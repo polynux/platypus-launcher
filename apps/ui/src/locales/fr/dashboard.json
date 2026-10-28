@@ -29,7 +29,9 @@
   },
   "reason": {
     "borked": "{{source}} déclare ce titre cassé. Essayez un autre runner ou consultez les rapports.",
-    "bronze": "{{source}} note ce titre bronze. Il lui faudra peut-être des réglages pour bien tourner."
+    "bronze": "{{source}} note ce titre bronze. Il lui faudra peut-être des réglages pour bien tourner.",
+    "conflict": "Les sauvegardes ont changé sur cet appareil et dans le cloud. Comparez-les pour continuer avec la bonne.",
+    "prefix": "Le préfixe Wine semble endommagé. Réparez-le ou le jeu risque de ne pas démarrer."
   },
   "continuePlaying": "Continuer à jouer",
   "yourGames": "Vos jeux",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Game, Job, ProtonVersion } from '../types';
-import { attentionIssues } from './games';
+import { attentionIssues, attentionReason, needsAttention } from './games';
 
 const game = (id: string, fields: Partial<Game> = {}) => ({
   id, source: 'steam', store: 'steam', store_app_id: id, title: id, cover_url: '', banner_url: '', hero_url: '',
@@ -29,5 +29,36 @@ describe('attentionIssues', () => {
       { id: 'new', kind: 'install', game_id: 'g', state: 'complete', updated_at: 2 } as Job,
     ];
     expect(attentionIssues([game('g')], jobs, [])).toEqual([]);
+  });
+
+  // Issue #144: the core flags land on the game; the frontend only lists them.
+  it('lists save conflicts and damaged prefixes from the core flags', () => {
+    const games = [
+      game('conflict', { has_save_conflict: true }),
+      game('prefix', { prefix_damaged: true }),
+    ];
+    const issues = attentionIssues(games, [], []);
+    expect(issues.map((issue) => issue.kind)).toEqual(['conflict', 'prefix']);
+    expect(issues[0].game.id).toBe('conflict');
+    expect(issues[1].game.id).toBe('prefix');
+  });
+
+  it('needsAttention covers the core signals and the reason names them', () => {
+    expect(needsAttention(game('c', { has_save_conflict: true }))).toBe(true);
+    expect(needsAttention(game('p', { prefix_damaged: true }))).toBe(true);
+    expect(needsAttention(game('ok'))).toBe(false);
+    expect(attentionReason(game('c', { has_save_conflict: true }))).toBe(
+      'Saves changed on this device and in the cloud. Compare them to keep playing with the right one.');
+    expect(attentionReason(game('p', { prefix_damaged: true }))).toBe(
+      'The Wine prefix looks damaged. Repair it or the game may not start.');
+  });
+
+  it('keeps the rating text on a rating row when the game also has a signal', () => {
+    const g = game('both', {
+      has_save_conflict: true,
+      fix_info: { description: 'Needs tweaks', source: 'Test', tier: 'bronze' },
+    } as Partial<Game>);
+    expect(attentionReason(g)).toContain('cloud');
+    expect(attentionReason(g, 'rating')).toBe('Needs tweaks');
   });
 });

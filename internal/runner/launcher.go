@@ -44,6 +44,24 @@ func PrefixPath(game types.Game, home, prefixesFolder string) string {
 	return filepath.Join(datadir.Path(home), "prefixes", game.ID)
 }
 
+// PrefixDamaged reports whether a Wine prefix looks broken (issue #144): it
+// has no Windows side, neither drive_c nor pfx/drive_c, as a failed creation
+// or a failed winetricks run leaves it, or a file blocks its path. A missing
+// folder is not damage on its own: the launch creates it, so the App only
+// flags a missing prefix for a game that ran before.
+func PrefixDamaged(prefixPath string) bool {
+	if st, err := os.Stat(prefixPath); err != nil || !st.IsDir() {
+		return err == nil
+	}
+	if st, err := os.Stat(filepath.Join(prefixPath, "drive_c")); err == nil && st.IsDir() {
+		return false
+	}
+	if st, err := os.Stat(filepath.Join(prefixPath, "pfx", "drive_c")); err == nil && st.IsDir() {
+		return false
+	}
+	return true
+}
+
 // BuildCommand constructs, for games Platypus starts itself (see
 // steam.IsClientLaunch for the other case), the full Linux gaming command pipeline (gamescope, mangohud, gamemode, proton/wine).
 // When preview is true, no on-disk state is created: the Proton prefix is

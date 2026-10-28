@@ -29,7 +29,9 @@
   },
   "reason": {
     "borked": "{{source}} reports this title as borked. Try a different runner or check the reports.",
-    "bronze": "{{source}} rates this title bronze. It may need tweaks to run well."
+    "bronze": "{{source}} rates this title bronze. It may need tweaks to run well.",
+    "conflict": "Saves changed on this device and in the cloud. Compare them to keep playing with the right one.",
+    "prefix": "The Wine prefix looks damaged. Repair it or the game may not start."
   },
   "continuePlaying": "Continue playing",
   "yourGames": "Your games",

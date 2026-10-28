@@ -33,7 +33,7 @@ import { MigrationNotice as MigrationBanner } from './components/MigrationNotice
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onActivity, onJobs, onLibrary, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
+import { LauncherApi, onActivity, onCloud, onJobs, onLibrary, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
 import type { types as gen } from './gen/models';
 import { reconcileViews, upsertView } from './lib/social';
 import { ensureTerms } from './lib/termsRequest';
@@ -641,6 +641,17 @@ export function AppContent() {
 
   // A plugin's playtime report changed a library value (protocol 1.7).
   useEffect(() => onPlaytime(() => refreshLibraryQuietly(mergePlaytime)), [refreshLibraryQuietly]);
+
+  // A save conflict appeared or was settled after the last scan (issue #144):
+  // the library's flag follows the cloud events, so Needs attention stays
+  // current without a rescan.
+  useEffect(() => onCloud((e) => {
+    if (e.kind === 'prompt' && e.prompt === 'conflict') {
+      setGames((prev) => prev.map((x) => (x.id === e.game_id ? { ...x, has_save_conflict: true } : x)));
+    } else if (e.kind === 'pushed' || e.kind === 'canceled' || (e.kind === 'status' && e.status?.state === 'synced')) {
+      setGames((prev) => prev.map((x) => (x.id === e.game_id ? { ...x, has_save_conflict: false } : x)));
+    }
+  }), []);
 
   // The background artwork lookup (issue #36) applied art to a sideloaded
   // game: take the new art from a quiet read, like a manual customization.

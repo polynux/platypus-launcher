@@ -351,6 +351,8 @@ export namespace types {
     native?: boolean;
     client_launch?: boolean;
     offline?: string;
+    has_save_conflict?: boolean;
+    prefix_damaged?: boolean;
     cloud_sync?: boolean;
     features: string[];
     pinned?: types.VersionPin | null;

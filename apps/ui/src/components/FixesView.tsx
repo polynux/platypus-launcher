@@ -2,7 +2,7 @@
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import type { Game, Job, ProtonVersion } from '../types';
-import { AlertTriangle, ArrowDownToLine, Check, Download, FolderOpen, Info, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, Check, Cloud, Download, FolderOpen, HardDrive, Info, Wrench } from 'lucide-react';
 import { ATLAS_PAGE, Cover, EmptyState, ListRow, Section, SegRow, TierBadge, TweakDot, ViewHeader } from './ui';
 import { Badge } from './ds/badge';
 import { Button } from './ds/button';
@@ -30,7 +30,7 @@ export function FixesView({ games, onOpenGame, jobs = [], runners = [], onJobAct
 function ClassicFixesView({ games, onOpenGame, onJobAction, onJob, onAllowFolder, onSaveSettings, onOpenRunners }: FixesProps) {
   const { t } = useTranslation(['nav', 'fixes']);
   const [filter, setFilter] = useState<Filter>('attention');
-  const withData = games.filter((g) => g.fix_info || g.compat_badges?.some((b) => b.kind === 'rating'));
+  const withData = games.filter((g) => g.fix_info || g.compat_badges?.some((b) => b.kind === 'rating') || g.has_save_conflict || g.prefix_damaged);
   const shown = filter === 'attention' ? withData.filter(needsAttention) : withData;
 
   return (
@@ -111,18 +111,18 @@ function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJobActio
         <ul className="grid gap-2.5">
           {issues.map((issue, index) => {
             const { game: g } = issue;
-            const KindIcon = { install: Download, outside: FolderOpen, runner: Wrench, update: ArrowDownToLine, rating: AlertTriangle }[issue.kind];
+            const KindIcon = { install: Download, outside: FolderOpen, runner: Wrench, update: ArrowDownToLine, conflict: Cloud, prefix: HardDrive, rating: AlertTriangle }[issue.kind];
             const title = issue.kind === 'install' && issue.failedJobKind === 'update'
               ? t('fixes:atlas.issue.updateFailed')
               : ({
               install: t('fixes:atlas.issue.install'), outside: t('fixes:atlas.issue.outside'), runner: t('fixes:atlas.issue.runner'),
-              update: t('fixes:atlas.issue.update'), rating: t('fixes:atlas.issue.rating'),
+              update: t('fixes:atlas.issue.update'), conflict: t('fixes:atlas.issue.conflict'), prefix: t('fixes:atlas.issue.prefix'), rating: t('fixes:atlas.issue.rating'),
               })[issue.kind];
             const fix = issue.kind === 'runner'
               ? t('fixes:atlas.useDefaultRunner', { runner: runners.find((r) => r.is_default)?.name ?? t('fixes:atlas.defaultRunner') })
               : ({
                 install: t('fixes:atlas.fix.install'), outside: t('fixes:atlas.fix.outside'), runner: t('fixes:atlas.fix.runner'),
-                update: t('fixes:atlas.fix.update'), rating: t('fixes:atlas.fix.rating'),
+                update: t('fixes:atlas.fix.update'), conflict: t('fixes:atlas.fix.conflict'), prefix: t('fixes:atlas.fix.prefix'), rating: t('fixes:atlas.fix.rating'),
               })[issue.kind];
             const issueJob = jobs.filter((j) => j.game_id === g.id && j.state === 'failed' && (j.kind === 'install' || j.kind === 'update')).sort((a, b) => b.updated_at - a.updated_at)[0];
             const fallbackRunner = runners.find((r) => r.is_default);
@@ -131,6 +131,8 @@ function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJobActio
               else if (issue.kind === 'outside') onAllowFolder?.(g);
               else if (issue.kind === 'runner' && fallbackRunner) onSaveSettings?.(g, fallbackRunner.id);
               else if (issue.kind === 'update') onJob?.('update', g);
+              // Conflicts and damaged prefixes resolve on the game page: the
+              // cloud panel compares the saves, the settings repair the prefix.
               else onOpenGame(g.id);
             };
             return (
@@ -146,11 +148,11 @@ function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJobActio
                   <button type="button" onClick={() => onOpenGame(g.id)} className="truncate justify-self-start text-left text-[15px] font-[750] hover:underline underline-offset-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                     {g.title}
                   </button>
-                  <p className="line-clamp-2 text-[12.5px] leading-[1.45] text-text-muted">{issue.kind === 'install' ? plainError(issue.error, t('fixes:atlas.reason.install')) : issue.kind === 'outside' ? t('fixes:atlas.reason.outside', { title: g.title, dir: g.install_dir }) : issue.kind === 'runner' ? t('fixes:atlas.reason.runner', { title: g.title, runner: issue.runnerId }) : issue.kind === 'update' ? t('fixes:atlas.reason.update') : attentionReason(g)}</p>
+                  <p className="line-clamp-2 text-[12.5px] leading-[1.45] text-text-muted">{issue.kind === 'install' ? plainError(issue.error, t('fixes:atlas.reason.install')) : issue.kind === 'outside' ? t('fixes:atlas.reason.outside', { title: g.title, dir: g.install_dir }) : issue.kind === 'runner' ? t('fixes:atlas.reason.runner', { title: g.title, runner: issue.runnerId }) : issue.kind === 'update' ? t('fixes:atlas.reason.update') : issue.kind === 'conflict' ? t('fixes:atlas.reason.conflict') : issue.kind === 'prefix' ? t('fixes:atlas.reason.prefix') : attentionReason(g, 'rating')}</p>
                 </div>
                 <div className="grid gap-1">
                   <Button variant="primary" onClick={action}>{fix}</Button>
-                  {issue.kind !== 'rating' && <Button variant="ghost" onClick={() => issue.kind === 'runner' ? onOpenRunners?.() : onOpenGame(g.id)}>{issue.kind === 'runner' ? t('fixes:atlas.openRunners') : t('fixes:atlas.openGame')}</Button>}
+                  {(issue.kind === 'install' || issue.kind === 'outside' || issue.kind === 'runner' || issue.kind === 'update') && <Button variant="ghost" onClick={() => issue.kind === 'runner' ? onOpenRunners?.() : onOpenGame(g.id)}>{issue.kind === 'runner' ? t('fixes:atlas.openRunners') : t('fixes:atlas.openGame')}</Button>}
                 </div>
               </li>
             );

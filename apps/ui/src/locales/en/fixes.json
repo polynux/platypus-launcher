@@ -15,10 +15,12 @@
   },
   "attention": {
     "borked": "{{source}} reports this title as borked. Try a different runner or check the reports.",
-    "bronze": "{{source}} rates this title bronze. It may need tweaks to run well."
+    "bronze": "{{source}} rates this title bronze. It may need tweaks to run well.",
+    "conflict": "Saves changed on this device and in the cloud. Compare them to keep playing with the right one.",
+    "prefix": "The Wine prefix looks damaged. Repair it or the game may not start."
   },
   "atlas": {
-    "reason": { "install": "The last attempt failed.", "outside": "{{title}} lives in {{dir}}. Platypus only launches games from your game folders.", "runner": "{{title}} is set to {{runner}}, which was removed.", "update": "An update is available." },
+    "reason": { "install": "The last attempt failed.", "outside": "{{title}} lives in {{dir}}. Platypus only launches games from your game folders.", "runner": "{{title}} is set to {{runner}}, which was removed.", "update": "An update is available.", "conflict": "Saves changed on this device and in the cloud.", "prefix": "The Wine prefix has no Windows side. The game may not start." },
     "title": "Needs attention",
     "sub_one": "{{count}} game can't start or needs a decision.",
     "sub_other": "{{count}} games can't start or need a decision.",
@@ -31,8 +33,8 @@
     "openRunners": "Open runners",
     "defaultRunner": "default runner",
     "useDefaultRunner": "Use {{runner}}",
-    "issue": { "install": "Install failed", "updateFailed": "Update failed", "outside": "Outside your game folders", "runner": "Runner missing", "update": "Update ready", "rating": "Runs badly on Linux" },
-    "fix": { "install": "Retry install", "outside": "Allow this folder", "runner": "Use default runner", "update": "Update now", "rating": "Open game" },
+    "issue": { "install": "Install failed", "updateFailed": "Update failed", "outside": "Outside your game folders", "runner": "Runner missing", "update": "Update ready", "conflict": "Save conflict", "prefix": "Wine prefix damaged", "rating": "Runs badly on Linux" },
+    "fix": { "install": "Retry install", "outside": "Allow this folder", "runner": "Use default runner", "update": "Update now", "conflict": "Compare saves", "prefix": "Open game", "rating": "Open game" },
     "emptyTitle": "Everything works",
     "emptyBody": "Games that fail to install, lose their runner or need an update show up here."
   }

@@ -15,10 +15,12 @@
   },
   "attention": {
     "borked": "{{source}} signale ce titre comme borked. Essayez un autre runner ou consultez les rapports.",
-    "bronze": "{{source}} note ce titre bronze. Il aura peut-être besoin d'ajustements pour bien fonctionner."
+    "bronze": "{{source}} note ce titre bronze. Il aura peut-être besoin d'ajustements pour bien fonctionner.",
+    "conflict": "Les sauvegardes ont changé sur cet appareil et dans le cloud. Comparez-les pour continuer avec la bonne.",
+    "prefix": "Le préfixe Wine semble endommagé. Réparez-le ou le jeu risque de ne pas démarrer."
   },
   "atlas": {
-    "reason": { "install": "La dernière tentative a échoué.", "outside": "{{title}} se trouve dans {{dir}}. Platypus ne lance que les jeux de vos dossiers de jeux.", "runner": "{{title}} utilise {{runner}}, qui a été supprimé.", "update": "Une mise à jour est disponible." },
+    "reason": { "install": "La dernière tentative a échoué.", "outside": "{{title}} se trouve dans {{dir}}. Platypus ne lance que les jeux de vos dossiers de jeux.", "runner": "{{title}} utilise {{runner}}, qui a été supprimé.", "update": "Une mise à jour est disponible.", "conflict": "Les sauvegardes ont changé sur cet appareil et dans le cloud.", "prefix": "Le préfixe Wine n'a plus de partie Windows. Le jeu risque de ne pas démarrer." },
     "title": "À surveiller",
     "sub_one": "{{count}} jeu ne démarre pas ou attend une décision.",
     "sub_other": "{{count}} jeux ne démarrent pas ou attendent une décision.",
@@ -31,8 +33,8 @@
     "openRunners": "Ouvrir les runners",
     "defaultRunner": "runner par défaut",
     "useDefaultRunner": "Utiliser {{runner}}",
-    "issue": { "install": "Échec de l'installation", "updateFailed": "Échec de la mise à jour", "outside": "En dehors de vos dossiers de jeux", "runner": "Runner manquant", "update": "Mise à jour disponible", "rating": "Fonctionne mal sous Linux" },
-    "fix": { "install": "Réessayer l'installation", "outside": "Autoriser ce dossier", "runner": "Utiliser le runner par défaut", "update": "Mettre à jour", "rating": "Ouvrir le jeu" },
+    "issue": { "install": "Échec de l'installation", "updateFailed": "Échec de la mise à jour", "outside": "En dehors de vos dossiers de jeux", "runner": "Runner manquant", "update": "Mise à jour disponible", "conflict": "Conflit de sauvegardes", "prefix": "Préfixe Wine endommagé", "rating": "Fonctionne mal sous Linux" },
+    "fix": { "install": "Réessayer l'installation", "outside": "Autoriser ce dossier", "runner": "Utiliser le runner par défaut", "update": "Mettre à jour", "conflict": "Comparer les sauvegardes", "prefix": "Ouvrir le jeu", "rating": "Ouvrir le jeu" },
     "emptyTitle": "Tout fonctionne",
     "emptyBody": "Les jeux qui ne s’installent pas, perdent leur runner ou attendent une mise à jour apparaissent ici."
   }

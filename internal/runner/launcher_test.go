@@ -30,6 +30,53 @@ func TestPreviewDoesNotCreatePrefix(t *testing.T) {
 	}
 }
 
+// Issue #144: a prefix is damaged when it has no Windows side (a failed
+// creation or a failed winetricks run leaves it so) or a file blocks its
+// path. A missing folder is not damage: the launch creates it.
+func TestPrefixDamaged(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if PrefixDamaged(filepath.Join(root, "missing")) {
+		t.Fatal("a missing prefix is not damage: the launch creates it")
+	}
+	for _, layout := range [][]string{{"drive_c"}, {"pfx", "drive_c"}} {
+		dir := filepath.Join(root, "healthy")
+		if err := os.MkdirAll(filepath.Join(append([]string{dir}, layout...)...), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if PrefixDamaged(dir) {
+			t.Fatalf("a prefix with %s is healthy", filepath.Join(layout...))
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatal(err)
+		}
+	}
+	empty := filepath.Join(root, "empty")
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !PrefixDamaged(empty) {
+		t.Fatal("an empty prefix folder is damage: creation never finished")
+	}
+	file := filepath.Join(root, "file")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !PrefixDamaged(file) {
+		t.Fatal("a file blocking the prefix path is damage")
+	}
+	flat := filepath.Join(root, "flat")
+	if err := os.MkdirAll(flat, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(flat, "drive_c"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !PrefixDamaged(flat) {
+		t.Fatal("a drive_c that is not a folder is damage")
+	}
+}
+
 // Issue #37: the per-game prefix wins, then the global prefixes folder,
 // then the default under Platypus's data.
 func TestPrefixPathPrecedence(t *testing.T) {

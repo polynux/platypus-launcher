@@ -118,6 +118,16 @@ type Game struct {
 	// 1.15, issue #44): "ok", "network" or "unknown" ("" means unknown,
 	// the pre-1.15 default). The core never disables Play because of it.
 	Offline string `json:"offline,omitempty"`
+	// HasSaveConflict says the cloud layer knows saves changed on both sides
+	// for this game (issue #144): the Needs attention list shows it until it
+	// is resolved. Set when the library is assembled, from this session's
+	// last cloud status; old snapshots load with it unset.
+	HasSaveConflict bool `json:"has_save_conflict,omitempty"`
+	// PrefixDamaged says the game's Wine prefix looks broken (issue #144): an
+	// existing prefix without a Windows side (a failed creation or a failed
+	// winetricks run left it so), or a missing prefix for a game that ran
+	// before. Set when the library is assembled; old snapshots load unset.
+	PrefixDamaged bool `json:"prefix_damaged,omitempty"`
 	// CloudSync says the store itself syncs this game's saves (protocol
 	// 1.15, issue #44). gameHasCloudSync uses it for plugin games.
 	CloudSync bool `json:"cloud_sync,omitempty"`

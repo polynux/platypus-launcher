@@ -3,7 +3,7 @@ import { formatBytes as formatBytesLocale, formatLastPlayed } from './format';
 import i18n from './i18n';
 import { ratingBadge } from './compat';
 
-export type AttentionIssue = { game: Game; kind: 'install' | 'outside' | 'runner' | 'update' | 'rating'; error?: string; runnerId?: string; failedJobKind?: 'install' | 'update' };
+export type AttentionIssue = { game: Game; kind: 'install' | 'outside' | 'runner' | 'update' | 'conflict' | 'prefix' | 'rating'; error?: string; runnerId?: string; failedJobKind?: 'install' | 'update' };
 
 /** Issues the frontend can identify from its current library, job and runner snapshots. */
 export function attentionIssues(games: Game[], jobs: Job[], runners: ProtonVersion[]): AttentionIssue[] {
@@ -25,20 +25,34 @@ export function attentionIssues(games: Game[], jobs: Job[], runners: ProtonVersi
       out.push({ game, kind: 'runner', runnerId });
     }
     if (game.update_available && game.is_installed) out.push({ game, kind: 'update' });
-    if (needsAttention(game)) out.push({ game, kind: 'rating' });
+    // Save conflicts and damaged prefixes come from the core (issue #144):
+    // the library carries them, the frontend never derives them. The rating
+    // row is only for the rating signal, so a signal game shows once.
+    if (game.has_save_conflict) out.push({ game, kind: 'conflict' });
+    if (game.prefix_damaged) out.push({ game, kind: 'prefix' });
+    if (hasRatingSignal(game)) out.push({ game, kind: 'rating' });
   }
   return out;
 }
 
-/** A game "needs attention" when it has a curated fix recipe or a poor rating badge. */
+/** A game "needs attention" when it has a curated fix recipe, a poor rating
+ *  badge, a save conflict, or a damaged Wine prefix (issue #144). */
 export function needsAttention(g: Game): boolean {
-  const f = g.fix_info;
-  if (f && f.description) return true;
+  return g.has_save_conflict || g.prefix_damaged || hasRatingSignal(g);
+}
+
+/** The rating signal alone: a curated fix recipe or a poor rating badge. */
+function hasRatingSignal(g: Game): boolean {
+  if (g.fix_info?.description) return true;
   const tier = ratingBadge(g)?.tone;
   return tier === 'bronze' || tier === 'borked';
 }
 
-export function attentionReason(g: Game): string {
+export function attentionReason(g: Game, kind?: AttentionIssue['kind']): string {
+  // The actionable signals speak first; the rating speaks when alone or on
+  // its own row. A kind narrows to that row's text.
+  if ((kind === undefined || kind === 'conflict') && g.has_save_conflict) return i18n.t('fixes:attention.conflict');
+  if ((kind === undefined || kind === 'prefix') && g.prefix_damaged) return i18n.t('fixes:attention.prefix');
   const f = g.fix_info;
   if (f?.description) return f.description;
   const badge = ratingBadge(g);
