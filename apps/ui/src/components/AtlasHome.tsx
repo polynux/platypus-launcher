@@ -17,7 +17,7 @@ import { AtlasMainAction } from './GameTabs';
 import { PluginLogo } from './PluginLogo';
 import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
-import { attentionReason, byAddedAt, DashboardEmpty, type DashboardProps } from './Dashboard';
+import { attentionReason, byAddedAt, DashboardEmpty, storeLabel, type DashboardProps } from './Dashboard';
 
 const byTitle = (a: Game, b: Game) => sortKey(a).localeCompare(sortKey(b)) || a.id.localeCompare(b.id);
 
@@ -52,18 +52,6 @@ function recentAdded(games: Game[], activity: ActivityEvent[]): Game[] {
   }
   if (out.length > 0) return out;
   return games.filter((g) => g.store === 'custom').slice(0, 5);
-}
-
-/** The store of a game, in words. */
-function storeLabel(store: string, t: (k: string) => string): string {
-  switch (store) {
-    case 'steam': return t('dashboard:store.steam');
-    case 'gog': return t('dashboard:store.gog');
-    case 'epic': return t('dashboard:store.epic');
-    case 'ubisoft': return t('dashboard:store.ubisoft');
-    case 'custom': return t('dashboard:store.custom');
-    default: return store;
-  }
 }
 
 export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, onOpenGame, onNavigate, jobs, sessions, sessionStartedAt, onPlay, onInstall, onStop, onJobAction, social = [], onOpenFriends, sourceLogos }: DashboardProps & { allGames: Game[] }) {

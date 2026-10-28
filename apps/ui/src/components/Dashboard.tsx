@@ -388,7 +388,7 @@ export function attentionReason(g: Game, t: TFunction): string {
 /** The store of a game, in words. The shared helper stays as is for the
  *  areas that still render it; the dashboard reads the catalog so the one
  *  coined word ("Sideloaded") follows the UI language. */
-function storeLabel(store: string, t: TFunction): string {
+export function storeLabel(store: string, t: TFunction): string {
   switch (store) {
     case 'steam': return t('dashboard:store.steam');
     case 'gog': return t('dashboard:store.gog');

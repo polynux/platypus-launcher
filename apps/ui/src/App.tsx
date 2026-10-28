@@ -1321,10 +1321,21 @@ export function AppContent() {
 
       {/* The friends panel sits beside the stage (issue #156: friends
           presentation, not the shell); other themes keep main alone and
-          use the modal below. */}
+          use the modal below. The migration banner lives in main whenever
+          the shell isn't the sourcebar (issue #156 finding 1): independent
+          of the friends branch, so mixed themes show it exactly once. */}
       {isFriendsPanel ? (
         <div className="flex min-h-0 flex-1">
           <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
+            {!isSourcebar && migration && (
+              <div className="px-7 pt-7">
+                <MigrationBanner
+                  notice={migration}
+                  onOpenPlugins={() => setView({ name: 'plugins' })}
+                  onDismiss={dismissMigration}
+                />
+              </div>
+            )}
             {renderView()}
           </main>
           {friendsOpen && (
@@ -1357,7 +1368,7 @@ export function AppContent() {
         </div>
       ) : (
         <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
-          {migration && (
+          {!isSourcebar && migration && (
             <div className="px-7 pt-7">
               <MigrationBanner
                 notice={migration}

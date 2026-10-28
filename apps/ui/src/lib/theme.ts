@@ -274,7 +274,25 @@ export function applyAndRemember(theme: ThemeTokens): void {
 
 /** Boot, before the first paint (main.tsx): the theme applied last time, or the
  *  default theme when nothing is cached, so the first paint is Atlas and not
- *  the stylesheet's own values. */
+ *  the stylesheet's own values. A cache written by an older catalog (issue
+ *  #156) has sourcebar chrome but none of the new page axes, and would paint
+ *  sourcebar chrome with classic pages until the core answers: when the
+ *  cached chrome is Atlas but any 1.1 axis is missing, the entry is stale
+ *  and the defaults paint instead. Warm-like caches (no sourcebar) are
+ *  harmless: the built-ins for the missing axes already match classic. */
+const STALE_AXES = [
+  'dashboard.presentation',
+  'fixes.presentation',
+  'activity.presentation',
+  'runners.presentation',
+  'downloads.presentation',
+  'storage.presentation',
+  'plugins.presentation',
+  'friends.presentation',
+  'store.presentation',
+  'settings-row.style',
+  'toast.style',
+];
 export function applyCachedTheme(): void {
   try {
     const rawScheme = window.localStorage.getItem(SCHEME_CACHE_KEY);
@@ -284,8 +302,22 @@ export function applyCachedTheme(): void {
   }
   try {
     const raw = window.localStorage.getItem(CACHE_KEY);
-    if (raw) applyTheme(JSON.parse(raw) as ThemeTokens);
-    else applyTheme(DEFAULT_THEME);
+    if (raw) {
+      const cached = JSON.parse(raw) as ThemeTokens;
+      const vars = (cached.variants ?? {}) as Record<string, string>;
+      const stale = vars['shell.navigation'] === 'sourcebar' && STALE_AXES.some((k) => !(k in vars));
+      if (!stale) {
+        applyTheme(cached);
+        return;
+      }
+      // Stale: fall through to the defaults so the first paint is coherent.
+      try {
+        window.localStorage.removeItem(CACHE_KEY);
+      } catch {
+        // Unwritable storage keeps the stale entry; the core load overwrites it.
+      }
+    }
+    applyTheme(DEFAULT_THEME);
   } catch {
     // A missing or broken entry leaves the defaults in place.
   }

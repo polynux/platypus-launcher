@@ -200,6 +200,33 @@ describe('applying a theme', () => {
     expect(document.documentElement.dataset.labelStyle).toBe('plain');
   });
 
+  it('ignores a cached theme from an older catalog so Atlas does not paint mixed chrome (issue #156)', async () => {
+    // A 1.0 Atlas cache: sourcebar chrome but none of the 11 new axes.
+    const stale = {
+      id: 'atlas',
+      tokens: { ...DEFAULT_THEME.tokens },
+      wash: [],
+      variants: {
+        'shell.navigation': 'sourcebar',
+        'library.presentation': 'list-detail',
+        'label.style': 'plain',
+      },
+    };
+    window.localStorage.setItem('platypus.theme', JSON.stringify(stale));
+    applyCachedTheme();
+    const { useVariant } = await import('./theme');
+    const React = (await import('react')).default;
+    const { render, screen, cleanup } = await import('@testing-library/react');
+    const Probe = () => {
+      const presentation = useVariant('dashboard.presentation');
+      return React.createElement('span', { 'data-testid': 'probe' }, presentation);
+    };
+    render(React.createElement(Probe));
+    // Stale cache ignored: the defaults paint Atlas home, not classic blocks.
+    expect(screen.getByTestId('probe').textContent).toBe('home');
+    cleanup();
+  });
+
   it('loads the picked theme from the core and remembers it', async () => {
     getTheme.mockReturnValue(Effect.succeed(cool));
     await loadTheme();
