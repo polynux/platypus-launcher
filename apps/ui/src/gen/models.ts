@@ -133,6 +133,14 @@ export namespace types {
     reason: string;
   }
 
+  export interface AvailableRunner {
+    tag: string;
+    name: string;
+    url: string;
+    checksum_url?: string;
+    size_bytes?: number;
+  }
+
   export interface BackupSettings {
     folder: string;
     default_folder: string;
@@ -685,6 +693,7 @@ export namespace types {
     is_system: boolean;
     is_custom: boolean;
     is_default: boolean;
+    size_bytes?: number;
   }
 
   export interface RedeemResult {
@@ -725,6 +734,13 @@ export namespace types {
   export interface RunnerEnv {
     env: Record<string, string>;
     wrappers: string[];
+  }
+
+  export interface RunnerRemoveCheck {
+    id: string;
+    size_bytes?: number;
+    used_by?: string[];
+    removable: boolean;
   }
 
   export interface SaveBackup {

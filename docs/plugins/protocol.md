@@ -274,9 +274,12 @@ runner.actions { "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefix
 runner.runAction { "id": "winetricks", "verb": "vcrun2022", "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> {}
 runner.runAction { "id": "stop", "force": false, "launch": { "env": {}, "runner": {} } } -> {}
 runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> [{ "rule": "vcredist", "param": "vcruntime140_1.dll", "verb": "vcrun2022" }]
+runner.available {} -> { "available": [{ "tag": "GE-Proton10-4", "name": "GE-Proton10-4", "url": "https://…/GE-Proton10-4.tar.gz", "checksumUrl": "https://…/GE-Proton10-4.sha512sum" }] }
+runner.install { "tag": "GE-Proton10-4" } -> { "runner": { "id": "compat:GE-Proton10-4" } }
+runner.remove { "id": "compat:GE-Proton10-4" } -> {}
 ```
 
-All eleven methods are required when `runner` is enabled (`runner.detectExecutable`
+All fourteen methods are required when `runner` is enabled (`runner.detectExecutable`
 is called for every sideloaded file, `runner.prefix` for every backup and cloud gate,
 `runner.migrateSettings` once per saved game at startup). Every call that hands
 the plugin a game also carries `defaultRunnerId`: the launcher's default runner
@@ -297,14 +300,17 @@ code>", "params": { … } }`, and the core shows its own translated text for it:
 | `crash.noPrefix` | the game has no prefix yet | `title` |
 | `crash.umuUnsupported` | umu's Proton build isn't there to run winetricks with | `title` |
 | `crash.noProtonWine` | the Proton build has no Wine binaries winetricks can use | `title` |
+| `runner.notRemovable` | a remove names a runner that isn't a user-installed build | `id` |
+| `runner.badChecksum` | a runner download failed its release checksum | `tag` |
+| `runner.unknownVersion` | an install names a version the release list doesn't have | `tag` |
 
 The core accepts only these codes. Any other failure, or one without `data`,
 shows the message under the call's generic code: `runner.wrapFailed` for a launch,
 `crash.winetricksFailed` for a winetricks run.
 
 - **`runner.list`**: each runner has `id`, `name`, `kind` (`proton`, `umu`,
-  `wine`, `custom` or `system`), `version`, `default`, and optionally `path`,
-  `system` and `custom`.
+  `wine`, `custom` or `system`), `version`, `default`, `size_bytes` (0 when
+  unknown), and optionally `path`, `system` and `custom`.
 - **`runner.options`**: the same group and field schema as `settings.schema`
   (1.8), every field with `"scope": "game"`, labels and descriptions in the
   language the core sent at `initialize` (`locale`, or `locale.changed`; English
@@ -384,6 +390,16 @@ shows the message under the call's generic code: `runner.wrapFailed` for a launc
 - **`runner.crashHints`**: returns `CrashHint` entries (`rule`, and `param`,
   `verb` or `action` when the rule has them). The core adds the log path and
   whether winetricks is available.
+- **`runner.available`**: `{ "releasesUrl": "…" }` -> `{ "available": […] }`.
+  Lists installable GE-Proton releases through the existing downloader. The
+  URL overrides the GitHub endpoint in tests; empty uses the default.
+- **`runner.install`**: `{ "tag": "GE-Proton10-4" }` (or an explicit `url`
+  and `checksumUrl`) -> `{ "runner": {} }`. Downloads the build, verifies
+  the release checksum, and unpacks it into the user's runner folder with
+  the same safety rules as plugin zips. The core runs its own install as a
+  job with progress; the plugin method is the synchronous half.
+- **`runner.remove`**: `{ "id": "compat:GE-Proton10-4" }` -> `{}`. Deletes a
+  user-installed build only; system Wine and Steam-managed Proton are refused.
 
 ## Jobs
 

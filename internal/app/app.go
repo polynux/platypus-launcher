@@ -71,6 +71,7 @@ type App struct {
 	settingsLocks settingsLocks
 	moves         coreMoves
 	removes       coreMoves   // core-run removals (issue #43), like moves
+	runnerInstalls coreMoves  // core-run runner installs (issue #142), like moves
 	custom        customStore // the user's titles and art (app_customize.go)
 	ledger        *ledger.Ledger
 	// artwork is the online art lookup for sideloaded games (issue #36).
@@ -559,7 +560,7 @@ func (a *App) GetProtonVersions() []types.ProtonVersion {
 	out := make([]types.ProtonVersion, 0, len(infos))
 	for _, r := range infos {
 		out = append(out, types.ProtonVersion{ID: r.ID, Name: r.Name, Path: r.Path,
-			IsSystem: r.System, IsCustom: r.Custom, IsDefault: r.Default})
+			IsSystem: r.System, IsCustom: r.Custom, IsDefault: r.Default, SizeBytes: r.SizeBytes})
 	}
 	return out
 }

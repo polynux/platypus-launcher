@@ -209,6 +209,8 @@ type RunnerInfo struct {
 	Path    string `json:"path,omitempty"`
 	System  bool   `json:"system,omitempty"`
 	Custom  bool   `json:"custom,omitempty"`
+	// SizeBytes is the runner's size on disk, 0 when unknown (issue #142).
+	SizeBytes int64 `json:"size_bytes,omitempty"`
 }
 
 // LaunchSpec answers game.launchSpec. Either Platypus runs Exe through its

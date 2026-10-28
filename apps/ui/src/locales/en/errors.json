@@ -7,7 +7,13 @@
   "runner": {
     "unavailable": "The bundled runner plugin is unavailable.",
     "wrapFailed": "The runner couldn't prepare {{title}}: {{error}}",
-    "invalidSpec": "The runner returned an invalid launch command for {{title}}."
+    "invalidSpec": "The runner returned an invalid launch command for {{title}}.",
+    "notRemovable": "Only user-installed builds in the runner folder can be removed.",
+    "inUse": "{{title}} is still used by {{count}} game(s); switch them first or remove anyway.",
+    "badChecksum": "The download failed its checksum; try again.",
+    "unknownVersion": "That runner version is not available.",
+    "alreadyInstalled": "{{title}} is already installed.",
+    "offline": "You're offline; connect to list installable runners."
   },
   "noticeFallback": "Platypus couldn't finish that. Try again.",
   "art": {

@@ -1,15 +1,17 @@
 // i18n: converted
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useState } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Download, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { Effect } from 'effect';
 import type { Game, ProtonVersion } from '../types';
+import type { types as gen } from '../gen/models';
 import { LauncherApi } from '../effect/runtime';
 import { ATLAS_PAGE, Cover, EmptyState, ListRow, Section, ViewHeader } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { heroImages } from '../lib/games';
+import { formatBytes } from '../lib/games';
 import { useVariant } from '../lib/theme';
 
 interface SystemViewProps {
@@ -42,9 +44,51 @@ export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunne
     setPicked(id);
     onDefaultRunner?.(id);
   };
+  // Installable builds (issue #142): listed through the core, installed as a
+  // job with progress (the job shows in Downloads), removed here.
+  const [available, setAvailable] = useState<gen.AvailableRunner[]>([]);
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    const api = LauncherApi as unknown as { listAvailableRunners?: () => Effect.Effect<gen.AvailableRunner[], Error> };
+    if (typeof api.listAvailableRunners !== 'function') return;
+    Effect.runPromise(api.listAvailableRunners())
+      .then((items) => live && setAvailable(items ?? []))
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const installedTags = new Set(
+    runners.map((r) => (r.id.startsWith('compat:') ? r.id.slice('compat:'.length) : '')),
+  );
+  const install = (tag: string) => {
+    setInstalling(tag);
+    Effect.runPromise(LauncherApi.installRunner(tag))
+      .then(() => onRefresh())
+      .catch(() => {})
+      .finally(() => setInstalling(null));
+  };
+  const remove = (id: string, name: string, size: number) => {
+    setRemoving(id);
+    Effect.runPromise(LauncherApi.checkRemoveRunner(id))
+      .then((check) => {
+        const used = check?.used_by ?? [];
+        const sizeLabel = size > 0 ? formatBytes(size) : t('runners:sizeUnknown');
+        if (used.length > 0 && !window.confirm(t('runners:removeConfirmBody', { size: sizeLabel, count: used.length }) + ' ' + t('runners:removeInUse', { count: used.length }))) {
+          return;
+        }
+        if (used.length === 0 && !window.confirm(t('runners:removeConfirmTitle', { runner: name }))) {
+          return;
+        }
+        return Effect.runPromise(LauncherApi.removeRunner(id, used.length > 0)).then(() => onRefresh());
+      })
+      .catch(() => {})
+      .finally(() => setRemoving(null));
+  };
+  const sizeLabel = (n?: number) => (n && n > 0 ? formatBytes(n) : t('runners:sizeUnknown'));
   // Atlas renders the /22 Runners page (issue #138); other themes keep the rows below.
   if (useVariant('shell.navigation') === 'sourcebar') {
-    return <AtlasRunners runners={runners} games={games ?? []} onRefresh={onRefresh} scanning={scanning} picked={picked} onDefaultRunner={onDefaultRunner ? choose : undefined} />;
+    return <AtlasRunners runners={runners} games={games ?? []} onRefresh={onRefresh} scanning={scanning} picked={picked} onDefaultRunner={onDefaultRunner ? choose : undefined} available={available} installing={installing} removing={removing} onInstall={install} onRemove={remove} sizeLabel={sizeLabel} />;
   }
   return (
     <div className="p-7">
@@ -71,6 +115,7 @@ export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunne
         </EmptyState>
       ) : (
         <Section className="space-y-2">
+          <h2 className="text-[13px] font-bold text-text-muted">{t('runners:installedTitle')}</h2>
           {runners.map((r) => (
             <ListRow key={r.id} kind="runner">
               <div className="min-w-0">
@@ -81,14 +126,42 @@ export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunne
                   {r.is_default && <Badge variant="neutral">{t('runners:badge.default')}</Badge>}
                 </div>
                 <div className="truncate font-mono text-hint text-text-muted select-text">{r.path}</div>
+                <div className="text-[12px] text-text-muted">{sizeLabel(r.size_bytes)}</div>
               </div>
               <div className="flex flex-none items-center gap-2">
                 {onDefaultRunner && !r.is_default && (
                   <Button variant="ghost" size="sm" onClick={() => onDefaultRunner(r.id)}>{t('runners:makeDefault')}</Button>
                 )}
+                {!r.is_system && r.id.startsWith('compat:') && (
+                  <Button variant="ghost" size="sm" onClick={() => remove(r.id, r.name, r.size_bytes ?? 0)} disabled={removing === r.id}>
+                    {removing === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    {removing === r.id ? t('runners:removing') : t('runners:remove')}
+                  </Button>
+                )}
                 <Badge variant="ok" className="flex-none gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-ok" /> {t('runners:badge.found')}
                 </Badge>
+              </div>
+            </ListRow>
+          ))}
+        </Section>
+      )}
+      {available.filter((a) => !installedTags.has(a.tag)).length > 0 && (
+        <Section className="mt-6 space-y-2">
+          <h2 className="text-[13px] font-bold text-text-muted">{t('runners:availableTitle')}</h2>
+          {available.filter((a) => !installedTags.has(a.tag)).map((a) => (
+            <ListRow key={a.tag} kind="runner">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-bold">{a.name}</span>
+                </div>
+                <div className="text-[12px] text-text-muted">{sizeLabel(a.size_bytes)}</div>
+              </div>
+              <div className="flex flex-none items-center gap-2">
+                <Button variant="neutral" size="sm" onClick={() => install(a.tag)} disabled={installing === a.tag}>
+                  {installing === a.tag ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  {installing === a.tag ? t('runners:installing') : t('runners:install')}
+                </Button>
               </div>
             </ListRow>
           ))}
@@ -99,12 +172,9 @@ export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunne
 }
 
 /** The /22 Runners page (issue #138, Atlas only): the default picker row is
- *  the current default, and each row names the build with its path. The
- *  lab's per-game usage thumbs, sizes and Install/Remove buttons have no
- *  backing in the core (runners are detected, not installed, and each game
- *  picks its own in its settings), so this page lists, rescans and picks the
- *  default for Automatic games only. */
-function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDefaultRunner }: SystemViewProps & { games: Game[]; picked: string | null }) {
+ *  the current default, and each row names the build with its path, size and
+ *  per-game usage, with Install/Remove backed by the core (issue #142). */
+function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDefaultRunner, available, installing, removing, onInstall, onRemove, sizeLabel }: SystemViewProps & { games: Game[]; picked: string | null; available: gen.AvailableRunner[]; installing: string | null; removing: string | null; onInstall: (tag: string) => void; onRemove: (id: string, name: string, size: number) => void; sizeLabel: (n?: number) => string }) {
   const { t } = useTranslation(['nav', 'runners']);
   const fallback = runners.find((r) => r.is_default) ?? runners[0];
   // A default that is no longer installed runs the automatic pick, so the
@@ -113,6 +183,8 @@ function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDefaultRu
   const shown = picked === null ? (fallback?.id ?? '') : stored === '' ? AUTOMATIC : stored;
   const uses = (id: string, name: string): Game[] =>
     games.filter((g) => !g.native && (g.settings.runner_id === id || g.settings.runner_id === name || ((!g.settings.runner_id || g.settings.runner_id === 'auto') && fallback?.id === id)));
+  const installedTags = new Set(runners.map((r) => (r.id.startsWith('compat:') ? r.id.slice('compat:'.length) : '')));
+  const pending = available.filter((a) => !installedTags.has(a.tag));
   return (
     <div className={ATLAS_PAGE}>
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -157,6 +229,7 @@ function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDefaultRu
             <ul className="divide-y divide-hairline">
               {runners.map((r) => {
                 const used = uses(r.id, r.name);
+                const removable = !r.is_system && r.id.startsWith('compat:');
                 return (
                   <li key={r.id} className="grid min-h-14 grid-cols-[minmax(200px,1.3fr)_minmax(160px,1fr)_70px_130px] items-center gap-3.5 border-b border-hairline">
                     <div className="min-w-0 flex flex-wrap items-center gap-2">
@@ -183,16 +256,45 @@ function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDefaultRu
                         <span className="text-[12.5px] text-text-faint">{t('runners:atlas.noGames')}</span>
                       )}
                     </div>
-                    <span className="text-right tabular-nums text-text-faint">—</span>
-                    {/* GetProtonVersions carries no size, and runners are
-                        detected, not installed (no remove call): the column
-                        reads unknown until the core reports it. */}
-                    {r.is_system && <span className="text-[12.5px] text-text-faint">{t('runners:atlas.fromSystem')}</span>}
+                    <span className="text-right tabular-nums text-text-faint">{sizeLabel(r.size_bytes)}</span>
+                    {r.is_system ? (
+                      <span className="text-[12.5px] text-text-faint">{t('runners:atlas.fromSystem')}</span>
+                    ) : removable ? (
+                      <Button variant="ghost" size="sm" onClick={() => onRemove(r.id, r.name, r.size_bytes ?? 0)} disabled={removing === r.id}>
+                        {removing === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        {removing === r.id ? t('runners:removing') : t('runners:remove')}
+                      </Button>
+                    ) : (
+                      <span />
+                    )}
                   </li>
                 );
               })}
             </ul>
           </section>
+          {pending.length > 0 && (
+            <section aria-label={t('runners:atlas.available')}>
+              <h2 className="mb-2.5 mt-6 text-[13px] font-bold text-text-muted">{t('runners:atlas.available')}</h2>
+              <ul className="divide-y divide-hairline">
+                {pending.map((a) => (
+                  <li key={a.tag} className="grid min-h-14 grid-cols-[minmax(200px,1.3fr)_minmax(160px,1fr)_70px_130px] items-center gap-3.5 border-b border-hairline">
+                    <div className="min-w-0 flex flex-wrap items-center gap-2">
+                      <div className="flex basis-full items-center gap-2"><span className="basis-auto text-[13px] font-bold text-text">{a.name}</span></div>
+                      <div className="basis-full truncate text-[12.5px] text-text-faint select-text">{a.tag}</div>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-1">
+                      <span className="text-[12.5px] text-text-faint">{t('runners:atlas.noGames')}</span>
+                    </div>
+                    <span className="text-right tabular-nums text-text-faint">{sizeLabel(a.size_bytes)}</span>
+                    <Button variant="neutral" size="sm" onClick={() => onInstall(a.tag)} disabled={installing === a.tag}>
+                      {installing === a.tag ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                      {installing === a.tag ? t('runners:installing') : t('runners:install')}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </>
       )}
     </div>
