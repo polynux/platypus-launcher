@@ -125,6 +125,12 @@
       "symlink": "Refusing to reset {{title}}: its prefix is a symlink; reset it by hand.",
       "notDir": "Refusing to reset {{title}}: a file blocks its prefix path; remove it by hand.",
       "moveFailed": "Couldn't reset the prefix of {{title}}: {{error}}."
+    },
+    "backup": {
+      "outsideRoot": "Only a prefix backup in the prefixes folder can be deleted ({{path}}).",
+      "missing": "That prefix backup is already gone.",
+      "notDir": "{{path}} is not a prefix backup folder.",
+      "deleteFailed": "Couldn't delete the prefix backup: {{error}}."
     }
   },
   "redeem": {

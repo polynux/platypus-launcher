@@ -187,9 +187,9 @@ type App struct {
 	// after a restart. No path means memory only, like the activity feed.
 	// Writes are debounced off the plugin reader (C2): dirty rows flush in
 	// the background, on shutdown, and on logout/removal.
-	chatRecentMu    sync.Mutex
-	chatRecentPath  string
-	chatRecents     map[chatRecentKey]chatRecent
+	chatRecentMu   sync.Mutex
+	chatRecentPath string
+	chatRecents    map[chatRecentKey]chatRecent
 	// chatRecentSeq is the last Seq recorded per conversation (memory only):
 	// a late, older view is dropped instead of overwriting a newer preview.
 	chatRecentSeq   map[chatRecentKey]uint64

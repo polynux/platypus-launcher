@@ -315,7 +315,8 @@ func TestChatConversationsSkipsPluginsWithoutChat(t *testing.T) {
 }
 
 // A rescan that no longer finds a plugin takes its rows with it (C3).
-func TestChatRecentsPrunedOnRemoval(t *testing.T) {	t.Parallel()
+func TestChatRecentsPrunedOnRemoval(t *testing.T) {
+	t.Parallel()
 	a := recentsEnv(t)
 	dir := t.TempDir()
 	a.openChatRecents(dir)

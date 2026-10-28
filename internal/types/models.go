@@ -846,7 +846,7 @@ type PrefixBackup struct {
 	At    int64  `json:"at"`
 }
 
-
+// Relocation says core moved a game's folder: the folder the plugin reports
 // (From) and where the game is now (To). It is kept until the plugin reports
 // the new folder itself (game.relocated) or the game is moved again.
 type Relocation struct {

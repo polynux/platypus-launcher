@@ -125,6 +125,12 @@
       "symlink": "Réinitialisation refusée pour « {{title}} » : son préfixe est un lien symbolique ; réinitialisez-le à la main.",
       "notDir": "Réinitialisation refusée pour « {{title}} » : un fichier bloque son préfixe ; retirez-le à la main.",
       "moveFailed": "Impossible de réinitialiser le préfixe de « {{title}} » : {{error}}."
+    },
+    "backup": {
+      "outsideRoot": "Seule une sauvegarde de préfixe dans le dossier des préfixes peut être supprimée ({{path}}).",
+      "missing": "Cette sauvegarde de préfixe a déjà disparu.",
+      "notDir": "{{path}} n'est pas un dossier de sauvegarde de préfixe.",
+      "deleteFailed": "Impossible de supprimer la sauvegarde de préfixe : {{error}}."
     }
   },
   "redeem": {
