@@ -334,3 +334,26 @@ func TestBackgroundFallbackRechecksEarlierPairs(t *testing.T) {
 		}
 	}
 }
+
+// Atlas holds its faint text to the body-text ratio (4.5:1) on every surface
+// it sits on, in every scheme: the /22 grey was below it (issue #130 check).
+func TestAtlasFaintTextReadsAtBodyRatio(t *testing.T) {
+	atlas, ok := Find("atlas")
+	if !ok {
+		t.Fatal("atlas is missing")
+	}
+	schemes := map[string]map[string]string{"dark": atlas.Tokens}
+	for name, over := range atlas.Schemes {
+		merged := maps.Clone(atlas.Tokens)
+		maps.Copy(merged, over)
+		schemes[name] = merged
+	}
+	for scheme, tokens := range schemes {
+		for _, bg := range []string{"ground", "raised", "surface", "popover"} {
+			p := contrastPair{"text-faint", bg, textRatio}
+			if ratio, missing := missingContrast(tokens, p); missing {
+				t.Errorf("%s: text-faint %s on %s %s is %.2f:1, want %.1f:1", scheme, tokens["text-faint"], bg, tokens[bg], ratio, textRatio)
+			}
+		}
+	}
+}
