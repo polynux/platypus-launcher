@@ -228,6 +228,9 @@ export const LauncherApi = {
     call<Game>('MakeGameExecutable', () => App.MakeGameExecutable(gameId)),
 
   getLauncherSettings: () => call<LauncherSettings>('GetLauncherSettings', () => App.GetLauncherSettings()),
+  /** The runner "auto" resolves to (issue #146): the runner new games without a
+   *  runner_id use. "" goes back to the automatic pick. */
+  setDefaultRunner: (id: string) => call<LauncherSettings>('SetDefaultRunner', () => App.SetDefaultRunner(id)),
 
   // Themes (issue #93): the picker's list, a theme's resolved tokens ("" is the
   // picked theme, what the UI applies at boot), and the pick itself.

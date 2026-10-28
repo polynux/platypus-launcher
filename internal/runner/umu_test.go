@@ -180,7 +180,7 @@ func TestUmuProtonPathLatest(t *testing.T) {
 		t.Fatalf("wine runner -> %q, want UMU-Latest", got)
 	}
 	runners := []types.ProtonVersion{wine, UmuEntry("/usr/bin/umu-run")}
-	if p, ok := UmuProton(runners); ok {
+	if p, ok := UmuProton(runners, ""); ok {
 		t.Fatalf("UmuProton with wine only = %q, want none", p.ID)
 	}
 }
@@ -194,10 +194,10 @@ func TestUmuFallbackWhenMissing(t *testing.T) {
 		t.Fatal("FindUmuFor found umu with an empty PATH and home")
 	}
 	runners := []types.ProtonVersion{umuProton(home), {ID: "system:wine", Name: "System Wine", Path: "/usr/bin/wine", IsSystem: true}}
-	if _, _, ok := SelectUmu("auto", runners); ok {
+	if _, _, ok := SelectUmu("auto", runners, ""); ok {
 		t.Fatal("SelectUmu(auto) without umu must not select umu")
 	}
-	if _, _, ok := SelectUmu("umu", runners); ok {
+	if _, _, ok := SelectUmu("umu", runners, ""); ok {
 		t.Fatal("SelectUmu(umu) without umu must not select umu")
 	}
 	args, env, err := BuildCommandFor(umuGame(), umuProton(home), Target{Exe: "/games/g.exe"}, true, "", home)
@@ -223,29 +223,29 @@ func TestUmuSelection(t *testing.T) {
 	umu := UmuEntry("/usr/bin/umu-run")
 	runners := []types.ProtonVersion{proton, wine, umu}
 
-	u, p, ok := SelectUmu("umu", runners)
+	u, p, ok := SelectUmu("umu", runners, "")
 	if !ok || u.Path != umu.Path {
 		t.Fatalf("explicit umu = %q, %v", u.Path, ok)
 	}
 	if p.ID != proton.ID {
 		t.Fatalf("umu proton = %q, want the auto pick %q", p.ID, proton.ID)
 	}
-	if _, _, ok := SelectUmu("auto", runners); !ok {
+	if _, _, ok := SelectUmu("auto", runners, ""); !ok {
 		t.Fatal("auto with umu present must select umu")
 	}
-	if _, _, ok := SelectUmu("", runners); !ok {
+	if _, _, ok := SelectUmu("", runners, ""); !ok {
 		t.Fatal("empty runner with umu present must select umu")
 	}
-	if _, _, ok := SelectUmu(proton.ID, runners); ok {
+	if _, _, ok := SelectUmu(proton.ID, runners, ""); ok {
 		t.Fatal("explicit Proton must run directly, not via umu")
 	}
-	if _, _, ok := SelectUmu(wine.ID, runners); ok {
+	if _, _, ok := SelectUmu(wine.ID, runners, ""); ok {
 		t.Fatal("explicit Wine must run directly, not via umu")
 	}
-	if got, _ := PickAuto(runners); got.ID != proton.ID {
+	if got, _ := PickAuto(runners, ""); got.ID != proton.ID {
 		t.Fatalf("PickAuto = %q, want %q (never umu)", got.ID, proton.ID)
 	}
-	if got, ok := PickAuto([]types.ProtonVersion{umu}); ok {
+	if got, ok := PickAuto([]types.ProtonVersion{umu}, ""); ok {
 		t.Fatalf("PickAuto with only umu = %q, want none", got.ID)
 	}
 }

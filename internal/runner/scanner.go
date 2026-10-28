@@ -14,11 +14,13 @@ func ScanProtonVersions() []types.ProtonVersion {
 	if err != nil {
 		return nil
 	}
-	return ScanProtonVersionsFor(home)
+	return ScanProtonVersionsFor(home, "")
 }
 
 // ScanProtonVersionsFor is ScanProtonVersions with an explicit home (issue #41).
-func ScanProtonVersionsFor(home string) []types.ProtonVersion {
+// defaultID is the user's default runner (issue #146): it carries IsDefault,
+// unless it is not installed, and then the automatic pick does.
+func ScanProtonVersionsFor(home, defaultID string) []types.ProtonVersion {
 	var versions []types.ProtonVersion
 	seen := make(map[string]bool)
 
@@ -132,7 +134,7 @@ func ScanProtonVersionsFor(home string) []types.ProtonVersion {
 	}
 
 	// Mark the runner "auto" resolves to so the UI can show it.
-	if pick, ok := PickAuto(versions); ok {
+	if pick, ok := PickAuto(versions, defaultID); ok {
 		for i := range versions {
 			versions[i].IsDefault = versions[i].ID == pick.ID
 		}

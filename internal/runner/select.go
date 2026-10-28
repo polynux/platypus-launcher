@@ -52,12 +52,21 @@ func rank(r types.ProtonVersion) int {
 	return 0
 }
 
-// PickAuto returns the best runner for "auto". Within a family the highest
+// PickAuto returns the runner "auto" resolves to: defaultID when that runner is
+// still installed (issue #146), else the best one. Within a family the highest
 // version wins, so GE-Proton10-34 beats GE-Proton10-32. Builds with a suffix
 // after the version (e.g. "-rtsp23-4" test builds) are skipped when a plain
-// release of the same family exists. The umu launcher entry is skipped: it
-// is not a Proton/Wine build (auto prefers it separately, see SelectUmu).
-func PickAuto(runners []types.ProtonVersion) (types.ProtonVersion, bool) {
+// release of the same family exists. The umu launcher entry is skipped: it is
+// not a Proton/Wine build (auto prefers it separately, see SelectUmu), so a
+// default of umu runs what auto runs.
+func PickAuto(runners []types.ProtonVersion, defaultID string) (types.ProtonVersion, bool) {
+	if !IsAuto(defaultID) {
+		for _, r := range runners {
+			if (r.ID == defaultID || r.Name == defaultID) && !IsUmu(r) {
+				return r, true
+			}
+		}
+	}
 	best := -1
 	for i, r := range runners {
 		if IsUmu(r) {
@@ -89,10 +98,11 @@ func better(a, b types.ProtonVersion) bool {
 	return lessVersion(versionKey(b.Name), versionKey(a.Name))
 }
 
-// Resolve maps a game's runner setting to an installed runner.
-func Resolve(runnerID string, runners []types.ProtonVersion) (types.ProtonVersion, bool) {
+// Resolve maps a game's runner setting to an installed runner. "auto" (or
+// none) resolves to defaultID when installed, else the automatic pick.
+func Resolve(runnerID string, runners []types.ProtonVersion, defaultID string) (types.ProtonVersion, bool) {
 	if IsAuto(runnerID) {
-		return PickAuto(runners)
+		return PickAuto(runners, defaultID)
 	}
 	for _, r := range runners {
 		if r.ID == runnerID || r.Name == runnerID {

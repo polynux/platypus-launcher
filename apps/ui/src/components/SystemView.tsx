@@ -16,13 +16,15 @@ interface SystemViewProps {
   scanning: boolean;
   /** Installed games, for each runner's usage strip (Atlas only). */
   games?: Game[];
+  /** Makes a runner the launcher's default (issue #146): what "auto" runs. */
+  onDefaultRunner?: (id: string) => void;
 }
 
-export function SystemView({ runners, onRefresh, scanning, games }: SystemViewProps) {
+export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunner }: SystemViewProps) {
   const { t } = useTranslation(['nav', 'runners']);
   // Atlas renders the /22 Runners page (issue #138); other themes keep the rows below.
   if (useVariant('shell.navigation') === 'sourcebar') {
-    return <AtlasRunners runners={runners} games={games ?? []} onRefresh={onRefresh} scanning={scanning} />;
+    return <AtlasRunners runners={runners} games={games ?? []} onRefresh={onRefresh} scanning={scanning} onDefaultRunner={onDefaultRunner} />;
   }
   return (
     <div className="p-7">
@@ -51,12 +53,18 @@ export function SystemView({ runners, onRefresh, scanning, games }: SystemViewPr
                   <span className="text-[13px] font-bold">{r.name}</span>
                   {r.is_custom && <Badge variant="gold">{t('runners:badge.custom')}</Badge>}
                   {r.is_system && <Badge variant="neutral">{t('runners:badge.system')}</Badge>}
+                  {r.is_default && <Badge variant="neutral">{t('runners:badge.default')}</Badge>}
                 </div>
                 <div className="truncate font-mono text-hint text-text-muted select-text">{r.path}</div>
               </div>
-              <Badge variant="ok" className="flex-none gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-ok" /> {t('runners:badge.found')}
-              </Badge>
+              <div className="flex flex-none items-center gap-2">
+                {onDefaultRunner && !r.is_default && (
+                  <Button variant="ghost" size="sm" onClick={() => onDefaultRunner(r.id)}>{t('runners:makeDefault')}</Button>
+                )}
+                <Badge variant="ok" className="flex-none gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-ok" /> {t('runners:badge.found')}
+                </Badge>
+              </div>
             </ListRow>
           ))}
         </Section>
@@ -69,8 +77,9 @@ export function SystemView({ runners, onRefresh, scanning, games }: SystemViewPr
  *  the current default, and each row names the build with its path. The
  *  lab's per-game usage thumbs, sizes and Install/Remove buttons have no
  *  backing in the core (runners are detected, not installed, and each game
- *  picks its own in its settings), so this page lists and rescans only. */
-function AtlasRunners({ runners, games, onRefresh, scanning }: SystemViewProps & { games: Game[] }) {
+ *  picks its own in its settings), so this page lists, rescans and picks the
+ *  default for new games only. */
+function AtlasRunners({ runners, games, onRefresh, scanning, onDefaultRunner }: SystemViewProps & { games: Game[] }) {
   const { t } = useTranslation(['nav', 'runners']);
   const fallback = runners.find((r) => r.is_default) ?? runners[0];
   const uses = (id: string, name: string): Game[] =>
@@ -96,9 +105,8 @@ function AtlasRunners({ runners, games, onRefresh, scanning }: SystemViewProps &
               <h2 className="text-[13px] font-semibold text-text">{t('runners:atlas.defaultLabel')}</h2>
               <p className="text-[0.93em] leading-normal text-text-muted">{t('runners:atlas.defaultDesc')}</p>
             </div>
-            {/* The core names the default but offers no call to change it, so
-                the picker reads only: a field, not bare text. */}
-            <Select value={fallback?.id ?? ''} disabled aria-label={t('runners:atlas.defaultLabel')}>
+            {/* The core names the default and takes the pick (issue #146). */}
+            <Select value={fallback?.id ?? ''} onValueChange={onDefaultRunner} disabled={!onDefaultRunner} aria-label={t('runners:atlas.defaultLabel')}>
               <SelectTrigger className="h-8 w-[210px] flex-none bg-surface font-sans text-[13px]">
                 <SelectValue />
               </SelectTrigger>

@@ -136,7 +136,7 @@ func TestEverySchemaLabelIsTranslated(t *testing.T) {
 			t.Errorf("fr has no %q", k)
 		}
 	}
-	for _, g := range runnerSchema()["groups"].([]any) {
+	for _, g := range runnerSchema("")["groups"].([]any) {
 		group := g.(map[string]any)
 		if group["label"] == "" {
 			t.Errorf("group %v has no label", group["id"])

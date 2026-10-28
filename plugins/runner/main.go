@@ -66,25 +66,30 @@ type wrapParams struct {
 		Cwd       string            `json:"cwd"`
 		NeedsWine bool              `json:"needsWine"`
 	} `json:"spec"`
-	Game           types.Game `json:"game"`
-	RunnerID       string     `json:"runnerId"`
-	PrefixesFolder string     `json:"prefixesFolder"`
-	Preview        bool       `json:"preview"`
+	Game     types.Game `json:"game"`
+	RunnerID string     `json:"runnerId"`
+	// DefaultRunnerID is the launcher's default runner (issue #146): what
+	// "auto" resolves to while it is installed.
+	DefaultRunnerID string `json:"defaultRunnerId"`
+	PrefixesFolder  string `json:"prefixesFolder"`
+	Preview         bool   `json:"preview"`
 }
 
 type prefixParams struct {
-	Game           types.Game `json:"game"`
-	RunnerID       string     `json:"runnerId"`
-	PrefixesFolder string     `json:"prefixesFolder"`
+	Game            types.Game `json:"game"`
+	RunnerID        string     `json:"runnerId"`
+	DefaultRunnerID string     `json:"defaultRunnerId"`
+	PrefixesFolder  string     `json:"prefixesFolder"`
 }
 
 type actionParams struct {
-	ID             string     `json:"id"`
-	Verb           string     `json:"verb"`
-	Game           types.Game `json:"game"`
-	RunnerID       string     `json:"runnerId"`
-	PrefixesFolder string     `json:"prefixesFolder"`
-	Force          bool       `json:"force"`
+	ID              string     `json:"id"`
+	Verb            string     `json:"verb"`
+	Game            types.Game `json:"game"`
+	RunnerID        string     `json:"runnerId"`
+	DefaultRunnerID string     `json:"defaultRunnerId"`
+	PrefixesFolder  string     `json:"prefixesFolder"`
+	Force           bool       `json:"force"`
 	// Launch is the runner.wrap result of the launch being stopped, handed back
 	// unread by the core. Only the stop action reads it.
 	Launch struct {
@@ -117,14 +122,22 @@ func handle(req message) message {
 		}
 		resp.Result = map[string]any{"protocol": chosen, "capabilities": []string{"runner"}}
 	case "runner.list":
-		rs := runner.ScanProtonVersionsFor(os.Getenv("HOME"))
+		var p struct {
+			DefaultRunnerID string `json:"defaultRunnerId"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		rs := runner.ScanProtonVersionsFor(os.Getenv("HOME"), p.DefaultRunnerID)
 		out := make([]plugins.RunnerInfo, 0, len(rs))
 		for _, r := range rs {
 			out = append(out, runnerInfo(r))
 		}
 		resp.Result = map[string]any{"runners": out}
 	case "runner.options":
-		resp.Result = runnerSchema()
+		var p struct {
+			DefaultRunnerID string `json:"defaultRunnerId"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		resp.Result = runnerSchema(p.DefaultRunnerID)
 	case "runner.env":
 		var p struct {
 			Game    types.Game     `json:"game"`
@@ -180,10 +193,10 @@ func handle(req message) message {
 		// the auto Proton pick (issue #48); explicit "umu" picks it directly. The
 		// runner reported is the umu entry, so cloud saves and the stop hook see
 		// umu's prefix layout.
-		rs := runner.ScanProtonVersionsFor(home)
-		selected, proton, useUmu := runner.SelectUmu(p.RunnerID, rs)
+		rs := runner.ScanProtonVersionsFor(home, p.DefaultRunnerID)
+		selected, proton, useUmu := runner.SelectUmu(p.RunnerID, rs, p.DefaultRunnerID)
 		if !useUmu {
-			selected, _ = runner.Resolve(p.RunnerID, rs)
+			selected, _ = runner.Resolve(p.RunnerID, rs, p.DefaultRunnerID)
 		}
 		if selected.ID == "" {
 			if runner.IsAuto(p.RunnerID) {
@@ -221,7 +234,7 @@ func handle(req message) message {
 			resp.Result = map[string]any{}
 			break
 		}
-		dir, user := gamePrefix(p.Game, p.RunnerID, p.PrefixesFolder, os.Getenv("HOME"))
+		dir, user := gamePrefix(p.Game, p.RunnerID, p.DefaultRunnerID, p.PrefixesFolder, os.Getenv("HOME"))
 		resp.Result = map[string]any{"dir": dir, "user": user}
 	case "runner.actions":
 		var p actionParams
@@ -386,11 +399,11 @@ func runWinetricks(p actionParams) error {
 		return &codedError{code: "crash.noWinetricks", msg: "winetricks isn't installed"}
 	}
 	home := os.Getenv("HOME")
-	runners := runner.ScanProtonVersionsFor(home)
-	selected, proton, useUmu := runner.SelectUmu(p.RunnerID, runners)
+	runners := runner.ScanProtonVersionsFor(home, p.DefaultRunnerID)
+	selected, proton, useUmu := runner.SelectUmu(p.RunnerID, runners, p.DefaultRunnerID)
 	if !useUmu {
 		var ok bool
-		selected, ok = runner.Resolve(p.RunnerID, runners)
+		selected, ok = runner.Resolve(p.RunnerID, runners, p.DefaultRunnerID)
 		if !ok {
 			return &codedError{code: "game.runnerMissing", params: map[string]string{"id": p.RunnerID},
 				msg: fmt.Sprintf("runner %q is not installed", p.RunnerID)}
@@ -450,12 +463,12 @@ func runWinetricks(p actionParams) error {
 // read from, and the login inside it, for the runner it launches with. It reads
 // the runner list and the disk only. With no runner installed, a pfx folder
 // (Proton's layout) decides.
-func gamePrefix(game types.Game, runnerID, prefixesFolder, home string) (dir, user string) {
+func gamePrefix(game types.Game, runnerID, defaultRunnerID, prefixesFolder, home string) (dir, user string) {
 	prefix := runner.PrefixPath(game, home, prefixesFolder)
-	rs := runner.ScanProtonVersionsFor(home)
-	selected, _, useUmu := runner.SelectUmu(runnerID, rs)
+	rs := runner.ScanProtonVersionsFor(home, defaultRunnerID)
+	selected, _, useUmu := runner.SelectUmu(runnerID, rs, defaultRunnerID)
 	if !useUmu {
-		selected, _ = runner.Resolve(runnerID, rs)
+		selected, _ = runner.Resolve(runnerID, rs, defaultRunnerID)
 	}
 	if selected.ID == "" {
 		if st, err := os.Stat(filepath.Join(prefix, "pfx")); err == nil && st.IsDir() {

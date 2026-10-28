@@ -122,6 +122,10 @@ type file struct {
 	// Theme is the picked theme's id (issue #93). Empty means the built-in
 	// default; the app checks the id (see app_theme.go).
 	Theme string `json:"theme,omitempty"`
+	// DefaultRunnerID is the runner "auto" resolves to (issue #146). Empty
+	// means the automatic pick; a runner that is no longer installed falls
+	// back to it too (see defaultrunner.go).
+	DefaultRunnerID string `json:"default_runner_id,omitempty"`
 	// GameTone is the game colour choice (issues #123, #134): "" or "accent"
 	// for the accent only, "whole" for the whole app, "off" for none. The
 	// theme's color.game-tone axis decides how far it applies (see gametone.go).

@@ -82,17 +82,17 @@ func UmuEntry(umuPath string) types.ProtonVersion {
 }
 
 // UmuProton picks the Proton build umu runs: the auto pick (same rule as a
-// direct launch). It returns false when no Proton build is installed or the
-// auto pick is not a Proton build (plain Wine): the caller then uses
-// UmuLatest.
-func UmuProton(runners []types.ProtonVersion) (types.ProtonVersion, bool) {
+// direct launch, issue #146's default included). It returns false when no
+// Proton build is installed or the auto pick is not a Proton build (plain
+// Wine): the caller then uses UmuLatest.
+func UmuProton(runners []types.ProtonVersion, defaultID string) (types.ProtonVersion, bool) {
 	var rest []types.ProtonVersion
 	for _, r := range runners {
 		if !IsUmu(r) {
 			rest = append(rest, r)
 		}
 	}
-	p, ok := PickAuto(rest)
+	p, ok := PickAuto(rest, defaultID)
 	if !ok || !strings.HasSuffix(p.Path, "proton") {
 		return types.ProtonVersion{}, false
 	}
@@ -166,7 +166,7 @@ func EffectiveUmuPrefix(prefixPath string) string {
 // Proton build umu runs: explicit "umu", or "auto" with umu installed (then
 // umu wraps the auto Proton pick). An explicit Proton/Wine choice always runs
 // directly. ok is false when umu is not installed.
-func SelectUmu(runnerID string, runners []types.ProtonVersion) (umu, proton types.ProtonVersion, ok bool) {
+func SelectUmu(runnerID string, runners []types.ProtonVersion, defaultID string) (umu, proton types.ProtonVersion, ok bool) {
 	var found *types.ProtonVersion
 	for i := range runners {
 		if IsUmu(runners[i]) {
@@ -180,7 +180,7 @@ func SelectUmu(runnerID string, runners []types.ProtonVersion) (umu, proton type
 	if runnerID != UmuRunnerID && !IsAuto(runnerID) {
 		return types.ProtonVersion{}, types.ProtonVersion{}, false
 	}
-	p, _ := UmuProton(runners)
+	p, _ := UmuProton(runners, defaultID)
 	return *found, p, true
 }
 

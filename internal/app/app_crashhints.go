@@ -99,7 +99,8 @@ func (a *App) RunWinetricksVerb(game types.Game, verb string) error {
 	defer cancel()
 	params := map[string]any{
 		"id": "winetricks", "verb": verb, "game": game,
-		"runnerId": game.Settings.RunnerID, "prefixesFolder": a.effectivePrefixesFolder(),
+		"runnerId": game.Settings.RunnerID, "defaultRunnerId": a.defaultRunnerID(),
+		"prefixesFolder": a.effectivePrefixesFolder(),
 	}
 	if err := a.plugins.Call(ctx, "runner", "runner.runAction", params, nil); err != nil {
 		return runnerFailure(err, "crash.winetricksFailed", map[string]string{"verb": verb})
