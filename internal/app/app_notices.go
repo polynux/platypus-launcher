@@ -6,7 +6,8 @@ import (
 
 // SetClientNotices saves the "Store client notices" switch (issue #149). Off,
 // the App stops reporting what a store's client is doing while it starts a
-// game: no "Steam is updating" status, and no poller behind the launch.
+// game: the "Steam is updating" status events stop, but the launch still polls
+// the client, so a long update keeps its deadline.
 func (a *App) SetClientNotices(on bool) (types.LauncherSettings, error) {
 	if err := a.settings.SetClientNotices(on); err != nil {
 		return a.launcherSettings(), err

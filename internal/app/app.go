@@ -1178,10 +1178,11 @@ func (a *App) startClient(game types.Game, cmd *exec.Cmd, cl *stores.ClientLaunc
 	}
 	go func() { _ = cmd.Wait() }()
 	opts := []session.StartOption{a.afterSessionHook(game)}
-	// Store client notices off (issue #149): the launch still waits for the
-	// game, but the App stops reporting what the client is doing.
-	if cl.ClientStatus != nil && (a.settings == nil || a.settings.ClientNotices()) {
-		opts = append(opts, session.WithClientStatus(cl.ClientStatus))
+	// The status is always polled: it is what keeps a client that updates or
+	// compiles shaders from being called a failed launch. "Store client
+	// notices" off only hides it from the user (issue #149).
+	if cl.ClientStatus != nil {
+		opts = append(opts, session.WithClientStatus(cl.ClientStatus), session.WithClientNotices(a.settings == nil || a.settings.ClientNotices()))
 	}
 	if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout, opts...) {
 		return "", apperr.New("game.running", fmt.Sprintf("%s is already running", game.Title), map[string]string{"title": game.Title})
