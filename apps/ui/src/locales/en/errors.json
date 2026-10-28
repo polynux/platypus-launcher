@@ -130,6 +130,7 @@
       "outsideRoot": "Only a prefix backup in the prefixes folder can be deleted ({{path}}).",
       "missing": "That prefix backup is already gone.",
       "notDir": "{{path}} is not a prefix backup folder.",
+      "inUse": "{{title}} uses this folder as its Wine prefix; point the game at another prefix first.",
       "deleteFailed": "Couldn't delete the prefix backup: {{error}}."
     }
   },

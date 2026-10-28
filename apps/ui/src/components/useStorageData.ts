@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import type { DiskUsage, Game, RemoveOptions } from '../types';
-import { LauncherApi, onDiskUsage } from '../effect/runtime';
+import { LauncherApi, onDiskUsage, onLibrary } from '../effect/runtime';
 import { coreErrMsg } from '../lib/coreError';
 
 interface UseStorageDataProps {
@@ -50,10 +50,18 @@ export function useStorageData({ games: library, jobs: liveJobs, onNotify, onRem
   useEffect(() => {
     Effect.runPromise(LauncherApi.getDiskUsage()).then(apply).catch(() => {});
     Effect.runPromise(LauncherApi.getGameFolders()).then(setFolders).catch(() => {});
-    Effect.runPromise(LauncherApi.prefixBackups()).then(setBackups).catch(() => {});
+    const readBackups = () => Effect.runPromise(LauncherApi.prefixBackups()).then(setBackups).catch(() => {});
+    void readBackups();
     // Without the App's live job list, read it once.
     if (!liveJobs) Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch(() => {});
-    return onDiskUsage(apply);
+    const offUsage = onDiskUsage(apply);
+    // A reset made while this page is open leaves a new backup (it emits a
+    // library event), and so does a plugin going away: read them again.
+    const offLibrary = onLibrary(() => { void readBackups(); });
+    return () => {
+      offUsage();
+      offLibrary();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { if (liveJobs) setJobs(liveJobs); }, [liveJobs]);

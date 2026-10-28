@@ -1,7 +1,9 @@
 package app
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -49,10 +51,16 @@ func (a *App) ResetPrefix(gameID string) (types.PrefixResetResult, error) {
 	// must not smuggle the reset outside. EvalSymlinks fails for paths that
 	// don't exist yet, so the deepest existing folder is resolved and the
 	// missing part appended as written: a missing folder under a symlink
-	// would otherwise read as inside the root. The prefix itself is checked
-	// with Lstat below, so a symlinked prefix is refused, never followed.
-	rroot := resolveExistingPath(root)
-	rparent := resolveExistingPath(filepath.Dir(prefix))
+	// would otherwise read as inside the root. A path that can't be resolved
+	// at all is refused below. The prefix itself is checked with Lstat, so a
+	// symlinked prefix is refused, never followed.
+	rroot, rrootErr := resolveExistingPath(root)
+	rparent, rparentErr := resolveExistingPath(filepath.Dir(prefix))
+	if rrootErr != nil || rparentErr != nil {
+		return types.PrefixResetResult{}, apperr.New("prefix.reset.outsideRoot",
+			fmt.Sprintf("%s uses a custom prefix outside the prefixes folder; reset it by hand", game.Title),
+			map[string]string{"title": game.Title})
+	}
 	rel, err := filepath.Rel(rroot, filepath.Join(rparent, filepath.Base(prefix)))
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return types.PrefixResetResult{}, apperr.New("prefix.reset.outsideRoot",
@@ -106,25 +114,61 @@ func (a *App) ResetPrefix(gameID string) (types.PrefixResetResult, error) {
 // the part that doesn't exist yet, unresolved. EvalSymlinks alone fails on a
 // missing path, which would hide a symlinked parent: <root>/link/new (link
 // pointing outside) must resolve to the outside folder, not read as lexical.
-func resolveExistingPath(p string) string {
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		return r
+// Only a missing component is skipped: a component that exists but can't be
+// resolved (a loop, no permission, a dangling link) is an error, so callers
+// refuse instead of trusting the lexical path.
+func resolveExistingPath(p string) (string, error) {
+	r, err := filepath.EvalSymlinks(p)
+	if err == nil {
+		return r, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return "", err
+	}
+	if st, lerr := os.Lstat(p); lerr == nil && st.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("%s is a symlink that can't be resolved", p)
 	}
 	parent := filepath.Dir(p)
 	if parent == p {
-		return p
+		return p, nil
 	}
-	return filepath.Join(resolveExistingPath(parent), filepath.Base(p))
+	rp, err := resolveExistingPath(parent)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(rp, filepath.Base(p)), nil
 }
 
 // prefixBackupName matches the backups ResetPrefix leaves: <prefix>.bak-<unix>,
 // and the -<n> repeats of the same second.
 var prefixBackupName = regexp.MustCompile(`\.bak-(\d+)(?:-\d+)?$`)
 
+// prefixOwners maps every game's current Wine prefix to that game: its saved
+// choice, or the default under the prefixes folder. A backup a user pointed a
+// game back at is a live prefix, never a reclaimable folder. An unlistable
+// library leaves the map empty (nothing is known to use the folder).
+func (a *App) prefixOwners() map[string]types.Game {
+	owners := map[string]types.Game{}
+	games, err := a.diskLibrary()
+	if err != nil {
+		return owners
+	}
+	root, home := a.effectivePrefixesFolder(), a.homeDir()
+	for _, g := range games {
+		if g.Native || g.ClientLaunch {
+			continue
+		}
+		owners[filepath.Clean(runner.PrefixPath(g, home, root))] = g
+	}
+	return owners
+}
+
 // PrefixBackups lists the prefix backups kept in the prefixes folder, stalest
 // first: each reset of a damaged prefix leaves one behind, and nothing else
 // ever tells the user they take space. Only the folder's own entries are
-// looked at (a game's prefix is <root>/<game id>); a link is never listed.
+// looked at (a game's prefix is <root>/<game id>): a backup of a custom prefix
+// nested deeper in the folder isn't listed. A link is never listed, and nor is
+// a backup a game uses as its prefix again.
 func (a *App) PrefixBackups() []types.PrefixBackup {
 	out := []types.PrefixBackup{}
 	root := a.effectivePrefixesFolder()
@@ -132,6 +176,7 @@ func (a *App) PrefixBackups() []types.PrefixBackup {
 	if err != nil {
 		return out
 	}
+	owners := a.prefixOwners()
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -142,6 +187,9 @@ func (a *App) PrefixBackups() []types.PrefixBackup {
 		}
 		at, _ := strconv.ParseInt(m[1], 10, 64)
 		path := filepath.Join(root, e.Name())
+		if _, used := owners[filepath.Clean(path)]; used {
+			continue
+		}
 		size, _ := relocate.TreeSize(path) // an unreadable folder still lists, at 0
 		out = append(out, types.PrefixBackup{Name: e.Name(), Path: path, Bytes: size, At: at})
 	}
@@ -152,6 +200,8 @@ func (a *App) PrefixBackups() []types.PrefixBackup {
 // DeletePrefixBackup deletes one prefix backup and returns the bytes it freed.
 // The path comes from the UI, so it is checked again here: a .bak-* folder
 // directly inside the prefixes folder, never a link and never anything else.
+// A game using it as its prefix is refused, and so is deleting under a running
+// game: the backup is the folder a wineserver would have open.
 func (a *App) DeletePrefixBackup(path string) (int64, error) {
 	root := filepath.Clean(a.effectivePrefixesFolder())
 	clean := filepath.Clean(path)
@@ -168,6 +218,16 @@ func (a *App) DeletePrefixBackup(path string) (int64, error) {
 		return 0, apperr.New("prefix.backup.notDir",
 			fmt.Sprintf("%s is not a prefix backup folder", clean),
 			map[string]string{"path": clean})
+	}
+	if game, used := a.prefixOwners()[clean]; used {
+		if a.isRunning(game.ID) {
+			return 0, apperr.New("game.running",
+				fmt.Sprintf("%s is running; delete its old prefix after it exits", game.Title),
+				map[string]string{"title": game.Title})
+		}
+		return 0, apperr.New("prefix.backup.inUse",
+			fmt.Sprintf("%s uses this folder as its Wine prefix", game.Title),
+			map[string]string{"title": game.Title, "path": clean})
 	}
 	size, _ := relocate.TreeSize(clean)
 	if err := os.RemoveAll(clean); err != nil {

@@ -8,11 +8,15 @@ import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { RemoveConfirmPanel, RemoveFirstRow, parentFolder, useRemoveCheck } from './MaintenanceTab';
 import { MoveDialog } from './MoveDialog';
+import { Modal } from './Modal';
 import { formatBytes, heroImages, isPluginGame, lastPlayedAgo, storeLabel } from '../lib/games';
 import { ThemeLayout } from '../lib/layout';
 import { useThemeLayout, useVariant } from '../lib/theme';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
 import { useStorageData, type StorageData } from './useStorageData';
+
+/** The suffix ResetPrefix gives a backup folder, past the game's id. */
+const BACKUP_SUFFIX = /\.bak-\d+(-\d+)?$/;
 
 /** The figure for a byte count: formatBytes has no output for 0, and an
  *  unreadable disk (-1) shows an em dash instead of a made-up size. */
@@ -474,11 +478,19 @@ function AtlasStorage({ data }: { data: StorageData }) {
 }
 
 /** The prefix backups the resets left behind (issue #163): each one listed
- *  with the space it takes, and deleted for good from here. Hidden when a
- *  reset never left one, which is the usual case. */
+ *  with the space it takes, and deleted from here — behind a confirm, since
+ *  the old drive_c holds the game's saves. Hidden when a reset never left
+ *  one, which is the usual case. */
 function PrefixBackups({ backups, data }: { backups: PrefixBackup[]; data: StorageData }) {
-  const { t } = useTranslation('storage');
+  const { t } = useTranslation(['storage', 'common']);
+  // The backup whose delete was asked for, and that is now waiting for the
+  // confirmation: deleting one is permanent, saves included.
+  const [pending, setPending] = useState<PrefixBackup | null>(null);
   if (backups.length === 0) return null;
+  // Who the backup belongs to: its folder carries the game's id, so the
+  // library names it, and the id stands in for a game that left the library.
+  const titleOf = (backup: PrefixBackup) =>
+    data.library.find((g) => backup.name.startsWith(`${g.id}.bak-`))?.title ?? backup.name.replace(BACKUP_SUFFIX, '');
   const remove = (backup: PrefixBackup) => {
     void data.deleteBackup(backup).then((freed) => {
       if (freed !== null) data.onNotify(t('storage:backups.deleted', { name: backup.name, size: figure(freed) }), 'ok');
@@ -498,13 +510,36 @@ function PrefixBackups({ backups, data }: { backups: PrefixBackup[]; data: Stora
               size="icon"
               className="size-7"
               aria-label={t('storage:backups.delete', { name: backup.name })}
-              onClick={() => remove(backup)}
+              onClick={() => setPending(backup)}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
           </li>
         ))}
       </ul>
+      {pending && (
+        <Modal label={t('storage:backups.confirmTitle')} onClose={() => setPending(null)} size="sm">
+          <div className="p-6">
+            <h2 className="mb-2 text-[17px] font-bold">{t('storage:backups.confirmTitle')}</h2>
+            <p className="text-[13px] leading-relaxed text-text-muted">
+              {t('storage:backups.confirmBody', { title: titleOf(pending), name: pending.name, size: figure(pending.bytes) })}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" autoFocus onClick={() => setPending(null)}>{t('common:cancel')}</Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  const backup = pending;
+                  setPending(null);
+                  remove(backup);
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> {t('storage:backups.confirmGo')}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </section>
   );
 }

@@ -34,6 +34,7 @@ vi.mock('../../effect/runtime', () => ({
     mock.subs.push(cb);
     return () => {};
   },
+  onLibrary: () => () => {},
 }));
 
 import { StorageView } from '../StorageView';

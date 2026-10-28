@@ -130,6 +130,7 @@
       "outsideRoot": "Seule une sauvegarde de préfixe dans le dossier des préfixes peut être supprimée ({{path}}).",
       "missing": "Cette sauvegarde de préfixe a déjà disparu.",
       "notDir": "{{path}} n'est pas un dossier de sauvegarde de préfixe.",
+      "inUse": "« {{title}} » utilise ce dossier comme préfixe Wine ; faites d'abord pointer le jeu vers un autre préfixe.",
       "deleteFailed": "Impossible de supprimer la sauvegarde de préfixe : {{error}}."
     }
   },

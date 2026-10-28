@@ -362,3 +362,70 @@ func TestDeletePrefixBackupRefusesAnythingElse(t *testing.T) {
 		t.Fatalf("a folder outside the prefixes folder was deleted: %v", err)
 	}
 }
+
+// A backup a game points back at is its live prefix (m2): it is never listed
+// as reclaimable, deleting it is refused, and a running game keeps it too.
+func TestPrefixBackupsLeaveALivePrefixAlone(t *testing.T) {
+	t.Parallel()
+	a, _ := resetTestApp(t, []types.Game{resetWineGame("restored", nil), resetWineGame("busy", nil)})
+	root := a.effectivePrefixesFolder()
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The user "restored" an old prefix by pointing the game at it.
+	restored := filepath.Join(root, "restored.bak-1700000000")
+	busy := filepath.Join(root, "busy.bak-1700000001")
+	spare := filepath.Join(root, "gone.bak-1700000002")
+	for _, dir := range []string{restored, busy, spare} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := a.settings.SetGameSettings("restored", map[string]any{"wine_prefix": restored}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.settings.SetGameSettings("busy", map[string]any{"wine_prefix": busy}); err != nil {
+		t.Fatal(err)
+	}
+	a.sessionRunning = func(id string) bool { return id == "busy" }
+
+	got := a.PrefixBackups()
+	if len(got) != 1 || got[0].Path != spare {
+		t.Fatalf("backups = %+v, want only the one no game uses", got)
+	}
+	if _, err := a.DeletePrefixBackup(restored); resetCode(t, err) != "prefix.backup.inUse" {
+		t.Fatalf("deleting a live prefix = %v, want prefix.backup.inUse", err)
+	}
+	if _, err := a.DeletePrefixBackup(busy); resetCode(t, err) != "game.running" {
+		t.Fatalf("deleting the prefix of a running game = %v, want game.running", err)
+	}
+	if _, err := os.Lstat(restored); err != nil {
+		t.Fatalf("the live prefix was deleted: %v", err)
+	}
+}
+
+// A parent that can't be resolved at all (a dangling link, a loop, no access)
+// is refused rather than trusted lexically (m5): the reset must not write
+// through it, even outside the root.
+func TestResetPrefixRefusesAParentItCannotResolve(t *testing.T) {
+	t.Parallel()
+	outside := t.TempDir()
+	a, _ := resetTestApp(t, []types.Game{resetWineGame("dangling", nil)})
+	root := a.effectivePrefixesFolder()
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "missing"), filepath.Join(root, "dang")); err != nil {
+		t.Fatal(err)
+	}
+	prefix := filepath.Join(root, "dang", "Documents")
+	if err := a.settings.SetGameSettings("dangling", map[string]any{"wine_prefix": prefix}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.ResetPrefix("dangling"); resetCode(t, err) != "prefix.reset.outsideRoot" {
+		t.Fatalf("reset through a dangling link = %v, want a refusal", err)
+	}
+	if _, err := os.Lstat(filepath.Join(outside, "missing")); !os.IsNotExist(err) {
+		t.Fatalf("the reset created the link's target: %v", err)
+	}
+}

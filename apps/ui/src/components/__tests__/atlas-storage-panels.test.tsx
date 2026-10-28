@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({ getDiskUsage: vi.fn(), getGameFolders: vi.fn(), 
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: new Proxy({}, { get: (_t, k: string) => (...args: unknown[]) => (api as Record<string, (...a: unknown[]) => unknown>)[k](...args) }),
   onDiskUsage: () => () => {},
+  onLibrary: () => () => {},
 }));
 vi.mock('../../lib/theme', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../lib/theme')>(),
@@ -95,7 +96,7 @@ describe('Atlas Storage panels', () => {
     expect(screen.getByText('2.5 GB')).toBeInTheDocument();
   });
 
-  it('deletes a prefix backup and reports the space it freed', async () => {
+  it('deletes a prefix backup once the confirm names it, and reports the space freed', async () => {
     const onNotify = vi.fn();
     api.prefixBackups.mockReturnValue(Effect.succeed([
       { name: 'inside.bak-1700000000', path: '/prefixes/inside.bak-1700000000', bytes: 2.5e9, at: 1700000000 },
@@ -103,6 +104,9 @@ describe('Atlas Storage panels', () => {
     api.deletePrefixBackup.mockReturnValue(Effect.succeed(2.5e9));
     render(<StorageView games={[mk('inside', '/home/games/Inside')]} onNotify={onNotify} onRemove={() => {}} onUninstall={() => {}} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Delete inside.bak-1700000000' }));
+    // Never on the trash alone: a backup may hold the game's saves.
+    expect(api.deletePrefixBackup).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete for good' }));
     await waitFor(() => expect(api.deletePrefixBackup).toHaveBeenCalledWith('/prefixes/inside.bak-1700000000'));
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Deleted inside.bak-1700000000 and freed 2.5 GB.', 'ok'));
     expect(screen.queryByText('inside.bak-1700000000')).toBeNull();
