@@ -1,10 +1,16 @@
 // Spatial navigation for controller and keyboard use (issue #53). Arrow keys
 // (and the gamepad D-pad / left stick through the same code path, see
 // useGamepad.ts) move focus to the nearest focusable element in that
-// direction, using DOM geometry. The scope is the topmost open layer: when a
-// dialog, flyout, the command palette or the friends panel is open, focus
-// stays inside it.
+// direction, using DOM geometry. The scope is the topmost open layer: an open
+// dialog (Modals, the command palette, the Tune flyout) wins over the friends
+// side panel, which wins over an open Radix menu/popper; with nothing open
+// the whole document is the scope.
 export type NavDir = 'up' | 'down' | 'left' | 'right';
+
+/** Set by the gamepad path (see dispatchPadArrow): a pad has no caret, so a
+ *  pad direction leaves text fields and closed triggers that keyboard arrows
+ *  must keep working in. */
+export const PAD_FLAG = 'controllerPadMove';
 
 /** What can take focus. Kept to natively focusable elements so a move always
  *  lands somewhere a mouse or Tab user could reach too. */
@@ -20,33 +26,79 @@ export const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
 
-/** Text fields, selects, sliders and the places that already handle arrows
- *  themselves keep them: the palette listbox, Radix menus and poppers, and
- *  combobox triggers (the closed select opens on ArrowDown). */
-export function shouldIgnoreArrows(target: EventTarget | null): boolean {
+/** Subtrees whose own key handling owns every key (the palette, the library
+ *  list): the shared handler yields without consuming. */
+const LOCAL_KEYS = '[data-keys-local]';
+/** Open popups the shared handler never steers inside (Radix owns their
+ *  keys; B closes them through Escape). */
+const POPUP = '[role="listbox"], [role="menu"], [data-radix-popper-content-wrapper]';
+/** Closed select/menu triggers: arrows move focus away, Enter/A opens. */
+const TRIGGER = '[role="combobox"], [aria-haspopup="menu"], [aria-haspopup="listbox"]';
+/** Text editing targets. */
+const TEXT = 'input, textarea, select, [contenteditable="true"], [contenteditable=""]';
+/** Single-line text entry: Up/Down are free, Left/Right keep the caret. */
+const TEXT_INPUT_TYPES = new Set(['', 'text', 'search', 'url', 'email', 'password', 'tel']);
+
+function menuOpen(): boolean {
+  return document.querySelector(POPUP) !== null;
+}
+
+function isPadEvent(e: KeyboardEvent): boolean {
+  return (e as KeyboardEvent & { [PAD_FLAG]?: boolean })[PAD_FLAG] === true;
+}
+
+/** Whether this arrow must keep the element's own behaviour. */
+export function shouldIgnoreArrows(target: EventTarget | null, fromPad = false): boolean {
   if (!(target instanceof Element)) return false;
-  if (
-    target.closest(
-      'input, textarea, select, [contenteditable="true"], [contenteditable=""]',
-    )
-  ) return true;
+  if (target.closest(LOCAL_KEYS)) return true;
+  if (target.closest(POPUP)) return true;
+  const trigger = target.closest(TRIGGER);
+  // Closed triggers never consume arrows (Enter/A opens them); with a menu
+  // open the popup owns the keys instead.
+  if (trigger) return menuOpen();
+  const text = target.closest(TEXT);
+  if (text) {
+    if (text.tagName === 'SELECT') return true;
+    if (text.getAttribute('role') === 'slider') return true;
+    if (text.tagName === 'INPUT') {
+      const type = (text.getAttribute('type') ?? '').toLowerCase();
+      if (!TEXT_INPUT_TYPES.has(type)) return true;
+      // Single-line entry: the caret owns Left/Right for the keyboard; a
+      // pad has no caret, so every direction may leave.
+      return false;
+    }
+    // Textareas and contenteditables: the keyboard keeps caret keys, the pad
+    // always leaves (it cannot address a line or column).
+    return !fromPad;
+  }
   if (target.closest('[role="slider"]')) return true;
-  if (
-    target.closest(
-      '[role="listbox"], [role="menu"], [role="combobox"], [data-radix-popper-content-wrapper]',
-    )
-  ) return true;
   return false;
 }
 
-/** The layer arrows are scoped to: the last open dialog (Modals, the command
- *  palette, the Tune flyout, all render role=dialog) wins over the friends
- *  side panel; with nothing open the whole document is the scope. */
+/** Left/Right keep the caret in single-line inputs; every other unconsumed
+ *  arrow moves focus. The pad path (no caret) moves on all four. */
+function caretKept(target: Element, dir: NavDir, fromPad: boolean): boolean {
+  if (fromPad) return false;
+  const text = target.closest(TEXT);
+  if (!text || text.tagName !== 'INPUT') return false;
+  const type = (text.getAttribute('type') ?? '').toLowerCase();
+  if (!TEXT_INPUT_TYPES.has(type)) return false;
+  return dir === 'left' || dir === 'right';
+}
+
+/** The layer arrows are scoped to: the last open dialog wins over the
+ *  friends side panel, which wins over an open Radix menu/popper; with
+ *  nothing open the whole document is the scope. */
 export function getScopeRoot(): Element | Document {
   const dialogs = document.querySelectorAll('[role="dialog"]');
   if (dialogs.length > 0) return dialogs[dialogs.length - 1];
   const layer = document.querySelector('[data-controller-layer]');
   if (layer) return layer;
+  const popup =
+    document.querySelector('[data-radix-popper-content-wrapper]') ??
+    [...document.querySelectorAll('[role="menu"], [role="listbox"]')].pop() ??
+    null;
+  if (popup) return popup;
   return document;
 }
 
@@ -57,6 +109,28 @@ function isHidden(el: HTMLElement): boolean {
   return el.getAttribute('aria-hidden') === 'true';
 }
 
+/** Hover-only controls (the cards' quick actions) are not stops: keyboard
+ *  and mouse users reach them through the card, and the pad treats a card as
+ *  one stop. Focused controls are never skipped. */
+function isHoverOnly(el: HTMLElement): boolean {
+  if (el.contains(document.activeElement) || el === document.activeElement) return false;
+  try {
+    return getComputedStyle(el).opacity === '0';
+  } catch {
+    return false;
+  }
+}
+
+function isEffectivelyHidden(el: HTMLElement): boolean {
+  try {
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden') return true;
+  } catch {
+    // jsdom: fall through to the rect check below.
+  }
+  return false;
+}
+
 /** Focusable elements in scope, in DOM order. Visibility is read off the
  *  rect: hidden elements lay out at 0x0 (tests stub the rects they need). */
 export function getFocusableElements(scope: Element | Document): HTMLElement[] {
@@ -65,7 +139,10 @@ export function getFocusableElements(scope: Element | Document): HTMLElement[] {
   for (const el of root.querySelectorAll(FOCUSABLE_SELECTOR)) {
     if (!(el instanceof HTMLElement)) continue;
     if (el.tabIndex < 0) continue;
+    if (el.hasAttribute('disabled')) continue;
     if (isHidden(el)) continue;
+    if (isEffectivelyHidden(el)) continue;
+    if (isHoverOnly(el)) continue;
     const r = el.getBoundingClientRect();
     if (r.width <= 0 && r.height <= 0) continue;
     out.push(el);
@@ -79,47 +156,67 @@ export function getFocusableElements(scope: Element | Document): HTMLElement[] {
   return out;
 }
 
-interface Point { x: number; y: number; }
+/** A candidate must lie in the pressed direction: its near edge past the
+ *  current element's far edge, with a small tolerance for shared borders. */
+const EDGE_TOL = 8;
 
-function center(r: DOMRect): Point {
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+function intervalGap(a1: number, a2: number, b1: number, b2: number): number {
+  if (b1 <= a2 && a1 <= b2) return 0;
+  return Math.min(Math.abs(b1 - a2), Math.abs(a1 - b2));
 }
 
-/** The nearest candidate strictly in `dir` of `from`, weighting the primary
- *  axis over the orthogonal one so rows and columns win over diagonals. */
+/** The nearest candidate strictly in `dir` of `from`: edge-gated, preferring
+ *  the ones overlapping the current row/column, then the nearest gap. */
 export function nearestInDirection(
   from: HTMLElement,
   els: HTMLElement[],
   dir: NavDir,
 ): HTMLElement | null {
-  const fc = center(from.getBoundingClientRect());
+  const f = from.getBoundingClientRect();
+  const fl = f.left;
+  const fr = f.left + f.width;
+  const ft = f.top;
+  const fb = f.top + f.height;
   let best: HTMLElement | null = null;
   let bestScore = Infinity;
+  let bestRow = false;
   for (const el of els) {
     if (el === from) continue;
-    const c = center(el.getBoundingClientRect());
-    const dx = c.x - fc.x;
-    const dy = c.y - fc.y;
-    let primary = 0;
-    let secondary = 0;
+    const r = el.getBoundingClientRect();
+    const l = r.left;
+    const rr = r.left + r.width;
+    const t = r.top;
+    const b = r.top + r.height;
+    let gap = 0;
+    let orth = 0;
     if (dir === 'right') {
-      if (dx <= 0) continue;
-      primary = dx;
-      secondary = Math.abs(dy);
+      if (l < fr - EDGE_TOL) continue;
+      gap = l - fr;
+      orth = intervalGap(ft, fb, t, b);
     } else if (dir === 'left') {
-      if (dx >= 0) continue;
-      primary = -dx;
-      secondary = Math.abs(dy);
+      if (rr > fl + EDGE_TOL) continue;
+      gap = fl - rr;
+      orth = intervalGap(ft, fb, t, b);
     } else if (dir === 'down') {
-      if (dy <= 0) continue;
-      primary = dy;
-      secondary = Math.abs(dx);
+      if (t < fb - EDGE_TOL) continue;
+      gap = t - fb;
+      orth = intervalGap(fl, fr, l, rr);
     } else {
-      if (dy >= 0) continue;
-      primary = -dy;
-      secondary = Math.abs(dx);
+      if (b > ft + EDGE_TOL) continue;
+      gap = ft - b;
+      orth = intervalGap(fl, fr, l, rr);
     }
-    const score = primary + secondary * 2.2;
+    // Row/column neighbours win over nearer off-axis controls: only when
+    // nothing overlaps the current row/column do diagonal candidates count.
+    const inRow = orth === 0;
+    if (bestRow && !inRow) continue;
+    const score = Math.max(0, gap) + orth * 3;
+    if (!bestRow && inRow) {
+      best = el;
+      bestScore = score;
+      bestRow = true;
+      continue;
+    }
     if (score < bestScore) {
       bestScore = score;
       best = el;
@@ -130,7 +227,7 @@ export function nearestInDirection(
 
 /** Mark the controller's target: programmatic focus() does not match
  *  :focus-visible, so the module marks its target and the stylesheet paints
- *  the same token ring. Cleared on pointer input. */
+ *  the same token ring. Cleared on pointer input and on any other focus. */
 export function focusController(el: HTMLElement): void {
   clearControllerFocus();
   el.setAttribute('data-controller-focus', 'true');
@@ -148,20 +245,49 @@ export function clearControllerFocus(): void {
   }
 }
 
-/** Move focus one step in `dir` inside the topmost layer. With focus outside
- *  the layer (or nowhere), the first element of the layer takes focus so a
- *  layer never leaks focus behind itself. */
-export function moveFocus(dir: NavDir): boolean {
+/** The first sensible element of the current view: main content first, then
+ *  the active nav item, then whatever is first. */
+export function focusFirstInView(): boolean {
   const scope = getScopeRoot();
   const els = getFocusableElements(scope);
   if (els.length === 0) return false;
-  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  const inScope = active !== null && (scope instanceof Document ? true : scope.contains(active));
-  if (!active || !inScope) {
+  if (!(scope instanceof Document)) {
     focusController(els[0]);
     return true;
   }
-  const next = nearestInDirection(active, els, dir);
+  const main = document.querySelector('main');
+  if (main instanceof HTMLElement) {
+    const inMain = els.filter((el) => main.contains(el));
+    if (inMain.length > 0) {
+      focusController(inMain[0]);
+      return true;
+    }
+  }
+  const current = document.querySelector('[aria-current="true"], [aria-current="page"]');
+  if (current instanceof HTMLElement && els.includes(current)) {
+    focusController(current);
+    return true;
+  }
+  focusController(els[0]);
+  return true;
+}
+
+/** Move focus one step in `dir` inside the topmost layer. With focus lost
+ *  (body, a removed element, or outside the layer) the first sensible
+ *  element of the view takes focus. */
+export function moveFocus(dir: NavDir): boolean {
+  const scope = getScopeRoot();
+  const ae = document.activeElement;
+  const lost =
+    !(ae instanceof HTMLElement) ||
+    ae === document.body ||
+    ae === document.documentElement ||
+    !document.contains(ae) ||
+    (!(scope instanceof Document) && !scope.contains(ae));
+  if (lost) return focusFirstInView();
+  const els = getFocusableElements(scope);
+  if (els.length === 0) return false;
+  const next = nearestInDirection(ae, els, dir);
   if (!next) return false;
   focusController(next);
   return true;
@@ -179,9 +305,10 @@ export function activateFocused(): boolean {
 }
 
 /** B (gamepad): back out of the topmost layer through its own Escape path
- *  (the dialog, flyout, palette and friends panel all close on Escape; the
- *  maintenance confirm row stops the event so the settings stay open).
- *  Returns whether a layer was present; the caller goes back otherwise. */
+ *  (a dialog, the friends panel, or an open menu/popper all close on
+ *  Escape; the maintenance confirm row stops the event so the settings stay
+ *  open). Returns whether a layer was present; the caller goes back
+ *  otherwise. */
 export function closeTopmostLayer(): boolean {
   if (getScopeRoot() instanceof Document) return false;
   const target =
@@ -190,10 +317,42 @@ export function closeTopmostLayer(): boolean {
   return true;
 }
 
-/** One arrow-key handler for keyboard and pad (the pad dispatches real
- *  ArrowLeft/Right/Up/Down events; see useGamepad). Local handlers run first
- *  in the bubble path: a preventDefaulted event, an editable target or a
- *  menu/listbox target is left alone. Returns whether focus moved. */
+/** B through the real path: close the topmost layer, else the fallback
+ *  (the app's back navigation). The App passes its history-back here. */
+export function handleBackAction(goBack: () => void): void {
+  if (!closeTopmostLayer()) goBack();
+}
+
+/** Scroll one step when nothing lies in `dir`: keyboard arrows keep their
+ *  native scroll, and the pad (whose synthetic events never scroll) moves
+ *  the nearest scrollable ancestor by hand. */
+function scrollOneStep(dir: NavDir): void {
+  const step = 48;
+  let el: Element | null =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  while (el && el !== document.documentElement) {
+    if (el instanceof HTMLElement && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1)) break;
+    el = el.parentElement;
+  }
+  const target =
+    el instanceof HTMLElement ? el : (document.scrollingElement as HTMLElement | null);
+  if (!target || typeof target.scrollBy !== 'function') return;
+  try {
+    if (dir === 'up') target.scrollBy({ top: -step });
+    else if (dir === 'down') target.scrollBy({ top: step });
+    else if (dir === 'left') target.scrollBy({ left: -step });
+    else target.scrollBy({ left: step });
+  } catch {
+    // jsdom: no layout, nothing to scroll.
+  }
+}
+
+/** One arrow-key handler for keyboard and pad (the pad dispatches flagged
+ *  ArrowLeft/Right/Up/Down events; see dispatchPadArrow in useGamepad.ts).
+ *  Capture-first so a closed select/menu trigger never opens under the
+ *  handler: arrows move away, Enter/A opens. Local handlers run in the
+ *  bubble path for everything the handler yields to; a preventDefaulted
+ *  event is left alone. Returns whether focus moved. */
 export function controllerKeyHandler(e: KeyboardEvent): boolean {
   if (e.defaultPrevented) return false;
   const dir =
@@ -204,19 +363,43 @@ export function controllerKeyHandler(e: KeyboardEvent): boolean {
     : null;
   if (dir === null) return false;
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
-  if (shouldIgnoreArrows(e.target)) return false;
-  e.preventDefault();
-  return moveFocus(dir);
+  const fromPad = isPadEvent(e);
+  const target = e.target instanceof Element ? e.target : null;
+  if (target && shouldIgnoreArrows(target, fromPad)) return false;
+  if (target && caretKept(target, dir, fromPad)) return false;
+  // Closed select/menu triggers: arrows move, never open (Enter/A opens).
+  // Stop the descent so Radix never sees the key.
+  if (target && target.closest(TRIGGER) && !menuOpen()) {
+    e.preventDefault();
+    e.stopPropagation();
+    return moveFocus(dir);
+  }
+  const moved = moveFocus(dir);
+  if (moved) {
+    e.preventDefault();
+    return true;
+  }
+  // Nothing in that direction: let the browser scroll (keyboard), or scroll
+  // the scroll root by hand (the pad's synthetic events never scroll).
+  if (fromPad) scrollOneStep(dir);
+  return false;
 }
 
 /** Install the shared arrow handler (and clear the controller ring on mouse
- *  input). The App owns the one installation; tests use the same one. */
+ *  input or any other focus). The App owns the one installation; tests use
+ *  the same one. */
 export function installControllerKeyboard(): () => void {
-  window.addEventListener('keydown', controllerKeyHandler);
+  const onFocusIn = (e: FocusEvent): void => {
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t || !t.hasAttribute('data-controller-focus')) clearControllerFocus();
+  };
+  window.addEventListener('keydown', controllerKeyHandler, true);
   window.addEventListener('pointerdown', clearControllerFocus);
+  window.addEventListener('focusin', onFocusIn);
   return () => {
-    window.removeEventListener('keydown', controllerKeyHandler);
+    window.removeEventListener('keydown', controllerKeyHandler, true);
     window.removeEventListener('pointerdown', clearControllerFocus);
+    window.removeEventListener('focusin', onFocusIn);
   };
 }
 

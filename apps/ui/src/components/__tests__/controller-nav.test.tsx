@@ -8,8 +8,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import {
   activateFocused,
   closeTopmostLayer,
+  handleBackAction,
   installControllerKeyboard,
 } from '../../lib/spatialNav';
+import { dispatchPadArrow } from '../../lib/useGamepad';
 
 function rect(el: HTMLElement, x: number, y: number, w = 40, h = 24): void {
   el.getBoundingClientRect = () =>
@@ -63,14 +65,14 @@ describe('arrow keys move focus in every direction', () => {
     expect(document.activeElement).toBe(screen.getByTestId(target));
   });
 
-  it('a pad direction dispatches the same Arrow event the keyboard uses', () => {
+  it('a pad direction moves through the same installed handler', () => {
     uninstall = installControllerKeyboard();
     render(<Grid />);
     gridPositions();
     const center = screen.getByTestId('center');
     center.focus();
     // Exactly what the App's gamepad callback dispatches for D-pad/stick.
-    center.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    dispatchPadArrow('right');
     expect(document.activeElement).toBe(screen.getByTestId('right'));
   });
 });
@@ -130,13 +132,14 @@ describe('inputs and local handlers keep their keys', () => {
     expect(document.activeElement).toBe(field);
   });
 
-  it('a local handler that consumes the event wins', () => {
+  it('a local key zone that consumes the event wins', () => {
     uninstall = installControllerKeyboard();
     const onKeyDown = (e: React.KeyboardEvent): void => {
       if (e.key === 'ArrowDown') e.preventDefault();
     };
+    // The zone marks itself so the shared capture handler yields to it.
     render(
-      <div onKeyDown={onKeyDown}>
+      <div data-keys-local onKeyDown={onKeyDown}>
         <button type="button" data-testid="row">row</button>
         <button type="button" data-testid="below">below</button>
       </div>,
@@ -186,7 +189,7 @@ describe('B backs out', () => {
     );
   }
 
-  it('closes the topmost layer first, then goes back', async () => {
+  it('closes the topmost layer first, then goes back through the real path', async () => {
     const onBack = vi.fn();
     render(<LayerHarness onBack={onBack} />);
     rect(screen.getByTestId('inside'), 0, 0);
@@ -195,9 +198,8 @@ describe('B backs out', () => {
     expect(closeTopmostLayer()).toBe(true);
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(onBack).not.toHaveBeenCalled();
-    // B with nothing open: the caller goes back.
-    expect(closeTopmostLayer()).toBe(false);
-    onBack();
+    // B with nothing open: the App's back branch runs.
+    handleBackAction(onBack);
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 });

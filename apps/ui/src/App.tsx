@@ -62,12 +62,13 @@ import { RouterProvider, useRouter } from '@tanstack/react-router';
 import { createAppRouter, useSetView, useView, viewToLocation } from './router';
 import {
   activateFocused,
-  closeTopmostLayer,
+  focusFirstInView,
+  handleBackAction,
   installControllerKeyboard,
   nextSection,
   sectionOf,
 } from './lib/spatialNav';
-import { useGamepad } from './lib/useGamepad';
+import { dispatchPadArrow, useGamepad } from './lib/useGamepad';
 
 const CORE_KIND_TO_TYPE: Record<string, ActivityEvent['type']> = {
   session: 'session', install: 'download', update: 'update', verify: 'update',
@@ -184,8 +185,20 @@ export function AppContent() {
   // actions. A activates, B backs out of the topmost layer else history,
   // LB/RB cycle the main sections in both presentations.
   useEffect(() => installControllerKeyboard(), []);
+  // After a pad section switch or back-step the focused element is gone
+  // (body): move focus into the new view, unless something (a dialog's
+  // focus restore) already took it.
+  const refocusView = useRef(false);
+  useEffect(() => {
+    if (!refocusView.current) return;
+    refocusView.current = false;
+    const ae = document.activeElement;
+    if (ae instanceof HTMLElement && ae !== document.body && document.contains(ae)) return;
+    focusFirstInView();
+  }, [viewKey]);
   const stepSection = useCallback(
     (delta: 1 | -1) => {
+      refocusView.current = true;
       setView((v) => {
         const cur = sectionOf(v.name, v.name === 'game' ? v.from : undefined);
         const next = nextSection(cur, delta);
@@ -197,13 +210,14 @@ export function AppContent() {
   );
   useGamepad((action) => {
     if (action === 'up' || action === 'down' || action === 'left' || action === 'right') {
-      const key = `Arrow${action[0].toUpperCase()}${action.slice(1)}`;
-      const el = document.activeElement ?? document.body;
-      el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      dispatchPadArrow(action);
     } else if (action === 'activate') {
       activateFocused();
     } else if (action === 'back') {
-      if (!closeTopmostLayer()) router.history.back();
+      handleBackAction(() => {
+        refocusView.current = true;
+        router.history.back();
+      });
     } else if (action === 'prevSection') {
       stepSection(-1);
     } else {

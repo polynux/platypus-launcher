@@ -8,6 +8,7 @@
 // local handlers like the library list or the palette see them); there is no
 // second navigation system.
 import { useEffect, useRef } from 'react';
+import { PAD_FLAG } from './spatialNav';
 
 export type PadAction =
   | 'up'
@@ -64,6 +65,17 @@ export function padDirectionHolds(snap: PadSnapshot): PadAction[] {
   if (ay > PAD_DEAD_ZONE) push('down');
   else if (ay < -PAD_DEAD_ZONE) push('up');
   return out;
+}
+
+/** A D-pad/stick step as the keyboard would send it, flagged so the shared
+ *  handler knows the pad (no caret) is behind it. The flagged event flows
+ *  through the same bubble path local handlers see. */
+export function dispatchPadArrow(dir: 'up' | 'down' | 'left' | 'right'): void {
+  const key = `Arrow${dir[0].toUpperCase()}${dir.slice(1)}`;
+  const el = document.activeElement ?? document.body;
+  const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+  (e as KeyboardEvent & { [PAD_FLAG]?: boolean })[PAD_FLAG] = true;
+  el.dispatchEvent(e);
 }
 
 function firstPad(): PadLike | null {

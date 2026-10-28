@@ -178,6 +178,9 @@ export function LibraryListDetail(p: ListDetailProps) {
   useEffect(() => {
     if (!atlas) return;
     const onGlobalKey = (e: KeyboardEvent) => {
+      // The shared controller handler (capture) runs first and marks what
+      // it moves: never handle the same press twice.
+      if (e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
       if (!target || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable) return;
       if (target.closest('[role=listbox],[role=menu],[role=dialog],[data-keys-local]') || document.querySelector('[role=dialog]')) return;
@@ -440,7 +443,7 @@ export function LibraryListDetail(p: ListDetailProps) {
             </button>
           </p>
         ) : (
-          <ul ref={listRef} onKeyDown={onListKey} className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
+          <ul ref={listRef} onKeyDown={onListKey} data-keys-local className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
             {filtered.map((g) => {
               const sub = subLine(t, g);
               const on = g.id === selected?.id;
