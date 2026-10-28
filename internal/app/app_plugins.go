@@ -6,7 +6,9 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"platypus/internal/apperr"
@@ -90,6 +92,7 @@ func (a *App) storePlugin(p plugins.Plugin) types.StorePlugin {
 		IconURL:              a.plugins.IconURL(m.ID),
 		StorefrontURL:        storefrontURL(m),
 		StorefrontDomains:    storefrontDomains(m),
+		Bundled:              plugins.BundledPluginIDs[m.ID],
 	}
 }
 
@@ -185,6 +188,150 @@ func (a *App) SetPluginEnabled(id string, enabled bool) error {
 	a.failStoppedJobs()
 	a.syncSocial()
 	return nil
+}
+
+// UninstallPlugin removes a plugin cleanly (issue #161): it stops the plugin
+// process first, deletes its folder, and forgets what the core kept for it
+// (approval, install folder, plugin settings, chat/social/cloud switches,
+// login cache, library rows, snapshots, its private data folder). Game files
+// are never touched: they stay on disk either way. removeGames also forgets
+// the plugin's per-game settings values; otherwise those stay so a reinstall
+// restores them. Bundled plugins can't be uninstalled, only disabled.
+func (a *App) UninstallPlugin(id string, removeGames bool) error {
+	if plugins.BundledPluginIDs[id] {
+		return fmt.Errorf("the bundled %s plugin can't be uninstalled, only disabled", id)
+	}
+	if _, ok := a.plugins.Plugin(id); !ok {
+		return fmt.Errorf("unknown plugin %q", id)
+	}
+	// A theme plugin that carries the picked theme: fall back to the
+	// built-in default first, so the theme never points at a gone plugin.
+	if picked := a.settings.Theme(); picked != "" {
+		if t, ok := a.findTheme(picked); ok && t.Info.Source == id {
+			if err := a.settings.SetTheme(""); err != nil {
+				return err
+			}
+		}
+	}
+	if err := a.plugins.Uninstall(id); err != nil {
+		return err
+	}
+	if err := a.settings.ForgetPlugin(id, removeGames); err != nil {
+		return err
+	}
+	a.removePluginData(id)
+	if a.chat != nil {
+		a.chat.Forget(id)
+	}
+	a.invalidateAuth(id)
+	a.invalidateLibrary(id)
+	a.dropArtCache(id)
+	a.dropSnapshot(id)
+	found, err := a.plugins.Discover()
+	if err != nil {
+		return err
+	}
+	a.invalidateLibraries()
+	a.invalidateAuthAll()
+	a.syncDataPlugins(found)
+	// Like forgetSettingsOfRemoved, but the just-uninstalled plugin's
+	// per-game settings stay unless the user asked to remove them: a
+	// reinstall restores them, while approval and login still start clean.
+	present := map[string]bool{}
+	for _, p := range found {
+		present[p.Manifest.ID] = true
+	}
+	keep := func(pid string) bool {
+		if pid == id && !removeGames {
+			return true
+		}
+		return present[pid]
+	}
+	if err := a.settings.PrunePlugins(keep); err != nil {
+		a.warnf("plugin settings of removed plugins not forgotten: %v", err)
+	}
+	a.failStoppedJobs()
+	a.syncSocial()
+	return nil
+}
+
+// removePluginData deletes the plugin's private data folder and its log file.
+// Failures are ignored: the data is the plugin's own (login tokens live
+// there; no OS keyring is used), and a leftover file must not fail the
+// uninstall.
+func (a *App) removePluginData(id string) {
+	if a.dataDir == "" || id == "" || id == "." || id == ".." {
+		return
+	}
+	if strings.ContainsAny(id, `/\`) {
+		return
+	}
+	data := filepath.Join(a.dataDir, "plugin-data", id)
+	if rel, err := filepath.Rel(a.dataDir, data); err != nil || !filepath.IsLocal(rel) {
+		return
+	} else {
+		_ = os.RemoveAll(data)
+	}
+	_ = os.Remove(filepath.Join(a.dataDir, "logs", "plugin-"+id+".log"))
+}
+
+// dropArtCache forgets the remembered online-art hits of one source.
+func (a *App) dropArtCache(source string) {
+	a.artCacheMu.Lock()
+	defer a.artCacheMu.Unlock()
+	for k := range a.artCache {
+		if k == source || strings.HasPrefix(k, source+":") {
+			delete(a.artCache, k)
+		}
+	}
+}
+
+// dropSnapshot deletes one source's library snapshot, so its games don't
+// linger as stale rows after the store is gone.
+func (a *App) dropSnapshot(source string) {
+	path := snapshotPath(a.library.snapDir, source)
+	if path == "" {
+		return
+	}
+	_ = os.Remove(path)
+}
+
+// ChoosePluginZip opens a file picker for a plugin zip. Returns "" when the
+// user cancels.
+func (a *App) ChoosePluginZip() (string, error) {
+	return a.host.OpenFile(FileDialog{
+		Title:   "Install a plugin",
+		Filters: []FileFilter{{Name: "Plugin zip", Extensions: []string{"zip"}}},
+	})
+}
+
+// InstallPluginZip installs a store or theme plugin from a zip file (issue
+// #147). Without confirmReplace, an id that is already installed answers
+// NeedsConfirm ("would replace vX with vY") and writes nothing; with it the
+// whole folder is replaced atomically, never merged. Bundled plugins can't be
+// replaced. The new plugin goes through the usual approval sheet: a zip
+// install is never auto-approved.
+func (a *App) InstallPluginZip(zipPath string, confirmReplace bool) (types.PluginInstallResult, error) {
+	if zipPath == "" {
+		return types.PluginInstallResult{}, fmt.Errorf("no zip file chosen")
+	}
+	res, err := a.plugins.InstallFromZip(zipPath, confirmReplace)
+	if err != nil {
+		return types.PluginInstallResult{}, err
+	}
+	if res.NeedsConfirm {
+		return types.PluginInstallResult{
+			ID: res.ID, Version: res.Version, NeedsConfirm: true,
+			CurrentVersion: res.CurrentVersion, NewVersion: res.NewVersion,
+		}, nil
+	}
+	a.invalidateLibraries()
+	a.invalidateAuthAll()
+	a.syncDataPlugins(a.plugins.Plugins())
+	a.forgetSettingsOfRemoved(a.plugins.Plugins())
+	a.failStoppedJobs()
+	a.syncSocial()
+	return types.PluginInstallResult{ID: res.ID, Version: res.Version, Replaced: res.Replaced}, nil
 }
 
 // RetryPlugin clears a gave-up plugin's crash count so the next call

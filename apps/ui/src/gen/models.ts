@@ -611,6 +611,15 @@ export namespace types {
     features: Record<string, boolean>;
   }
 
+  export interface PluginInstallResult {
+    id: string;
+    version: string;
+    replaced?: boolean;
+    needsConfirm?: boolean;
+    currentVersion?: string;
+    newVersion?: string;
+  }
+
   export interface PluginRequirement {
     bin: string;
     hint: string;
@@ -835,6 +844,7 @@ export namespace types {
     write: string[];
     running: boolean;
     gave_up?: boolean;
+    bundled?: boolean;
     install_folder: string;
     default_install_folder: string;
     extra_folders: string[];

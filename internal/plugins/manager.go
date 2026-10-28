@@ -747,6 +747,50 @@ func (m *Manager) GaveUp(id string) bool {
 	return proc.crashes >= proc.t.maxCrashes
 }
 
+// Stop halts one plugin's process without forgetting anything: the next Call
+// starts it again. Unknown or stopped plugins are a no-op.
+func (m *Manager) Stop(id string) {
+	m.mu.Lock()
+	proc := m.procs[id]
+	delete(m.procs, id)
+	m.mu.Unlock()
+	if proc != nil {
+		proc.stop()
+	}
+}
+
+// Uninstall stops the plugin and removes its folder. It refuses anything
+// outside the plugins folder and never touches a missing manager dir. The
+// caller re-discovers afterwards; approval and settings are the caller's to
+// forget.
+func (m *Manager) Uninstall(id string) error {
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\`) {
+		return fmt.Errorf("refusing to uninstall %q: not a plugin id", id)
+	}
+	if m.dir == "" {
+		return fmt.Errorf("refusing to uninstall %q: no plugins folder", id)
+	}
+	target := filepath.Join(m.dir, id)
+	rel, err := filepath.Rel(m.dir, target)
+	if err != nil || rel != id || !filepath.IsLocal(rel) {
+		return fmt.Errorf("refusing to uninstall %q: outside the plugins folder", id)
+	}
+	m.mu.Lock()
+	proc := m.procs[id]
+	delete(m.procs, id)
+	m.mu.Unlock()
+	if proc != nil {
+		proc.stop()
+	}
+	if _, err := os.Lstat(target); err != nil {
+		return fmt.Errorf("unknown plugin %q", id)
+	}
+	if err := os.RemoveAll(target); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Shutdown stops every plugin (on app exit). The manager can't be used after.
 func (m *Manager) Shutdown() {
 	m.mu.Lock()

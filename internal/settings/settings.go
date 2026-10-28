@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -578,6 +579,50 @@ func (s *Store) SetPluginState(id string, t PluginState) error {
 		} else {
 			delete(s.data.Plugins, id)
 		}
+		return err
+	}
+	return nil
+}
+
+// ForgetPlugin drops every per-plugin record for id: the approval and enabled
+// flag, the install-folder override, plugin-wide and (when removeGames) the
+// per-game settings values, and the chat/social/cloud switches. Missing
+// entries are the default (switches read as on), so deleting them forgets the
+// choice cleanly. Callers hold no lock; save is atomic with rollback.
+func (s *Store) ForgetPlugin(id string, removeGames bool) error {
+	if id == "" {
+		return errors.New("plugin id is empty")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prevPlugins := maps.Clone(s.data.Plugins)
+	prevSettings := maps.Clone(s.data.PluginSettings)
+	prevGameSettings := maps.Clone(s.data.PluginGameSettings)
+	prevChat := maps.Clone(s.data.ChatAlerts)
+	prevSocial := maps.Clone(s.data.SocialPlugins)
+	prevPlaying := maps.Clone(s.data.SocialPlaying)
+	prevCloud := maps.Clone(s.data.CloudPlugins)
+	delete(s.data.Plugins, id)
+	delete(s.data.PluginSettings, id)
+	delete(s.data.ChatAlerts, id)
+	delete(s.data.SocialPlugins, id)
+	delete(s.data.SocialPlaying, id)
+	delete(s.data.CloudPlugins, id)
+	if removeGames {
+		for gid, v := range s.data.PluginGameSettings {
+			if v.Source == id {
+				delete(s.data.PluginGameSettings, gid)
+			}
+		}
+	}
+	if err := s.save(); err != nil {
+		s.data.Plugins = prevPlugins
+		s.data.PluginSettings = prevSettings
+		s.data.PluginGameSettings = prevGameSettings
+		s.data.ChatAlerts = prevChat
+		s.data.SocialPlugins = prevSocial
+		s.data.SocialPlaying = prevPlaying
+		s.data.CloudPlugins = prevCloud
 		return err
 	}
 	return nil
