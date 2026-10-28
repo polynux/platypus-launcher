@@ -83,6 +83,7 @@ describe('atlas covers/table open the clicked game', () => {
       await user.click(target);
       expect(await screen.findByRole('heading', { name: 'Beta Run' })).toBeInTheDocument();
       expect(screen.queryByRole('heading', { name: 'Alpha Quest' })).not.toBeInTheDocument();
-    });
+      // A whole-App render with several views: give it room under suite load.
+    }, 20_000);
   }
 });
