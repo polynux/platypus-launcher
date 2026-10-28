@@ -247,14 +247,16 @@ func TestFinishedHookRunsForInstallsAndUninstalls(t *testing.T) {
 	q.Notify("echo", "job.done", plugins.JobUpdate{JobID: in.ID})
 	mu.Lock()
 	defer mu.Unlock()
-	if len(seen) != 1 || seen[0] != KindInstall {
-		t.Fatalf("finished hook saw %v, want [install]", seen)
+	// Verifies report through the same hook (issue #145: the activity feed
+	// records them); the library invalidation stays the App's choice.
+	if len(seen) != 2 || seen[0] != KindVerify || seen[1] != KindInstall {
+		t.Fatalf("finished hook saw %v, want [verify install]", seen)
 	}
 }
 
 // Updates and moves change what the store lists, so the finished hook sees
-// them like installs and uninstalls (the library cache drops their source);
-// a verify only reports and still doesn't call it.
+// them like installs and uninstalls (the library cache drops their source).
+// Verifies report through the same hook for the activity feed (issue #145).
 func TestFinishedHookRunsForUpdatesAndMoves(t *testing.T) {
 	b := &fakeBackend{}
 	q, _ := newQueue(t, b)

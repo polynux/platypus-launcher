@@ -23,6 +23,7 @@ vi.mock('../../effect/runtime', () => ({
     getRunnerOptions: () => Effect.succeed([]),
   } as Record<string, unknown>, { get: (t, k: string) => t[k] ?? (() => Effect.succeed(null)) }),
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
   onSocial: () => () => {},

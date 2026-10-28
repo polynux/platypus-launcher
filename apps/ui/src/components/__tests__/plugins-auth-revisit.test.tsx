@@ -31,6 +31,7 @@ vi.mock('../../effect/runtime', () => ({
     savePluginSettings: () => Effect.succeed({ applied: true } as never),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
   onSocial: () => () => {},

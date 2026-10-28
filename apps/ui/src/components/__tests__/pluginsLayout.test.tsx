@@ -23,6 +23,7 @@ vi.mock('../../effect/runtime', () => ({
     getThemeLayout: () => Effect.succeed(layoutState.layout),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
   onSocial: () => () => {},

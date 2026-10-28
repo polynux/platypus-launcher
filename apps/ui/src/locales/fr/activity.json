@@ -1,9 +1,9 @@
 {
  "view": {
-  "subtitle": "Les analyses, lancements et changements de réglages de cette session. Le journal n'est pas encore conservé entre les sessions."
+  "subtitle": "Lancements, installations, syncs et succès, du plus récent au plus ancien. Le journal est conservé entre les sessions."
  },
  "feed": {
-  "empty": "Rien pour l'instant cette session. Les lancements, analyses et changements de réglages apparaissent ici."
+  "empty": "Rien pour l'instant. Les lancements, installations et changements de réglages apparaissent ici."
  },
  "type": {
   "session": "session",
@@ -54,10 +54,17 @@
   "jobVerbInstalled": "installé",
   "jobVerbUpdated": "mis à jour",
   "jobVerbUninstalled": "désinstallé",
+  "jobVerbVerified": "vérifié",
+  "jobVerbMoved": "déplacé",
   "jobDone": "{{title}} {{action}}",
   "jobFailed": "{{kind}} de {{title}} a échoué",
   "sideloaded": "{{title}} ajouté manuellement",
   "removed": "{{title}} retiré de la bibliothèque",
+  "added": "{{title}} ajouté",
+  "cloudUploaded": "Cloud envoyé pour {{title}}",
+  "cloudDownloaded": "Cloud reçu pour {{title}}",
+  "cloudConflict": "Conflit cloud pour {{title}}",
+  "achievementUnlocked": "{{name}} débloqué dans {{title}}",
   "jobVerbBackedUp": "sauvegardé",
   "jobVerbRestored": "restauré"
  },

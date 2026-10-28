@@ -162,6 +162,15 @@ type App struct {
 	// GetNetState and the "netstate" event. Nil in tests that don't need
 	// it (every helper tolerates nil).
 	net *netstate.State
+	// activityMu guards the persisted activity feed and the first-seen map
+	// (issues #145, #151). Tests that don't open them use the zero value:
+	// no path means memory only, and every helper tolerates nil maps.
+	activityMu     sync.Mutex
+	activityPath   string
+	activityEvents []types.ActivityEvent
+	activityNextID int64
+	addedAtPath    string
+	addedAt        map[string]int64
 }
 
 // Options carries the folders one App run uses (issue #41). Empty fields
@@ -350,6 +359,10 @@ func (a *App) startup(ctx context.Context) {
 	// recovery reads the folder in use. Dangling sessions close at their
 	// last heartbeat inside Open.
 	a.openPlaylog(dataDir)
+	// The activity feed and the first-seen map live beside it (issues
+	// #145, #151): yesterday's sessions and adds survive a restart.
+	a.openActivity(dataDir)
+	a.openAddedAt(dataDir)
 
 	// Store plugins start on demand: when the library is listed, on login,
 	// or when an interrupted install resumes.
@@ -540,6 +553,7 @@ func (a *App) customGames() []types.Game {
 			StoreAppID:  types.SourceCustom,
 			Title:       g.Title,
 			ReleaseYear: g.ReleaseYear,
+			AddedAt:     g.AddedAt,
 			InstallDir:  filepath.Dir(g.Executable),
 			Executable:  g.Executable,
 			IsInstalled: true,
@@ -617,6 +631,10 @@ func (a *App) AddCustomGame(title, executable string) (types.Game, error) {
 		return types.Game{}, err
 	}
 	a.maybeAutoArtwork(g.ID, g.Title)
+	// The add lands on the feed at once (issue #145): the next library scan
+	// keeps it (noteLibraryGames skips ids it already knows).
+	seed := []types.Game{{ID: g.ID, Title: g.Title, Store: types.StoreCustom, AddedAt: g.AddedAt}}
+	a.noteLibraryGames(seed)
 	return types.Game{
 		ID:          g.ID,
 		Source:      types.SourceCustom,
@@ -624,6 +642,7 @@ func (a *App) AddCustomGame(title, executable string) (types.Game, error) {
 		StoreAppID:  types.SourceCustom,
 		Title:       g.Title,
 		ReleaseYear: g.ReleaseYear,
+		AddedAt:     seed[0].AddedAt,
 		InstallDir:  filepath.Dir(g.Executable),
 		Executable:  g.Executable,
 		IsInstalled: true,
@@ -658,7 +677,7 @@ func (a *App) UpdateCustomGameExecutable(id, executable string) (types.Game, err
 	}
 	return types.Game{
 		ID: g.ID, Source: types.SourceCustom, Store: types.StoreCustom, StoreAppID: types.SourceCustom,
-		Title: g.Title, ReleaseYear: g.ReleaseYear, InstallDir: filepath.Dir(g.Executable),
+		Title: g.Title, ReleaseYear: g.ReleaseYear, AddedAt: g.AddedAt, InstallDir: filepath.Dir(g.Executable),
 		Executable: g.Executable, IsInstalled: true,
 		Settings: types.GameSettings{UseGameMode: true}, Native: a.customNative(g.Executable, ""),
 	}, nil
@@ -778,6 +797,7 @@ func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs [
 		a.startPlaytimeOnce(s.ID())
 	}
 	lib.Games = append(lib.Games, a.customGames()...)
+	a.noteLibraryGames(lib.Games)
 	a.applyPlaytime(lib.Games)
 	a.applyPins(&lib)
 	a.applyCustomization(lib.Games)

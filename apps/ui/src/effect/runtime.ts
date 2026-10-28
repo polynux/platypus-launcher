@@ -266,6 +266,11 @@ export const LauncherApi = {
   // Currently tracked sessions so late windows hydrate (CORE-1/FE-2).
   getSessions: () => call<SessionEvent[]>('ListSessions', async () => (await App.ListSessions()) ?? []),
 
+  // The persisted activity feed (issues #145, #151): stored rows plus the
+  // playlog's sessions, newest first. since is unix ms (0 = all).
+  listActivity: (since: number, limit: number) =>
+    call<gen.ActivityEvent[]>('ListActivity', async () => (await App.ListActivity(since, limit)) ?? []),
+
   saveGameSettings: (id: string, settings: GameSettings) =>
     call<void>('SaveGameSettings', () => App.SaveGameSettings(id, { ...settings })),
 
@@ -577,6 +582,11 @@ export const LauncherApi = {
 /** Subscribe to launched-game state changes. Returns the unsubscribe function. */
 export function onSession(cb: (e: SessionEvent) => void): () => void {
   return onEvent('session', cb);
+}
+
+/** Subscribe to new activity feed rows (issues #145, #151). */
+export function onActivity(cb: (e: gen.ActivityEvent) => void): () => void {
+  return onEvent('activity', cb);
 }
 
 /** Subscribe to the install queue; every event carries the whole list. */

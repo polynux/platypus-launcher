@@ -21,6 +21,7 @@ vi.mock('../../effect/runtime', () => ({
     openPluginsFolder: () => Effect.succeed(undefined as never),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
   onSocial: () => () => {},

@@ -56,6 +56,7 @@ vi.mock('../../effect/runtime', () => ({
     setPreferredCopy: () => Effect.succeed(undefined as never),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onCloud: () => () => {},
   onFamily: () => () => {},

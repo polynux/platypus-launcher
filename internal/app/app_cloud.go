@@ -46,10 +46,33 @@ func (a *App) startCloud(ctx context.Context, dataDir string) {
 		Backend:   cloudBackend{a},
 		Settings:  a.settings,
 		StatePath: filepath.Join(dataDir, "cloud.json"),
-		Emit:      func(e types.CloudEvent) { a.host.Emit("cloud", e) },
+		Emit:      func(e types.CloudEvent) { a.cloudEmit(e) },
 		Logf:      func(f string, args ...any) { a.host.Infof("cloud: "+f, args...) },
 	})
 	a.cloud.Resume()
+}
+
+// cloudEmit forwards a cloud event to the UI and logs its result (uploaded,
+// downloaded, conflict) to the activity feed (issue #145).
+func (a *App) cloudEmit(e types.CloudEvent) {
+	if a.host != nil {
+		a.host.Emit("cloud", e)
+	}
+	switch e.Kind {
+	case types.CloudEvPushed:
+		a.recordCloudActivity("cloud", e.GameID, "activity:log.cloudUploaded",
+			map[string]string{"message": e.Message})
+	case types.CloudEvPrompt:
+		if e.Prompt == types.CloudPromptConflict {
+			a.recordCloudActivity("cloud", e.GameID, "activity:log.cloudConflict",
+				map[string]string{"message": e.Message})
+		}
+	case types.CloudEvStatus:
+		if e.Message != "" && len(e.Message) >= 10 && e.Message[:10] == "Downloaded" && e.Status != nil && e.Status.Counts.Download > 0 {
+			a.recordCloudActivity("cloud", e.GameID, "activity:log.cloudDownloaded",
+				map[string]string{"message": e.Message})
+		}
+	}
 }
 
 // cloudGame says whether the game has cloud saves Platypus can sync: it comes

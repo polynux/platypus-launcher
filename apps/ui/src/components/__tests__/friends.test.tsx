@@ -13,6 +13,7 @@ vi.mock('../../effect/runtime', () => ({
     getFamilyMembers: (source: string) => Effect.promise(() => api.getFamilyMembers(source)),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
 }));
 

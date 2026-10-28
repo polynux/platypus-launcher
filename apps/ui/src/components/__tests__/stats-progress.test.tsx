@@ -16,6 +16,7 @@ vi.mock('../../effect/runtime', () => ({
     getGameDetails: (g: unknown) => mocks.getGameDetails(g),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
   onSocial: () => () => {},

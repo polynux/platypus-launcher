@@ -90,6 +90,15 @@ export namespace types {
     list: types.Achievement[];
   }
 
+  export interface ActivityEvent {
+    id: number;
+    ts: number;
+    kind: string;
+    game_id?: string;
+    text_key: string;
+    args?: Record<string, string>;
+  }
+
   export interface ArtCandidate {
     source: string;
     id: string;
@@ -329,6 +338,7 @@ export namespace types {
     fix_info?: types.GameFixInfo | null;
     compat_badges?: types.CompatBadge[];
     last_played_at?: number;
+    added_at?: number;
     playtime_minutes?: number;
     playtime_local_minutes?: number | null;
     playtime_store_minutes?: number | null;

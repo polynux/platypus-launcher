@@ -270,9 +270,12 @@ export function AtlasLibraryBlocks({ games, activity = [], onOpen }: { games: Ga
     () => games.filter((g) => g.is_installed && g.last_played_at).sort(byRecent).slice(0, 4),
     [games],
   );
-  // No added_at on Game: the newest install/add activity is the recency
-  // signal, custom games the fallback. Long term, core should stamp added_at.
+  // Newest added_at first (issue #151); without it the newest install/add
+  // activity is the recency signal, custom games the fallback.
   const added = useMemo(() => {
+    if (games.some((g) => (g.added_at ?? 0) > 0)) {
+      return [...games].sort((a, b) => (b.added_at ?? 0) - (a.added_at ?? 0)).slice(0, 4).map((game) => ({ game, at: game.added_at ?? 0 }));
+    }
     const byId = new Map(games.map((g) => [g.id, g]));
     const byTitle = new Map(games.map((g) => [g.title, g]));
     const seen = new Set<string>();

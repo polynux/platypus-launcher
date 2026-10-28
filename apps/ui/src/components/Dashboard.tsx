@@ -27,6 +27,16 @@ import { PluginLogo } from './PluginLogo';
 
 const byTitle = (a: Game, b: Game) => sortKey(a).localeCompare(sortKey(b)) || a.id.localeCompare(b.id);
 
+/** Newest first-seen first (issue #151); games without added_at sort last. */
+export const byAddedAt = (a: Game, b: Game) => (b.added_at ?? 0) - (a.added_at ?? 0) || byTitle(a, b);
+
+/** Recently added (issues #145, #151): newest added_at first across the
+ *  library; without added_at (tests, old data) sideloaded games stand in. */
+export function recentByAddedAt(games: Game[], n: number): Game[] {
+  if (games.some((g) => (g.added_at ?? 0) > 0)) return [...games].sort(byAddedAt).slice(0, n);
+  return games.filter((g) => g.store === 'custom').slice(0, n);
+}
+
 interface DashboardProps {
   games: Game[];
   runners: ProtonVersion[];
@@ -103,7 +113,7 @@ function dashboardBlocks({ games, runners, activity, ownedCount, dismissedHero, 
   const hasPlayData = games.some((g) => g.last_played_at);
   // Without play data byRecent has nothing to order by, so fall back to a stable title sort.
   const continueGames = [...games].sort(hasPlayData ? byRecent : byTitle).slice(0, 8);
-  const recentlyAdded = games.filter((g) => g.store === 'custom').slice(0, 5);
+  const recentlyAdded = recentByAddedAt(games, 5);
   return {
     hero: (
       <DashboardHero
@@ -432,16 +442,18 @@ export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (
  *  data and handlers as the layout blocks above; only the markup is /22.
  *  The Play button opens the game page, where Play lives: Home gets no new
  *  launch wiring of its own. */
-/** Recently added from the activity log's install/add events (issue #138):
- *  newest first, matched back to library games by title. Without log events
- *  (or matches), sideloaded games stand in: they have no store record. */
+/** Recently added (issues #138, #145, #151): newest added_at first; without
+ *  added_at the newest install/add activity matched back by id or title, with
+ *  sideloaded games standing in when neither names anything. */
 function recentAdded(games: Game[], activity: ActivityEvent[]): Game[] {
+  if (games.some((g) => (g.added_at ?? 0) > 0)) return [...games].sort(byAddedAt).slice(0, 5);
+  const byId = new Map(games.map((g) => [g.id, g]));
   const byTitle = new Map(games.map((g) => [g.title, g]));
   const seen = new Set<string>();
   const out: Game[] = [];
   for (const e of activity) {
     if (e.type !== 'download' && e.type !== 'add') continue;
-    const g = (e.game && byTitle.get(e.game)) || undefined;
+    const g = (e.game && (byId.get(e.game) ?? byTitle.get(e.game))) || undefined;
     if (g && !seen.has(g.id)) {
       seen.add(g.id);
       out.push(g);

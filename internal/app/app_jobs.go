@@ -172,6 +172,12 @@ func (a *App) heldByJob(game types.Game) error {
 // keeps its record: the plugin still reports the old folder, which maps to
 // the new one.
 func (a *App) jobFinished(j types.Job) {
+	a.recordJobActivity(j)
+	// A verify only reports: it changes no bytes and lists nothing new, so
+	// the library and disk caches stay (issue #145 records it, nothing more).
+	if j.Kind == jobs.KindVerify {
+		return
+	}
 	a.invalidateLibrary(j.Source)
 	a.invalidateDiskGame(j.GameID) // the job moved its game's bytes: installs, updates, uninstalls, moves, removals
 	if j.Kind != jobs.KindInstall && j.Kind != jobs.KindUninstall {

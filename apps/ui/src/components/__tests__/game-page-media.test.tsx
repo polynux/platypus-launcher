@@ -28,6 +28,7 @@ vi.mock('../../effect/runtime', () => ({
     getGameDetails: () => Effect.succeed(details as never),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
   onSocial: () => () => {},

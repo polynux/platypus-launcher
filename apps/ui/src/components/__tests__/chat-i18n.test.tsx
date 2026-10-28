@@ -13,6 +13,7 @@ vi.mock('../../effect/runtime', () => ({
     getFamilyMembers: () => Effect.succeed([] as never),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
 }));
 

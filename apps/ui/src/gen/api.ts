@@ -86,6 +86,7 @@ export interface CoreApi {
   LaunchGameAnyway(game: types.Game, prompt: string): Promise<string>;
   LaunchGameViaClient(game: types.Game): Promise<string>;
   LinkGameInfo(gameID: string, source: string, id: string): Promise<string>;
+  ListActivity(since: number, limit: number): Promise<types.ActivityEvent[]>;
   ListCollections(): Promise<types.Collection[]>;
   ListJobs(): Promise<types.Job[]>;
   ListPrefixPresets(): Promise<types.PrefixPreset[]>;
@@ -271,6 +272,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'LaunchGameAnyway',
   'LaunchGameViaClient',
   'LinkGameInfo',
+  'ListActivity',
   'ListCollections',
   'ListJobs',
   'ListPrefixPresets',

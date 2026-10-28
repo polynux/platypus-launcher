@@ -33,7 +33,8 @@ import { MigrationNotice as MigrationBanner } from './components/MigrationNotice
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onJobs, onLibrary, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
+import { LauncherApi, onActivity, onJobs, onLibrary, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
+import type { types as gen } from './gen/models';
 import { reconcileViews, upsertView } from './lib/social';
 import { ensureTerms } from './lib/termsRequest';
 import { friendNameOf, useChat } from './lib/useChat';
@@ -173,6 +174,57 @@ export function AppContent() {
   const eventId = useRef(0);
   const log = useCallback((e: Omit<ActivityEvent, 'id' | 'ts'>) => {
     setActivity((prev) => [{ ...e, id: ++eventId.current, ts: Date.now() }, ...prev].slice(0, 200));
+  }, []);
+
+  // The persisted feed (issues #145, #151): stored rows plus the playlog's
+  // sessions, newest first. Rendered through the same rows as the ephemeral
+  // log above, so yesterday's sessions survive a restart.
+  const [feed, setFeed] = useState<gen.ActivityEvent[]>([]);
+  const feedId = useRef(1000000);
+  const CORE_KIND_TO_TYPE: Record<string, ActivityEvent['type']> = {
+    session: 'session', install: 'download', update: 'update', verify: 'update',
+    move: 'download', uninstall: 'remove', cloud: 'cloud', achievement: 'unlock', add: 'add',
+  };
+  const toRow = useCallback((e: gen.ActivityEvent): ActivityEvent => {
+    const type = CORE_KIND_TO_TYPE[e.kind] ?? 'scan';
+    const title = games.find((g) => g.id === e.game_id)?.title ?? e.args?.title ?? e.game_id ?? '';
+    const verb = (k: string) => {
+      switch (k) {
+        case 'install': return t('activity:log.jobVerbInstalled');
+        case 'update': return t('activity:log.jobVerbUpdated');
+        case 'uninstall': return t('activity:log.jobVerbUninstalled');
+        case 'verify': return t('activity:log.jobVerbVerified');
+        case 'move': return t('activity:log.jobVerbMoved');
+        default: return k;
+      }
+    };
+    let detail = '';
+    let meta: string | undefined;
+    if (e.kind === 'session') {
+      detail = t('activity:log.sessionStopped', { title });
+      const secs = Number(e.args?.seconds ?? 0);
+      if (secs > 0) meta = t('activity:log.sessionMinutes', { count: Math.max(1, Math.round(secs / 60)) });
+    } else if (e.kind === 'install' || e.kind === 'update' || e.kind === 'uninstall' || e.kind === 'verify' || e.kind === 'move') {
+      detail = t('activity:log.jobDone', { action: e.args?.action ?? verb(e.kind), title });
+      meta = e.args?.store ?? e.args?.version;
+    } else {
+      try {
+        detail = t(e.text_key, { title, ...(e.args ?? {}) });
+      } catch {
+        detail = title || e.text_key;
+      }
+      meta = e.args?.message ?? e.args?.store;
+    }
+    return { id: ++feedId.current, ts: e.ts, type, game: e.game_id || title || undefined, detail, meta };
+  }, [t, games]);
+  const feedRows = useMemo(() => feed.map(toRow), [feed, toRow]);
+  const allActivity = useMemo(
+    () => [...activity, ...feedRows].sort((a, b) => b.ts - a.ts).slice(0, 200),
+    [activity, feedRows],
+  );
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.listActivity(0, 200)).then((rows) => setFeed(rows ?? [])).catch(() => {});
+    return onActivity((e) => setFeed((prev) => [...prev, e].slice(-500)));
   }, []);
 
   // The one-time Hydra→Platypus migration notice (issue #14). Null when there
@@ -526,7 +578,11 @@ export function AppContent() {
           // round-trip (FE-4); the refresh reconciles afterwards.
           setGames((prev) => optimisticGamesAfterJob(prev, j));
           notify(t(`downloads:${verbKey}`, { title: j.title }));
-          log({ type: 'download', game: j.title, detail: t('activity:log.jobDone', { action, title: j.title }), meta: j.source });
+          // Finished installs, updates, uninstalls, verifies and moves also
+          // arrive on the persisted feed (issue #145): only the rest log here.
+          if (!['install', 'update', 'uninstall', 'verify', 'move'].includes(j.kind)) {
+            log({ type: 'download', game: j.title, detail: t('activity:log.jobDone', { action, title: j.title }), meta: j.source });
+          }
         } else if (j.state === 'failed') {
           notify(t('downloads:jobFailed', { title: j.title, error: j.error ?? t(`downloads:actionFailed.${j.kind}`) }), 'err');
           log({ type: 'download', game: j.title, detail: t('activity:log.jobFailed', { kind: t(jobKindKey(j.kind)), title: j.title }), meta: j.error });
@@ -619,9 +675,9 @@ export function AppContent() {
       opts,
     ).then(({ game }) => {
       // Sideloaded games lead the library, like before, with their saved settings.
+      // The add lands on the persisted feed (issue #145), so no row here.
       setGames((prev) => [game, ...prev.filter((x) => x.id !== game.id)]);
       notify(t('game:added', { title }));
-      log({ type: 'add', game: title, detail: t('activity:log.sideloaded', { title }), meta: game.executable });
     });
   };
 
@@ -783,7 +839,7 @@ export function AppContent() {
       installIntent={installIntentId === game.id}
       onInstallIntentHandled={() => setInstallIntentId(null)}
       runners={runners}
-      activity={activity}
+      activity={allActivity}
       backLabel={t(`nav:${from}`)}
       onBack={() => setView({ name: from } as View)}
       hideBack={hideBack}
@@ -895,7 +951,7 @@ export function AppContent() {
             allGames={games}
             ownedCount={games.length}
             runners={runners}
-            activity={activity}
+            activity={allActivity}
             social={social}
             sourceLogos={sourceLogos}
             onOpenFriends={() => setFriendsOpen(true)}
@@ -943,7 +999,7 @@ export function AppContent() {
               jobs={activeJobs}
               sessions={sessions}
               runners={runners}
-              activity={activity}
+              activity={allActivity}
               sourceLogos={sourceLogos}
               view={atlasView}
               onOpen={openGame}
@@ -963,7 +1019,7 @@ export function AppContent() {
           <LibraryView
             games={games}
             runners={runners}
-            activity={activity}
+            activity={allActivity}
             search={search}
             onSearch={setSearch}
             source={source}

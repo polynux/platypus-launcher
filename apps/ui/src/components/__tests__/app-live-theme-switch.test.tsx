@@ -15,7 +15,8 @@ vi.mock('../../effect/runtime', () => {
   return {
     LauncherApi: new Proxy({}, { get: (_target, key: string) => () => Effect.succeed(values[key]) }),
     onJobs: () => () => {}, onLibrary: () => () => {}, onLibraryPartial: () => () => {},
-    onPlaytime: () => () => {}, onSession: () => () => {}, onSocial: () => () => {},
+    onPlaytime: () => () => {}, onActivity: () => () => {},
+  onSession: () => () => {}, onSocial: () => () => {},
     onChat: () => () => {}, onAuth: () => () => {}, onCloud: () => () => {},
     onFamily: () => () => {},
   };
