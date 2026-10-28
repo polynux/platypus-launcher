@@ -35,7 +35,10 @@ function TypeIcon({ Icon, tone, spin }: { Icon: typeof Info; tone: string; spin?
  *  running, #49) disable them in style.css, while new toasts still appear. */
 export function Toaster({ storeOpen = false }: { storeOpen?: boolean }) {
   const { t } = useTranslation('common');
-  const plain = useVariant('label.style') === 'plain';
+  // One branch for toasts (issue #156): pill is the /22 bottom-center
+  // one-liner, card is today's top-right. Replaces the label.style check.
+  const pill = useVariant('toast.style') === 'pill';
+  const plain = pill;
   return (
     <SonnerToaster
       position={plain && !storeOpen ? 'bottom-center' : 'top-right'}

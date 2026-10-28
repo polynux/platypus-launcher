@@ -5,9 +5,10 @@ import { Shell, SourceFooter } from './components/Shell';
 import { AtlasFriendsPanel, AtlasChatView } from './components/AtlasFriendsPanel';
 import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
-import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
+import { LibraryView, type LibraryMode } from './components/LibraryView';
 import { LibraryListDetail } from './components/LibraryListDetail';
 import { AtlasLibraryPage } from './components/AtlasLibraryViews';
+import { useLibraryFilters } from './components/useLibraryFilters';
 import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
 import { StoreView } from './components/StoreView';
 import { StoresPage } from './components/StoresPage';
@@ -42,9 +43,7 @@ import { isLiveState } from './lib/sessions';
 import { usePauseWhileGameRuns } from './lib/pauseWhileHidden';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { attentionIssues, heroImages, mergeAttentionSignals, mergeCloudEvent, needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
-import type { ActivityEvent, Collection, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
-import type { TierFilter } from './lib/compat';
-import type { StatusFilter } from './components/LibraryView';
+import type { ActivityEvent, Collection, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, Tweak, View } from './types';
 import { useTranslation } from 'react-i18next';
 import { applyLanguage, loadSessionInfo } from './lib/i18n';
 import { loadTheme } from './lib/theme';
@@ -172,38 +171,18 @@ export function AppContent() {
     window.addEventListener('mouseup', onMouseUp);
     return () => window.removeEventListener('mouseup', onMouseUp);
   }, [router]);
-  const [search, setSearch] = useState('');
-  const [source, setSource] = useState<StoreType | 'all'>('all');
-  // The sourcebar's multi-store selection (issue #125, D21 empty = every
-  // store): kept in sync with the single source the sidebar and topbar use.
-  const [selectedStores, setSelectedStores] = useState<StoreType[]>([]);
+  const {
+    ownership, setOwnership,
+    source, setSource,
+    selectedStores, setSelectedStores,
+    tier: atlasTier, setTier: setAtlasTier,
+    status: atlasStatus, setStatus: setAtlasStatus,
+    lending: atlasLending, setLending: setAtlasLending,
+    query: search, setQuery: setSearch,
+    atlasView, setAtlasView: persistAtlasView,
+    resetLibraryFilters: resetFilterState,
+  } = useLibraryFilters();
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('cards');
-  const [ownership, setOwnership] = useState<Ownership>('installed');
-
-  // The /22 library bar shares its filter state with the list (#135): one
-  // state in App drives both, like the classic library mode keeps its view.
-  const [atlasTier, setAtlasTier] = useState<TierFilter>('all');
-  const [atlasStatus, setAtlasStatus] = useState<StatusFilter>('all');
-  const [atlasLending, setAtlasLending] = useState<'all' | 'with-me'>('all');
-  // Which library view the /22 switch shows (issue #136): the list-detail
-  // stage, or the Atlas grid/table. Persisted like the classic library mode,
-  // so the choice survives a relaunch.
-  const [atlasView, setAtlasView] = useState<'list' | 'grid' | 'table'>(() => {
-    try {
-      const saved = window.localStorage.getItem('platypus.atlas.view');
-      return saved === 'grid' || saved === 'table' ? saved : 'list';
-    } catch {
-      return 'list';
-    }
-  });
-  const persistAtlasView = useCallback((v: 'list' | 'grid' | 'table') => {
-    setAtlasView(v);
-    try {
-      window.localStorage.setItem('platypus.atlas.view', v);
-    } catch {
-      // A private window or denied storage keeps the in-memory choice.
-    }
-  }, []);
 
   const [addOpen, setAddOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
@@ -767,8 +746,18 @@ export function AppContent() {
     () => installedGames.reduce<Record<string, number>>((acc, g) => ((acc[g.store] = (acc[g.store] ?? 0) + 1), acc), {}),
     [installedGames]
   );
-  const activeJobs = jobs.filter((j) => j.state === 'queued' || j.state === 'running' || j.state === 'paused');
+  const activeJobs = useMemo(
+    () => jobs.filter((j) => j.state === 'queued' || j.state === 'running' || j.state === 'paused'),
+    [jobs],
+  );
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
+  // Sessions with their game titles (issue #156): one memoised map, so the
+  // shell, footer, dashboard and palette don't each rebuild it per render.
+  const sessionsWithTitles = useMemo(
+    () => Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id })),
+    [sessions, games],
+  );
+  const sessionStartedAt = useMemo(() => ({ ...sessionStart.current }), [sessions]);
 
   const collectionTotals = useMemo(() => collectionCounts(collections, games, Math.floor(Date.now() / 1000)), [collections, games]);
   // Manual collections remember each game's title (issue #77), so a game that
@@ -902,7 +891,7 @@ export function AppContent() {
       onForceStop={() => stop(game.id, true)}
       launching={launchingId === game.id}
       session={sessions[game.id] ?? sessionFailures[game.id]}
-      sessionStartedAt={sessionStart.current[game.id]}
+      sessionStartedAt={sessionStartedAt[game.id]}
       refreshing={scanning}
       tweaks={tweaks}
       // saveSettings rethrows after its toast so the settings drawer can
@@ -932,21 +921,15 @@ export function AppContent() {
 
   // The list-detail library (issue #126): the list plus the stage. Opening a
   // game from elsewhere (palette, dashboard) lands here with that game
-  // selected, through the game view below. Under Atlas the /22 library bar
-  // owns the filters (#135), so the list filters through App's state and
-  // keeps only its filter field and sort; the add-game entry lives in the
-  // More places menu.
-  const resetLibraryFilters = () => {
+  // selected, through the game view below. The /22 library bar shares the
+  // filters with the list (issues #135, #157): one reset clears them all,
+  // wherever the empty state lives.
+  const resetLibraryFilters = useCallback(() => {
+    resetFilterState();
     setOwnership('owned');
-    setSelectedStores([]);
-    setSource('all');
-    setSearch('');
-    setAtlasTier('all');
-    setAtlasStatus('all');
-    setAtlasLending('all');
     if (view.name !== 'library') setView({ name: 'library' });
     else setView({ name: 'library', collection: undefined });
-  };
+  }, [resetFilterState, setOwnership, setView, view.name]);
 
   const renderListDetail = (initialSelectedId?: string | null) => (
     <LibraryListDetail
@@ -969,6 +952,8 @@ export function AppContent() {
       onStatusChange={setAtlasStatus}
       lendingValue={atlasLending}
       onLendingChange={setAtlasLending}
+      queryValue={search}
+      onQueryChange={setSearch}
       warnings={warnings}
       pluginName={(id) => socialLabels[id] ?? id}
       onOpenPlugins={() => setView({ name: 'plugins' })}
@@ -1013,7 +998,7 @@ export function AppContent() {
             onNavigate={setView}
             jobs={jobs}
             sessions={sessions}
-            sessionStartedAt={{ ...sessionStart.current }}
+            sessionStartedAt={sessionStartedAt}
             onPlay={(id) => {
               const g = games.find((x) => x.id === id);
               if (g) launch(g);
@@ -1179,9 +1164,9 @@ export function AppContent() {
             </div>
           );
         }
-        // Atlas lists every storefront above the embedded view (issue #138);
-        // other themes keep the bare embedded view.
-        if (isSourcebar) {
+        // The storefronts list above the embedded view is its own
+        // presentation (issue #156), not the shell.
+        if (isStorefronts) {
           return (
             <StoresPage
               plugins={storePlugins}
@@ -1212,6 +1197,15 @@ export function AppContent() {
   // every other view scrolls like warm. The Atlas grid/table scroll too.
   const listDetailActive = isListDetail && atlasView === 'list' && (view.name === 'library' || view.name === 'game');
   const isSourcebar = shellNavigation === 'sourcebar';
+  // Page presentations (issue #156): friends and store pick their own
+  // presentation without the shell. Built-ins keep Atlas paired
+  // (sourcebar + panel + storefronts) and warm/cool/slate paired
+  // (sidebar/topbar + modal + embedded), so no visible change.
+  const friendsPresentation = useVariant('friends.presentation');
+  const isFriendsPanel = friendsPresentation === 'panel';
+  const storePresentation = useVariant('store.presentation');
+  const isStorefronts = storePresentation === 'storefronts';
+  const fixesPresentation = useVariant('fixes.presentation');
   const hasBorrowed = useMemo(() => games.some((g) => g.shared_by != null), [games]);
   // The /22 banners (D22 Banners): between the top bar and the library bar.
   // Other themes keep the banner in the main column.
@@ -1228,7 +1222,7 @@ export function AppContent() {
   const chatFriend = chatTarget ? social.find((v) => v.plugin === chatTarget.plugin)?.friends.find((f) => f.id === chatTarget.friendId) : undefined;
   const chatPlugin = chatTarget ? plugins.find((x) => x.id === chatTarget.plugin) : undefined;
   const chatPanel = chatTarget && (
-    isSourcebar ? (
+    isFriendsPanel ? (
       <AtlasChatView
         view={chat.conversation}
         friend={chatFriend}
@@ -1278,10 +1272,10 @@ export function AppContent() {
         loading={!loaded}
         downloadCount={activeJobs.length}
         authNeeded={warnings.some((w) => w.needs_auth) || plugins.some((x) => x.status === 'unapproved' || x.status === 'changed')}
-        fixCount={shellNavigation === 'sourcebar' ? attentionIssues(games, jobs, runners).length : games.filter(needsAttention).length}
+        fixCount={fixesPresentation === 'cards' ? attentionIssues(games, jobs, runners).length : games.filter(needsAttention).length}
         runnerCount={runners.length}
         lastScan={lastScan}
-        sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
+        sessions={sessionsWithTitles}
         onStop={(id) => stop(id, false)}
         friends={social}
         friendLabels={socialLabels}
@@ -1316,7 +1310,7 @@ export function AppContent() {
         storeSelection={selectedStores}
         onSelectStores={(s) => { setSelectedStores(s); setSource(s.length === 1 ? s[0] : 'all'); }}
         jobs={activeJobs}
-        sessionStartedAt={{ ...sessionStart.current }}
+        sessionStartedAt={sessionStartedAt}
       />
       {settingsPresentation !== 'page' && settingsOpen && (
         <Modal label={t('nav:title.settings')} presentation={settingsPresentation === 'sheet' ? 'sheet' : 'dialog'} size="xl" className="h-[min(52rem,100%)]" onClose={() => setSettingsOpen(false)}>
@@ -1325,9 +1319,10 @@ export function AppContent() {
         </Modal>
       )}
 
-      {/* The /22 body (D22 `.body`): the stage and the friends side panel sit
-          side by side; other themes keep main as the single column. */}
-      {isSourcebar ? (
+      {/* The friends panel sits beside the stage (issue #156: friends
+          presentation, not the shell); other themes keep main alone and
+          use the modal below. */}
+      {isFriendsPanel ? (
         <div className="flex min-h-0 flex-1">
           <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
             {renderView()}
@@ -1376,9 +1371,9 @@ export function AppContent() {
       )}
       {shellNavigation === 'sourcebar' && (
         <SourceFooter
-          sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
+          sessions={sessionsWithTitles}
           jobs={activeJobs}
-          sessionStartedAt={{ ...sessionStart.current }}
+          sessionStartedAt={sessionStartedAt}
           onStop={(id) => stop(id, false)}
           onOpenDownloads={() => setView({ name: 'downloads' })}
           games={games}
@@ -1413,7 +1408,7 @@ export function AppContent() {
         collectionId={view.name === 'library' ? view.collection ?? null : null}
         onShowCollection={(id) => setView({ name: 'library', collection: id })}
         onNewCollection={() => setCollectionsDialog({ mode: 'new' })}
-        sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
+        sessions={sessionsWithTitles}
         sourceLogos={sourceLogos}
       />
 
@@ -1433,9 +1428,9 @@ export function AppContent() {
         />
       )}
 
-      {/* Atlas shows the friends side panel instead (#135); other themes
-          keep the modal. */}
-      {friendsOpen && !isSourcebar && (
+      {/* The friends presentation decides (issue #156): panel beside the
+          stage, or the modal here. */}
+      {friendsOpen && !isFriendsPanel && (
         <FriendsModal
           views={social}
           labels={socialLabels}

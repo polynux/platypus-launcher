@@ -4,7 +4,13 @@ import { render, screen } from '@testing-library/react';
 import type { Game, ProtonVersion } from '../../types';
 import { SystemView } from '../SystemView';
 
-vi.mock('../../lib/theme', () => ({ useVariant: () => 'sourcebar' }));
+vi.mock('../../lib/theme', () => ({
+  useVariant: (axis: string) => {
+    if (axis === 'runners.presentation') return 'table';
+    if (axis === 'shell.navigation') return 'sourcebar';
+    return 'sourcebar';
+  },
+}));
 
 it('counts Auto games against the default runner', () => {
   const runners = [

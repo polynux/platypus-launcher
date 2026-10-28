@@ -11,7 +11,7 @@ import type { Game } from '../../types';
 vi.mock('../../effect/runtime', () => ({ LauncherApi: {} }));
 vi.mock('../../lib/theme', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/theme')>();
-  return { ...actual, useVariant: (axis: string) => axis === 'shell.navigation' ? 'sourcebar' : actual.useVariant(axis as never) };
+  return { ...actual, useVariant: (axis: string) => axis === 'shell.navigation' ? 'sourcebar' : (axis === 'dashboard.presentation' ? 'home' : axis === 'fixes.presentation' ? 'cards' : axis === 'activity.presentation' ? 'days' : axis === 'runners.presentation' ? 'table' : axis === 'downloads.presentation' ? 'cards' : axis === 'storage.presentation' ? 'cards' : axis === 'plugins.presentation' ? 'directory' : axis === 'friends.presentation' ? 'panel' : axis === 'store.presentation' ? 'storefronts' : axis === 'settings-row.style' ? 'srow' : axis === 'toast.style' ? 'pill' : actual.useVariant(axis as never)) };
 });
 
 afterEach(() => cleanup());

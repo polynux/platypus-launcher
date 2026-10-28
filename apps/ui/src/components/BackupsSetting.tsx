@@ -83,7 +83,7 @@ export function BackupsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
     : saved?.manifest === 'stale' ? t('backups.manifest.stale')
     : t('backups.manifest.none');
 
-  if (useVariant('shell.navigation') === 'sourcebar') {
+  if (useVariant('settings-row.style') === 'srow') {
     const persist = (nextFolder: string, nextKeep: number, nextMode: string, nextAfter: boolean) => {
       setBusy(true);
       Effect.runPromise(LauncherApi.setBackupSettings(nextFolder, nextKeep, nextMode, nextAfter)).then((s) => {

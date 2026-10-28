@@ -13,17 +13,19 @@ import { PluginLogo } from './PluginLogo';
 import { coverImages, formatBytes, heroImages, hoursPlayed, lastPlayedAgo, needsAttention, attentionReason, byRecent, storeLabel } from '../lib/games';
 import { formatCount } from '../lib/format';
 import { TIER_LABEL, tierFilterValue } from '../lib/compat';
-import { collectionPredicate } from '../lib/collections';
 import { isLiveState } from '../lib/sessions';
-import { matchesExtraFilters, sortGames, type Sort, type SortKey, type StatusFilter } from './LibraryView';
+import { filterLibrary } from '../lib/libraryFilter';
+import { sortGames, type Sort, type SortKey, type StatusFilter } from './LibraryView';
 import type { TierFilter } from '../lib/compat';
 
 export type AtlasSortKey = 'recent' | 'title' | 'hours' | 'year' | 'size' | 'tier';
 const toSort = (s: AtlasSortKey, dir: 'asc' | 'desc'): Sort =>
   s === 'recent' ? { key: 'last', dir } : { key: s, dir };
 
-/** Shared filter for the Atlas grid/table (issue #136): the same predicates
- *  the list and the classic library filter through, so the logic can't drift. */
+/** Shared filter for the Atlas grid/table (issues #136, #157): one
+ *  filterLibrary for the list, grid and table, so the logic can't drift.
+ *  Kept under its historic name for existing imports; new code reads
+ *  filterLibrary from lib/libraryFilter. */
 export function atlasFilteredGames(games: Game[], o: {
   ownership: 'installed' | 'owned';
   source: StoreType | 'all';
@@ -37,20 +39,8 @@ export function atlasFilteredGames(games: Game[], o: {
   sort: AtlasSortKey;
   dir: 'asc' | 'desc';
 }): Game[] {
-  const hasBorrowed = games.some((g) => g.shared_by != null);
-  const lendingFilter = hasBorrowed ? o.lending : 'all';
-  const inCollection = collectionPredicate(o.collections ?? [], o.collection ?? '', Math.floor(Date.now() / 1000));
-  const q = o.query.trim().toLowerCase();
-  const multi = o.storeSelection;
-  const list = games.filter(
-    (g) =>
-      (o.ownership === 'owned' || g.is_installed) &&
-      (multi !== undefined ? multi.length === 0 || multi.includes(g.store) : o.source === 'all' || g.store === o.source) &&
-      (!inCollection || inCollection(g)) &&
-      matchesExtraFilters(g, o.tier, o.status, lendingFilter) &&
-      (q === '' || g.title.toLowerCase().includes(q)),
-  );
-  return sortGames(list, toSort(o.sort, o.dir));
+  const { sort, dir, ...filter } = o;
+  return sortGames(filterLibrary(games, filter), toSort(sort, dir));
 }
 
 /** Attention / update / download badges at the right of a row or card, as in

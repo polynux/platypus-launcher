@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "entries": [
     {
       "entry": "settings",
@@ -951,6 +951,171 @@
       "axes": null,
       "kind": "block",
       "region": "side"
+    },
+    {
+      "entry": "dashboard",
+      "since": "1.1",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "blocks",
+            "home"
+          ],
+          "default": "blocks",
+          "since": "1.1"
+        }
+      ]
+    },
+    {
+      "entry": "fixes",
+      "since": "1.1",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "rows",
+            "cards"
+          ],
+          "default": "rows",
+          "since": "1.1"
+        }
+      ]
+    },
+    {
+      "entry": "activity",
+      "since": "1.1",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "feed",
+            "days"
+          ],
+          "default": "feed",
+          "since": "1.1"
+        }
+      ]
+    },
+    {
+      "entry": "runners",
+      "since": "1.1",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "rows",
+            "table"
+          ],
+          "default": "rows",
+          "since": "1.1"
+        }
+      ]
+    },
+    {
+      "entry": "downloads",
+      "since": "1.1",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "groups",
+            "cards"
+          ],
+          "default": "groups",
+          "since": "1.1"
+        }
+      ]
+    },
+    {
+      "entry": "storage",
+      "since": "1.1",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "blocks",
+            "cards"
+          ],
+          "default": "blocks",
+          "since": "1.1"
+        }
+      ]
+    },
+    {
+      "entry": "plugins",
+      "since": "1.1",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "cards",
+            "directory"
+          ],
+          "default": "cards",
+          "since": "1.1"
+        }
+      ]
+    },
+    {
+      "entry": "friends",
+      "since": "1.1",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "modal",
+            "panel"
+          ],
+          "default": "modal",
+          "since": "1.1"
+        }
+      ]
+    },
+    {
+      "entry": "store",
+      "since": "1.1",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "embedded",
+            "storefronts"
+          ],
+          "default": "embedded",
+          "since": "1.1"
+        }
+      ]
+    },
+    {
+      "entry": "settings-row",
+      "since": "1.1",
+      "axes": [
+        {
+          "name": "style",
+          "values": [
+            "section",
+            "srow"
+          ],
+          "default": "section",
+          "since": "1.1"
+        }
+      ]
+    },
+    {
+      "entry": "toast",
+      "since": "1.1",
+      "axes": [
+        {
+          "name": "style",
+          "values": [
+            "card",
+            "pill"
+          ],
+          "default": "card",
+          "since": "1.1"
+        }
+      ]
     }
   ]
 }

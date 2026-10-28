@@ -16,6 +16,17 @@ vi.mock('../../lib/theme', async (importOriginal) => {
     ...mod,
     useVariant: (axis: string) => {
       if (axis === 'shell.navigation') return 'sourcebar';
+      if (axis === 'dashboard.presentation') return 'home';
+      if (axis === 'fixes.presentation') return 'cards';
+      if (axis === 'activity.presentation') return 'days';
+      if (axis === 'runners.presentation') return 'table';
+      if (axis === 'downloads.presentation') return 'cards';
+      if (axis === 'storage.presentation') return 'cards';
+      if (axis === 'plugins.presentation') return 'directory';
+      if (axis === 'friends.presentation') return 'panel';
+      if (axis === 'store.presentation') return 'storefronts';
+      if (axis === 'settings-row.style') return 'srow';
+      if (axis === 'toast.style') return 'pill';
       if (axis === 'settings.navigation') return 'scroll';
       if (axis === 'label.style') return 'plain';
       if (axis === 'section.chrome') return 'hairline';

@@ -46,8 +46,12 @@ interface ModalProps {
 }
 
 /** Centered modal on ds/Dialog (Radix): Esc + click-outside close, focus trapped and restored on close (FE-11).
- *  Narrow by default (`sm`); a dialog that needs more passes a `size`. */
-export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation = 'dialog', sheetWidth, onOpenAutoFocus, returnFocus, overlayClassName, contentClassName, innerClassName, contentStyle, onEscapeKeyDown, children }: ModalProps) {
+ *  Narrow by default (`sm`); a dialog that needs more passes a `size`.
+ *  Without a presentation, the dialog.presentation axis decides (issue #156):
+ *  every generic dialog follows the theme, so the axis has a reader. */
+export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation: presentationProp, sheetWidth, onOpenAutoFocus, returnFocus, overlayClassName, contentClassName, innerClassName, contentStyle, onEscapeKeyDown, children }: ModalProps & { presentation?: 'dialog' | 'sheet' }) {
+  const catalogPresentation = useVariant('dialog.presentation');
+  const presentation = presentationProp ?? (catalogPresentation === 'sheet' ? 'sheet' : 'dialog');
   const restoreFocus = useRef<HTMLElement | null>(typeof document === 'undefined' ? null : document.activeElement as HTMLElement);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
