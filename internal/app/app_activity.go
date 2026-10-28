@@ -21,6 +21,7 @@ import (
 const (
 	activityFileVersion = 1
 	addedFileVersion    = 1
+	achSeenFileVersion  = 1
 	// maxActivityEvents bounds the persisted feed; older rows fall off the
 	// end. Each row is tiny, so the cap is only a backstop.
 	maxActivityEvents = 500
@@ -142,11 +143,9 @@ func (a *App) saveActivity() {
 	_ = os.Rename(tmp.Name(), a.activityPath)
 }
 
-// appendActivityLocked appends e under the lock, trims the feed to the cap
-// by oldest timestamp (so a backfilled old row never evicts a fresh one),
-// and saves. It returns the stored row (with its id). Callers hold
-// a.activityMu.
-func (a *App) appendActivityLocked(e types.ActivityEvent) types.ActivityEvent {
+// stageActivityLocked assigns the next id and appends e under the lock,
+// without trimming or saving. Callers hold a.activityMu.
+func (a *App) stageActivityLocked(e types.ActivityEvent) types.ActivityEvent {
 	if a.activityNextID < 1 {
 		var max int64
 		for _, old := range a.activityEvents {
@@ -162,9 +161,30 @@ func (a *App) appendActivityLocked(e types.ActivityEvent) types.ActivityEvent {
 	e.ID = a.activityNextID
 	a.activityNextID++
 	a.activityEvents = append(a.activityEvents, e)
+	return e
+}
+
+// appendActivityLocked appends e under the lock, trims the feed to the cap
+// by oldest timestamp (so a backfilled old row never evicts a fresh one),
+// and saves. It returns the stored row (with its id). Callers hold
+// a.activityMu.
+func (a *App) appendActivityLocked(e types.ActivityEvent) types.ActivityEvent {
+	e = a.stageActivityLocked(e)
 	a.trimActivityLocked()
 	a.saveActivity()
 	return e
+}
+
+// appendActivitiesLocked appends rows under one lock with a single trim and
+// save, for scans and polls that add several rows at once.
+func (a *App) appendActivitiesLocked(rows []types.ActivityEvent) []types.ActivityEvent {
+	out := make([]types.ActivityEvent, 0, len(rows))
+	for _, e := range rows {
+		out = append(out, a.stageActivityLocked(e))
+	}
+	a.trimActivityLocked()
+	a.saveActivity()
+	return out
 }
 
 // trimActivityLocked drops rows past the cap, oldest timestamp first (ties
@@ -226,7 +246,7 @@ func (a *App) openAchSeen(dataDir string) {
 		return
 	}
 	var f achSeenFile
-	if err := json.Unmarshal(raw, &f); err != nil || f.Version > activityFileVersion {
+	if err := json.Unmarshal(raw, &f); err != nil || f.Version > achSeenFileVersion {
 		bad := fmt.Sprintf("%s.bad-%d", a.achSeenPath, time.Now().Unix())
 		_ = os.Rename(a.achSeenPath, bad)
 		if a.host != nil {
@@ -249,7 +269,7 @@ func (a *App) saveAchSeenLocked() {
 	if a.achSeenPath == "" {
 		return
 	}
-	f := achSeenFile{Version: activityFileVersion, Games: a.achSeen}
+	f := achSeenFile{Version: achSeenFileVersion, Games: a.achSeen}
 	raw, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return
@@ -279,7 +299,8 @@ func (a *App) saveAchSeenLocked() {
 // (issue #145): the plugin's unlockedAt is the unlock time, so each row is
 // stamped then. The first poll of a game only seeds the persisted set, so a
 // library of old unlocks never floods (or recycles through) the capped feed;
-// the check and the insert hold one lock, so concurrent polls can't double
+// an unlock that predates that first poll is therefore never logged. The
+// check and the insert hold one lock, so concurrent polls can't double
 // log. Callers hold no lock.
 func (a *App) noteAchievementUnlocks(game types.Game, progress types.AchievementProgress) {
 	a.activityMu.Lock()
@@ -313,14 +334,15 @@ func (a *App) noteAchievementUnlocks(game types.Game, progress types.Achievement
 		return
 	}
 	a.saveAchSeenLocked()
-	var emitted []types.ActivityEvent
+	staged := make([]types.ActivityEvent, 0, len(rows))
 	for _, r := range rows {
-		emitted = append(emitted, a.appendActivityLocked(types.ActivityEvent{
+		staged = append(staged, types.ActivityEvent{
 			TS: r.at * 1000, Kind: "achievement", GameID: game.ID,
 			TextKey: "activity:log.achievementUnlocked",
 			Args:    map[string]string{"achievement": r.id, "name": r.name, "title": game.Title},
-		}))
+		})
 	}
+	emitted := a.appendActivitiesLocked(staged)
 	a.activityMu.Unlock()
 	if a.host != nil {
 		for _, e := range emitted {
@@ -556,14 +578,15 @@ func (a *App) noteLibraryGames(games []types.Game) {
 	if changed {
 		a.saveAddedAt()
 	}
-	var emitted []types.ActivityEvent
+	staged := make([]types.ActivityEvent, 0, len(rows))
 	for _, r := range rows {
-		emitted = append(emitted, a.appendActivityLocked(types.ActivityEvent{
+		staged = append(staged, types.ActivityEvent{
 			TS: r.ts, Kind: "add", GameID: r.gameID,
 			TextKey: "activity:log.added",
 			Args:    map[string]string{"title": r.title, "store": r.store},
-		}))
+		})
 	}
+	emitted := a.appendActivitiesLocked(staged)
 	a.activityMu.Unlock()
 	if a.host != nil {
 		for _, e := range emitted {

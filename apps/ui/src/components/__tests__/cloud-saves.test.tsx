@@ -336,11 +336,26 @@ describe('CloudSavesHost', () => {
     return { onNotify, onLog };
   };
 
-  it('toasts and logs a finished push with the game\'s title', () => {
+  it('toasts a finished push without a session-only row (the core feed logs it, A10)', () => {
     const { onNotify, onLog } = setup();
     emit({ kind: 'pushed', message: 'Saved 2 files to the cloud' });
     expect(onNotify).toHaveBeenCalledWith('Saved 2 files to the cloud · Echo Tiny', 'ok');
-    expect(onLog).toHaveBeenCalledWith(expect.objectContaining({ type: 'cloud', game: 'p.echo.tiny' }));
+    expect(onLog).not.toHaveBeenCalled();
+  });
+
+  it('skips the session-only row for core-logged syncs, keeps it for the rest', () => {
+    const { onLog } = setup();
+    // Uploads, downloads and conflicts live in the persisted feed already.
+    emit({ kind: 'pushed', message: 'Saved 1 file to the cloud' });
+    emit({ kind: 'status', message: 'Downloaded 2 files from the cloud', done: 2 });
+    emit({ kind: 'prompt', prompt: 'conflict', message: 'x', status: conflictStatus() });
+    emit({ kind: 'failed', message: 'conflict at push', status: conflictStatus() });
+    expect(onLog).not.toHaveBeenCalled();
+    // Anything else still logs its row.
+    emit({ kind: 'failed', message: 'no route to the store' });
+    emit({ kind: 'skipped', message: 'Not synced: offline' });
+    emit({ kind: 'prompt', prompt: 'offline', message: 'The store is not reachable' });
+    expect(onLog).toHaveBeenCalledTimes(3);
   });
 
   it('shows a conflict prompt as the conflict dialog; resolving launches the game', async () => {
