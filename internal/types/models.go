@@ -19,6 +19,26 @@ type ProtonVersion struct {
 	IsSystem  bool   `json:"is_system"`
 	IsCustom  bool   `json:"is_custom"`
 	IsDefault bool   `json:"is_default"`
+	// SizeBytes is the runner's size on disk, 0 when unknown (issue #142).
+	SizeBytes int64 `json:"size_bytes,omitempty"`
+}
+
+// AvailableRunner is one installable GE-Proton release (issue #142).
+type AvailableRunner struct {
+	Tag         string `json:"tag"`
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	ChecksumURL string `json:"checksum_url,omitempty"`
+	SizeBytes   int64  `json:"size_bytes,omitempty"`
+}
+
+// RunnerRemoveCheck is what CheckRemoveRunner answers (issue #142): the
+// runner's size and the games still using it.
+type RunnerRemoveCheck struct {
+	ID        string   `json:"id"`
+	SizeBytes int64    `json:"size_bytes,omitempty"`
+	UsedBy    []string `json:"used_by,omitempty"`
+	Removable bool     `json:"removable"`
 }
 
 type GameSettings struct {

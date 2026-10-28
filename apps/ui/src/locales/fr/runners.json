@@ -9,6 +9,18 @@
   "defaultAutomatic": "Les jeux en Automatique reprennent le meilleur runner",
   "emptyTitle": "aucun runner",
   "emptyBody": "Aucun build Proton ou Wine trouvé. Installez Proton depuis Steam, ou déposez GE-Proton dans ~/.steam/root/compatibilitytools.d.",
+  "install": "Installer",
+  "installing": "Installation…",
+  "remove": "Supprimer",
+  "removing": "Suppression…",
+  "sizeUnknown": "Taille inconnue",
+  "availableTitle": "Disponibles",
+  "availableEmpty": "Aucun build installable trouvé en ligne.",
+  "installedTitle": "Installés",
+  "removeConfirmTitle": "Supprimer {{runner}} ?",
+  "removeInUse_one": "Libère {{size}}. Un jeu l'utilise encore ; changez-le d'abord ou supprimez quand même.",
+  "removeInUse_other": "Libère {{size}}. {{count}} jeux l'utilisent encore ; changez-les d'abord ou supprimez quand même.",
+  "offline": "Vous êtes hors ligne ; connectez-vous pour lister les runners installables.",
   "badge": {
     "custom": "personnalisé",
     "system": "système",
@@ -27,6 +39,7 @@
     "gamesCount_other": "{{count}} jeux",
     "noGames": "Aucun jeu ne l'utilise",
     "sizeLabel": "Taille",
-    "installed": "Installés"
+    "installed": "Installés",
+    "available": "Disponibles"
   }
 }

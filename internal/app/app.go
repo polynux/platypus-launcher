@@ -71,6 +71,7 @@ type App struct {
 	settingsLocks settingsLocks
 	moves         coreMoves
 	removes       coreMoves   // core-run removals (issue #43), like moves
+	runnerInstalls coreMoves  // core-run runner installs (issue #142), like moves
 	custom        customStore // the user's titles and art (app_customize.go)
 	ledger        *ledger.Ledger
 	// artwork is the online art lookup for sideloaded games (issue #36).
@@ -360,6 +361,14 @@ func (a *App) startup(ctx context.Context) {
 		a.host.Errorf("settings: %v", err)
 	}
 
+	// A killed core leaves runner install stages behind: drop them at
+	// startup, before any install runs (issue #142).
+	if resolved.Home != "" {
+		if err := runner.CleanStaleRunnerStages(resolved.Home); err != nil {
+			a.host.Warnf("runner stages: %v", err)
+		}
+	}
+
 	if err := a.openCustomization(dataDir); err != nil {
 		a.host.Errorf("customization: %v", err)
 	}
@@ -547,6 +556,9 @@ func (a *App) isRunning(gameID string) bool {
 	if a.sessionRunning != nil {
 		return a.sessionRunning(gameID)
 	}
+	if a.sessions == nil {
+		return false
+	}
 	return a.sessions.Running(gameID)
 }
 
@@ -559,7 +571,7 @@ func (a *App) GetProtonVersions() []types.ProtonVersion {
 	out := make([]types.ProtonVersion, 0, len(infos))
 	for _, r := range infos {
 		out = append(out, types.ProtonVersion{ID: r.ID, Name: r.Name, Path: r.Path,
-			IsSystem: r.System, IsCustom: r.Custom, IsDefault: r.Default})
+			IsSystem: r.System, IsCustom: r.Custom, IsDefault: r.Default, SizeBytes: r.SizeBytes})
 	}
 	return out
 }

@@ -7,7 +7,13 @@
   "runner": {
     "unavailable": "Le module d'exécution fourni est indisponible.",
     "wrapFailed": "Le module d'exécution n'a pas pu préparer {{title}} : {{error}}",
-    "invalidSpec": "Le module d'exécution a renvoyé une commande invalide pour {{title}}."
+    "invalidSpec": "Le module d'exécution a renvoyé une commande invalide pour {{title}}.",
+    "notRemovable": "Seuls les builds installés par l'utilisateur dans le dossier des runners peuvent être supprimés.",
+    "inUse": "{{title}} est encore utilisé par {{count}} jeu(s) ; changez-les d'abord ou supprimez quand même.",
+    "badChecksum": "Le téléchargement a échoué à sa somme de contrôle ; réessayez.",
+    "unknownVersion": "Cette version de runner n'est pas disponible.",
+    "alreadyInstalled": "{{title}} est déjà installé.",
+    "offline": "Vous êtes hors ligne ; connectez-vous pour lister les runners installables."
   },
   "noticeFallback": "Platypus n'a pas pu aller au bout. Réessayez.",
   "art": {

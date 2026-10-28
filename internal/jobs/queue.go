@@ -41,6 +41,11 @@ const (
 	// its own AddRemove constructor, no size check, RunsInCore, and no
 	// downloaded data to discard.
 	KindRemove = "remove"
+	// KindRunnerInstall installs a GE-Proton build into the runner folder
+	// (issue #142). Like a core move it runs in core: its own
+	// AddRunnerInstall constructor, no size check, RunsInCore, and progress
+	// through the queue.
+	KindRunnerInstall = "runner-install"
 
 	StateQueued   = "queued"
 	StateRunning  = "running"
@@ -288,7 +293,7 @@ func startTimeoutFor(kind string) time.Duration {
 
 // prepare checks free space and creates the install folder.
 func (q *Queue) prepare(ctx context.Context, job types.Job) error {
-	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindBackup || job.Kind == KindRestore || job.Kind == KindRemove {
+	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindBackup || job.Kind == KindRestore || job.Kind == KindRemove || job.Kind == KindRunnerInstall {
 		return nil // no download, so nothing to size; a move checks its space when it is queued
 	}
 	sizeCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -447,6 +452,23 @@ func (q *Queue) AddRemove(source, gameID, storeGameID, title string, deletePrefi
 	return q.enqueue(&types.Job{
 		Kind: KindRemove, Source: source, GameID: gameID, StoreGameID: storeGameID,
 		Title: title, DeletePrefix: deletePrefix, DeleteFiles: deleteFiles, AllowNoSaves: allowNoSaves,
+	})
+}
+
+// AddRunnerInstall queues installing one runner build (issue #142): tag is
+// the GE-Proton release tag, title its display name, installDir the runner
+// folder. The job resolves the download URL itself, so the queue keeps only
+// the tag.
+func (q *Queue) AddRunnerInstall(source, gameID, tag, title, installDir string) (types.Job, error) {
+	if tag == "" {
+		return types.Job{}, errors.New("a runner install needs a version tag")
+	}
+	if !filepath.IsAbs(installDir) {
+		return types.Job{}, fmt.Errorf("install folder %q is not an absolute path", installDir)
+	}
+	return q.enqueue(&types.Job{
+		Kind: KindRunnerInstall, Source: source, GameID: gameID, StoreGameID: tag,
+		Title: title, InstallDir: installDir,
 	})
 }
 
@@ -1034,7 +1056,7 @@ func (q *Queue) Discard(ctx context.Context, id string) error {
 		q.mu.Unlock()
 		return fmt.Errorf("no job %s", id)
 	}
-	if j.Kind == KindVerify || j.Kind == KindMove || j.Kind == KindBackup || j.Kind == KindRestore || j.Kind == KindRemove {
+	if j.Kind == KindVerify || j.Kind == KindMove || j.Kind == KindBackup || j.Kind == KindRestore || j.Kind == KindRemove || j.Kind == KindRunnerInstall {
 		q.mu.Unlock()
 		return fmt.Errorf("%s: %w", j.Title, ErrNoData)
 	}

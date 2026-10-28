@@ -103,7 +103,9 @@ var registry = []Capability{
 	{Name: "save-context", Since: rev117, Orchestrated: true,
 		Methods: []string{"game.saveContext"}, Surfaces: []string{"save-backups"}},
 	{Name: "runner", Since: rev117, Orchestrated: true,
-		Methods: []string{"runner.list", "runner.options", "runner.detectExecutable", "runner.prefix", "runner.env", "runner.migrateSettings", "runner.clientCrash", "runner.wrap", "runner.actions", "runner.runAction", "runner.crashHints"}, Surfaces: []string{"launch", "game-settings", "crash-hints"}},
+		Methods:         []string{"runner.list", "runner.options", "runner.detectExecutable", "runner.prefix", "runner.env", "runner.migrateSettings", "runner.clientCrash", "runner.wrap", "runner.actions", "runner.runAction", "runner.crashHints"},
+		OptionalMethods: []string{"runner.available", "runner.remove"},
+		Surfaces:        []string{"launch", "game-settings", "crash-hints"}},
 }
 
 // capabilityFreeOptional are optional methods that belong to no capability:

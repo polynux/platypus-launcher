@@ -141,6 +141,7 @@ var runnerCodes = map[string]bool{
 	"game.noRunner": true, "game.runnerMissing": true,
 	"crash.badVerb": true, "crash.noWinetricks": true, "crash.noPrefix": true,
 	"crash.umuUnsupported": true, "crash.noProtonWine": true,
+	"runner.notRemovable": true, "runner.badChecksum": true, "runner.unknownVersion": true,
 }
 
 // runnerFailure is the core's error for a runner plugin failure: the plugin's

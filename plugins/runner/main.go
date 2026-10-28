@@ -3,6 +3,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"platypus/internal/compat"
 	"platypus/internal/crashhints"
 	"platypus/internal/plugins"
 	"platypus/internal/runner"
@@ -127,11 +129,40 @@ func handle(req message) message {
 		}
 		_ = json.Unmarshal(req.Params, &p)
 		rs := runner.ScanProtonVersionsFor(os.Getenv("HOME"), p.DefaultRunnerID)
+		// Report each runner's size on disk (issue #142).
+		for i := range rs {
+			rs[i].SizeBytes = runnerBuildSize(rs[i])
+		}
 		out := make([]plugins.RunnerInfo, 0, len(rs))
 		for _, r := range rs {
 			out = append(out, runnerInfo(r))
 		}
 		resp.Result = map[string]any{"runners": out}
+	case "runner.available":
+		var p struct {
+			ReleasesURL string `json:"releasesUrl"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		fetcher := compat.NewFetcher("platypus-runner")
+		list, err := runner.FetchAvailable(context.Background(), fetcher, p.ReleasesURL)
+		if err != nil {
+			resp.Error = &rpcError{Code: -32003, Message: err.Error()}
+			break
+		}
+		resp.Result = map[string]any{"available": list}
+	case "runner.remove":
+		var p struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+			resp.Error = &rpcError{Code: -32602, Message: "id is required"}
+			break
+		}
+		if err := removeRunnerBuild(p.ID, os.Getenv("HOME")); err != nil {
+			resp.Error = rpcFailure(-32003, err)
+			break
+		}
+		resp.Result = map[string]any{}
 	case "runner.options":
 		var p struct {
 			DefaultRunnerID string `json:"defaultRunnerId"`
@@ -379,7 +410,44 @@ func runnerInfo(r types.ProtonVersion) plugins.RunnerInfo {
 	case r.IsSystem:
 		kind = "system"
 	}
-	return plugins.RunnerInfo{ID: r.ID, Name: r.Name, Kind: kind, Version: r.Name, Default: r.IsDefault, Path: r.Path, System: r.IsSystem, Custom: r.IsCustom}
+	return plugins.RunnerInfo{ID: r.ID, Name: r.Name, Kind: kind, Version: r.Name, Default: r.IsDefault, Path: r.Path, System: r.IsSystem, Custom: r.IsCustom, SizeBytes: r.SizeBytes}
+}
+
+// runnerBuildSize sizes one runner without ever walking outside its build
+// folder (issue #142): a Proton build is its folder, a Lutris build its
+// version folder, anything else (system Wine, umu) just its binary.
+func runnerBuildSize(r types.ProtonVersion) int64 {
+	if r.Path == "" {
+		return 0
+	}
+	if strings.HasSuffix(r.Path, "proton") {
+		return runner.DirSize(filepath.Dir(r.Path))
+	}
+	if strings.HasSuffix(r.Path, "bin/wine") && (r.IsCustom || strings.HasPrefix(r.ID, "lutris:")) {
+		return runner.DirSize(filepath.Dir(filepath.Dir(r.Path)))
+	}
+	if st, err := os.Stat(r.Path); err == nil && !st.IsDir() {
+		return st.Size()
+	}
+	return 0
+}
+
+// removeRunnerBuild deletes a user-installed build (issue #142). Anything
+// that is not a compat build in the runner folder is refused, so system Wine
+// and Steam-managed Proton can never be removed here.
+func removeRunnerBuild(id, home string) error {
+	rs := runner.ScanProtonVersionsFor(home, "")
+	for _, r := range rs {
+		if r.ID != id {
+			continue
+		}
+		dir, err := runner.BuildDirForRemovable(r, home)
+		if err != nil {
+			return &codedError{code: "runner.notRemovable", params: map[string]string{"id": id}, msg: err.Error()}
+		}
+		return os.RemoveAll(dir)
+	}
+	return &codedError{code: "game.runnerMissing", params: map[string]string{"id": id}, msg: fmt.Sprintf("runner %q is not installed", id)}
 }
 
 func prefixUser(r types.ProtonVersion) string {

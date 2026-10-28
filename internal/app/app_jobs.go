@@ -59,6 +59,8 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 		return b.a.plugins.Call(ctx, j.Source, "game.uninstall", installParams(j, nil), nil)
 	case jobs.KindRemove:
 		return b.a.startCoreRemove(j) // core deletes; reports through the queue
+	case jobs.KindRunnerInstall:
+		return b.a.startCoreRunnerInstall(j) // core downloads; reports through the queue
 	}
 	if j.Target != nil {
 		if err := b.a.jobTargetGate(j); err != nil {
@@ -127,6 +129,10 @@ func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
 		b.a.removes.stop(ctx, j.ID)
 		return nil
 	}
+	if j.Kind == jobs.KindRunnerInstall {
+		b.a.runnerInstalls.stop(ctx, j.ID)
+		return nil
+	}
 	return b.a.plugins.Call(ctx, j.Source, "job.cancel", map[string]any{"jobId": j.ID}, nil)
 }
 
@@ -137,7 +143,7 @@ func (b jobBackend) RunsInCore(j types.Job) bool {
 	if j.Kind == jobs.KindBackup || j.Kind == jobs.KindRestore {
 		return true
 	}
-	return b.a.moves.active(j.ID) || b.a.removes.active(j.ID)
+	return b.a.moves.active(j.ID) || b.a.removes.active(j.ID) || b.a.runnerInstalls.active(j.ID)
 }
 
 // heldByJob refuses a launch while a move, a check, a backup, a restore or a

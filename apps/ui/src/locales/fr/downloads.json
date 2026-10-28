@@ -21,7 +21,9 @@
     "verify": "échec de la vérification",
     "move": "échec du déplacement",
     "backup": "échec de la sauvegarde",
-    "restore": "échec de la restauration"
+    "restore": "échec de la restauration",
+    "remove": "échec de la suppression",
+    "runner-install": "échec de l'installation du runner"
   },
   "kind": {
     "install": "installation",

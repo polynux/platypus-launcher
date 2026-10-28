@@ -21,7 +21,9 @@
     "verify": "verify failed",
     "move": "move failed",
     "backup": "backup failed",
-    "restore": "restore failed"
+    "restore": "restore failed",
+    "remove": "remove failed",
+    "runner-install": "runner install failed"
   },
   "kind": {
     "install": "install",

@@ -29,6 +29,7 @@ export interface CoreApi {
   CheckInstallFolder(folder: string): Promise<types.InstallFolderCheck>;
   CheckMove(game: types.Game, parent: string): Promise<types.MoveCheck>;
   CheckRemove(gameID: string, opts: types.RemoveOptions): Promise<types.RemoveCheck>;
+  CheckRemoveRunner(id: string): Promise<types.RunnerRemoveCheck>;
   ChooseGameFolder(): Promise<string>;
   ChoosePluginInstallFolder(id: string): Promise<string>;
   ChoosePluginZip(): Promise<string>;
@@ -83,6 +84,7 @@ export interface CoreApi {
   InstallGameWithOptions(game: types.Game, options: Record<string, unknown>): Promise<types.Job>;
   InstallGameWithOptionsTo(game: types.Game, options: Record<string, unknown>, folder: string): Promise<types.Job>;
   InstallPluginZip(zipPath: string, confirmReplace: boolean): Promise<types.PluginInstallResult>;
+  InstallRunner(tag: string): Promise<types.Job>;
   InvalidateLibrary(source: string): Promise<void>;
   IsGameExecutable(gameID: string): Promise<boolean>;
   LaunchGame(game: types.Game): Promise<string>;
@@ -90,6 +92,7 @@ export interface CoreApi {
   LaunchGameViaClient(game: types.Game): Promise<string>;
   LinkGameInfo(gameID: string, source: string, id: string): Promise<string>;
   ListActivity(since: number, limit: number): Promise<types.ActivityEvent[]>;
+  ListAvailableRunners(): Promise<types.AvailableRunner[]>;
   ListCollections(): Promise<types.Collection[]>;
   ListJobs(): Promise<types.Job[]>;
   ListPrefixPresets(): Promise<types.PrefixPreset[]>;
@@ -131,6 +134,7 @@ export interface CoreApi {
   RemoveCustomGame(id: string): Promise<void>;
   RemoveGame(gameID: string, opts: types.RemoveOptions): Promise<types.Job>;
   RemoveGameFolder(path: string): Promise<types.GameFolder[]>;
+  RemoveRunner(id: string, force: boolean): Promise<void>;
   ReorderCollections(ids: string[]): Promise<types.Collection[]>;
   RepairGame(game: types.Game): Promise<types.Job>;
   RescanLibrary(): Promise<types.Library>;
@@ -224,6 +228,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'CheckInstallFolder',
   'CheckMove',
   'CheckRemove',
+  'CheckRemoveRunner',
   'ChooseGameFolder',
   'ChoosePluginInstallFolder',
   'ChoosePluginZip',
@@ -278,6 +283,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'InstallGameWithOptions',
   'InstallGameWithOptionsTo',
   'InstallPluginZip',
+  'InstallRunner',
   'InvalidateLibrary',
   'IsGameExecutable',
   'LaunchGame',
@@ -285,6 +291,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'LaunchGameViaClient',
   'LinkGameInfo',
   'ListActivity',
+  'ListAvailableRunners',
   'ListCollections',
   'ListJobs',
   'ListPrefixPresets',
@@ -326,6 +333,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'RemoveCustomGame',
   'RemoveGame',
   'RemoveGameFolder',
+  'RemoveRunner',
   'ReorderCollections',
   'RepairGame',
   'RescanLibrary',

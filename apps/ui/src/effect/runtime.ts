@@ -132,6 +132,12 @@ export const LauncherApi = {
   invalidateLibrary: (source: string) => call<void>('InvalidateLibrary', () => App.InvalidateLibrary(source)),
 
   getProtonVersions: () => call<ProtonVersion[]>('GetProtonVersions', async () => (await App.GetProtonVersions()) ?? []),
+  // Runner installs (issue #142): installable GE-Proton releases, installing
+  // one as a job with progress, and removing a user-installed build.
+  listAvailableRunners: () => call<gen.AvailableRunner[]>('ListAvailableRunners', async () => (await App.ListAvailableRunners()) ?? []),
+  installRunner: (tag: string) => call<Job>('InstallRunner', () => App.InstallRunner(tag)),
+  checkRemoveRunner: (id: string) => call<gen.RunnerRemoveCheck>('CheckRemoveRunner', () => App.CheckRemoveRunner(id)),
+  removeRunner: (id: string, force: boolean) => call<void>('RemoveRunner', () => App.RemoveRunner(id, force)),
 
   // Whether the machine looks online (issue #44): background work skips its
   // fetches while offline, and the library shows its last known listing.

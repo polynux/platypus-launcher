@@ -1123,6 +1123,8 @@ export function AppContent() {
             onRefresh={() => loadData('rescan')}
             scanning={scanning}
             onDefaultRunner={setDefaultRunner}
+            jobs={jobs}
+            onNotify={notify}
           />
         );
       case 'plugins':
