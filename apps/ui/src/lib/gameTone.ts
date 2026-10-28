@@ -189,8 +189,8 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: Col
     // lab's whole-light has no k-on-accent override).
     derived.text = readable(tone, 0.4, 0.1, ground, 4.5, -1);
     derived['text-body'] = readable(tone, 0.3, 0.2, ground, 4.5, -1);
-    derived['text-muted'] = readable(tone, 0.2, 0.36, ground, 3, -1);
-    derived['text-faint'] = readable(tone, 0.15, 0.5, ground, 3, -1);
+    derived['text-muted'] = readable(tone, 0.2, 0.36, ground, 4.5, -1);
+    derived['text-faint'] = readable(tone, 0.15, 0.5, ground, 4.5, -1);
   } else {
     // The surfaces first: the text is clamped against the ground it sits on.
     const d = black ? 0.5 : 1;
@@ -211,8 +211,8 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: Col
     derived['on-accent'] = readable(tone, 0.5, 0.07, accent, 4.5, -1);
     derived.text = readable(tone, 0.3, 0.95, ground, 4.5, 1);
     derived['text-body'] = readable(tone, 0.25, 0.72, ground, 4.5, 1);
-    derived['text-muted'] = readable(tone, 0.25, 0.72, ground, 3, 1);
-    derived['text-faint'] = readable(tone, 0.22, 0.52, ground, 3, 1);
+    derived['text-muted'] = readable(tone, 0.25, 0.72, ground, 4.5, 1);
+    derived['text-faint'] = readable(tone, 0.22, 0.52, ground, 4.5, 1);
   }
   const vars: Record<string, string> = {};
   for (const [token, value] of Object.entries(derived)) {

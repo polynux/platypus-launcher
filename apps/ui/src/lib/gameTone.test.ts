@@ -200,7 +200,11 @@ describe('schemes x tints (issue #134: 3 schemes, 3 tints)', () => {
         const vars = toneVariables('whole', sample, scheme);
         const ground = rgb(vars['--color-ground']);
         expect(contrastRatio(rgb(vars['--color-text']), ground), `${scheme} text`).toBeGreaterThanOrEqual(4.5);
-        expect(contrastRatio(rgb(vars['--color-text-muted']), ground), `${scheme} muted`).toBeGreaterThanOrEqual(3);
+        expect(contrastRatio(rgb(vars['--color-text-muted']), ground), `${scheme} muted`).toBeGreaterThanOrEqual(4.5);
+        // Faint text holds the body ratio too, and stays below muted.
+        const faint = contrastRatio(rgb(vars['--color-text-faint']), ground);
+        expect(faint, `${scheme} faint`).toBeGreaterThanOrEqual(4.5);
+        expect(faint, `${scheme} faint below muted`).toBeLessThanOrEqual(contrastRatio(rgb(vars['--color-text-muted']), ground));
       }
     }
   });
