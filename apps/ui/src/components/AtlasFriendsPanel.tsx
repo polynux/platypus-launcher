@@ -137,7 +137,7 @@ export function AtlasFriendsPanel(p: AtlasFriendsPanelProps) {
   }, [p.views, p.unreadOf]);
   const chatsLabel = unreadTotal > 0 ? `${t('chat:tabs.chats')} ${unreadTotal}` : t('chat:tabs.chats');
   return (
-    <aside aria-label={t('chat:modal.title')} className="flex min-h-0 w-[340px] flex-none flex-col border-l border-hairline bg-ground-2">
+    <aside aria-label={t('chat:modal.title')} data-controller-layer="friends" className="flex min-h-0 w-[340px] flex-none flex-col border-l border-hairline bg-ground-2">
       <header className="flex flex-none items-center justify-between py-2.5 pl-[18px] pr-2.5">
         <h2 className="text-[15px] font-extrabold">{t('chat:modal.title')}</h2>
         <button

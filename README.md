@@ -76,6 +76,15 @@ plugins/install.sh echo               # a fake store, safe to play with
 already logged in, a seeded library and fake games that run, fail or crash. Nothing touches your real
 data. See [docs/testing.md](docs/testing.md).
 
+### Keyboard and controller
+
+The whole launcher works without a mouse, in the Atlas and the classic themes. Arrow keys move
+focus to the nearest control in that direction (a dialog or panel keeps focus inside itself);
+`Enter`/`Space` activate as usual. A gamepad does the same through the standard mapping: D-pad
+or left stick moves, A activates (open a game, press Play), B goes back (close the topmost
+dialog or panel, else the previous view), LB/RB switch sections. Text fields, lists with their
+own keys (the library list, the command palette) and menus keep their own behaviour.
+
 ## Goals and milestones
 
 Done:
