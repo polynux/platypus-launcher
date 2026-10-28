@@ -18,8 +18,8 @@
   "availableEmpty": "No installable builds found online.",
   "installedTitle": "Installed",
   "removeConfirmTitle": "Remove {{runner}}?",
-  "removeConfirmBody": "Frees {{size}}. {{count}} game(s) still use it.",
-  "removeInUse": "{{count}} game(s) still use it; switch them first or remove anyway",
+  "removeInUse_one": "Frees {{size}}. One game still uses it; switch it first or remove anyway.",
+  "removeInUse_other": "Frees {{size}}. {{count}} games still use it; switch them first or remove anyway.",
   "offline": "You're offline; connect to list installable runners.",
   "badge": {
     "custom": "custom",

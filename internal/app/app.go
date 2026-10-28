@@ -361,6 +361,14 @@ func (a *App) startup(ctx context.Context) {
 		a.host.Errorf("settings: %v", err)
 	}
 
+	// A killed core leaves runner install stages behind: drop them at
+	// startup, before any install runs (issue #142).
+	if resolved.Home != "" {
+		if err := runner.CleanStaleRunnerStages(resolved.Home); err != nil {
+			a.host.Warnf("runner stages: %v", err)
+		}
+	}
+
 	if err := a.openCustomization(dataDir); err != nil {
 		a.host.Errorf("customization: %v", err)
 	}
@@ -547,6 +555,9 @@ func (a *App) pluginStore(p plugins.Plugin) *stores.Plugin {
 func (a *App) isRunning(gameID string) bool {
 	if a.sessionRunning != nil {
 		return a.sessionRunning(gameID)
+	}
+	if a.sessions == nil {
+		return false
 	}
 	return a.sessions.Running(gameID)
 }

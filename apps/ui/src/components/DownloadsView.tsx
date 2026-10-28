@@ -27,6 +27,7 @@ const VERB_KEY: Record<Job['kind'], string> = {
   backup: 'downloads:action.backup',
   restore: 'downloads:action.restore',
   remove: 'downloads:action.remove',
+  'runner-install': 'downloads:action.install',
 };
 
 const KIND_KEY: Record<Job['kind'], string> = {
@@ -38,6 +39,7 @@ const KIND_KEY: Record<Job['kind'], string> = {
   backup: 'downloads:kind.backup',
   restore: 'downloads:kind.restore',
   remove: 'downloads:kind.remove',
+  'runner-install': 'downloads:kind.install',
 };
 
 const STATE_STYLE: Record<Job['state'], string> = {
@@ -71,6 +73,9 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
   const sizes = job.total > 0
     ? t('downloads:job.sizesOf', { done: formatBytes(job.bytes) || '0 B', total: formatBytes(job.total) })
     : '';
+  // Runner installs are not games: their row names the build instead of
+  // linking to a game page that doesn't exist (issue #142, m13).
+  const isRunnerJob = job.game_id.startsWith('runner:');
   const detail =
     job.state === 'running'
       ? [job.phase, sizes, job.speed > 0 && t('downloads:job.speedPerSec', { speed: formatBytes(job.speed) })].filter(Boolean).join(' · ')
@@ -85,9 +90,15 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
     <ListRow kind="job">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <button onClick={() => onOpenGame(job.game_id)} className="truncate text-left text-[13px] font-bold hover:text-dl">
-            {t(VERB_KEY[job.kind])} · {job.title}
-          </button>
+          {isRunnerJob ? (
+            <span className="truncate text-left text-[13px] font-bold">
+              {t(VERB_KEY[job.kind])} · {job.title}
+            </span>
+          ) : (
+            <button onClick={() => onOpenGame(job.game_id)} className="truncate text-left text-[13px] font-bold hover:text-dl">
+              {t(VERB_KEY[job.kind])} · {job.title}
+            </button>
+          )}
           <div className={cx('truncate font-mono text-hint', STATE_STYLE[job.state])} title={detail}>
             {t(STATE_KEY[job.state])}{detail ? ` · ${detail}` : ''}
             {job.attempts > 1 && active ? ` · ${t('downloads:job.attempt', { count: job.attempts })}` : ''}
@@ -120,8 +131,9 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
               <Button variant="neutral" size="sm" onClick={() => onAction('resume', job.id)} aria-label={t('downloads:aria.resumeJob', { title: job.title })}>
                 <Play className="h-3 w-3" /> {t('downloads:job.resume')}
               </Button>
-              {/* A check, a move or a removal works on the installed game: there is no download to discard. */}
-              {job.kind !== 'verify' && job.kind !== 'move' && job.kind !== 'remove' && (
+              {/* A check, a move, a removal or a runner install works on the
+                  installed game or needs no cleanup: there is no download to discard. */}
+              {job.kind !== 'verify' && job.kind !== 'move' && job.kind !== 'remove' && job.kind !== 'runner-install' && (
                 <Button variant="neutral" size="sm" onClick={() => onAction('discard', job.id)} aria-label={t('downloads:aria.discardJob', { title: job.title })}>
                   <Trash2 className="h-3 w-3" /> {t('downloads:job.discard')}
                 </Button>

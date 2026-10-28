@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -151,23 +150,6 @@ func handle(req message) message {
 			break
 		}
 		resp.Result = map[string]any{"available": list}
-	case "runner.install":
-		var p struct {
-			Tag         string `json:"tag"`
-			URL         string `json:"url"`
-			ChecksumURL string `json:"checksumUrl"`
-			JobID       string `json:"jobId"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || (p.Tag == "" && p.URL == "") {
-			resp.Error = &rpcError{Code: -32602, Message: "tag or url is required"}
-			break
-		}
-		if r, err := installRunnerBuild(p.Tag, p.URL, p.ChecksumURL); err != nil {
-			resp.Error = rpcFailure(-32003, err)
-			break
-		} else {
-			resp.Result = map[string]any{"runner": r}
-		}
 	case "runner.remove":
 		var p struct {
 			ID string `json:"id"`
@@ -448,83 +430,6 @@ func runnerBuildSize(r types.ProtonVersion) int64 {
 		return st.Size()
 	}
 	return 0
-}
-
-// installRunnerBuild downloads and unpacks one GE-Proton build into the
-// user's runner folder (issue #142). Tag names the release when URL is empty;
-// otherwise URL (and its ChecksumURL) is fetched directly, which lets the
-// core queue a job for a listed version. Checksums from the release are
-// verified, and the tarball unpacks with the same safety rules as plugin
-// zips. Network goes through the existing downloader client.
-func installRunnerBuild(tag, url, checksumURL string) (plugins.RunnerInfo, error) {
-	home := os.Getenv("HOME")
-	destDir := runner.UserRunnerDir(home)
-	if tag != "" && url == "" {
-		fetcher := compat.NewFetcher("platypus-runner")
-		list, err := runner.FetchAvailable(context.Background(), fetcher, "")
-		if err != nil {
-			return plugins.RunnerInfo{}, err
-		}
-		for _, a := range list {
-			if a.Tag == tag {
-				url, checksumURL = a.URL, a.ChecksumURL
-				break
-			}
-		}
-		if url == "" {
-			return plugins.RunnerInfo{}, &codedError{code: "runner.unknownVersion", params: map[string]string{"tag": tag}, msg: fmt.Sprintf("runner version %q is not available", tag)}
-		}
-	}
-	client := &http.Client{Timeout: 15 * time.Second}
-	tmp, err := os.CreateTemp("", "runner-*.tar.gz")
-	if err != nil {
-		return plugins.RunnerInfo{}, err
-	}
-	tmpPath := tmp.Name()
-	_ = tmp.Close()
-	defer os.Remove(tmpPath)
-	out, err := os.Create(tmpPath)
-	if err != nil {
-		return plugins.RunnerInfo{}, err
-	}
-	// The tarball streams through the existing downloader client; the small
-	// checksum goes through the Fetcher when it is a URL.
-	if err := runner.Download(context.Background(), client, url, out, nil); err != nil {
-		_ = out.Close()
-		return plugins.RunnerInfo{}, err
-	}
-	_ = out.Close()
-	if checksumURL != "" {
-		sumRaw, err := client.Get(checksumURL)
-		if err != nil {
-			return plugins.RunnerInfo{}, err
-		}
-		sumBody, err := io.ReadAll(io.LimitReader(sumRaw.Body, 1<<20))
-		_ = sumRaw.Body.Close()
-		if err != nil {
-			return plugins.RunnerInfo{}, err
-		}
-		if err := runner.VerifyChecksumFile(tmpPath, string(sumBody)); err != nil {
-			return plugins.RunnerInfo{}, &codedError{code: "runner.badChecksum", params: map[string]string{"tag": tag}, msg: err.Error()}
-		}
-	}
-	f, err := os.Open(tmpPath)
-	if err != nil {
-		return plugins.RunnerInfo{}, err
-	}
-	defer f.Close()
-	top, err := runner.UnpackTarGz(f, destDir, 0)
-	if err != nil {
-		return plugins.RunnerInfo{}, err
-	}
-	// Rescan for the new build so the answer names what is installed.
-	rs := runner.ScanProtonVersionsFor(home, "")
-	for _, r := range rs {
-		if strings.Contains(r.Path, top) {
-			return runnerInfo(r), nil
-		}
-	}
-	return plugins.RunnerInfo{ID: "compat:" + top, Name: top}, nil
 }
 
 // removeRunnerBuild deletes a user-installed build (issue #142). Anything

@@ -34,16 +34,6 @@ func compatDirsFor(home string) []string {
 	}
 }
 
-// steamCommonDirs mirrors the scanner's Steam-managed Proton folders.
-func steamCommonDirs(home string) []string {
-	return []string{
-		filepath.Join(home, ".local/share/Steam/steamapps/common"),
-		filepath.Join(home, ".steam/steam/steamapps/common"),
-		filepath.Join(home, ".var/com.apple.Steam/.local/share/Steam/steamapps/common"),
-		filepath.Join(home, ".var/com.valvesoftware.Steam/.local/share/Steam/steamapps/common"),
-	}
-}
-
 // Removable reports whether runner may be deleted (issue #142): only a
 // user-installed build in the runner folder (compat:*). System Wine and
 // Steam-managed Proton are never removed.
@@ -181,7 +171,11 @@ func FetchAvailable(ctx context.Context, fetcher *compat.Fetcher, baseURL string
 
 // VerifyChecksumFile checks file against the expected hex SHA-512.
 func VerifyChecksumFile(path, expectedHex string) error {
-	expectedHex = strings.Fields(strings.TrimSpace(expectedHex))[0]
+	fields := strings.Fields(expectedHex)
+	if len(fields) == 0 {
+		return fmt.Errorf("empty checksum")
+	}
+	expectedHex = fields[0]
 	expected, err := hex.DecodeString(strings.TrimSpace(expectedHex))
 	if err != nil || len(expected) != sha512.Size {
 		return fmt.Errorf("bad checksum: %q", expectedHex)
@@ -215,10 +209,14 @@ func equalBytes(a, b []byte) bool {
 // Download fetches url through the existing downloader's client, writing to
 // w with progress. It is the small streaming half Fetcher.Get doesn't cover:
 // release JSON goes through Fetcher.Get, the tarball streams here through
-// the same client.
-func Download(ctx context.Context, client *http.Client, url string, w io.Writer, progress func(done, total int64)) error {
+// the same client. At most maxBytes+1 response bytes are read: anything past
+// the cap fails instead of filling the disk.
+func Download(ctx context.Context, client *http.Client, url string, w io.Writer, progress func(done, total int64), maxBytes int64) error {
 	if client == nil {
 		client = http.DefaultClient
+	}
+	if maxBytes <= 0 {
+		maxBytes = maxRunnerBytes
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -239,12 +237,15 @@ func Download(ctx context.Context, client *http.Client, url string, w io.Writer,
 	var done int64
 	buf := make([]byte, 1<<20)
 	for {
-		n, rerr := resp.Body.Read(buf)
+		n, rerr := io.LimitReader(resp.Body, maxBytes+1-done).Read(buf)
 		if n > 0 {
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				return werr
 			}
 			done += int64(n)
+			if done > maxBytes {
+				return fmt.Errorf("runner download over %d MB", maxBytes>>20)
+			}
 			if progress != nil {
 				progress(done, total)
 			}
@@ -258,18 +259,42 @@ func Download(ctx context.Context, client *http.Client, url string, w io.Writer,
 	}
 }
 
+// DownloadLimit bounds one runner tarball: the release asset size plus slack
+// for checksums and compression variance, or the unpack budget when the
+// release names no size.
+func DownloadLimit(assetSize int64) int64 {
+	const slack = 64 << 20
+	if assetSize > 0 {
+		return assetSize + slack
+	}
+	return maxRunnerBytes
+}
+
+// maxRunnerEntries bounds a runner archive's entry count (inode-exhaustion
+// guard, same spirit as the size budget).
+var maxRunnerEntries = 200000
+
 // UnpackTarGz unpacks a GE-Proton tar.gz into destDir with the same safety
 // rules as plugin zips: no absolute paths, no "..", no symlink escape, no
-// device files, and a shared unpack budget (size bombs). Symlinks are only
-// stored when their target stays inside the folder, and chains that escape
-// are refused after extraction. It returns the top-level build folder name.
-func UnpackTarGz(r io.Reader, destDir string, maxBytes int64) (string, error) {
+// device files, and a shared unpack budget (size bombs). Proton builds carry
+// relative symlinks with ".." hops that stay inside the build (their
+// default_pfx DLL links), so a link target is validated relative to the
+// link's own folder and must stay under the archive's single top-level
+// folder. Every write goes through an os.Root on the staging folder, so no
+// write can follow a link out; chains that escape are refused by the final
+// sweep. It returns the top-level build folder name.
+func UnpackTarGz(ctx context.Context, r io.Reader, destDir string, maxBytes int64) (string, error) {
 	if maxBytes <= 0 {
 		maxBytes = maxRunnerBytes
 	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", err
 	}
+	root, err := os.OpenRoot(destDir)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return "", fmt.Errorf("not a gzip archive: %w", err)
@@ -277,15 +302,23 @@ func UnpackTarGz(r io.Reader, destDir string, maxBytes int64) (string, error) {
 	defer gz.Close()
 	tr := tar.NewReader(gz)
 	remaining := maxBytes
+	entries := 0
 	var top string
 	var links []linkCheck
 	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		hdr, err := tr.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return "", err
+		}
+		// Pax global headers carry no files.
+		if hdr.Typeflag == tar.TypeXGlobalHeader {
+			continue
 		}
 		name := strings.TrimPrefix(hdr.Name, "./")
 		name = filepath.FromSlash(name)
@@ -295,27 +328,35 @@ func UnpackTarGz(r io.Reader, destDir string, maxBytes int64) (string, error) {
 		if !filepath.IsLocal(name) {
 			return "", fmt.Errorf("refusing tar entry %q: escapes the runner folder", hdr.Name)
 		}
+		entries++
+		if entries > maxRunnerEntries {
+			return "", fmt.Errorf("refusing tar archive: over %d entries", maxRunnerEntries)
+		}
 		if top == "" {
 			top = strings.Split(name, string(filepath.Separator))[0]
 		}
-		dst := filepath.Join(destDir, name)
+		if name != top && !strings.HasPrefix(name, top+string(filepath.Separator)) {
+			return "", fmt.Errorf("refusing tar entry %q: outside the build folder %q", hdr.Name, top)
+		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(dst, 0o755); err != nil {
+			if err := root.MkdirAll(name, 0o755); err != nil {
 				return "", err
 			}
 		case tar.TypeReg, tar.TypeRegA:
 			if hdr.Size < 0 || hdr.Size > remaining {
 				return "", fmt.Errorf("refusing tar entry %q: unpacked data over %d MB (size bomb?)", hdr.Name, maxBytes>>20)
 			}
-			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-				return "", err
+			if dir := filepath.Dir(name); dir != "." {
+				if err := root.MkdirAll(dir, 0o755); err != nil {
+					return "", err
+				}
 			}
 			perm := os.FileMode(0o644)
 			if hdr.FileInfo().Mode().Perm()&0o111 != 0 {
 				perm = 0o755
 			}
-			out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+			out, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
 			if err != nil {
 				return "", err
 			}
@@ -333,17 +374,22 @@ func UnpackTarGz(r io.Reader, destDir string, maxBytes int64) (string, error) {
 				return "", err
 			}
 		case tar.TypeSymlink:
-			if !filepath.IsLocal(filepath.FromSlash(hdr.Linkname)) {
+			// The target is read relative to the link's own folder, like the
+			// filesystem reads it, and must stay under the build folder.
+			t := filepath.Join(filepath.Dir(name), filepath.FromSlash(hdr.Linkname))
+			if !filepath.IsLocal(t) || (t != top && !strings.HasPrefix(t, top+string(filepath.Separator))) {
 				return "", fmt.Errorf("refusing tar entry %q: symlink points outside the runner folder", hdr.Name)
 			}
-			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			if dir := filepath.Dir(name); dir != "." {
+				if err := root.MkdirAll(dir, 0o755); err != nil {
+					return "", err
+				}
+			}
+			_ = root.Remove(name)
+			if err := root.Symlink(hdr.Linkname, name); err != nil {
 				return "", err
 			}
-			_ = os.Remove(dst)
-			if err := os.Symlink(hdr.Linkname, dst); err != nil {
-				return "", err
-			}
-			links = append(links, linkCheck{path: dst, target: hdr.Linkname})
+			links = append(links, linkCheck{path: name})
 		default:
 			return "", fmt.Errorf("refusing tar entry %q: not a file, folder or symlink", hdr.Name)
 		}
@@ -352,24 +398,64 @@ func UnpackTarGz(r io.Reader, destDir string, maxBytes int64) (string, error) {
 		return "", fmt.Errorf("empty runner archive")
 	}
 	resolvedDest, err := filepath.EvalSymlinks(destDir)
-	if err == nil {
-		destDir = resolvedDest
+	if err != nil {
+		return "", err
 	}
 	for _, l := range links {
-		resolved, err := filepath.EvalSymlinks(l.path)
+		resolved, err := filepath.EvalSymlinks(filepath.Join(resolvedDest, l.path))
 		if err != nil {
-			return "", fmt.Errorf("refusing tar symlink %q: broken", relOf(destDir, l.path))
+			return "", fmt.Errorf("refusing tar symlink %q: broken", relOf(resolvedDest, filepath.Join(resolvedDest, l.path)))
 		}
-		if !sameOrWithin(destDir, resolved) {
-			return "", fmt.Errorf("refusing tar symlink %q: escapes the runner folder", relOf(destDir, l.path))
+		if !sameOrWithin(resolvedDest, resolved) {
+			return "", fmt.Errorf("refusing tar symlink %q: escapes the runner folder", relOf(resolvedDest, filepath.Join(resolvedDest, l.path)))
 		}
 	}
 	return top, nil
 }
 
 type linkCheck struct {
-	path   string
-	target string
+	path string
+}
+
+// stagePrefixes are the temp stage folders a runner install leaves behind
+// when the core dies mid-install: the current one inside the runner folder,
+// and the legacy one next to it from before the stage moved inside.
+var stagePrefixes = []string{".platypus-runner-", ".runner-install-"}
+
+// CleanStaleRunnerStages deletes leftover install stages for home's runner
+// folder: a killed core never resumes them, and the scanner ignores them
+// (no proton file), so they only take space.
+func CleanStaleRunnerStages(home string) error {
+	destDir := UserRunnerDir(home)
+	resolved, err := filepath.EvalSymlinks(destDir)
+	if err != nil {
+		resolved = destDir
+	}
+	dirs := map[string]bool{resolved: true, filepath.Dir(filepath.Clean(destDir)): true}
+	var first error
+	for dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			name := e.Name()
+			stale := false
+			for _, p := range stagePrefixes {
+				if strings.HasPrefix(name, p) {
+					stale = true
+					break
+				}
+			}
+			if !stale {
+				continue
+			}
+			if err := os.RemoveAll(filepath.Join(dir, name)); err != nil && first == nil {
+				first = err
+			}
+		}
+	}
+	return first
 }
 
 func relOf(base, path string) string {

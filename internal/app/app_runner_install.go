@@ -3,8 +3,10 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"platypus/internal/apperr"
@@ -50,20 +52,70 @@ func (a *App) runnerByID(id string) (types.ProtonVersion, bool) {
 	return types.ProtonVersion{}, false
 }
 
-// runnerUsedBy lists saved games whose runner_id names id (or its name).
+// runnerUsedBy lists saved games whose runner_id names id (or its name), and
+// games left on Automatic when id is what they resolve to (the default, or
+// the automatic pick when no default is set).
 func (a *App) runnerUsedBy(id, name string) []string {
 	var out []string
+	seen := map[string]bool{}
 	if a.settings == nil {
 		return out
 	}
-	for gameID, saved := range a.settings.GameSettings() {
-		if v, ok := saved["runner_id"]; ok {
-			if s, ok := v.(string); ok && (s == id || (name != "" && s == name)) {
+	auto := a.effectiveAutoRunnerID()
+	saved := a.settings.GameSettings()
+	// Sideloaded games with no saved settings are Automatic too.
+	ids := make([]string, 0, len(saved))
+	for gameID := range saved {
+		ids = append(ids, gameID)
+	}
+	for _, g := range a.customGames() {
+		if _, ok := saved[g.ID]; !ok {
+			ids = append(ids, g.ID)
+		}
+	}
+	for _, gameID := range ids {
+		v, _ := saved[gameID]["runner_id"].(string)
+		if v == "" {
+			v = "auto"
+		}
+		if v == id || (name != "" && v == name) {
+			if !seen[gameID] {
+				seen[gameID] = true
+				out = append(out, gameID)
+			}
+			continue
+		}
+		if v == "auto" && auto != "" && id == auto {
+			if !seen[gameID] {
+				seen[gameID] = true
 				out = append(out, gameID)
 			}
 		}
 	}
 	return out
+}
+
+// effectiveAutoRunnerID is what a game left on Automatic resolves to: the
+// default while it is installed, else the automatic pick.
+func (a *App) effectiveAutoRunnerID() string {
+	if d := a.defaultRunnerID(); !runner.IsAuto(d) {
+		return d
+	}
+	if pick, ok := runner.PickAuto(a.GetProtonVersions(), ""); ok {
+		return pick.ID
+	}
+	return ""
+}
+
+// runnerGameTitle names a game for removal errors: the sideloaded title when
+// it has one, else the id.
+func (a *App) runnerGameTitle(gameID string) string {
+	for _, g := range a.customGames() {
+		if g.ID == gameID {
+			return g.Title
+		}
+	}
+	return gameID
 }
 
 // CheckRemoveRunner says whether a runner can be removed and who uses it.
@@ -80,7 +132,8 @@ func (a *App) CheckRemoveRunner(id string) (types.RunnerRemoveCheck, error) {
 
 // RemoveRunner deletes a user-installed build. System Wine and Steam-managed
 // Proton are never removed. Without force, a build games still use is kept
-// so the caller can warn first.
+// so the caller can warn first. A build a running game uses is never removed,
+// and removing the default falls back to the automatic pick.
 func (a *App) RemoveRunner(id string, force bool) error {
 	r, ok := a.runnerByID(id)
 	if !ok {
@@ -91,13 +144,24 @@ func (a *App) RemoveRunner(id string, force bool) error {
 	if err != nil {
 		return apperr.New("runner.notRemovable", err.Error(), map[string]string{"id": id})
 	}
-	if used := a.runnerUsedBy(r.ID, r.Name); len(used) > 0 && !force {
+	used := a.runnerUsedBy(r.ID, r.Name)
+	if len(used) > 0 && !force {
 		return apperr.New("runner.inUse",
 			fmt.Sprintf("%s is still used by %d game(s); switch them first or remove anyway", r.Name, len(used)),
-			map[string]string{"id": id})
+			map[string]string{"id": id, "title": r.Name, "count": strconv.Itoa(len(used))})
+	}
+	for _, gameID := range used {
+		if a.isRunning(gameID) {
+			title := a.runnerGameTitle(gameID)
+			return apperr.New("game.running",
+				fmt.Sprintf("%s is running", title), map[string]string{"title": title})
+		}
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		return err
+	}
+	if a.defaultRunnerID() == id && a.settings != nil {
+		_ = a.settings.SetDefaultRunnerID("")
 	}
 	return nil
 }
@@ -110,7 +174,7 @@ func (a *App) InstallRunner(tag string) (types.Job, error) {
 	}
 	if r, ok := a.runnerByID("compat:" + tag); ok && r.ID != "" {
 		return types.Job{}, apperr.New("runner.alreadyInstalled",
-			fmt.Sprintf("%s is already installed", r.Name), map[string]string{"id": r.ID})
+			fmt.Sprintf("%s is already installed", r.Name), map[string]string{"id": r.ID, "title": r.Name})
 	}
 	// Resolve the display name without the network when it is already
 	// listed; the job resolves the URL itself at start.
@@ -145,10 +209,91 @@ func (a *App) startCoreRunnerInstall(j types.Job) error {
 	return nil
 }
 
+// resolveRunnerRelease picks tag out of the release list and fails closed:
+// an unknown tag, a release with no checksum, or a non-https asset URL never
+// installs unverified (issue #142, B1). Plain http is allowed only to
+// loopback, so httptest fixtures keep working.
+func resolveRunnerRelease(avail []types.AvailableRunner, tag string) (*types.AvailableRunner, error) {
+	var picked *types.AvailableRunner
+	for i := range avail {
+		if avail[i].Tag == tag {
+			picked = &avail[i]
+			break
+		}
+	}
+	if picked == nil {
+		return nil, fmt.Errorf("runner version %q is not available", tag)
+	}
+	if picked.ChecksumURL == "" {
+		return nil, apperr.New("runner.badChecksum",
+			fmt.Sprintf("release %s has no checksum", tag), map[string]string{"tag": tag})
+	}
+	if !validRunnerAssetURL(picked.URL) || !validRunnerAssetURL(picked.ChecksumURL) {
+		return nil, apperr.New("runner.badChecksum",
+			fmt.Sprintf("release %s has no trustworthy download", tag), map[string]string{"tag": tag})
+	}
+	return picked, nil
+}
+
+// validRunnerAssetURL allows https, and http only to loopback for tests.
+func validRunnerAssetURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return true
+	case "http":
+		host := u.Hostname()
+		return host == "localhost" || host == "127.0.0.1" || host == "::1"
+	default:
+		return false
+	}
+}
+
+// makeRunnerStage creates the install stage inside the resolved runner
+// folder (issue #142, M4): the folder exists first, so installs work with no
+// native Steam folder, and the stage shares the folder's filesystem even
+// when it is a symlink to another drive.
+func makeRunnerStage(destDir string) (stage, resolved string, err error) {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return "", "", err
+	}
+	resolved = destDir
+	if r, err := filepath.EvalSymlinks(destDir); err == nil {
+		resolved = r
+	}
+	stage, err = os.MkdirTemp(resolved, ".platypus-runner-*")
+	if err != nil {
+		return "", "", err
+	}
+	return stage, resolved, nil
+}
+
 // runCoreRunnerInstall downloads, verifies and unpacks one release, reporting
-// progress through the queue. Staging lives next to the runner folder so a
+// progress through the queue. Staging lives inside the runner folder so a
 // cancel or failure leaves no partial build behind.
 func (a *App) runCoreRunnerInstall(ctx context.Context, j types.Job) {
+	// A panic in the job goroutine must fail the job, never the core (B2).
+	defer func() {
+		if r := recover(); r != nil {
+			a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: fmt.Sprintf("runner install failed: %v", r)})
+		}
+	}()
+	if err := a.installRunnerBuild(ctx, j); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: err.Error()})
+		return
+	}
+	a.noteNetSuccess()
+	a.jobs.Notify(j.Source, "job.progress", plugins.JobUpdate{JobID: j.ID, Phase: "done", Bytes: 1, Total: 1})
+	a.jobs.Notify(j.Source, "job.done", plugins.JobUpdate{JobID: j.ID})
+}
+
+func (a *App) installRunnerBuild(ctx context.Context, j types.Job) error {
 	tag := j.StoreGameID
 	notifyProgress := func(done, total int64) {
 		a.jobs.Notify(j.Source, "job.progress", plugins.JobUpdate{JobID: j.ID, Phase: "downloading", Bytes: done, Total: total})
@@ -159,103 +304,57 @@ func (a *App) runCoreRunnerInstall(ctx context.Context, j types.Job) {
 	avail, err := runner.FetchAvailable(listCtx, fetcher, a.runnerReleasesURL())
 	cancel()
 	if err != nil {
-		if ctx.Err() != nil {
-			return
-		}
-		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: err.Error()})
-		return
+		return err
 	}
-	var picked *types.AvailableRunner
-	for i := range avail {
-		if avail[i].Tag == tag {
-			picked = &avail[i]
-			break
-		}
-	}
-	if picked == nil {
-		if ctx.Err() != nil {
-			return
-		}
-		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: fmt.Sprintf("runner version %q is not available", tag)})
-		return
+	picked, err := resolveRunnerRelease(avail, tag)
+	if err != nil {
+		return err
 	}
 	destDir := j.InstallDir
 	if destDir == "" {
 		destDir = runner.UserRunnerDir(a.homeDir())
 	}
-	parent := filepath.Dir(filepath.Clean(destDir))
-	stage, err := os.MkdirTemp(parent, ".runner-install-*")
+	stage, resolved, err := makeRunnerStage(destDir)
 	if err != nil {
-		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: err.Error()})
-		return
+		return err
 	}
 	defer os.RemoveAll(stage)
 	tmpPath := filepath.Join(stage, "runner.tar.gz")
 	out, err := os.Create(tmpPath)
 	if err != nil {
-		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: err.Error()})
-		return
+		return err
 	}
-	dlErr := runner.Download(ctx, a.netClient(nil, 0), picked.URL, out, notifyProgress)
+	dlErr := runner.Download(ctx, a.netClient(nil, 0), picked.URL, out, notifyProgress, runner.DownloadLimit(picked.SizeBytes))
 	_ = out.Close()
 	if dlErr != nil {
-		if ctx.Err() != nil {
-			return
-		}
-		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: dlErr.Error()})
-		return
+		return dlErr
 	}
-	if picked.ChecksumURL != "" {
-		// Fetch the checksum file through the downloader (small file).
-		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		sumBody, ferr := fetcher.Get(cctx, picked.ChecksumURL)
-		cancel()
-		if ferr != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: ferr.Error()})
-			return
-		}
-		if verr := runner.VerifyChecksumFile(tmpPath, string(sumBody)); verr != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: verr.Error()})
-			return
-		}
+	// Fetch the checksum file through the downloader (small file).
+	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	sumBody, ferr := fetcher.Get(cctx, picked.ChecksumURL)
+	cancel()
+	if ferr != nil {
+		return ferr
+	}
+	if verr := runner.VerifyChecksumFile(tmpPath, string(sumBody)); verr != nil {
+		return verr
 	}
 	f, err := os.Open(tmpPath)
 	if err != nil {
-		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: err.Error()})
-		return
+		return err
 	}
-	top, err := runner.UnpackTarGz(f, stage, 0)
+	top, err := runner.UnpackTarGz(ctx, f, stage, 0)
 	_ = f.Close()
 	if err != nil {
-		if ctx.Err() != nil {
-			return
-		}
-		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: err.Error()})
-		return
+		return err
 	}
-	final := filepath.Join(destDir, top)
+	final := filepath.Join(resolved, top)
 	if _, err := os.Lstat(final); err == nil {
-		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: fmt.Sprintf("%s is already installed", top)})
-		return
-	}
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: err.Error()})
-		return
+		return apperr.New("runner.alreadyInstalled",
+			fmt.Sprintf("%s is already installed", top), map[string]string{"id": "compat:" + top, "title": top})
 	}
 	if err := os.Rename(filepath.Join(stage, top), final); err != nil {
-		if ctx.Err() != nil {
-			return
-		}
-		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: err.Error()})
-		return
+		return err
 	}
-	a.noteNetSuccess()
-	a.jobs.Notify(j.Source, "job.progress", plugins.JobUpdate{JobID: j.ID, Phase: "done", Bytes: 1, Total: 1})
-	a.jobs.Notify(j.Source, "job.done", plugins.JobUpdate{JobID: j.ID})
+	return nil
 }

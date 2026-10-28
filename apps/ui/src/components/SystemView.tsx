@@ -1,11 +1,12 @@
 // i18n: converted
 import { useTranslation } from 'react-i18next';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Download, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { Effect } from 'effect';
-import type { Game, ProtonVersion } from '../types';
+import type { Game, Job, ProtonVersion } from '../types';
 import type { types as gen } from '../gen/models';
 import { LauncherApi } from '../effect/runtime';
+import { coreErrMsg } from '../lib/coreError';
 import { ATLAS_PAGE, Cover, EmptyState, ListRow, Section, ViewHeader } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
@@ -22,13 +23,17 @@ interface SystemViewProps {
   games?: Game[];
   /** Makes a runner the launcher's default (issue #146): what "auto" runs. */
   onDefaultRunner?: (id: string) => void;
+  /** The download queue, so the page refreshes when a runner install lands. */
+  jobs?: Job[];
+  /** Reports install/remove failures (issue #142, M7). */
+  onNotify?: (msg: string, kind: 'err') => void;
 }
 
 /** The picker's value for "no default": Radix needs a non-empty item value. */
 const AUTOMATIC = 'automatic';
 
-export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunner }: SystemViewProps) {
-  const { t } = useTranslation(['nav', 'runners']);
+export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunner, jobs, onNotify }: SystemViewProps) {
+  const { t } = useTranslation(['nav', 'runners', 'errors']);
   // The stored pick (issue #146): "" is the automatic one, null is not read yet.
   // The runner list names the runner "auto" runs, not whether the user picked
   // it, so the page asks the core for the setting and can offer a way back.
@@ -55,9 +60,21 @@ export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunne
     if (typeof api.listAvailableRunners !== 'function') return;
     Effect.runPromise(api.listAvailableRunners())
       .then((items) => live && setAvailable(items ?? []))
-      .catch(() => {});
+      .catch((err: unknown) => {
+        if (!live) return;
+        const failure = err instanceof Error ? err : new Error(String(err));
+        const net = (LauncherApi as unknown as { getNetState?: () => Effect.Effect<{ online: boolean }, Error> }).getNetState;
+        if (typeof net !== 'function') {
+          onNotify?.(coreErrMsg(failure), 'err');
+          return;
+        }
+        Effect.runPromise(net()).then(
+          (ns) => live && onNotify?.(ns && !ns.online ? t('runners:offline') : coreErrMsg(failure), 'err'),
+          () => live && onNotify?.(coreErrMsg(failure), 'err'),
+        );
+      });
     return () => { live = false; };
-  }, []);
+  }, [onNotify, t]);
   const installedTags = new Set(
     runners.map((r) => (r.id.startsWith('compat:') ? r.id.slice('compat:'.length) : '')),
   );
@@ -65,7 +82,7 @@ export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunne
     setInstalling(tag);
     Effect.runPromise(LauncherApi.installRunner(tag))
       .then(() => onRefresh())
-      .catch(() => {})
+      .catch((err: unknown) => onNotify?.(coreErrMsg(err instanceof Error ? err : new Error(String(err))), 'err'))
       .finally(() => setInstalling(null));
   };
   const remove = (id: string, name: string, size: number) => {
@@ -74,7 +91,7 @@ export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunne
       .then((check) => {
         const used = check?.used_by ?? [];
         const sizeLabel = size > 0 ? formatBytes(size) : t('runners:sizeUnknown');
-        if (used.length > 0 && !window.confirm(t('runners:removeConfirmBody', { size: sizeLabel, count: used.length }) + ' ' + t('runners:removeInUse', { count: used.length }))) {
+        if (used.length > 0 && !window.confirm(t('runners:removeInUse', { size: sizeLabel, count: used.length }))) {
           return;
         }
         if (used.length === 0 && !window.confirm(t('runners:removeConfirmTitle', { runner: name }))) {
@@ -82,9 +99,23 @@ export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunne
         }
         return Effect.runPromise(LauncherApi.removeRunner(id, used.length > 0)).then(() => onRefresh());
       })
-      .catch(() => {})
+      .catch((err: unknown) => onNotify?.(coreErrMsg(err instanceof Error ? err : new Error(String(err))), 'err'))
       .finally(() => setRemoving(null));
   };
+  // A finished runner install lands outside this page's own actions (issue
+  // #142, M7): refresh the list when one completes, and surface failures.
+  const seenJobs = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!jobs) return;
+    for (const j of jobs) {
+      if (j.kind !== 'runner-install') continue;
+      if (j.state !== 'done' && j.state !== 'failed') continue;
+      if (seenJobs.current.has(j.id)) continue;
+      seenJobs.current.add(j.id);
+      if (j.state === 'done') onRefresh();
+      else onNotify?.(j.error || t('errors:fallback'), 'err');
+    }
+  }, [jobs, onRefresh, onNotify, t]);
   const sizeLabel = (n?: number) => (n && n > 0 ? formatBytes(n) : t('runners:sizeUnknown'));
   // Atlas renders the /22 Runners page (issue #138); other themes keep the rows below.
   if (useVariant('shell.navigation') === 'sourcebar') {

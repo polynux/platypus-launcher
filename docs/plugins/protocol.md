@@ -274,12 +274,11 @@ runner.actions { "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefix
 runner.runAction { "id": "winetricks", "verb": "vcrun2022", "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> {}
 runner.runAction { "id": "stop", "force": false, "launch": { "env": {}, "runner": {} } } -> {}
 runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> [{ "rule": "vcredist", "param": "vcruntime140_1.dll", "verb": "vcrun2022" }]
-runner.available {} -> { "available": [{ "tag": "GE-Proton10-4", "name": "GE-Proton10-4", "url": "https://…/GE-Proton10-4.tar.gz", "checksumUrl": "https://…/GE-Proton10-4.sha512sum" }] }
-runner.install { "tag": "GE-Proton10-4" } -> { "runner": { "id": "compat:GE-Proton10-4" } }
+runner.available {} -> { "available": [{ "tag": "GE-Proton10-4", "name": "GE-Proton10-4", "url": "https://…/GE-Proton10-4.tar.gz", "checksum_url": "https://…/GE-Proton10-4.sha512sum" }] }
 runner.remove { "id": "compat:GE-Proton10-4" } -> {}
 ```
 
-All fourteen methods are required when `runner` is enabled (`runner.detectExecutable`
+All eleven methods are required when `runner` is enabled (`runner.detectExecutable`
 is called for every sideloaded file, `runner.prefix` for every backup and cloud gate,
 `runner.migrateSettings` once per saved game at startup). Every call that hands
 the plugin a game also carries `defaultRunnerId`: the launcher's default runner
@@ -390,16 +389,14 @@ shows the message under the call's generic code: `runner.wrapFailed` for a launc
 - **`runner.crashHints`**: returns `CrashHint` entries (`rule`, and `param`,
   `verb` or `action` when the rule has them). The core adds the log path and
   whether winetricks is available.
-- **`runner.available`**: `{ "releasesUrl": "…" }` -> `{ "available": […] }`.
+- **`runner.available`** (optional): `{ "releasesUrl": "…" }` -> `{ "available": […] }`.
   Lists installable GE-Proton releases through the existing downloader. The
-  URL overrides the GitHub endpoint in tests; empty uses the default.
-- **`runner.install`**: `{ "tag": "GE-Proton10-4" }` (or an explicit `url`
-  and `checksumUrl`) -> `{ "runner": {} }`. Downloads the build, verifies
-  the release checksum, and unpacks it into the user's runner folder with
-  the same safety rules as plugin zips. The core runs its own install as a
-  job with progress; the plugin method is the synchronous half.
-- **`runner.remove`**: `{ "id": "compat:GE-Proton10-4" }` -> `{}`. Deletes a
+  URL overrides the GitHub endpoint in tests; empty uses the default. The
+  core lists releases itself when it runs an install job and never calls
+  this; it exists for tooling.
+- **`runner.remove`** (optional): `{ "id": "compat:GE-Proton10-4" }` -> `{}`. Deletes a
   user-installed build only; system Wine and Steam-managed Proton are refused.
+  The core removes builds itself and never calls this; it exists for tooling.
 
 ## Jobs
 
@@ -704,7 +701,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `terms` | 1.11 | | `game.acceptTerms` | yes |
 | `local-art` | 1.15 | | | yes |
 | `compat-facts` | 1.17 | `compat.lookup` | | yes |
-| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.env`, `runner.migrateSettings`, `runner.clientCrash`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
+| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.env`, `runner.migrateSettings`, `runner.clientCrash`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | `runner.available`, `runner.remove` | yes |
 | `save-context` | 1.17 | `game.saveContext` | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but

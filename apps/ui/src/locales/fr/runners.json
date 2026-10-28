@@ -18,8 +18,8 @@
   "availableEmpty": "Aucun build installable trouvé en ligne.",
   "installedTitle": "Installés",
   "removeConfirmTitle": "Supprimer {{runner}} ?",
-  "removeConfirmBody": "Libère {{size}}. {{count}} jeu(s) l'utilisent encore.",
-  "removeInUse": "{{count}} jeu(s) l'utilisent encore ; changez-les d'abord ou supprimez quand même",
+  "removeInUse_one": "Libère {{size}}. Un jeu l'utilise encore ; changez-le d'abord ou supprimez quand même.",
+  "removeInUse_other": "Libère {{size}}. {{count}} jeux l'utilisent encore ; changez-les d'abord ou supprimez quand même.",
   "offline": "Vous êtes hors ligne ; connectez-vous pour lister les runners installables.",
   "badge": {
     "custom": "personnalisé",
