@@ -613,6 +613,50 @@ func (q *Queue) requeue(id string, from ...string) error {
 	return nil
 }
 
+// MoveToFront moves a queued or paused job to the front of the waiters, so
+// it is the next job to start. Running jobs keep running; finished jobs
+// (done, failed, canceled) are left where they are. The new order is saved
+// and broadcast like any other queue change.
+func (q *Queue) MoveToFront(id string) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	j := q.find(id)
+	if j == nil {
+		return fmt.Errorf("no job %s", id)
+	}
+	if j.State != StateQueued && j.State != StatePaused {
+		return nil
+	}
+	for i, o := range q.jobs {
+		if o == j {
+			q.jobs = append(q.jobs[:i], q.jobs[i+1:]...)
+			break
+		}
+	}
+	at := len(q.jobs)
+	for i, o := range q.jobs {
+		if o.State == StateQueued || o.State == StatePaused {
+			at = i
+			break
+		}
+	}
+	// Never ahead of the running job: it keeps running, and after a
+	// restart (Open requeues it in place) it must still start first, not
+	// the moved job. A paused waiter ahead of the run stays ahead.
+	for i, o := range q.jobs {
+		if o.State == StateRunning && i+1 > at {
+			at = i + 1
+		}
+	}
+	q.jobs = append(q.jobs, nil)
+	copy(q.jobs[at+1:], q.jobs[at:])
+	q.jobs[at] = j
+	j.UpdatedAt = q.now().UnixMilli()
+	q.changed(true)
+	q.signal()
+	return nil
+}
+
 // ClearFinished drops done, failed and canceled jobs from the list. A canceled
 // job whose data hasn't been deleted yet stays, so clearing the list can't
 // orphan downloaded data nobody tracks anymore.
