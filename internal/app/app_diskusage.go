@@ -26,23 +26,36 @@ import (
 // totals, never scanned. Measuring runs in the background and cached (a
 // later slice); this file only groups and measures.
 
-// diskMount is one mounted filesystem, by mount point.
+// diskMount is one mounted filesystem: where it is mounted, its filesystem
+// type, the device behind it, what that device is and the filesystem's label
+// (issue #148).
 type diskMount struct {
-	point string
+	point  string
+	fsType string
+	source string
+	kind   string
+	label  string
 }
 
-// readDiskMounts lists the mount points in /proc/self/mountinfo. It reads
-// that one file only, never the drives themselves.
+// readDiskMounts lists the mounts in /proc/self/mountinfo and, for each one,
+// what sysfs and udev say about its device (issue #148). It reads those
+// small files only, never the drives themselves.
 func readDiskMounts() ([]diskMount, error) {
 	data, err := os.ReadFile("/proc/self/mountinfo")
 	if err != nil {
 		return nil, err
 	}
-	return parseDiskMounts(data), nil
+	mounts := parseDiskMounts(data)
+	for i := range mounts {
+		mounts[i].kind = deviceKind(mounts[i], os.ReadFile)
+		mounts[i].label = filesystemLabel(mounts[i].source, "/dev/disk/by-label")
+	}
+	return mounts, nil
 }
 
-// parseDiskMounts picks the mount points out of mountinfo content: field 5
-// of every line (the path the filesystem is mounted on).
+// parseDiskMounts picks the mount point, filesystem type and device out of
+// mountinfo content: field 5 of every line (the path the filesystem is
+// mounted on) and, after the "-" separator, the filesystem type and source.
 func parseDiskMounts(data []byte) []diskMount {
 	var out []diskMount
 	for _, line := range strings.Split(string(data), "\n") {
@@ -50,7 +63,14 @@ func parseDiskMounts(data []byte) []diskMount {
 		if len(f) < 6 {
 			continue
 		}
-		out = append(out, diskMount{point: unescapeMount(f[4])})
+		m := diskMount{point: unescapeMount(f[4])}
+		for i := 6; i < len(f); i++ {
+			if f[i] == "-" && i+2 < len(f) {
+				m.fsType, m.source = f[i+1], unescapeMount(f[i+2])
+				break
+			}
+		}
+		out = append(out, m)
 	}
 	return out
 }
@@ -59,6 +79,94 @@ func parseDiskMounts(data []byte) []diskMount {
 // spaces occur in practice; anything else rides along byte for byte.
 func unescapeMount(p string) string {
 	return strings.ReplaceAll(p, `\040`, " ")
+}
+
+// networkFsTypes are the filesystem types that live on another machine: the
+// drive is not a local device at all.
+var networkFsTypes = map[string]bool{
+	"9p": true, "afs": true, "ceph": true, "cifs": true, "davfs": true,
+	"davfs2": true, "fuse.rclone": true, "fuse.sshfs": true, "glusterfs": true,
+	"ncpfs": true, "nfs": true, "nfs4": true, "smb3": true, "smbfs": true,
+	"sshfs": true,
+}
+
+// deviceKind names what a mount's device is (issue #148): network for a
+// remote filesystem, removable for a USB key, nvme for an NVMe drive, else
+// ssd or hdd from the kernel's rotational flag. readFile reads sysfs (tests
+// inject a fake); an unknown device yields "".
+func deviceKind(m diskMount, readFile func(string) ([]byte, error)) string {
+	if networkFsTypes[m.fsType] || (!strings.HasPrefix(m.source, "/") && strings.Contains(m.source, ":")) {
+		return "network"
+	}
+	// A loop device holds an image file, not a drive: its rotational flag
+	// says nothing about the disk underneath.
+	if strings.HasPrefix(filepath.Base(m.source), "loop") {
+		return ""
+	}
+	// The kernel names whole disks in /sys/block, so a partition is read
+	// through its disk.
+	names := blockNames(m.source)
+	for _, n := range names {
+		if v, err := readFile("/sys/block/" + n + "/removable"); err == nil && strings.TrimSpace(string(v)) == "1" {
+			return "removable"
+		}
+	}
+	for _, n := range names {
+		if strings.HasPrefix(n, "nvme") {
+			return "nvme"
+		}
+	}
+	for _, n := range names {
+		v, err := readFile("/sys/block/" + n + "/queue/rotational")
+		if err != nil {
+			continue
+		}
+		switch strings.TrimSpace(string(v)) {
+		case "0":
+			return "ssd"
+		case "1":
+			return "hdd"
+		}
+	}
+	return ""
+}
+
+// blockNames lists the /sys/block names to try for a mount source: the
+// device itself first (a whole disk can be mounted directly), then the disk
+// its partition suffix belongs to (sda1 is on sda, nvme0n1p2 on nvme0n1).
+func blockNames(source string) []string {
+	name := filepath.Base(source)
+	base := strings.TrimRight(name, "0123456789")
+	if strings.HasSuffix(base, "p") {
+		base = strings.TrimSuffix(base, "p")
+	}
+	if base == "" || base == name {
+		return []string{name}
+	}
+	return []string{name, base}
+}
+
+// filesystemLabel is the label udev recorded for a device in dir
+// (/dev/disk/by-label), "" when it recorded none: most filesystems carry no
+// label, and a machine without udev has no dir at all.
+func filesystemLabel(source, dir string) string {
+	if !strings.HasPrefix(source, "/dev/") {
+		return ""
+	}
+	device := filepath.Base(source)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		target, err := os.Readlink(filepath.Join(dir, e.Name()))
+		if err != nil || filepath.Base(filepath.Clean(target)) != device {
+			continue
+		}
+		// udev escapes what can't sit in a file name: blanks as \x20.
+		return strings.ReplaceAll(strings.ReplaceAll(e.Name(), `\x20`, " "), `\x5c`, `\`)
+	}
+	return ""
 }
 
 // resolveDiskPath resolves symlinks in path, so a games folder on another
@@ -236,6 +344,15 @@ func buildDiskUsageWith(games []types.Game, roots []string, home, prefixes strin
 		folders := byDrive[d]
 		sort.Strings(folders)
 		du := types.DriveUsage{ID: d, Mount: d, Folders: folders, GamesBytes: driveGames[d]}
+		for _, m := range mounts {
+			if m.point != d {
+				continue
+			}
+			// What the drive is (issue #148): the filesystem type, the
+			// device kind from sysfs and the filesystem's label.
+			du.FsType, du.DeviceKind, du.Label = m.fsType, m.kind, m.label
+			break
+		}
 		if total, free, err := spaceOf(folders[0]); err == nil {
 			du.TotalBytes, du.FreeBytes = int64(total), int64(free)
 			// Other is derived, never scanned: whatever the totals say is

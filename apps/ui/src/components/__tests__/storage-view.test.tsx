@@ -43,6 +43,8 @@ function usage(over: Partial<DiskUsage> = {}): DiskUsage {
         id: '/mnt/a',
         mount: '/mnt/a',
         folders: ['/mnt/a/Games'],
+        fs_type: '',
+        device_kind: '',
         total_bytes: 100 * GB,
         free_bytes: 40 * GB,
         games_bytes: 30 * GB,
@@ -108,6 +110,24 @@ describe('StorageView', () => {
     expect(screen.getAllByText('30.0 GB')).toHaveLength(2);
     expect(screen.getByText('40.0 GB')).toBeInTheDocument();
     expect(container.querySelector('[aria-label="/mnt/a"]')).toBe(bar);
+  });
+
+  it('names what each drive is: its label, device kind and filesystem', async () => {
+    mock.api.getDiskUsage.mockReturnValue(
+      Effect.succeed(
+        usage({
+          drives: [
+            { ...usage().drives[0], label: 'JEUX', device_kind: 'nvme', fs_type: 'ext4' },
+            { ...usage().drives[0], id: '/mnt/b', mount: '/mnt/b', folders: ['/mnt/b/Games'], device_kind: 'network', fs_type: 'cifs' },
+          ],
+        }),
+      ),
+    );
+    view();
+    // The label and what the device is, from the core's snapshot (#148).
+    expect(await screen.findByText('JEUX · NVMe, ext4')).toBeInTheDocument();
+    // No label: the kind and filesystem type alone, with no stray separator.
+    expect(screen.getByText('Network, cifs')).toBeInTheDocument();
   });
 
   it('lists games biggest first with store, location and prefix figures', async () => {

@@ -49,6 +49,8 @@ function usage(over: Partial<DiskUsage> = {}): DiskUsage {
         id: '/mnt/a',
         mount: '/mnt/a',
         folders: ['/mnt/a/Games'],
+        fs_type: '',
+        device_kind: '',
         total_bytes: 100 * GB,
         free_bytes: 40 * GB,
         games_bytes: 30 * GB,

@@ -113,7 +113,7 @@ const mkJob = (o: Partial<Job> = {}): Job =>
 
 const GB = 1e9;
 const usage = (over: Partial<DiskUsage> = {}): DiskUsage => ({
-  drives: [{ id: '/mnt/a', mount: '/mnt/a', folders: ['/mnt/a/Games'], total_bytes: 100 * GB, free_bytes: 40 * GB, games_bytes: 30 * GB, other_bytes: 30 * GB }],
+  drives: [{ id: '/mnt/a', mount: '/mnt/a', folders: ['/mnt/a/Games'], fs_type: '', device_kind: '', total_bytes: 100 * GB, free_bytes: 40 * GB, games_bytes: 30 * GB, other_bytes: 30 * GB }],
   games: [], scanning: false, generated_at: 0, ...over,
 });
 const sizeRow = (over: Partial<DiskUsage['games'][number]> = {}): DiskUsage['games'][number] => ({
