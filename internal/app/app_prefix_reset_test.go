@@ -108,6 +108,64 @@ func TestResetPrefixMissingPrefixCreatesFresh(t *testing.T) {
 
 // Only the game's own prefix path is ever touched: a user-chosen folder
 // outside the prefixes root is refused.
+// A custom prefix through a symlinked subfolder must not escape the root:
+// <root>/link/Documents with link pointing outside is refused, and the
+// outside folder is left alone.
+func TestResetPrefixRefusesSymlinkedParent(t *testing.T) {
+	t.Parallel()
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(outside, "Documents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "Documents", "keep.txt"), []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := resetTestApp(t, []types.Game{resetWineGame("linked", nil)})
+	// The saved setting wins over the default, like a launch.
+	root := a.effectivePrefixesFolder()
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.settings.SetGameSettings("linked", map[string]any{"wine_prefix": filepath.Join(root, "link", "Documents")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.ResetPrefix("linked"); resetCode(t, err) != "prefix.reset.outsideRoot" {
+		t.Fatalf("reset through a symlinked parent = %v, want a refusal", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(outside, "Documents", "keep.txt")); err != nil || string(data) != "keep" {
+		t.Fatalf("the outside folder was touched: %q, %v", data, err)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "link", "Documents", runner.FreshMarker)); !os.IsNotExist(err) {
+		t.Fatalf("a fresh prefix was created through the link: %v", err)
+	}
+}
+
+// A prefix that is itself a symlink is refused, never followed.
+func TestResetPrefixRefusesSymlinkedPrefix(t *testing.T) {
+	t.Parallel()
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "keep.txt"), []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a, home := resetTestApp(t, []types.Game{resetWineGame("linkedself", nil)})
+	prefix := runner.PrefixPath(types.Game{ID: "linkedself"}, home, a.effectivePrefixesFolder())
+	if err := os.MkdirAll(filepath.Dir(prefix), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, prefix); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.ResetPrefix("linkedself"); resetCode(t, err) != "prefix.reset.symlink" {
+		t.Fatalf("reset of a symlinked prefix = %v, want a refusal", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(outside, "keep.txt")); err != nil || string(data) != "keep" {
+		t.Fatalf("the link target was touched: %q, %v", data, err)
+	}
+}
+
 func TestResetPrefixRefusesCustomPrefixOutsideRoot(t *testing.T) {
 	t.Parallel()
 	outside := filepath.Join(t.TempDir(), "mine")

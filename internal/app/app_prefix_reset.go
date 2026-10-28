@@ -41,19 +41,38 @@ func (a *App) ResetPrefix(gameID string) (types.PrefixResetResult, error) {
 	}
 	root := a.effectivePrefixesFolder()
 	prefix := runner.PrefixPath(game, a.homeDir(), root)
-	rel, err := filepath.Rel(root, prefix)
+	// Containment is on resolved paths: a symlinked subfolder (or root)
+	// must not smuggle the reset outside. EvalSymlinks fails for paths
+	// that don't exist yet; those have no links to resolve, so the
+	// lexical path stands in. The prefix itself is checked with Lstat
+	// below, so a symlinked prefix is refused, never followed.
+	rroot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		rroot = root
+	}
+	rparent, err := filepath.EvalSymlinks(filepath.Dir(prefix))
+	if err != nil {
+		rparent = filepath.Dir(prefix)
+	}
+	rel, err := filepath.Rel(rroot, filepath.Join(rparent, filepath.Base(prefix)))
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return types.PrefixResetResult{}, apperr.New("prefix.reset.outsideRoot",
 			fmt.Sprintf("%s uses a custom prefix outside the prefixes folder; reset it by hand", game.Title),
 			map[string]string{"title": game.Title})
 	}
 	res := types.PrefixResetResult{Prefix: prefix}
-	if st, err := os.Stat(prefix); err == nil {
-		if !st.IsDir() {
-			return types.PrefixResetResult{}, apperr.New("prefix.reset.notDir",
-				fmt.Sprintf("%s has a file where its Wine prefix should be; remove it by hand", game.Title),
-				map[string]string{"title": game.Title})
-		}
+	st, err := os.Lstat(prefix)
+	if err == nil && st.Mode()&os.ModeSymlink != 0 {
+		return types.PrefixResetResult{}, apperr.New("prefix.reset.symlink",
+			fmt.Sprintf("refusing to reset %s: its prefix is a symlink; reset it by hand", game.Title),
+			map[string]string{"title": game.Title})
+	}
+	if err == nil && !st.IsDir() {
+		return types.PrefixResetResult{}, apperr.New("prefix.reset.notDir",
+			fmt.Sprintf("%s has a file where its Wine prefix should be; remove it by hand", game.Title),
+			map[string]string{"title": game.Title})
+	}
+	if err == nil {
 		backup := fmt.Sprintf("%s.bak-%d", prefix, time.Now().Unix())
 		for i := 1; ; i++ {
 			if _, err := os.Stat(backup); os.IsNotExist(err) {

@@ -1,4 +1,4 @@
-import type { Game, GameSettings, Job, ProtonVersion } from '../types';
+import type { Game, GameSettings, CloudEvent, Job, ProtonVersion } from '../types';
 import { formatBytes as formatBytesLocale, formatLastPlayed } from './format';
 import i18n from './i18n';
 import { ratingBadge } from './compat';
@@ -194,6 +194,33 @@ export function mergeAttentionSignals(prev: Game[], fresh: Game[]): Game[] {
     return { ...g, has_save_conflict: f.has_save_conflict, prefix_damaged: f.prefix_damaged };
   });
   return changed ? next : prev;
+}
+
+/** Fold one cloud sync event into the library flags (issue #144): any event
+ *  carrying a conflict status flags the game — a launch prompt, the post-exit
+ *  push failing, or a "check now" — and only a push or a non-conflict status
+ *  clears it again. A canceled resolve settles nothing, so the flag stays.
+ *  Returns `prev` itself when nothing changed. */
+export function mergeCloudEvent(prev: Game[], e: CloudEvent): Game[] {
+  if (e.status?.state === 'conflict') {
+    let changed = false;
+    const next = prev.map((g) => {
+      if (g.id !== e.game_id || g.has_save_conflict) return g;
+      changed = true;
+      return { ...g, has_save_conflict: true };
+    });
+    return changed ? next : prev;
+  }
+  if (e.kind === 'pushed' || (e.kind === 'status' && e.status && e.status.state !== 'conflict')) {
+    let changed = false;
+    const next = prev.map((g) => {
+      if (g.id !== e.game_id || !g.has_save_conflict) return g;
+      changed = true;
+      return { ...g, has_save_conflict: false };
+    });
+    return changed ? next : prev;
+  }
+  return prev;
 }
 /** Take only the family fields (who shares a borrowed game, its copies and the
  *  preferred copy) from a fresh library read, so a copy pick shows without a

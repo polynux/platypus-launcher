@@ -122,6 +122,7 @@
       "native": "Les préfixes ne s'appliquent pas à « {{title}} » : il tourne en natif, sans préfixe Wine.",
       "clientLaunch": "Les préfixes ne s'appliquent pas à « {{title}} » : son client de boutique le lance et possède son préfixe.",
       "outsideRoot": "Réinitialisation refusée pour « {{title}} » : son préfixe personnalisé est hors du dossier des préfixes ; réinitialisez-le à la main.",
+      "symlink": "Réinitialisation refusée pour « {{title}} » : son préfixe est un lien symbolique ; réinitialisez-le à la main.",
       "notDir": "Réinitialisation refusée pour « {{title}} » : un fichier bloque son préfixe ; retirez-le à la main.",
       "moveFailed": "Impossible de réinitialiser le préfixe de « {{title}} » : {{error}}."
     }

@@ -129,7 +129,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
     return (
       <div className="space-y-5">
         <SaveBackupsSection game={game} onNotify={onNotify} />
-        {game.is_installed && !game.native && (
+        {game.is_installed && !game.native && !game.client_launch && (
           <ResetPrefixRow game={game} running={running} onNotify={onNotify} />
         )}
         {confirm ? (

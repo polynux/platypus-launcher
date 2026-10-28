@@ -122,6 +122,7 @@
       "native": "Prefixes don't apply to {{title}}: it runs natively, without a Wine prefix.",
       "clientLaunch": "Prefixes don't apply to {{title}}: its store client launches it and owns its prefix.",
       "outsideRoot": "Refusing to reset {{title}}: its custom prefix is outside the prefixes folder; reset it by hand.",
+      "symlink": "Refusing to reset {{title}}: its prefix is a symlink; reset it by hand.",
       "notDir": "Refusing to reset {{title}}: a file blocks its prefix path; remove it by hand.",
       "moveFailed": "Couldn't reset the prefix of {{title}}: {{error}}."
     }

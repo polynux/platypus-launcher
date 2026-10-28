@@ -41,7 +41,7 @@ import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
 import { usePauseWhileGameRuns } from './lib/pauseWhileHidden';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
-import { attentionIssues, heroImages, mergeAttentionSignals, needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
+import { attentionIssues, heroImages, mergeAttentionSignals, mergeCloudEvent, needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Collection, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 import type { TierFilter } from './lib/compat';
 import type { StatusFilter } from './components/LibraryView';
@@ -643,15 +643,10 @@ export function AppContent() {
   useEffect(() => onPlaytime(() => refreshLibraryQuietly(mergePlaytime)), [refreshLibraryQuietly]);
 
   // A save conflict appeared or was settled after the last scan (issue #144):
-  // the library's flag follows the cloud events, so Needs attention stays
-  // current without a rescan.
-  useEffect(() => onCloud((e) => {
-    if (e.kind === 'prompt' && e.prompt === 'conflict') {
-      setGames((prev) => prev.map((x) => (x.id === e.game_id ? { ...x, has_save_conflict: true } : x)));
-    } else if (e.kind === 'pushed' || e.kind === 'canceled' || (e.kind === 'status' && e.status?.state === 'synced')) {
-      setGames((prev) => prev.map((x) => (x.id === e.game_id ? { ...x, has_save_conflict: false } : x)));
-    }
-  }), []);
+  // any event carrying a conflict status flags the game — a launch prompt,
+  // the post-exit push failing, or a "check now" — and only a push or a
+  // non-conflict status clears it again. A canceled resolve settles nothing.
+  useEffect(() => onCloud((e) => setGames((prev) => mergeCloudEvent(prev, e))), []);
 
   // The background artwork lookup (issue #36) applied art to a sideloaded
   // game: take the new art from a quiet read, like a manual customization.
