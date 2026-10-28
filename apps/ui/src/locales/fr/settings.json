@@ -13,6 +13,7 @@
   "artwork": "Illustrations",
   "gameInfo": "Détails des jeux",
   "chat": "Discussion",
+  "notices": "Notifications des clients de boutique",
   "tray": "Zone de notification",
   "backups": "Sauvegardes",
   "cloud": "Sauvegardes cloud"
@@ -68,14 +69,28 @@
   "keepYear": "Garder un an"
  },
  "ratings": {
-  "heading": "Notes, protection et données anti-triche",
-  "description": "Récupérer en ligne les notes ProtonDB, les infos de protection de PCGamingWiki et la liste anti-triche. Désactivé, Platypus affiche ce qu'il a déjà enregistré sans rien demander de nouveau.",
-  "label": "Récupérer les infos des jeux en ligne",
-  "on": "Les infos des jeux seront récupérées en ligne",
-  "off": "Les infos des jeux restent hors ligne",
-  "creditCompat": "Notes de compatibilité : rapports de la communauté ProtonDB (protondb.com).",
+  "heading": "Notes de compatibilité",
+  "description": "Récupérer en ligne les notes de la communauté ProtonDB (et les verdicts Steam Deck). Désactivé, Platypus affiche ce qu'il a déjà enregistré sans rien demander de nouveau.",
+  "label": "Récupérer les notes ProtonDB en ligne",
+  "on": "Les notes seront récupérées en ligne",
+  "off": "Les notes restent hors ligne",
+  "creditCompat": "Notes de compatibilité : rapports de la communauté ProtonDB (protondb.com)."
+ },
+ "protection": {
+  "heading": "Données anti-triche et de protection",
+  "description": "Récupérer en ligne les infos de protection de PCGamingWiki et la liste anti-triche AreWeAntiCheatYet. Désactivé, Platypus affiche ce qu'il a déjà enregistré sans rien demander de nouveau.",
+  "label": "Récupérer les données de protection en ligne",
+  "on": "Les données de protection seront récupérées en ligne",
+  "off": "Les données de protection restent hors ligne",
   "creditWiki": "Infos de protection : contributeurs PCGamingWiki, CC BY-NC-SA 3.0 (pcgamingwiki.com). Pour ce lanceur non commercial uniquement.",
   "creditAnticheat": "Liste anti-triche : AreWeAntiCheatYet, licence MIT (github.com/AreWeAntiCheatYet/AreWeAntiCheatYet)."
+ },
+ "notices": {
+  "heading": "Notifications des clients de boutique",
+  "description": "Signaler qu'un jeu a besoin du client de la boutique en arrière-plan : ce qu'il fait pendant qu'il démarre le jeu, par exemple une mise à jour ou la préparation des shaders. Désactivé, Platypus attend quand même ; il n'affiche simplement plus rien.",
+  "label": "Afficher les notifications du client de boutique",
+  "on": "Platypus indiquera ce que fait le client de la boutique",
+  "off": "Les lancements via le client restent silencieux"
  },
  "artwork": {
   "heading": "Recherche des visuels des jeux ajoutés",
@@ -178,7 +193,8 @@
    "folders": "Dossiers de jeux",
    "saves": "Sauvegardes",
    "data": "Notes et infos jeux",
-   "social": "Amis et discussion"
+   "social": "Amis et discussion",
+   "stores": "Clients de boutique"
   }
  },
  "social": {"friends": "Amis de {{store}}"}

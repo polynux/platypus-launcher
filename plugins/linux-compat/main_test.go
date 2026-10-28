@@ -128,7 +128,7 @@ func TestLookupReturnsWikiCreditAndGenericProtectionBadges(t *testing.T) {
 	})}
 	proton = ratingLookupFunc(func(context.Context, string) (compat.Summary, error) { return compat.Summary{}, compat.ErrNotFound })
 	defer func() { svc, proton = oldSvc, oldProton }()
-	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "g", SteamAppID: "620", Online: true, StoreDRM: true}}})
+	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "g", SteamAppID: "620", Online: true, ProtectionOnline: true, StoreDRM: true}}})
 	got, rpcErr := lookup(context.Background(), params)
 	if rpcErr != nil {
 		t.Fatal(rpcErr)
@@ -267,5 +267,51 @@ func TestLookupKeepsLastFactWhenContextEnds(t *testing.T) {
 	facts := got.(map[string]any)["facts"].([]fact)
 	if len(facts) != 1 || facts[0].ID != "one" {
 		t.Fatalf("facts = %+v, want the completed lookup", facts)
+	}
+}
+
+// Protection facts have their own switch (issue #150): with it off, the wiki
+// source is never asked, while ProtonDB ratings still go out.
+func TestProtectionSwitchKeepsTheWikiSourceOffline(t *testing.T) {
+	oldSvc, oldProton := svc, proton
+	cache, _ := compat.OpenCache("")
+	wikiAsked := 0
+	svc = &compat.Service{Cache: cache, Wiki: wikiLookupFunc(func(context.Context, string) (compat.WikiRecord, error) {
+		wikiAsked++
+		return compat.WikiRecord{Title: "Portal 2", AntiCheat: []string{"Easy Anti-Cheat"}}, nil
+	})}
+	proton = ratingLookupFunc(func(context.Context, string) (compat.Summary, error) {
+		return compat.Summary{Tier: "platinum", Confidence: "strong", Total: 343}, nil
+	})
+	defer func() { svc, proton = oldSvc, oldProton }()
+
+	lookupOne := func(g game) fact {
+		t.Helper()
+		params, _ := json.Marshal(lookupParams{Games: []game{g}})
+		got, rpcErr := lookup(context.Background(), params)
+		if rpcErr != nil {
+			t.Fatal(rpcErr)
+		}
+		facts := got.(map[string]any)["facts"].([]fact)
+		if len(facts) != 1 {
+			t.Fatalf("facts = %+v", facts)
+		}
+		return facts[0]
+	}
+
+	off := lookupOne(game{ID: "off", SteamAppID: "620", Online: true})
+	if wikiAsked != 0 {
+		t.Fatalf("PCGamingWiki asked %d times with protection off", wikiAsked)
+	}
+	if off.Report == nil || off.Report.Tier != "platinum" {
+		t.Fatalf("ratings should still fetch with protection off: %+v", off.Report)
+	}
+
+	on := lookupOne(game{ID: "on", SteamAppID: "620", Online: true, ProtectionOnline: true})
+	if wikiAsked != 1 {
+		t.Fatalf("PCGamingWiki asked %d times with protection on, want 1", wikiAsked)
+	}
+	if on.Wiki == nil {
+		t.Fatalf("no wiki credit with protection on: %+v", on.Badges)
 	}
 }

@@ -1178,7 +1178,9 @@ func (a *App) startClient(game types.Game, cmd *exec.Cmd, cl *stores.ClientLaunc
 	}
 	go func() { _ = cmd.Wait() }()
 	opts := []session.StartOption{a.afterSessionHook(game)}
-	if cl.ClientStatus != nil {
+	// Store client notices off (issue #149): the launch still waits for the
+	// game, but the App stops reporting what the client is doing.
+	if cl.ClientStatus != nil && (a.settings == nil || a.settings.ClientNotices()) {
 		opts = append(opts, session.WithClientStatus(cl.ClientStatus))
 	}
 	if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout, opts...) {
@@ -1214,6 +1216,8 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		DefaultGamesFolder:    settings.DefaultGamesFolderFor(a.homeDir()),
 		CancelCleanupDays:     a.settings.CancelCleanupDays(),
 		RatingsOnline:         a.settings.RatingsOnline(),
+		ProtectionOnline:      a.settings.ProtectionOnline(),
+		ClientNotices:         a.settings.ClientNotices(),
 		ArtworkOnline:         a.settings.ArtworkOnline(),
 		GameInfoOnline:        a.settings.GameInfoOnline(),
 		ChatDesktopNotify:     a.settings.ChatDesktopNotify(),

@@ -13,6 +13,7 @@
   "artwork": "Artwork",
   "gameInfo": "Game details",
   "chat": "Chat",
+  "notices": "Store client notices",
   "tray": "System tray",
   "backups": "Save backups",
   "cloud": "Cloud saves"
@@ -68,14 +69,28 @@
   "keepYear": "Keep for a year"
  },
  "ratings": {
-  "heading": "Ratings, protection and anti-cheat data",
-  "description": "Fetch ProtonDB ratings, PCGamingWiki protection facts and the anti-cheat list online. Off, Platypus shows what it saved before and asks nothing new.",
-  "label": "Fetch game info online",
-  "on": "Game info will be fetched online",
-  "off": "Game info stays offline",
-  "creditCompat": "Compatibility ratings: ProtonDB community reports (protondb.com).",
+  "heading": "Compatibility ratings",
+  "description": "Fetch ProtonDB community ratings (and Steam Deck verdicts) online. Off, Platypus shows what it saved before and asks nothing new.",
+  "label": "Fetch ProtonDB ratings online",
+  "on": "Ratings will be fetched online",
+  "off": "Ratings stay offline",
+  "creditCompat": "Compatibility ratings: ProtonDB community reports (protondb.com)."
+ },
+ "protection": {
+  "heading": "Anti-cheat and protection data",
+  "description": "Fetch PCGamingWiki protection facts and the AreWeAntiCheatYet anti-cheat list online. Off, Platypus shows what it saved before and asks nothing new.",
+  "label": "Fetch protection data online",
+  "on": "Protection data will be fetched online",
+  "off": "Protection data stays offline",
   "creditWiki": "Protection facts: PCGamingWiki contributors, CC BY-NC-SA 3.0 (pcgamingwiki.com). Used for this non-commercial launcher only.",
   "creditAnticheat": "Anti-cheat list: AreWeAntiCheatYet, MIT licence (github.com/AreWeAntiCheatYet/AreWeAntiCheatYet)."
+ },
+ "notices": {
+  "heading": "Store client notices",
+  "description": "Tell me when a game needs the store client running in the background: what it is doing while it starts the game, such as an update or shader processing. Off, Platypus waits anyway; it just reports nothing.",
+  "label": "Show store client notices",
+  "on": "Platypus will report what the store client does",
+  "off": "Store client launches stay quiet"
  },
  "artwork": {
   "heading": "Sideloaded artwork lookup",
@@ -178,7 +193,8 @@
    "folders": "Game folders",
    "saves": "Save backups",
    "data": "Ratings and game info",
-   "social": "Friends and chat"
+   "social": "Friends and chat",
+   "stores": "Store clients"
   }
  },
  "social": {"friends": "{{store}} friends"}

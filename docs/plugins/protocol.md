@@ -1222,7 +1222,7 @@ remains part of 1.17; it does not introduce a 1.18 version.
 ```json
 compat.lookup { "games": [{ "id": "game-id", "store": "steam",
   "storeAppId": "620", "steamAppId": "620", "platforms": ["windows"],
-  "installDir": "/games/example", "online": true }] }
+  "installDir": "/games/example", "online": true, "protectionOnline": true }] }
   -> { "facts": [{ "id": "game-id", "badges": [{ "kind": "rating",
     "label": "Platinum", "tone": "platinum", "link": "https://example.test/",
     "source": "ProtonDB", "checkedAt": 1791589136 }], "links": [],
@@ -1247,12 +1247,17 @@ titles are never used.
 - **`storeDRM`.** True when `game.details` supplied DRM facts. A provider can
   use it to avoid adding overlapping third-party DRM facts; removed DRM history
   can still be reported.
-- **`online`.** Whether network sources may be queried. The core sends false
-  when offline or when "Fetch ratings online" is off. Providers return what
-  they know without network access, including their cached network facts, and
-  refresh local sources such as installed-file detection. The core stores that
-  complete answer as an offline snapshot and asks again once online; providers
-  own their source caches and combine cached and fresh facts themselves.
+- **`online`.** Whether the rating sources (ProtonDB, Steam Deck) may be
+  queried. The core sends false when offline or when "Fetch ratings online" is
+  off. Providers return what they know without network access, including their
+  cached network facts, and refresh local sources such as installed-file
+  detection. The core stores that complete answer as an offline snapshot and
+  asks again once online; providers own their source caches and combine cached
+  and fresh facts themselves.
+- **`protectionOnline`.** Whether the protection sources (PCGamingWiki,
+  AreWeAntiCheatYet) may be queried. Same rules as `online`, with its own
+  switch since issue #150 ("Fetch protection data online"); false when offline
+  or when that switch is off, whatever `online` says.
 
 An optional `report` summarizes the provider's report count: `state` is
 `rated`, `few` or `none`; `count` is the number of reports when known, and

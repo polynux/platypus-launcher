@@ -36,3 +36,23 @@ func TestOfflineFactDoesNotSatisfyOnlineAndReplacesSnapshot(t *testing.T) {
 		t.Fatalf("offline snapshot = %+v", fact.Badges)
 	}
 }
+
+// An answer fetched with only the protection switch on is an online snapshot
+// (issue #150): it must not be replaced by the next offline answer, and the
+// next lookup with either switch on asks again for nothing.
+func TestProtectionOnlyAnswerIsAnOnlineSnapshot(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := &App{compatFacts: &compatFactsCache{path: filepath.Join(t.TempDir(), "compat-facts-cache.json"), facts: map[string]map[string]compatFactEntry{"linux-compat": {}}}}
+	req := plugins.CompatLookupGame{ID: "g", SteamAppID: "620", InstallDir: "/games/g", Online: false, ProtectionOnline: true}
+	a.compatFacts.mu.Lock()
+	a.cacheCompatFactResultLocked("linux-compat", []plugins.CompatLookupGame{req}, []plugins.CompatFact{{ID: "g", Badges: []plugins.CompatBadge{{Kind: "anticheat", Label: "BattlEye", Source: "AreWeAntiCheatYet"}}, TTLSeconds: 600}}, now)
+	a.compatFacts.mu.Unlock()
+	entry := a.compatFacts.facts["linux-compat"]["g"]
+	if !entry.Online {
+		t.Fatal("an answer fetched with protection online was saved as an offline snapshot")
+	}
+	if !compatFactFresh(entry, "620", "/games/g", lookupOnline(req), now.Add(time.Minute)) {
+		t.Fatal("the protection-only answer was not fresh for the next online lookup")
+	}
+}

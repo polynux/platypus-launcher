@@ -310,9 +310,17 @@ describe('a22 settings', () => {
     expect(screen.getByRole('button', { name: 'Save backups' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ratings and game info' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Friends and chat' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Store clients' })).toBeInTheDocument();
     expect(screen.getByText('Language')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Friends and chat' }));
     expect(await screen.findByText('Chat notifications')).toBeInTheDocument();
+    // Issues #150 and #149: ratings and protection are separate switches, and
+    // the lab's Store clients category now has its client notices switch.
+    fireEvent.click(screen.getByRole('button', { name: 'Ratings and game info' }));
+    expect(await screen.findByRole('switch', { name: /Compatibility ratings/ })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: /Anti-cheat and protection data/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Store clients' }));
+    expect(await screen.findByRole('switch', { name: /Store client notices/ })).toBeInTheDocument();
   });
 });
 

@@ -153,6 +153,7 @@ export interface CoreApi {
   SetCancelCleanupDays(days: number): Promise<types.LauncherSettings>;
   SetChatAlerts(pluginID: string, on: boolean): Promise<void>;
   SetChatDesktopNotify(on: boolean): Promise<types.LauncherSettings>;
+  SetClientNotices(on: boolean): Promise<types.LauncherSettings>;
   SetCloudGameMode(gameID: string, mode: string): Promise<void>;
   SetCloudPluginMode(pluginID: string, mode: string): Promise<void>;
   SetColorScheme(scheme: string): Promise<types.LauncherSettings>;
@@ -173,6 +174,7 @@ export interface CoreApi {
   SetPluginInstallFolder(id: string, path: string): Promise<void>;
   SetPreferredCopy(game: types.Game, ownerID: string): Promise<void>;
   SetPrefixesFolder(path: string): Promise<types.LauncherSettings>;
+  SetProtectionOnline(on: boolean): Promise<types.LauncherSettings>;
   SetRatingsOnline(on: boolean): Promise<types.LauncherSettings>;
   SetSocialEnabled(pluginID: string, enabled: boolean): Promise<void>;
   SetSocialPlaying(pluginID: string, show: boolean): Promise<void>;
@@ -341,6 +343,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetCancelCleanupDays',
   'SetChatAlerts',
   'SetChatDesktopNotify',
+  'SetClientNotices',
   'SetCloudGameMode',
   'SetCloudPluginMode',
   'SetColorScheme',
@@ -361,6 +364,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetPluginInstallFolder',
   'SetPreferredCopy',
   'SetPrefixesFolder',
+  'SetProtectionOnline',
   'SetRatingsOnline',
   'SetSocialEnabled',
   'SetSocialPlaying',

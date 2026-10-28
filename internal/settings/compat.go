@@ -10,8 +10,9 @@ func errBadAppID() *apperr.Error {
 	return apperr.New("steam.appid.invalid", "a Steam AppID is a number", nil)
 }
 
-// RatingsOnline says whether Platypus may fetch compatibility ratings and
-// anti-cheat data from the network. On until the user switches it off.
+// RatingsOnline says whether Platypus may fetch ProtonDB compatibility
+// ratings from the network. On until the user switches it off. Protection
+// facts (PCGamingWiki, AreWeAntiCheatYet) have their own switch since #150.
 func (s *Store) RatingsOnline() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -26,6 +27,28 @@ func (s *Store) SetRatingsOnline(on bool) error {
 	s.data.FetchRatings = &on
 	if err := s.save(); err != nil {
 		s.data.FetchRatings = prev
+		return err
+	}
+	return nil
+}
+
+// ProtectionOnline says whether Platypus may fetch protection facts
+// (PCGamingWiki and AreWeAntiCheatYet) from the network (issue #150). On
+// until the user switches it off.
+func (s *Store) ProtectionOnline() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.FetchProtection == nil || *s.data.FetchProtection
+}
+
+// SetProtectionOnline saves the "Fetch protection data online" switch.
+func (s *Store) SetProtectionOnline(on bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev := s.data.FetchProtection
+	s.data.FetchProtection = &on
+	if err := s.save(); err != nil {
+		s.data.FetchProtection = prev
 		return err
 	}
 	return nil

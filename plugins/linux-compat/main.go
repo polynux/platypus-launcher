@@ -39,7 +39,10 @@ type game struct {
 	Platforms  []string `json:"platforms,omitempty"`
 	InstallDir string   `json:"installDir,omitempty"`
 	Online     bool     `json:"online"`
-	StoreDRM   bool     `json:"storeDRM,omitempty"`
+	// ProtectionOnline allows the PCGamingWiki and AreWeAntiCheatYet sources.
+	// Without it they answer from their caches (issue #150).
+	ProtectionOnline bool `json:"protectionOnline"`
+	StoreDRM         bool `json:"storeDRM,omitempty"`
 }
 
 type lookupParams struct {
@@ -208,7 +211,7 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 			}
 			var cat *compat.AntiCheatData
 			if svc.AntiCheat != nil {
-				if g.Online {
+				if g.ProtectionOnline {
 					cat = svc.AntiCheatCatalogue(ctx)
 				} else {
 					cat = svc.AntiCheat.Load()
@@ -232,7 +235,7 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 			if id != "" && svc.Wiki != nil {
 				var w compat.WikiAnswer
 				var ok bool
-				if g.Online {
+				if g.ProtectionOnline {
 					w, ok = svc.WikiPage(ctx, id)
 				} else {
 					w, ok = svc.WikiPageCacheOnly(id)

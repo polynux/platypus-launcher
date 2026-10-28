@@ -247,6 +247,15 @@ func (a *App) SetRatingsOnline(on bool) (types.LauncherSettings, error) {
 	return a.launcherSettings(), nil
 }
 
+// SetProtectionOnline saves the "Fetch protection data online" switch (issue
+// #150): PCGamingWiki and AreWeAntiCheatYet, apart from ProtonDB ratings.
+func (a *App) SetProtectionOnline(on bool) (types.LauncherSettings, error) {
+	if err := a.settings.SetProtectionOnline(on); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
+}
+
 // SetArtworkOnline saves the "Find artwork online" switch (issue #36).
 func (a *App) SetArtworkOnline(on bool) (types.LauncherSettings, error) {
 	if err := a.settings.SetArtworkOnline(on); err != nil {
