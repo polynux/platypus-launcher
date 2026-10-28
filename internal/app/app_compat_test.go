@@ -1,11 +1,14 @@
 package app
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"platypus/internal/plugins"
+	"platypus/internal/settings"
 	"platypus/internal/types"
 )
 
@@ -102,5 +105,137 @@ func TestEnablingACompatSourceMakesTheAnswerStale(t *testing.T) {
 	oldOff := compatFactEntry{Fact: fact, SteamAppID: "620", Expires: now.Add(time.Hour), Online: false, Protection: &notFetched}
 	if compatFactFresh(oldOff, "620", "", false, true, now) {
 		t.Fatal("an old offline answer is fresh once protection is switched on")
+	}
+}
+
+// compatProviderApp is an App with one compat-facts provider (echo's program)
+// whose manifest promises the given protocol versions, with the ratings switch
+// on and the protection switch as asked.
+func compatProviderApp(t *testing.T, versions []string, protection bool) *App {
+	t.Helper()
+	root := t.TempDir()
+	trust, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := trust.SetRatingsOnline(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := trust.SetProtectionOnline(protection); err != nil {
+		t.Fatal(err)
+	}
+	pluginsDir := filepath.Join(root, "plugins")
+	installEchoApp(t, pluginsDir)
+	list, _ := json.Marshal(versions)
+	manifest := `{"id":"echo","name":"Echo","version":"1.0.0","manifestVersion":1,` +
+		`"protocol":{"versions":` + string(list) + `},"store":"echo","exec":"bin/platypus-echo-app",` +
+		`"capabilities":["compat-facts"]}`
+	if err := os.WriteFile(filepath.Join(pluginsDir, "echo", "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := plugins.NewManager(plugins.Options{
+		Dir: pluginsDir, LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"),
+		Settings: trust, Home: root,
+	})
+	t.Cleanup(m.Shutdown)
+	if _, err := m.Discover(); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Approve("echo"); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{host: stderrHost{}, settings: trust, plugins: m, optHome: root,
+		compatFacts: openCompatFactsCache(filepath.Join(root, "compat-facts.json"))}
+	return a
+}
+
+// queuedCompatRequest asks for one game while the provider is busy and returns
+// the request core built for it: the pending batch keeps it as it will be sent.
+func queuedCompatRequest(t *testing.T, a *App, game types.Game) plugins.CompatLookupGame {
+	t.Helper()
+	a.compatFacts.mu.Lock()
+	a.compatFacts.inFlight["echo"] = true
+	a.compatFacts.mu.Unlock()
+	a.requestCompatFacts([]types.Game{game}, nil)
+	a.compatFacts.mu.Lock()
+	defer a.compatFacts.mu.Unlock()
+	req, ok := a.compatFacts.pending["echo"][game.ID]
+	if !ok {
+		t.Fatalf("the lookup of %s was not queued: %+v", game.ID, a.compatFacts.pending["echo"])
+	}
+	return req
+}
+
+// A provider that predates the split gate every source on `online` (issue
+// #162): it gets the intersection of both switches, so switching protection
+// off keeps it off the network instead of letting it fetch everything.
+func TestPreSplitCompatProviderGetsTheIntersectionOfBothSwitches(t *testing.T) {
+	t.Parallel()
+	a := compatProviderApp(t, []string{"1.0", "1.17"}, false)
+	req := queuedCompatRequest(t, a, types.Game{ID: "g", Source: "echo", Store: "echo"})
+	if req.Online || req.ProtectionOnline {
+		t.Fatalf("pre-split request = online %v protection %v, want both off", req.Online, req.ProtectionOnline)
+	}
+}
+
+// A provider that advertises the split (1.18) gets the two switches apart: it
+// still fetches ratings while the protection switch is off.
+func TestSplitCompatProviderGetsBothSwitchesApart(t *testing.T) {
+	t.Parallel()
+	a := compatProviderApp(t, []string{"1.0", "1.17", "1.18"}, false)
+	req := queuedCompatRequest(t, a, types.Game{ID: "g", Source: "echo", Store: "echo"})
+	if !req.Online || req.ProtectionOnline {
+		t.Fatalf("split request = online %v protection %v, want ratings on, protection off", req.Online, req.ProtectionOnline)
+	}
+}
+
+// A game asked for while a provider's batch is in flight waits for that batch
+// to end and is looked up right after (S3): it must not wait for the next
+// library load, which can be minutes away.
+func TestQueuedCompatLookupIsAskedAfterTheRunningBatch(t *testing.T) {
+	t.Parallel()
+	a := compatProviderApp(t, []string{"1.0", "1.17", "1.18"}, true)
+	game := types.Game{ID: "p.echo.queued", Source: "echo", Store: "echo"}
+
+	a.compatFacts.mu.Lock()
+	a.compatFacts.inFlight["echo"] = true
+	a.compatFacts.mu.Unlock()
+	a.requestCompatFacts([]types.Game{game}, nil)
+
+	// The batch in flight ends with another game: the queued one follows.
+	a.refreshCompatFacts("echo", []plugins.CompatLookupGame{{ID: "p.echo.running", Store: "echo"}})
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		a.compatFacts.mu.Lock()
+		entry := a.compatFacts.facts["echo"]["p.echo.queued"]
+		left := len(a.compatFacts.pending["echo"])
+		a.compatFacts.mu.Unlock()
+		if !entry.RetryAt.IsZero() && left == 0 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("the queued game was never looked up")
+}
+
+// The compat answer carries both online switches (issue #162), so a screen can
+// tell why one kind of fact is missing and the other isn't.
+func TestGetGameCompatReportsBothOnlineSwitches(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	st, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetRatingsOnline(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetProtectionOnline(false); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{settings: st}
+	got := a.GetGameCompat(types.Game{ID: "g", Source: types.SourceCustom})
+	if !got.RatingsOnline || got.ProtectionOnline {
+		t.Fatalf("compat = ratings %v protection %v, want ratings on, protection off", got.RatingsOnline, got.ProtectionOnline)
 	}
 }

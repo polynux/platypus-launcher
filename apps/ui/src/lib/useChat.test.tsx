@@ -123,6 +123,22 @@ describe('useChat', () => {
     expect(notify).toHaveBeenCalledWith('3 new messages from Ana Ruiz and Bo Lindqvist on echo', 'busy');
   });
 
+  it('closes the conversation on screen when its store clears its chats', async () => {
+    const { result } = renderHook(() => useChat(social, vi.fn()));
+    await act(async () => {});
+    act(() => {
+      h.listener?.({ ...conv({ unread: 1, seq: 5 }), alert: false } as ChatEvent);
+    });
+    act(() => result.current.open('echo', '1'));
+    await waitFor(() => expect(result.current.target).not.toBeNull());
+    // A logout: the core names the store and no friend.
+    act(() => {
+      h.listener?.({ ...conv({ friendId: '', seq: 0, messages: [] }), alert: false, dropped: true } as ChatEvent);
+    });
+    expect(result.current.target).toBeNull();
+    expect(result.current.conversations).toEqual([]);
+  });
+
   it('drops a conversation the backend evicted, and keeps a newer one', async () => {
     const { result } = renderHook(() => useChat(social, vi.fn()));
     await act(async () => {});

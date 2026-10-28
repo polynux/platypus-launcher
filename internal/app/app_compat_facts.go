@@ -75,6 +75,22 @@ func compatFactFresh(e compatFactEntry, appID, installDir string, ratings, prote
 // fetched with either allowed is an online snapshot.
 func lookupOnline(g plugins.CompatLookupGame) bool { return g.Online || g.ProtectionOnline }
 
+// speaksProtectionSplit says whether a provider advertises the split ratings
+// and protection state of compat.lookup (ProtectionOnlineVersion): the
+// protocol it negotiated, or, before it has ever started, the newest version
+// its manifest promises — nothing higher can come out of negotiation.
+func (a *App) speaksProtectionSplit(pluginID string) bool {
+	rt := a.plugins.Runtime(pluginID)
+	if rt.Initialized {
+		return rt.Speaks(plugins.ProtectionOnlineVersion)
+	}
+	p, ok := a.plugins.Plugin(pluginID)
+	if !ok || p.Manifest.Protocol == nil {
+		return false
+	}
+	return p.Manifest.Protocol.Versions.Contains(plugins.ProtectionOnlineVersion)
+}
+
 // openCompatFactsCache loads the persisted facts cache, falling back to an empty cache.
 func openCompatFactsCache(path string) *compatFactsCache {
 	c := &compatFactsCache{path: path, facts: map[string]map[string]compatFactEntry{}, inFlight: map[string]bool{}, pending: map[string]map[string]plugins.CompatLookupGame{}}
@@ -142,6 +158,15 @@ func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *typ
 			continue
 		}
 		pluginID := plugin.Manifest.ID
+		// A provider that predates the split gates every source on `online`:
+		// it gets the intersection of both switches, and its answer counts as
+		// fetched with that same state, so a switch it can't honour never
+		// makes it refetch forever.
+		ratings, protects := online, protection
+		if !a.speaksProtectionSplit(pluginID) {
+			ratings = online && protection
+			protects = ratings
+		}
 		batch := make([]plugins.CompatLookupGame, 0, len(games))
 		for _, g := range games {
 			d := (*types.GameDetails)(nil)
@@ -151,7 +176,7 @@ func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *typ
 			appID, _ := a.ratingAppID(g, d)
 			a.compatFacts.mu.Lock()
 			e := a.compatFacts.facts[pluginID][g.ID]
-			fresh := compatFactFresh(e, appID, g.InstallDir, online, protection, now)
+			fresh := compatFactFresh(e, appID, g.InstallDir, ratings, protects, now)
 			a.compatFacts.mu.Unlock()
 			if fresh {
 				continue
@@ -160,7 +185,7 @@ func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *typ
 			if store == "" {
 				store = sourceOf(g)
 			}
-			item := plugins.CompatLookupGame{ID: g.ID, Store: store, StoreAppID: g.StoreAppID, SteamAppID: appID, InstallDir: g.InstallDir, Online: online, ProtectionOnline: protection}
+			item := plugins.CompatLookupGame{ID: g.ID, Store: store, StoreAppID: g.StoreAppID, SteamAppID: appID, InstallDir: g.InstallDir, Online: ratings, ProtectionOnline: protects}
 			if d != nil {
 				item.Platforms = d.Platforms
 				item.StoreDRM = d.DRM != nil

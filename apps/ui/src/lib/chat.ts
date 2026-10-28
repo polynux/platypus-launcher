@@ -27,9 +27,12 @@ export function upsertConversation(list: ChatView[], view: ChatView): ChatView[]
   return next;
 }
 
-/** Drops a conversation the backend evicted from memory. A view held that is newer than the eviction
- *  (a later change of the same conversation) stays. */
+/** Drops a conversation the backend evicted from memory, or, when the event
+ *  names no friend, every conversation of that store: a logout cleared them,
+ *  and the rows held here include previews the core sent once. A view held that
+ *  is newer than the eviction (a later change of the same conversation) stays. */
 export function dropConversation(list: ChatView[], e: Pick<ChatView, 'plugin' | 'friendId' | 'seq'>): ChatView[] {
+  if (!e.friendId) return list.filter((v) => v.plugin !== e.plugin);
   const key = chatKey(e.plugin, e.friendId);
   return list.filter((v) => chatKey(v.plugin, v.friendId) !== key || v.seq > e.seq);
 }

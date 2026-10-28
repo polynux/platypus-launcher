@@ -322,6 +322,13 @@ var OfflineVersion = Version{Major: 1, Minor: 15}
 // only: the user's own value always wins, a hint fills an empty field only.
 var StatusVersion = Version{Major: 1, Minor: 16}
 
+// ProtectionOnlineVersion is the first protocol revision whose compat.lookup
+// splits the online state in two (CompatLookupGame.online and
+// protectionOnline, issue #150). A provider that predates it knows only
+// `online` and gates every source on it, so Platypus sends it the
+// intersection of both switches instead (see requestCompatFacts).
+var ProtectionOnlineVersion = Version{Major: 1, Minor: 18}
+
 // DRM is what the store says about a game's protection. Every field is a
 // pointer or optional: nil (or "") means the store said nothing, and Platypus
 // shows no badge for it. Plugins map their own store fields to these:

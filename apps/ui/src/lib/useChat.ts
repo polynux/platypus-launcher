@@ -75,6 +75,12 @@ export function useChat(
     const unsubscribe = onChat((e) => {
       if (e.dropped) {
         setConversations((list) => dropConversation(list, e));
+        // A store whose chats were cleared (a logout, a removal) takes the
+        // conversation on screen with it: it can't be shown or read any more.
+        if (!e.friendId && targetRef.current?.plugin === e.plugin) {
+          targetRef.current = null;
+          setTarget(null);
+        }
         return;
       }
       setConversations((list) => upsertConversation(list, e));

@@ -222,6 +222,7 @@ export namespace types {
     steam_app_id_source?: string;
     native: boolean;
     ratings_online: boolean;
+    protection_online: boolean;
     wiki?: types.WikiCredit | null;
   }
 

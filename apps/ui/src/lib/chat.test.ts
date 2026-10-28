@@ -57,6 +57,12 @@ describe('dropConversation', () => {
     expect(dropConversation(list, { plugin: 'echo', friendId: 'a', seq: 4 }).map((v) => v.friendId)).toEqual(['a', 'b']);
     expect(dropConversation(list, { plugin: 'other', friendId: 'b', seq: 9 })).toHaveLength(2);
   });
+
+  it('drops every conversation of a store when the event names no friend (a logout cleared them)', () => {
+    const list = [conv({ plugin: 'echo', friendId: 'a', seq: 5 }), conv({ plugin: 'echo', friendId: 'b', seq: 2 }), conv({ plugin: 'other', friendId: 'a', seq: 9 })];
+    const left = dropConversation(list, { plugin: 'echo', friendId: '', seq: 0 });
+    expect(left.map((v) => `${v.plugin}|${v.friendId}`)).toEqual(['other|a']);
+  });
 });
 
 describe('chatRows', () => {

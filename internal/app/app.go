@@ -190,6 +190,9 @@ type App struct {
 	chatRecentMu    sync.Mutex
 	chatRecentPath  string
 	chatRecents     map[chatRecentKey]chatRecent
+	// chatRecentSeq is the last Seq recorded per conversation (memory only):
+	// a late, older view is dropped instead of overwriting a newer preview.
+	chatRecentSeq   map[chatRecentKey]uint64
 	chatRecentDirty bool
 	chatRecentTimer *time.Timer
 	// cloudConflict marks games with an unanswered logged conflict (A7):

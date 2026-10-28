@@ -22,7 +22,7 @@ import {
 const mk = (id: string, o: Partial<Game> = {}): Game =>
   ({ id, source: 'echo', store: 'epic', store_app_id: id, title: id, is_installed: true, settings: {}, ...o }) as Game;
 
-const compat = (o: Partial<Compat> = {}): Compat => ({ native: false, ratings_online: true, badges: [], ...o });
+const compat = (o: Partial<Compat> = {}): Compat => ({ native: false, ratings_online: true, protection_online: true, badges: [], ...o });
 
 describe('card compatibility', () => {
   it('shows a native build over a tier, and a tier when there is no native build', () => {
