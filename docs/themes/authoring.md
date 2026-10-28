@@ -10,6 +10,28 @@ Go data the core validates against.
 
 Source: `internal/themes/themes.go`, `internal/plugins/manifest.go`.
 
+## Built-in themes: the base and the default
+
+Two built-in themes have special roles (`internal/themes/themes.go`):
+
+- **Base: `warm`** (`BaseID`). Every token and axis a theme leaves out, or
+  sets badly, takes warm's value. "The built-in value" below means warm's.
+  Its pixel baseline test stays the reference for the classic look.
+- **Default: `atlas`** (`DefaultID`, issue #130). The theme the launcher
+  starts with when the user hasn't picked one, and the one a picked theme
+  falls back to when it disappears (a removed plugin, for example).
+
+Atlas is built from these catalog axes (see `catalog.md` for every value):
+`shell.navigation = sourcebar`, `library.presentation = list-detail`,
+`game.structure = tabs`, `game-settings.presentation = sheet`,
+`game-settings.tabs = accordion`, `game-hero.logo = logo`,
+`color.game-tone = whole`, `label.style = plain`,
+`empty-state.chrome = plain`, `empty-state.icon = on`, and `compact` for
+`list-row.density`, `game-row.mode` and `view-header.size`. It also declares
+`[schemes.light]` and `[schemes.black]`. A theme that sets
+`shell.navigation = sourcebar` gets Atlas's page set today; explicit
+page-presentation axes are planned (issue #156).
+
 ## Levels and `supports`
 
 A theme declares what it changes in `[theme]` as `supports`. Each level is

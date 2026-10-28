@@ -203,3 +203,10 @@ How the accepted decisions landed, without changing them.
 Source: `internal/themes/catalog.go`, `internal/themes/builtin_layout.go`,
 `apps/ui/src/gen/catalog.ts`, `apps/ui/src/lib/theme.ts`,
 `apps/ui/src/lib/layout.tsx`.
+
+## Note (2026-10-28): the default theme is Atlas
+
+Issue #130 makes the Atlas theme (design /22) the default: `themes.DefaultID`
+is `atlas`, used when the user hasn't picked a theme and when a picked theme
+is gone. `warm` stays the base every theme falls back to (`themes.BaseID`),
+selectable like `cool` and `slate`, and its pixel baseline test stays.

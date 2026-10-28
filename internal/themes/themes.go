@@ -30,9 +30,14 @@ const Schema = 1
 // DefaultThemeCatalog is assumed when an older theme omits its catalog target.
 const DefaultThemeCatalog = "1.0"
 
-// DefaultID is the built-in theme the launcher starts with. Every token a
+// BaseID is the built-in theme every other theme builds on: every token a
 // theme leaves out, or sets badly, takes its value from here.
-const DefaultID = "warm"
+const BaseID = "warm"
+
+// DefaultID is the theme the launcher starts with when the user hasn't
+// picked one (issue #130), and the one a picked theme that is gone falls
+// back to.
+const DefaultID = "atlas"
 
 // The statuses of a theme (types.ThemeInfo.Status).
 const (
@@ -688,9 +693,9 @@ func ResolveTheme(t Theme, found bool) types.ThemeTokens {
 }
 
 func resolve(t Theme, found bool) types.ThemeTokens {
-	def, ok := Find(DefaultID)
+	def, ok := Find(BaseID)
 	if !ok {
-		panic("themes: the built-in default " + DefaultID + " is missing")
+		panic("themes: the built-in default " + BaseID + " is missing")
 	}
 	variants := map[string]string{}
 	for _, entry := range Catalog {

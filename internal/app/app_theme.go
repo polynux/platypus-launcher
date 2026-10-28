@@ -89,19 +89,28 @@ func (a *App) findTheme(id string) (themes.Theme, bool) {
 	return themes.Theme{}, false
 }
 
+// pickedTheme is the theme the user picked, or the default when they never
+// picked one (issue #130).
+func (a *App) pickedTheme() string {
+	if id := a.settings.Theme(); id != "" {
+		return id
+	}
+	return themes.DefaultID
+}
+
 // GetTheme returns the resolved tokens of a theme (issues #93, #105). An empty
 // id means the theme the user picked, which is what the UI applies at boot.
 // Relative font and wash image paths of a plugin theme become art URLs here.
 func (a *App) GetTheme(id string) types.ThemeTokens {
 	if id == "" {
-		id = a.settings.Theme()
+		id = a.pickedTheme()
 	}
 	if t, ok := themes.Find(id); ok {
 		return themes.ResolveTheme(t, true)
 	}
 	t, ok := a.findTheme(id)
 	if !ok {
-		return themes.Resolve("")
+		return themes.Resolve(themes.DefaultID)
 	}
 	out := themes.ResolveTheme(t, true)
 	return a.withThemeURLs(out)
@@ -160,12 +169,15 @@ func (a *App) GetThemeCatalog() []types.ThemeCatalogEntry { return themes.Catalo
 // built-in arrangement (issue #108). It returns nil only for a view the
 // catalog knows no blocks for.
 func (a *App) GetThemeLayout(view string) *types.ThemeLayout {
-	id := a.settings.Theme()
+	id := a.pickedTheme()
 	if t, ok := themes.Find(id); ok {
 		return themes.LayoutForTheme(t, view)
 	}
 	t, ok := a.findTheme(id)
 	if !ok {
+		if d, ok := themes.Find(themes.DefaultID); ok {
+			return themes.LayoutForTheme(d, view)
+		}
 		return themes.BuiltinLayout(view)
 	}
 	return themes.LayoutForTheme(t, view)

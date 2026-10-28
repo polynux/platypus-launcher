@@ -11,7 +11,7 @@ import { VARIANT_DEFAULTS, type VariantAxis, type VariantValues } from '../gen/c
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
 
 /** The theme the app ships with. Matches the core's default (themes.DefaultID). */
-export const DEFAULT_THEME_ID = 'warm';
+export const DEFAULT_THEME_ID = 'atlas';
 
 const CACHE_KEY = 'platypus.theme';
 let currentVariants: VariantValues = { ...VARIANT_DEFAULTS };

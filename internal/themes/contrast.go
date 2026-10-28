@@ -53,7 +53,7 @@ var (
 
 func builtinDefaults() map[string]string {
 	defaultsOnce.Do(func() {
-		src, err := builtin.ReadFile(path.Join("builtin", DefaultID, "theme.toml"))
+		src, err := builtin.ReadFile(path.Join("builtin", BaseID, "theme.toml"))
 		if err != nil {
 			return
 		}

@@ -191,7 +191,7 @@ func TestBuiltinLayouts(t *testing.T) {
 			t.Errorf("%s: warnings %v, want none", th.Info.ID, th.Info.Warnings)
 		}
 	}
-	warm, ok := Find(DefaultID)
+	warm, ok := Find(BaseID)
 	if !ok {
 		t.Fatal("no default theme")
 	}
