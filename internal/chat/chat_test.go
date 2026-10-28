@@ -824,3 +824,43 @@ func TestMergeIsSortedAndDeduped(t *testing.T) {
 		t.Fatalf("merged %v", got)
 	}
 }
+
+// Conversations lists every held conversation of a plugin, read or unread,
+// with their messages; empty lists every plugin's. It backs the core's
+// recent-conversations listing (issue #143).
+func TestConversationsListsHeldConversations(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.incoming("ana", "n1", "hey", 100)
+	h.notify(NoteUnread, map[string]any{"friendId": "cy", "count": 2})
+	if _, err := h.m.Open(ctx, "echo", "ana"); err != nil {
+		t.Fatal(err)
+	}
+	got := h.m.Conversations("echo")
+	if len(got) != 2 {
+		t.Fatalf("Conversations(echo) = %+v, want ana and cy", got)
+	}
+	byFriend := map[string]View{}
+	for _, v := range got {
+		byFriend[v.FriendID] = v
+	}
+	if ana := byFriend["ana"]; ana.Unread != 0 || len(ana.Messages) == 0 {
+		t.Fatalf("ana: %+v, want read with messages", ana)
+	}
+	if cy := byFriend["cy"]; cy.Unread != 2 {
+		t.Fatalf("cy: %+v, want the unread-only seed", cy)
+	}
+	if all := h.m.Conversations(""); len(all) != 2 {
+		t.Fatalf("Conversations() = %d, want both plugins' holdings", len(all))
+	}
+	h.m.Notify("other", NoteMessage, json.RawMessage(`{"friendId":"dee","message":{"id":"d1","text":"t","sentAt":1}}`))
+	if all := h.m.Conversations(""); len(all) != 3 {
+		t.Fatalf("Conversations() = %d, want the other plugin's too", len(all))
+	}
+	if other := h.m.Conversations("other"); len(other) != 1 || other[0].FriendID != "dee" {
+		t.Fatalf("Conversations(other) = %+v", other)
+	}
+	if none := h.m.Conversations("unknown"); len(none) != 0 {
+		t.Fatalf("Conversations(unknown) = %+v, want none", none)
+	}
+}

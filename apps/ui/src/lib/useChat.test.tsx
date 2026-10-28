@@ -54,6 +54,7 @@ beforeEach(() => {
   b.chatOpenCb = null;
   h.api = {
     chatUnread: () => Effect.succeed([]),
+    chatConversations: () => Effect.succeed([]),
     chatAlerts: () => Effect.succeed({ echo: true }),
     chatOpen: () => Effect.succeed(conv({ open: true })),
     chatClose: () => Effect.succeed(undefined),
@@ -148,6 +149,22 @@ describe('useChat', () => {
     });
     expect(result.current.conversations).toHaveLength(1);
     expect(result.current.unread).toBe(0);
+  });
+
+  it('seeds the Chats tab from the persisted recent conversations, read or unread (issue #143)', async () => {
+    const preview = (over: Partial<ChatView> = {}): ChatView =>
+      conv({ seq: 0, unread: 0, loaded: false, more: true, messages: [{ id: 'm9', from: '1', text: 'see you tomorrow', sentAt: 1700000000000 }], ...over });
+    h.api.chatConversations = () =>
+      Effect.succeed([
+        preview({ friendId: '1' }),
+        preview({ friendId: '2', unread: 3, seq: 0, messages: [] }),
+      ]);
+    const { result } = renderHook(() => useChat(social, vi.fn()));
+    await waitFor(() => expect(result.current.conversations).toHaveLength(2));
+    // A read conversation with a preview shows its text, newest first.
+    const rows = result.current.conversations;
+    expect(rows.find((v) => v.friendId === '1')?.messages[0].text).toBe('see you tomorrow');
+    expect(result.current.unreadOf('echo', '2')).toBe(3);
   });
 
   it('closes the conversation on screen when another one opens', async () => {

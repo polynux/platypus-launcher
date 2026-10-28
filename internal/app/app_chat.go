@@ -30,13 +30,19 @@ func (b chatBackend) Call(ctx context.Context, pluginID, method string, params, 
 
 // startChat creates the conversation manager. Its events reach the UI on the
 // "chat" event; a new message alerts only when the user keeps alerts on for
-// the store.
+// the store. Every change also folds into the persisted recents (issue #143),
+// so the Chats tab survives a reload; an evicted conversation stays recent.
 func (a *App) startChat(ctx context.Context) {
 	a.chat = chat.NewManager(chat.Options{
 		Backend: chatBackend{a},
 		Alert:   a.settings.ChatAlerts,
-		Emit:    func(e chat.Event) { a.host.Emit("chat", e) },
-		Logf:    func(f string, args ...any) { a.host.Infof("chat: "+f, args...) },
+		Emit: func(e chat.Event) {
+			if !e.Dropped {
+				a.recordChatRecent(e.View)
+			}
+			a.host.Emit("chat", e)
+		},
+		Logf: func(f string, args ...any) { a.host.Infof("chat: "+f, args...) },
 	})
 }
 
