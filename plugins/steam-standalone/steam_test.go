@@ -117,6 +117,18 @@ func setup(t *testing.T) *env {
 	}
 	plug := filepath.Join(root, "plugins", id)
 	copyFile(t, "plugin.json", filepath.Join(plug, "plugin.json"), 0o644)
+	// The plugin's `#!/usr/bin/env python3` must keep resolving when a test
+	// empties HOME: point it at the real interpreter instead of a shim.
+	if prebuiltPython != "" {
+		pyDir := filepath.Join(root, "bin-py")
+		if err := os.MkdirAll(pyDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(prebuiltPython, filepath.Join(pyDir, "python3")); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", pyDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	}
 	// The whole bin folder: the exec plus the steam_cm module it imports.
 	binDir := filepath.Join(plug, "bin")
 	os.MkdirAll(binDir, 0o755)

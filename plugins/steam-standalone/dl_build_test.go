@@ -10,14 +10,27 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 // prebuiltDL is the built platypus-steam-dl binary all tests share.
 var prebuiltDL string
 
+// prebuiltPython is the interpreter behind `python3`, captured here for the
+// same reason: tests point HOME at an empty dir (so the user's Steam install
+// can't answer), which also breaks version-manager shims (asdf, mise) — their
+// shims look for a version file under HOME or a cwd below it, and the plugin
+// runs with its cwd in the temp root. The plugin's `#!/usr/bin/env python3`
+// then exits 126 and it "crashes 5 times in a row" during initialize. setup()
+// puts this interpreter first on PATH instead of the shim.
+var prebuiltPython string
+
 func TestMain(m *testing.M) {
 	home, modCache, buildCache := realGoEnv()
+	if out, err := exec.Command("python3", "-c", "import sys; print(sys.executable)").Output(); err == nil {
+		prebuiltPython = strings.TrimSpace(string(out))
+	}
 	dir, err := os.MkdirTemp("", "platypus-steam-dl-test")
 	if err != nil {
 		panic(err)
