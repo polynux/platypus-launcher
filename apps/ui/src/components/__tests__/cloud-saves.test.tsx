@@ -340,7 +340,7 @@ describe('CloudSavesHost', () => {
     const { onNotify, onLog } = setup();
     emit({ kind: 'pushed', message: 'Saved 2 files to the cloud' });
     expect(onNotify).toHaveBeenCalledWith('Saved 2 files to the cloud · Echo Tiny', 'ok');
-    expect(onLog).toHaveBeenCalledWith(expect.objectContaining({ type: 'cloud', game: 'Echo Tiny' }));
+    expect(onLog).toHaveBeenCalledWith(expect.objectContaining({ type: 'cloud', game: 'p.echo.tiny' }));
   });
 
   it('shows a conflict prompt as the conflict dialog; resolving launches the game', async () => {

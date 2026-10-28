@@ -238,7 +238,7 @@ describe('/22 hero, tabs and side (issue #137)', () => {
         game={g}
         plugin={plugin()}
         runners={base.runners as never}
-        activity={[{ id: 1, ts: Date.now(), type: 'session', game: g.title, detail: 'played' }]}
+        activity={[{ id: 1, ts: Date.now(), type: 'session', game: g.id, detail: 'played' }]}
         {...base}
         collections={[]}
         onManageCollections={() => {}}

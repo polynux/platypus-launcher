@@ -46,7 +46,7 @@ export function CloudSavesHost({
         const title = gamesRef.current.find((g) => g.id === e.game_id)?.title ?? e.title ?? e.game_id;
         const n = cloudNotice(e, title);
         if (n?.toast) notifyRef.current(n.toast.msg, n.toast.kind);
-        if (n?.activity) logRef.current({ type: 'cloud', game: title, ...n.activity });
+        if (n?.activity) logRef.current({ type: 'cloud', game: e.game_id, ...n.activity });
         // Keyed by id: a prompt is never dropped because the library lacks its game.
         if (e.kind === 'prompt' && e.prompt) {
           setPending({ gameId: e.game_id, title, kind: e.prompt, message: e.message ?? '', status: e.status, client: e.client });

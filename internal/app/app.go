@@ -171,6 +171,19 @@ type App struct {
 	activityNextID int64
 	addedAtPath    string
 	addedAt        map[string]int64
+	// addedAtSeen marks sources with a seeded first listing (A1): a
+	// store's first login must not flood the feed. addedAtFresh is set
+	// when library-added.json didn't exist at open: the next scan seeds
+	// every id silently.
+	addedAtSeen  map[string]bool
+	addedAtFresh bool
+	// achSeenPath/achSeen is the persisted unlock set apart from the
+	// capped feed (A2): game id to achievement id to unlock time.
+	achSeenPath string
+	achSeen     map[string]map[string]int64
+	// cloudConflict marks games with an unanswered logged conflict (A7):
+	// a prompt re-fires on every launch until it is resolved or pushed.
+	cloudConflict map[string]bool
 }
 
 // Options carries the folders one App run uses (issue #41). Empty fields
@@ -363,6 +376,7 @@ func (a *App) startup(ctx context.Context) {
 	// #145, #151): yesterday's sessions and adds survive a restart.
 	a.openActivity(dataDir)
 	a.openAddedAt(dataDir)
+	a.openAchSeen(dataDir)
 
 	// Store plugins start on demand: when the library is listed, on login,
 	// or when an interrupted install resumes.
@@ -631,24 +645,29 @@ func (a *App) AddCustomGame(title, executable string) (types.Game, error) {
 		return types.Game{}, err
 	}
 	a.maybeAutoArtwork(g.ID, g.Title)
-	// The add lands on the feed at once (issue #145): the next library scan
-	// keeps it (noteLibraryGames skips ids it already knows).
-	seed := []types.Game{{ID: g.ID, Title: g.Title, Store: types.StoreCustom, AddedAt: g.AddedAt}}
-	a.noteLibraryGames(seed)
-	return types.Game{
+	// The add lands on the feed at once (issue #145): an explicit add is
+	// always a genuine new row, even on a first run (noteLibraryGames would
+	// seed it silently as backfill).
+	out := types.Game{
 		ID:          g.ID,
 		Source:      types.SourceCustom,
 		Store:       types.StoreCustom,
 		StoreAppID:  types.SourceCustom,
 		Title:       g.Title,
 		ReleaseYear: g.ReleaseYear,
-		AddedAt:     seed[0].AddedAt,
+		AddedAt:     g.AddedAt,
 		InstallDir:  filepath.Dir(g.Executable),
 		Executable:  g.Executable,
 		IsInstalled: true,
 		Settings:    types.GameSettings{UseGameMode: true},
 		Native:      a.customNative(g.Executable, ""),
-	}, nil
+	}
+	if out.AddedAt == 0 {
+		out.AddedAt = time.Now().UnixMilli()
+	}
+	a.noteExplicitAdd(out)
+	out.AddedAt = a.addedAt[out.ID]
+	return out, nil
 }
 
 // DetectGameExecutable reports how a sideloaded executable would run by

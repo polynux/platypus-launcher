@@ -63,10 +63,12 @@
   "jobVerbVerified": "verified",
   "jobVerbMoved": "moved",
   "added": "Added {{title}}",
-  "cloudUploaded": "Cloud uploaded {{title}}",
-  "cloudDownloaded": "Cloud downloaded {{title}}",
   "cloudConflict": "Cloud conflict for {{title}}",
-  "achievementUnlocked": "Unlocked {{name}} in {{title}}"
+  "achievementUnlocked": "Unlocked {{name}} in {{title}}",
+  "cloudUploaded_one": "Cloud uploaded {{count}} file for {{title}}",
+  "cloudUploaded_other": "Cloud uploaded {{count}} files for {{title}}",
+  "cloudDownloaded_one": "Cloud downloaded {{count}} file for {{title}}",
+  "cloudDownloaded_other": "Cloud downloaded {{count}} files for {{title}}"
  },
  "atlas": {
   "sub": "What happened in your library, newest first.",

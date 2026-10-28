@@ -285,23 +285,6 @@ func (a *App) GetGameAchievements(game types.Game) (*types.AchievementProgress, 
 	return &progress, nil
 }
 
-// noteAchievementUnlocks logs newly seen unlocks to the activity feed (issue
-// #145): the plugin's unlockedAt is the unlock time, so the row is stamped
-// then. Rows already stored are skipped, so polls never duplicate them.
-func (a *App) noteAchievementUnlocks(game types.Game, progress types.AchievementProgress) {
-	for _, ach := range progress.List {
-		if !ach.Unlocked || ach.UnlockedAt <= 0 {
-			continue
-		}
-		if a.hasAchievementActivity(game.ID, ach.ID) {
-			continue
-		}
-		a.recordActivityAt(ach.UnlockedAt*1000, "achievement", game.ID,
-			"activity:log.achievementUnlocked",
-			map[string]string{"achievement": ach.ID, "name": ach.Name, "title": game.Title})
-	}
-}
-
 // RedeemCode sends a typed code to a store plugin that offers redeem. The code
 // goes to that plugin and nowhere else; the log shows only a masked form.
 func (a *App) RedeemCode(source, code string) (types.RedeemResult, error) {

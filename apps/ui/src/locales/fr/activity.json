@@ -61,12 +61,14 @@
   "sideloaded": "{{title}} ajouté manuellement",
   "removed": "{{title}} retiré de la bibliothèque",
   "added": "{{title}} ajouté",
-  "cloudUploaded": "Cloud envoyé pour {{title}}",
-  "cloudDownloaded": "Cloud reçu pour {{title}}",
   "cloudConflict": "Conflit cloud pour {{title}}",
   "achievementUnlocked": "{{name}} débloqué dans {{title}}",
   "jobVerbBackedUp": "sauvegardé",
-  "jobVerbRestored": "restauré"
+  "jobVerbRestored": "restauré",
+  "cloudUploaded_one": "Cloud envoyé : {{count}} fichier pour {{title}}",
+  "cloudUploaded_other": "Cloud envoyé : {{count}} fichiers pour {{title}}",
+  "cloudDownloaded_one": "Cloud reçu : {{count}} fichier pour {{title}}",
+  "cloudDownloaded_other": "Cloud reçu : {{count}} fichiers pour {{title}}"
  },
  "atlas": {
   "sub": "Ce qui s'est passé dans votre bibliothèque, du plus récent au plus ancien.",

@@ -488,7 +488,7 @@ export function GamePage(p: GamePageProps) {
   const canChooseOptions = !!plugin && game.installable !== false && offers(plugin, 'install-options', { game });
   const installing = !game.is_installed && !!plugin && !!game.installable;
   const installSize = useInstallSize(game, plugin, installing);
-  const events = activity.filter((e) => e.game === game.title).slice(0, 6);
+  const events = activity.filter((e) => e.game === game.id).slice(0, 6);
   const hours = hoursPlayed(game);
   const recency = recencyOf(game.last_played_at);
   const last = recency ? renderRecency(t, 'game:recency', recency) : undefined;

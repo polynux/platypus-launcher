@@ -145,8 +145,9 @@ describe('game page layouts', () => {
   });
 
   it('renders the built-in arrangement: media above about, compat in the side column, axe clean', async () => {
-    const events = [{ id: 1, ts: Date.now(), type: 'play', detail: 'played', game: 'Layout Installed' }] as unknown as GamePageActivity;
-    const { container } = page(installedGame(), events);
+    const g = installedGame();
+    const events = [{ id: 1, ts: Date.now(), type: 'play', detail: 'played', game: g.id }] as unknown as GamePageActivity;
+    const { container } = page(g, events);
     // Hero: back link, title and actions.
     expect(await screen.findByRole('heading', { name: 'Layout Installed' })).toBeTruthy();
     expect(screen.getByText('Library')).toBeTruthy();

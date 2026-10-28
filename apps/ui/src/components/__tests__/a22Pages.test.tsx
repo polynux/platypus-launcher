@@ -31,7 +31,7 @@ const mock = vi.hoisted(() => ({
   getDiskUsage: vi.fn(),
   getGameFolders: vi.fn(),
   listActivity: () => Effect.succeed([] as never),
-    listJobs: vi.fn(),
+  listJobs: vi.fn(),
   discardJob: vi.fn(),
   refreshDiskUsage: vi.fn(),
   openGameFolder: vi.fn(),

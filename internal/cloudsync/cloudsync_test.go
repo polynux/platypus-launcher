@@ -206,6 +206,10 @@ func TestPullHappensBeforeLaunchWhenTheCloudHasNewerFiles(t *testing.T) {
 	if ev := r.ev.find(types.CloudEvStatus); ev == nil || ev.Message != "Downloaded 2 files from the cloud" {
 		t.Fatalf("the user should hear what the pull did: %+v", ev)
 	}
+	// The feed logs downloads from Done, not from the message text (issue #145).
+	if ev := r.ev.find(types.CloudEvStatus); ev == nil || ev.Done != 2 {
+		t.Fatalf("the pull status should carry the downloaded count: %+v", ev)
+	}
 }
 
 func TestACleanGameLaunchesWithoutAPull(t *testing.T) {
