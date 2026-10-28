@@ -250,6 +250,36 @@ func TestUmuSelection(t *testing.T) {
 	}
 }
 
+// A default runner umu can't run — a Wine build — makes automatic games run
+// directly, so the runner the list marks is the one that runs (issue #146). A
+// Proton default keeps going through umu, which runs that very build.
+func TestUmuStepsAsideForAWineDefault(t *testing.T) {
+	proton := types.ProtonVersion{ID: "steam:Proton 9.0", Name: "Proton 9.0", Path: "/x/Proton 9.0/proton"}
+	wine := types.ProtonVersion{ID: "system:wine", Name: "System Wine", Path: "/usr/bin/wine", IsSystem: true}
+	umu := UmuEntry("/usr/bin/umu-run")
+	runners := []types.ProtonVersion{proton, wine, umu}
+
+	if _, _, ok := SelectUmu("auto", runners, wine.ID); ok {
+		t.Fatal("a Wine default must run directly, not through umu with UMU-Latest")
+	}
+	if _, _, ok := SelectUmu("", runners, wine.ID); ok {
+		t.Fatal("a game with no runner_id must not run through umu when the default is Wine")
+	}
+	// Without a default, auto still prefers umu (the rule is unchanged).
+	if _, _, ok := SelectUmu("auto", runners, ""); !ok {
+		t.Fatal("auto with umu installed and no default must still run through umu")
+	}
+	// umu runs the default Proton build, so the marked runner is the one that runs.
+	u, p, ok := SelectUmu("auto", runners, proton.ID)
+	if !ok || u.Path != umu.Path || p.ID != proton.ID {
+		t.Fatalf("Proton default = %q/%q ok=%v, want umu with Proton 9.0", u.Path, p.ID, ok)
+	}
+	// An uninstalled default falls back to the automatic pick: umu.
+	if _, _, ok := SelectUmu("auto", runners, "steam:Proton 4.11"); !ok {
+		t.Fatal("an uninstalled default must leave auto on umu")
+	}
+}
+
 // Store mapping for umu's STORE.
 func TestUmuStoreMapping(t *testing.T) {
 	for store, want := range map[types.StoreType]string{

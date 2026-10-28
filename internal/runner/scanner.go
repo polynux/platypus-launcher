@@ -134,10 +134,6 @@ func ScanProtonVersionsFor(home, defaultID string) []types.ProtonVersion {
 	}
 
 	// Mark the runner "auto" resolves to so the UI can show it.
-	if pick, ok := PickAuto(versions, defaultID); ok {
-		for i := range versions {
-			versions[i].IsDefault = versions[i].ID == pick.ID
-		}
-	}
+	MarkDefault(versions, defaultID)
 	return versions
 }

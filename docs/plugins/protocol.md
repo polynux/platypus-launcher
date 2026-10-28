@@ -278,12 +278,12 @@ runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> [{ "rule":
 
 All eleven methods are required when `runner` is enabled (`runner.detectExecutable`
 is called for every sideloaded file, `runner.prefix` for every backup and cloud gate,
-`runner.migrateSettings` once per saved game at startup). Every call that
-resolves `auto` (`runner.list`, `runner.options`, `runner.wrap`, `runner.prefix`
-and a winetricks `runner.runAction`) also carries `defaultRunnerId`: the
-launcher's default runner (issue #146). That runner is what `auto` resolves to
-while it is installed; without it, or when it is gone, the automatic pick
-answers, and `runner.list` marks whichever one `auto` runs.
+`runner.migrateSettings` once per saved game at startup). Every call that hands
+the plugin a game also carries `defaultRunnerId`: the launcher's default runner
+(issue #146). That runner is what `auto` resolves to while it is installed;
+without it, or when it is gone, the automatic pick answers, and `runner.list`
+marks whichever one `auto` runs. An automatic game whose default is a Wine
+build runs directly rather than through umu, which can only run a Proton build.
 Errors use `-32602` for a bad request and `-32003` for a runner failure, with a
 message. A failure the UI translates carries `error.data` as `{ "code": "<apperr
 code>", "params": { … } }`, and the core shows its own translated text for it:

@@ -164,8 +164,10 @@ func EffectiveUmuPrefix(prefixPath string) string {
 
 // SelectUmu decides whether a runner setting runs through umu and which
 // Proton build umu runs: explicit "umu", or "auto" with umu installed (then
-// umu wraps the auto Proton pick). An explicit Proton/Wine choice always runs
-// directly. ok is false when umu is not installed.
+// umu wraps the auto Proton pick, or the default one). An explicit
+// Proton/Wine choice always runs directly, and so does an automatic game whose
+// default runner is a Wine build umu can't run (issue #146). ok is false when
+// umu is not installed.
 func SelectUmu(runnerID string, runners []types.ProtonVersion, defaultID string) (umu, proton types.ProtonVersion, ok bool) {
 	var found *types.ProtonVersion
 	for i := range runners {
@@ -179,6 +181,15 @@ func SelectUmu(runnerID string, runners []types.ProtonVersion, defaultID string)
 	}
 	if runnerID != UmuRunnerID && !IsAuto(runnerID) {
 		return types.ProtonVersion{}, types.ProtonVersion{}, false
+	}
+	if IsAuto(runnerID) {
+		// A default umu can't run — a Wine build — runs directly (issue #146):
+		// the picked runner must be the one that runs, not UMU-Latest.
+		for _, r := range runners {
+			if (r.ID == defaultID || r.Name == defaultID) && !IsUmu(r) && !strings.HasSuffix(r.Path, "proton") {
+				return types.ProtonVersion{}, types.ProtonVersion{}, false
+			}
+		}
 	}
 	p, _ := UmuProton(runners, defaultID)
 	return *found, p, true

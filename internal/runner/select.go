@@ -111,3 +111,26 @@ func Resolve(runnerID string, runners []types.ProtonVersion, defaultID string) (
 	}
 	return types.ProtonVersion{}, false
 }
+
+// MarkDefault sets IsDefault on the runner "auto" resolves to (issue #146):
+// defaultID when it is installed, the umu entry included (auto runs through it
+// when it is installed, see SelectUmu), else the automatic pick. It clears any
+// earlier mark.
+func MarkDefault(versions []types.ProtonVersion, defaultID string) {
+	for i := range versions {
+		versions[i].IsDefault = false
+	}
+	if !IsAuto(defaultID) {
+		for i := range versions {
+			if versions[i].ID == defaultID || versions[i].Name == defaultID {
+				versions[i].IsDefault = true
+				return
+			}
+		}
+	}
+	if pick, ok := PickAuto(versions, ""); ok {
+		for i := range versions {
+			versions[i].IsDefault = versions[i].ID == pick.ID
+		}
+	}
+}

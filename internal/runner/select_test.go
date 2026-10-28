@@ -59,3 +59,43 @@ func TestPickAutoFollowsTheDefaultRunner(t *testing.T) {
 		t.Fatalf("default of auto = %q, want the automatic pick", got.ID)
 	}
 }
+
+// The runner the list marks default follows the setting, the umu entry
+// included: it is what an automatic game runs when it is installed
+// (issue #146). Without a usable default the automatic pick is marked.
+func TestMarkDefaultFollowsTheSetting(t *testing.T) {
+	proton := types.ProtonVersion{ID: "compat:GE-Proton11-3", Name: "GE-Proton11-3 (Custom/GE)", Path: "/x/proton"}
+	umu := UmuEntry("/usr/bin/umu-run")
+	marked := func(versions []types.ProtonVersion) string {
+		found := ""
+		for _, r := range versions {
+			if r.IsDefault {
+				if found != "" {
+					t.Fatalf("more than one runner marked default: %q and %q", found, r.ID)
+				}
+				found = r.ID
+			}
+		}
+		return found
+	}
+
+	versions := []types.ProtonVersion{proton, umu}
+	MarkDefault(versions, umu.ID)
+	if got := marked(versions); got != umu.ID {
+		t.Fatalf("default umu marks %q, want the umu entry", got)
+	}
+	// Switching the pick clears the old mark.
+	MarkDefault(versions, proton.ID)
+	if got := marked(versions); got != proton.ID {
+		t.Fatalf("default Proton marks %q", got)
+	}
+	// An uninstalled default, and the automatic pick, mark the auto pick.
+	MarkDefault(versions, "steam:Proton 4.11")
+	if got := marked(versions); got != proton.ID {
+		t.Fatalf("uninstalled default marks %q, want the automatic pick", got)
+	}
+	MarkDefault(versions, "")
+	if got := marked(versions); got != proton.ID {
+		t.Fatalf("automatic marks %q, want the automatic pick", got)
+	}
+}

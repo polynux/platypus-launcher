@@ -40,7 +40,8 @@ func (a *App) GameCrashHints(game types.Game) *types.CrashHints {
 	}
 	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), launchTimeout)
 	defer cancel()
-	params := map[string]any{"game": game, "runnerId": game.Settings.RunnerID, "log": string(raw)}
+	params := map[string]any{"game": game, "runnerId": game.Settings.RunnerID,
+		"defaultRunnerId": a.defaultRunnerID(), "log": string(raw)}
 	var hints []types.CrashHint
 	if err := a.plugins.Call(ctx, "runner", "runner.crashHints", params, &hints); err != nil || len(hints) == 0 {
 		return nil
@@ -49,7 +50,8 @@ func (a *App) GameCrashHints(game types.Game) *types.CrashHints {
 		Actions []runnerAction `json:"actions"`
 	}
 	winetricks := a.plugins.Call(ctx, "runner", "runner.actions", map[string]any{
-		"game": game, "runnerId": game.Settings.RunnerID, "prefixesFolder": a.effectivePrefixesFolder(),
+		"game": game, "runnerId": game.Settings.RunnerID, "defaultRunnerId": a.defaultRunnerID(),
+		"prefixesFolder": a.effectivePrefixesFolder(),
 	}, &actions) == nil
 	if winetricks {
 		winetricks = false
