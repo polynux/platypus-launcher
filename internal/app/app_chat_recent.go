@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+	"unicode/utf8"
 
 	"platypus/internal/chat"
 )
@@ -14,8 +15,10 @@ import (
 // Recent chat conversations (issue #143): one preview row per friend, so the
 // Chats tab lists recent conversations after a reload, most recent first,
 // read or unread. The chat manager only holds what the session saw; every
-// change is recorded here and the file is the restart bridge. Message text
-// is user data like the activity feed, never logged.
+// change is recorded here and the file is the restart bridge. Previews hold
+// message text (clipped), user data like the activity feed, never logged.
+// Unread is never persisted: after a restart every row comes back read, and
+// only the store's live snapshot (RefreshUnread) sets unread again.
 
 const (
 	chatRecentFileVersion = 1
@@ -23,20 +26,27 @@ const (
 	// maxChatRecents bounds the persisted rows; the manager bounds live
 	// conversations the same way, so nothing held is ever dropped here.
 	maxChatRecents = 256
+	// chatRecentPreviewRunes caps a persisted preview: the Chats tab only
+	// shows a snippet, and less message text lands on disk.
+	chatRecentPreviewRunes = 200
+	// chatRecentSaveDelay debounces file writes off the plugin reader: a
+	// burst of incoming messages marks rows dirty, and one background save
+	// covers them all. Shutdown, logout and removal flush at once instead.
+	chatRecentSaveDelay = 2 * time.Second
 )
 
-// chatRecent is one conversation's preview: the friend, the last message's
-// preview, when it last changed, and the unread count.
+// chatRecent is one conversation's preview: the friend and its last
+// message's clipped preview, plus when it last changed.
 type chatRecent struct {
 	Plugin   string `json:"plugin"`
 	FriendID string `json:"friendId"`
 	From     string `json:"from,omitempty"`
 	Text     string `json:"text,omitempty"`
 	SentAt   int64  `json:"sentAt,omitempty"`
-	Unread   int    `json:"unread,omitempty"`
-	// At is the last change in unix ms: the row's most-recent-first order.
-	// A conversation whose messages were dropped still sorts by when it
-	// last changed, not by a missing message.
+	// At is the last change in unix ms: the file's most-recent-first order
+	// and what the cap drops by. The listing itself orders by the message's
+	// SentAt instead: opening an old conversation rewrites the file without
+	// moving its row.
 	At int64 `json:"at"`
 }
 
@@ -50,7 +60,8 @@ type chatRecentFile struct {
 // openChatRecents loads the persisted previews. A missing file is empty; a
 // corrupt or newer one is moved aside and Open returns empty, like the
 // session log and the activity feed, so history is never silently
-// overwritten. Old files still load: unknown fields stay zero.
+// overwritten. Old files still load: their unread counts are ignored (C1),
+// and rows without a preview carry nothing and are dropped.
 func (a *App) openChatRecents(dataDir string) {
 	a.chatRecentMu.Lock()
 	defer a.chatRecentMu.Unlock()
@@ -85,42 +96,26 @@ func (a *App) openChatRecents(dataDir string) {
 		return
 	}
 	for _, r := range f.Recents {
-		if r.Plugin == "" || r.FriendID == "" {
+		if r.Plugin == "" || r.FriendID == "" || r.Text == "" {
 			continue
-		}
-		if r.Unread < 0 {
-			r.Unread = 0
 		}
 		a.chatRecents[chatRecentKey{r.Plugin, r.FriendID}] = r
 	}
 	trimChatRecents(a.chatRecents)
 }
 
-// saveChatRecentsLocked writes the previews atomically. Callers hold
-// a.chatRecentMu.
-func (a *App) saveChatRecentsLocked() {
-	if a.chatRecentPath == "" {
+// writeChatRecentsFile writes rows atomically. Callers hold no lock; the rows
+// are already a snapshot.
+func writeChatRecentsFile(path string, recents []chatRecent) {
+	if path == "" {
 		return
 	}
-	recents := make([]chatRecent, 0, len(a.chatRecents))
-	for _, r := range a.chatRecents {
-		recents = append(recents, r)
-	}
-	sort.Slice(recents, func(i, j int) bool {
-		if recents[i].At != recents[j].At {
-			return recents[i].At > recents[j].At
-		}
-		if recents[i].Plugin != recents[j].Plugin {
-			return recents[i].Plugin < recents[j].Plugin
-		}
-		return recents[i].FriendID < recents[j].FriendID
-	})
 	f := chatRecentFile{Version: chatRecentFileVersion, Recents: recents}
 	raw, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return
 	}
-	dir := filepath.Dir(a.chatRecentPath)
+	dir := filepath.Dir(path)
 	_ = os.MkdirAll(dir, 0o755)
 	tmp, err := os.CreateTemp(dir, ".chat-recents-*.json")
 	if err != nil {
@@ -138,7 +133,48 @@ func (a *App) saveChatRecentsLocked() {
 	if err := tmp.Close(); err != nil {
 		return
 	}
-	_ = os.Rename(tmp.Name(), a.chatRecentPath)
+	_ = os.Rename(tmp.Name(), path)
+}
+
+// sortedChatRecents snapshots the rows, most recent change first. Callers
+// hold a.chatRecentMu.
+func (a *App) sortedChatRecentsLocked() []chatRecent {
+	recents := make([]chatRecent, 0, len(a.chatRecents))
+	for _, r := range a.chatRecents {
+		recents = append(recents, r)
+	}
+	sort.Slice(recents, func(i, j int) bool {
+		if recents[i].At != recents[j].At {
+			return recents[i].At > recents[j].At
+		}
+		if recents[i].Plugin != recents[j].Plugin {
+			return recents[i].Plugin < recents[j].Plugin
+		}
+		return recents[i].FriendID < recents[j].FriendID
+	})
+	return recents
+}
+
+// flushChatRecents stops the pending save and writes dirty rows now. The
+// debounced background save, shutdown, logout and removal share it; tests use
+// it instead of sleeping for the debounce.
+func (a *App) flushChatRecents() {
+	a.chatRecentMu.Lock()
+	if a.chatRecentTimer != nil {
+		a.chatRecentTimer.Stop()
+		a.chatRecentTimer = nil
+	}
+	var recents []chatRecent
+	path := ""
+	if a.chatRecentDirty && a.chatRecentPath != "" {
+		recents = a.sortedChatRecentsLocked()
+		a.chatRecentDirty = false
+		path = a.chatRecentPath
+	}
+	a.chatRecentMu.Unlock()
+	if path != "" {
+		writeChatRecentsFile(path, recents)
+	}
 }
 
 // trimChatRecents drops the stalest rows past the cap, in place.
@@ -156,9 +192,20 @@ func trimChatRecents(m map[chatRecentKey]chatRecent) {
 	}
 }
 
+// clipChatPreview caps a preview to a snippet, in runes.
+func clipChatPreview(s string) string {
+	if utf8.RuneCountInString(s) <= chatRecentPreviewRunes {
+		return s
+	}
+	return string([]rune(s)[:chatRecentPreviewRunes])
+}
+
 // recordChatRecent folds one conversation change into the previews. A dropped
 // (evicted) conversation stays: the bound only trims memory, not recency.
-// Typing alone changes nothing and skips the save.
+// Views without a message record nothing: typing, empty histories and unread
+// seeds carry no preview, and unread is never persisted (C1), so there is
+// nothing to keep. The map updates under the lock; the file follows on a
+// short debounce, never on the caller's (often the plugin reader's) path.
 func (a *App) recordChatRecent(v chat.View) {
 	if v.Plugin == "" || v.FriendID == "" {
 		return
@@ -167,15 +214,15 @@ func (a *App) recordChatRecent(v chat.View) {
 	var sentAt int64
 	if len(v.Messages) > 0 {
 		last := v.Messages[len(v.Messages)-1]
-		from, text, sentAt = last.From, last.Text, last.SentAt
+		from, text, sentAt = last.From, clipChatPreview(last.Text), last.SentAt
+	}
+	if text == "" {
+		return
 	}
 	next := chatRecent{
 		Plugin: v.Plugin, FriendID: v.FriendID,
-		From: from, Text: text, SentAt: sentAt, Unread: v.Unread,
+		From: from, Text: text, SentAt: sentAt,
 		At: time.Now().UnixMilli(),
-	}
-	if next.Unread < 0 {
-		next.Unread = 0
 	}
 	a.chatRecentMu.Lock()
 	defer a.chatRecentMu.Unlock()
@@ -183,23 +230,81 @@ func (a *App) recordChatRecent(v chat.View) {
 		a.chatRecents = map[chatRecentKey]chatRecent{}
 	}
 	k := chatRecentKey{v.Plugin, v.FriendID}
-	old, ok := a.chatRecents[k]
-	if ok && old.Unread == next.Unread &&
-		old.From == next.From && old.Text == next.Text && old.SentAt == next.SentAt {
+	if old, ok := a.chatRecents[k]; ok && old == next {
 		return
-	}
-	// A view without messages (an unread seed the snapshot backfilled, or a
-	// refresh racing a restart) must not wipe the stored preview: the last
-	// message is still the conversation's, only the count is new.
-	if next.Text == "" && ok && old.Text != "" {
-		next.From, next.Text, next.SentAt = old.From, old.Text, old.SentAt
-		if old.Unread == next.Unread {
-			return
-		}
 	}
 	a.chatRecents[k] = next
 	trimChatRecents(a.chatRecents)
-	a.saveChatRecentsLocked()
+	if a.chatRecentPath == "" {
+		return
+	}
+	a.chatRecentDirty = true
+	if a.chatRecentTimer == nil {
+		a.chatRecentTimer = time.AfterFunc(chatRecentSaveDelay, func() { a.flushChatRecents() })
+	}
+}
+
+// forgetChatPlugin drops a plugin's rows and its live conversations: a
+// logout or removal must not leave the previous account's previews behind.
+func (a *App) forgetChatPlugin(id string) {
+	if id == "" {
+		return
+	}
+	a.chatRecentMu.Lock()
+	changed := false
+	for k := range a.chatRecents {
+		if k.plugin == id {
+			delete(a.chatRecents, k)
+			changed = true
+		}
+	}
+	if changed && a.chatRecentPath != "" {
+		a.chatRecentDirty = true
+	}
+	a.chatRecentMu.Unlock()
+	if a.chat != nil {
+		a.chat.Forget(id)
+	}
+	if changed {
+		a.flushChatRecents()
+	}
+}
+
+// pruneChatRecentsOfRemoved drops the rows of plugins a scan no longer
+// finds, after a scan that succeeded (like forgetSettingsOfRemoved, which
+// owns the present set).
+func (a *App) pruneChatRecentsOfRemoved(present map[string]bool) {
+	pruned := map[string]bool{}
+	a.chatRecentMu.Lock()
+	for k := range a.chatRecents {
+		if !present[k.plugin] {
+			delete(a.chatRecents, k)
+			pruned[k.plugin] = true
+		}
+	}
+	if len(pruned) > 0 && a.chatRecentPath != "" {
+		a.chatRecentDirty = true
+	}
+	a.chatRecentMu.Unlock()
+	if a.chat != nil {
+		for id := range pruned {
+			a.chat.Forget(id)
+		}
+	}
+	if len(pruned) > 0 {
+		a.flushChatRecents()
+	}
+}
+
+// chatOffers says whether a plugin's rows may be listed: installed with the
+// chat capability. Readiness is not required, so rows survive until the
+// plugin starts on demand. Without a plugin manager there is nothing to
+// check against, and rows are kept.
+func (a *App) chatOffers(id string) bool {
+	if a.plugins == nil {
+		return true
+	}
+	return a.plugins.Has(id, "chat")
 }
 
 // ChatConversations lists the recent conversations with friends, most recent
@@ -207,7 +312,9 @@ func (a *App) recordChatRecent(v chat.View) {
 // previews, so a reload still lists what the session saw. Views the manager
 // holds win (their unread and open state are current); a persisted preview
 // fills in the last message when memory holds none, and covers the
-// conversations memory dropped. It never returns nil.
+// conversations memory dropped. Persisted rows always come back read:
+// unread comes from the live manager alone. Rows of plugins that no longer
+// offer chat are skipped. It never returns nil.
 func (a *App) ChatConversations() []chat.View {
 	live := map[chatRecentKey]chat.View{}
 	if a.chat != nil {
@@ -242,7 +349,10 @@ func (a *App) ChatConversations() []chat.View {
 		if seen[k] {
 			continue
 		}
-		v := chat.View{Plugin: r.Plugin, FriendID: r.FriendID, Unread: r.Unread, More: r.Text != ""}
+		if !a.chatOffers(r.Plugin) {
+			continue
+		}
+		v := chat.View{Plugin: r.Plugin, FriendID: r.FriendID, More: r.Text != ""}
 		if r.Text != "" {
 			v.Messages = []chat.Message{{From: r.From, Text: r.Text, SentAt: r.SentAt}}
 		} else {

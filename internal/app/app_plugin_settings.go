@@ -223,6 +223,8 @@ func (a *App) forgetSettingsOfRemoved(found []plugins.Plugin) {
 	if err := a.settings.PrunePlugins(func(id string) bool { return present[id] }); err != nil {
 		a.warnf("plugin settings of removed plugins not forgotten: %v", err)
 	}
+	// A removed plugin takes its chat previews with it.
+	a.pruneChatRecentsOfRemoved(present)
 }
 
 // forgetRemovedGameSettings drops the per-game settings of games a store no

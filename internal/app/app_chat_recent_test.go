@@ -3,7 +3,9 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"platypus/internal/chat"
 )
@@ -52,6 +54,7 @@ func TestChatConversationsSurviveForget(t *testing.T) {
 	a := recentsEnv(t)
 	// Memory only until a data dir opens: the listing still works.
 	a.openChatRecents(t.TempDir())
+	t.Cleanup(a.flushChatRecents)
 	echoConfig(t, a, map[string]any{"botDelayMs": 10})
 
 	if _, err := a.ChatOpen("echo", chatAna); err != nil {
@@ -85,8 +88,8 @@ func TestChatConversationsSurviveForget(t *testing.T) {
 	if got[0].FriendID != chatBot || got[1].FriendID != chatAna {
 		t.Fatalf("order = [%s %s], want [bot ana]", got[0].FriendID, got[1].FriendID)
 	}
-	if got[0].Unread != 1 {
-		t.Fatalf("bot unread %d, want 1", got[0].Unread)
+	if got[0].Unread != 0 {
+		t.Fatalf("bot unread %d, want 0: persisted rows come back read, only the live snapshot sets unread (C1)", got[0].Unread)
 	}
 	if len(got[0].Messages) == 0 || got[0].Messages[len(got[0].Messages)-1].Text != "ereht ih" {
 		t.Fatalf("bot preview = %+v, want the reversed reply last", got[0].Messages)
@@ -100,13 +103,13 @@ func TestChatConversationsSurviveForget(t *testing.T) {
 }
 
 // The previews persist across restarts: a fresh App over the same data dir
-// lists them with their unread counts, and a live snapshot's unread merges
-// with the persisted preview.
+// lists them, always read (C1: unread comes only from the live snapshot).
 func TestChatConversationsPersistAcrossRestarts(t *testing.T) {
 	t.Parallel()
 	a := recentsEnv(t)
 	dir := t.TempDir()
 	a.openChatRecents(dir)
+	t.Cleanup(a.flushChatRecents)
 	echoConfig(t, a, map[string]any{"botDelayMs": 10})
 	if _, err := a.ChatOpen("echo", chatBot); err != nil {
 		t.Fatal(err)
@@ -119,6 +122,8 @@ func TestChatConversationsPersistAcrossRestarts(t *testing.T) {
 		return a.chat.Snapshot("echo", chatBot).Unread == 1
 	})
 	waitRecent(t, a, chatBot, "ereht ih")
+	// The save is debounced (C2): flush instead of sleeping for it.
+	a.flushChatRecents()
 	if _, err := os.Stat(filepath.Join(dir, chatRecentFileName)); err != nil {
 		t.Fatalf("no recents file: %v", err)
 	}
@@ -126,8 +131,8 @@ func TestChatConversationsPersistAcrossRestarts(t *testing.T) {
 	b := &App{host: stderrHost{}}
 	b.openChatRecents(dir)
 	got := b.ChatConversations()
-	if len(got) != 1 || got[0].FriendID != chatBot || got[0].Unread != 1 {
-		t.Fatalf("after restart: %+v, want the bot with 1 unread", got)
+	if len(got) != 1 || got[0].FriendID != chatBot || got[0].Unread != 0 {
+		t.Fatalf("after restart: %+v, want the bot read with its preview", got)
 	}
 	if len(got[0].Messages) == 0 || got[0].Messages[len(got[0].Messages)-1].Text != "ereht ih" {
 		t.Fatalf("after restart preview = %+v", got[0].Messages)
@@ -161,15 +166,30 @@ func TestChatRecentsFileVersions(t *testing.T) {
 		t.Fatal("a newer file loaded conversations")
 	}
 
-	old := `{"version":1,"recents":[{"plugin":"echo","friendId":"9","unread":2}]}`
+	old := `{"version":1,"recents":[{"plugin":"echo","friendId":"9","unread":2,"text":"stale hi","sentAt":11,"at":12}]}`
 	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	c := &App{host: stderrHost{}}
 	c.openChatRecents(dir)
 	got := c.ChatConversations()
-	if len(got) != 1 || got[0].FriendID != "9" || got[0].Unread != 2 || len(got[0].Messages) != 0 {
-		t.Fatalf("old file: %+v, want the unread-only row", got)
+	if len(got) != 1 || got[0].FriendID != "9" || got[0].Unread != 0 {
+		t.Fatalf("old file: %+v, want the row read: persisted unread never applies (C1)", got)
+	}
+	if len(got[0].Messages) == 0 || got[0].Messages[0].Text != "stale hi" {
+		t.Fatalf("old file: %+v, want the preview kept", got)
+	}
+
+	// An old row without a preview carries nothing now: no unread is
+	// persisted and there is no text to show, so it is dropped at load.
+	older := `{"version":1,"recents":[{"plugin":"echo","friendId":"8","unread":2}]}`
+	if err := os.WriteFile(path, []byte(older), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := &App{host: stderrHost{}}
+	d.openChatRecents(dir)
+	if got := d.ChatConversations(); len(got) != 0 {
+		t.Fatalf("preview-less row: %+v, want nothing listed", got)
 	}
 }
 
@@ -185,5 +205,137 @@ func TestChatConversationsMemoryOnly(t *testing.T) {
 	got := a.ChatConversations()
 	if len(got) != 1 || got[0].FriendID != chatAna {
 		t.Fatalf("ChatConversations() = %+v, want ana from memory", got)
+	}
+}
+
+// A persisted preview is a snippet (C2/C4): a long message is clipped to
+// about 200 runes before it reaches the file.
+func TestChatRecentPreviewIsClipped(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	a := &App{host: stderrHost{}}
+	a.openChatRecents(dir)
+	t.Cleanup(a.flushChatRecents)
+	long := strings.Repeat("é", 500)
+	a.recordChatRecent(chat.View{
+		Plugin: "echo", FriendID: "1",
+		Messages: []chat.Message{{From: "1", Text: long, SentAt: 7}},
+	})
+	a.flushChatRecents()
+	b := &App{host: stderrHost{}}
+	b.openChatRecents(dir)
+	got := b.ChatConversations()
+	if len(got) != 1 || utf8.RuneCountInString(got[0].Messages[0].Text) != chatRecentPreviewRunes {
+		t.Fatalf("preview holds %d runes, want %d", utf8.RuneCountInString(got[0].Messages[0].Text), chatRecentPreviewRunes)
+	}
+	if want := strings.Repeat("é", chatRecentPreviewRunes); got[0].Messages[0].Text != want {
+		t.Fatal("preview is not the message's first 200 runes")
+	}
+}
+
+// Recording never writes on the caller's path (C2): a burst of incoming
+// messages marks rows dirty, and one background save covers them. Tests
+// flush instead of sleeping for the debounce.
+func TestChatRecentsSaveIsDebounced(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	a := &App{host: stderrHost{}}
+	a.openChatRecents(dir)
+	t.Cleanup(a.flushChatRecents)
+	a.recordChatRecent(chat.View{
+		Plugin: "echo", FriendID: "1",
+		Messages: []chat.Message{{From: "1", Text: "hi", SentAt: 7}},
+	})
+	if _, err := os.Stat(filepath.Join(dir, chatRecentFileName)); !os.IsNotExist(err) {
+		t.Fatal("record wrote the file synchronously; saves must be debounced")
+	}
+	a.flushChatRecents()
+	b := &App{host: stderrHost{}}
+	b.openChatRecents(dir)
+	if got := b.ChatConversations(); len(got) != 1 || got[0].FriendID != "1" {
+		t.Fatalf("after flush: %+v, want the row", got)
+	}
+}
+
+// Logging out ends the account's chats (C3): its rows are deleted and its
+// live conversations forgotten, so the next account starts with no Chats.
+func TestChatRecentsClearedOnLogout(t *testing.T) {
+	t.Parallel()
+	a := recentsEnv(t)
+	dir := t.TempDir()
+	a.openChatRecents(dir)
+	t.Cleanup(a.flushChatRecents)
+	a.recordChatRecent(chat.View{
+		Plugin: "echo", FriendID: chatBot,
+		Messages: []chat.Message{{From: chatBot, Text: "hi", SentAt: 1}},
+	})
+	a.flushChatRecents()
+	if got := a.ChatConversations(); len(got) != 1 {
+		t.Fatalf("before logout: %+v, want the row", got)
+	}
+	if _, err := a.PluginLogout("echo"); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.ChatConversations(); len(got) != 0 {
+		t.Fatalf("after logout: %+v, want no rows", got)
+	}
+	if v := a.chat.Snapshot("echo", chatBot); len(v.Messages) != 0 || v.Unread != 0 {
+		t.Fatalf("after logout the live conversation survived: %+v", v)
+	}
+	b := &App{host: stderrHost{}}
+	b.openChatRecents(dir)
+	if got := b.ChatConversations(); len(got) != 0 {
+		t.Fatalf("after logout the file still lists: %+v", got)
+	}
+}
+
+// Rows of plugins that no longer offer chat are never listed (C3): an
+// uninstalled store's friend ids and previews stay off the Chats tab, even
+// though its rows are still on disk until the next rescan prunes them.
+func TestChatConversationsSkipsPluginsWithoutChat(t *testing.T) {
+	t.Parallel()
+	a := recentsEnv(t)
+	dir := t.TempDir()
+	a.openChatRecents(dir)
+	t.Cleanup(a.flushChatRecents)
+	a.recordChatRecent(chat.View{
+		Plugin: "echo", FriendID: chatBot,
+		Messages: []chat.Message{{From: chatBot, Text: "hi", SentAt: 1}},
+	})
+	a.recordChatRecent(chat.View{
+		Plugin: "ghost", FriendID: "1",
+		Messages: []chat.Message{{From: "1", Text: "old account", SentAt: 2}},
+	})
+	got := a.ChatConversations()
+	if len(got) != 1 || got[0].Plugin != "echo" {
+		t.Fatalf("ChatConversations() = %+v, want only echo", got)
+	}
+}
+
+// A rescan that no longer finds a plugin takes its rows with it (C3).
+func TestChatRecentsPrunedOnRemoval(t *testing.T) {
+	t.Parallel()
+	a := recentsEnv(t)
+	dir := t.TempDir()
+	a.openChatRecents(dir)
+	t.Cleanup(a.flushChatRecents)
+	a.recordChatRecent(chat.View{
+		Plugin: "echo", FriendID: chatBot,
+		Messages: []chat.Message{{From: chatBot, Text: "hi", SentAt: 1}},
+	})
+	a.recordChatRecent(chat.View{
+		Plugin: "ghost", FriendID: "1",
+		Messages: []chat.Message{{From: "1", Text: "old account", SentAt: 2}},
+	})
+	a.flushChatRecents()
+	a.forgetSettingsOfRemoved(a.plugins.Plugins())
+	got := a.ChatConversations()
+	if len(got) != 1 || got[0].Plugin != "echo" {
+		t.Fatalf("after the rescan: %+v, want only echo", got)
+	}
+	b := &App{host: stderrHost{}}
+	b.openChatRecents(dir)
+	if got := b.ChatConversations(); len(got) != 1 || got[0].Plugin != "echo" {
+		t.Fatalf("after the rescan the file still lists: %+v", got)
 	}
 }
