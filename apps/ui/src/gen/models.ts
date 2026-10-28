@@ -230,6 +230,7 @@ export namespace types {
     steam_app_id_source?: string;
     native: boolean;
     ratings_online: boolean;
+    protection_online: boolean;
     wiki?: types.WikiCredit | null;
   }
 
@@ -647,6 +648,13 @@ export namespace types {
     skipped: string[];
     verbs: string[];
     windows_version: string;
+  }
+
+  export interface PrefixBackup {
+    name: string;
+    path: string;
+    bytes: number;
+    at: number;
   }
 
   export interface PrefixGame {

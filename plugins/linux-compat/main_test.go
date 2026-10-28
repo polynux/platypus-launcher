@@ -37,6 +37,13 @@ func TestInitializeNegotiatesCompatFactsProtocol(t *testing.T) {
 	if result["protocol"] != "1.17" {
 		t.Fatalf("protocol = %v, want 1.17", result["protocol"])
 	}
+	// 1.18 splits the online state of compat.lookup: offering it wins.
+	params, _ = json.Marshal(map[string]any{"protocols": []string{"1.6", "1.17", "1.18"}})
+	resp = handle(context.Background(), message{Method: "initialize", Params: params})
+	result = resp.Result.(map[string]any)
+	if result["protocol"] != "1.18" {
+		t.Fatalf("protocol = %v, want 1.18", result["protocol"])
+	}
 }
 
 func TestLookupReturnsProtonDBBadgeBySteamAppID(t *testing.T) {

@@ -662,7 +662,9 @@ that doesn't know it.
   the `runner` capability (`runner.list`, `runner.options`, `runner.wrap`,
   `runner.actions`, `runner.runAction`, `runner.crashHints`), the
   `save-context` capability (`game.saveContext`), and
-  `LibraryGame.clientLaunch; 1.18: `game.clientStatus` (see [Client launch status](#client-launch-status-118)); see [Compat facts](#compat-facts-117),
+  `LibraryGame.clientLaunch`; 1.18: the split ratings and protection state of
+  `compat.lookup` (`protectionOnline`, see [Compat facts](#compat-facts-117))
+  and `game.clientStatus` (see [Client launch status](#client-launch-status-118)); see [Compat facts](#compat-facts-117),
   [Runner](#runner-117), and [Save context](#save-context-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
@@ -1229,8 +1231,7 @@ Mapping hints for plugins, from their own store fields:
 
 The `compat-facts` capability supplies store-independent compatibility facts in
 batches. The core owns caching and background refresh; rendering never waits for
-the plugin. Protocol 1.17 is unpublished, so the online-state extension below
-remains part of 1.17; it does not introduce a 1.18 version.
+the plugin.
 
 ```json
 compat.lookup { "games": [{ "id": "game-id", "store": "steam",
@@ -1270,7 +1271,12 @@ titles are never used.
 - **`protectionOnline`.** Whether the protection sources (PCGamingWiki,
   AreWeAntiCheatYet) may be queried. Same rules as `online`, with its own
   switch since issue #150 ("Fetch protection data online"); false when offline
-  or when that switch is off, whatever `online` says.
+  or when that switch is off, whatever `online` says. Added in 1.18: a provider
+  that only negotiated 1.17 or earlier knows just `online`, and gates every
+  source on it. Platypus then sends `online` as the intersection of both
+  switches (`ratings && protection`) and stores that answer as fetched with
+  both, so a switch the provider can't honour never makes it ask again in a
+  loop. Such a provider gets neither source while either switch is off.
 
 An optional `report` summarizes the provider's report count: `state` is
 `rated`, `few` or `none`; `count` is the number of reports when known, and

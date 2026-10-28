@@ -287,7 +287,9 @@ func handle(ctx context.Context, req message) message {
 		_ = json.Unmarshal(req.Params, &p)
 		chosen := "1.0"
 		for _, v := range p.Protocols {
-			if v == "1.17" {
+			// 1.18 is the newest this provider speaks: it splits the online
+			// state of compat.lookup (online / protectionOnline).
+			if v == "1.17" || v == "1.18" {
 				chosen = v
 			}
 		}

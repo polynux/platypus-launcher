@@ -1,9 +1,11 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"unicode/utf8"
 
@@ -338,4 +340,87 @@ func TestChatRecentsPrunedOnRemoval(t *testing.T) {
 	if got := b.ChatConversations(); len(got) != 1 || got[0].Plugin != "echo" {
 		t.Fatalf("after the rescan the file still lists: %+v", got)
 	}
+}
+
+// A view that arrives late is older than one already recorded (C5): the
+// manager stamps every change with a rising seq, so the preview keeps the
+// newer message instead of being rewritten by the straggler.
+func TestChatRecentsDropAnOutOfOrderView(t *testing.T) {
+	t.Parallel()
+	a := &App{host: stderrHost{}}
+	a.openChatRecents(t.TempDir())
+	t.Cleanup(a.flushChatRecents)
+	view := func(seq uint64, text string) chat.View {
+		return chat.View{
+			Seq: seq, Plugin: "echo", FriendID: "1",
+			Messages: []chat.Message{{From: "1", Text: text, SentAt: 3}},
+		}
+	}
+	a.recordChatRecent(view(9, "newest"))
+	a.recordChatRecent(view(4, "stale"))
+	got := a.ChatConversations()
+	if len(got) != 1 || got[0].Messages[0].Text != "newest" {
+		t.Fatalf("preview = %+v, want the newer message kept", got)
+	}
+	a.recordChatRecent(view(10, "newer still"))
+	got = a.ChatConversations()
+	if len(got) != 1 || got[0].Messages[0].Text != "newer still" {
+		t.Fatalf("preview = %+v, want the newer message recorded", got)
+	}
+}
+
+// chatClearedHost records the "chat" events an App emits in tests.
+type chatClearedHost struct {
+	mu     sync.Mutex
+	events []chat.Event
+}
+
+func (h *chatClearedHost) Emit(event string, data ...any) {
+	if event != "chat" || len(data) == 0 {
+		return
+	}
+	e, ok := data[0].(chat.Event)
+	if !ok {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.events = append(h.events, e)
+}
+
+func (h *chatClearedHost) Infof(string, ...any)  {}
+func (h *chatClearedHost) Warnf(string, ...any)  {}
+func (h *chatClearedHost) Errorf(string, ...any) {}
+
+func (h *chatClearedHost) OpenFile(FileDialog) (string, error) {
+	return "", errors.New("no dialog in tests")
+}
+
+func (h *chatClearedHost) OpenDirectory(DirectoryDialog) (string, error) {
+	return "", errors.New("no dialog in tests")
+}
+
+// Logging out clears the account's chats in the open window too (C6): the
+// rows it holds are its own, so the core says they are gone with a dropped
+// event that names the store and no friend.
+func TestChatRecentsClearedOnLogoutIsAnnounced(t *testing.T) {
+	t.Parallel()
+	a := recentsEnv(t)
+	host := &chatClearedHost{}
+	a.host = host
+	a.recordChatRecent(chat.View{
+		Plugin: "echo", FriendID: chatBot,
+		Messages: []chat.Message{{From: chatBot, Text: "hi", SentAt: 1}},
+	})
+	if _, err := a.PluginLogout("echo"); err != nil {
+		t.Fatal(err)
+	}
+	host.mu.Lock()
+	defer host.mu.Unlock()
+	for _, e := range host.events {
+		if e.Dropped && e.Plugin == "echo" && e.FriendID == "" {
+			return
+		}
+	}
+	t.Fatalf("logout emitted %+v, want a dropped event for the whole store", host.events)
 }

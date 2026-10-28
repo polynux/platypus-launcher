@@ -61,6 +61,7 @@ vi.mock('../../effect/runtime', () => ({
     getLauncherSettings: (...a: unknown[]) => mock.getLauncherSettings(...a),
     listThemes: (...a: unknown[]) => mock.listThemes(...a),
     socialViews: (...a: unknown[]) => mock.socialViews(...a),
+    prefixBackups: () => Effect.succeed([] as never),
   },
   onDiskUsage: (cb: (d: unknown) => void) => {
     mock.subs.push(cb);

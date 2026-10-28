@@ -2,17 +2,21 @@
 import { useTranslation } from 'react-i18next';
 import React, { useMemo, useState } from 'react';
 import { FolderInput, FolderOpen, HardDrive, HardDriveDownload, Loader2, RefreshCw, ScanLine, Trash2, TriangleAlert } from 'lucide-react';
-import type { DiskUsage, Game, Job, RemoveOptions } from '../types';
+import type { DiskUsage, Game, Job, PrefixBackup, RemoveOptions } from '../types';
 import { ATLAS_PAGE, Cover, EmptyState, MonoLabel, ViewHeader } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { RemoveConfirmPanel, RemoveFirstRow, parentFolder, useRemoveCheck } from './MaintenanceTab';
 import { MoveDialog } from './MoveDialog';
+import { Modal } from './Modal';
 import { formatBytes, heroImages, isPluginGame, lastPlayedAgo, storeLabel } from '../lib/games';
 import { ThemeLayout } from '../lib/layout';
 import { useThemeLayout, useVariant } from '../lib/theme';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
 import { useStorageData, type StorageData } from './useStorageData';
+
+/** The suffix ResetPrefix gives a backup folder, past the game's id. */
+const BACKUP_SUFFIX = /\.bak-\d+(-\d+)?$/;
 
 /** The figure for a byte count: formatBytes has no output for 0, and an
  *  unreadable disk (-1) shows an em dash instead of a made-up size. */
@@ -83,6 +87,11 @@ function ClassicStorage({ data }: { data: ReturnType<typeof useStorageData> }) {
             ? 'grid gap-5 xl:grid-cols-[1.75fr_1fr]'
             : undefined}
       />
+      {data.backups.length > 0 && (
+        <div className="mt-6">
+          <PrefixBackups backups={data.backups} data={data} />
+        </div>
+      )}
     </div>
   );
 }
@@ -468,6 +477,73 @@ function AtlasStorage({ data }: { data: StorageData }) {
   );
 }
 
+/** The prefix backups the resets left behind (issue #163): each one listed
+ *  with the space it takes, and deleted from here — behind a confirm, since
+ *  the old drive_c holds the game's saves. Hidden when a reset never left
+ *  one, which is the usual case. */
+function PrefixBackups({ backups, data }: { backups: PrefixBackup[]; data: StorageData }) {
+  const { t } = useTranslation(['storage', 'common']);
+  // The backup whose delete was asked for, and that is now waiting for the
+  // confirmation: deleting one is permanent, saves included.
+  const [pending, setPending] = useState<PrefixBackup | null>(null);
+  if (backups.length === 0) return null;
+  // Who the backup belongs to: its folder carries the game's id, so the
+  // library names it, and the id stands in for a game that left the library.
+  const titleOf = (backup: PrefixBackup) =>
+    data.library.find((g) => backup.name.startsWith(`${g.id}.bak-`))?.title ?? backup.name.replace(BACKUP_SUFFIX, '');
+  const remove = (backup: PrefixBackup) => {
+    void data.deleteBackup(backup).then((freed) => {
+      if (freed !== null) data.onNotify(t('storage:backups.deleted', { name: backup.name, size: figure(freed) }), 'ok');
+    });
+  };
+  return (
+    <section className="rounded-xl bg-surface px-4 py-3.5">
+      <h2 className="mb-2 text-[14px] font-bold">{t('storage:backups.title')}</h2>
+      <p className="mb-2 text-[12.5px] text-text-muted">{t('storage:backups.intro')}</p>
+      <ul className="divide-y divide-hairline">
+        {backups.map((backup) => (
+          <li key={backup.path} className="flex items-center gap-2 py-2 text-[12.5px]">
+            <span className="min-w-0 flex-1 truncate select-text" title={backup.path}>{backup.name}</span>
+            <span className="tabular-nums text-text-muted">{figure(backup.bytes)}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              aria-label={t('storage:backups.delete', { name: backup.name })}
+              onClick={() => setPending(backup)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {pending && (
+        <Modal label={t('storage:backups.confirmTitle')} onClose={() => setPending(null)} size="sm">
+          <div className="p-6">
+            <h2 className="mb-2 text-[17px] font-bold">{t('storage:backups.confirmTitle')}</h2>
+            <p className="text-[13px] leading-relaxed text-text-muted">
+              {t('storage:backups.confirmBody', { title: titleOf(pending), name: pending.name, size: figure(pending.bytes) })}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" autoFocus onClick={() => setPending(null)}>{t('common:cancel')}</Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  const backup = pending;
+                  setPending(null);
+                  remove(backup);
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> {t('storage:backups.confirmGo')}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </section>
+  );
+}
+
 function AtlasDriveCard({ drive: d, rows, data, defaultFolder }: { drive: DiskUsage['drives'][number]; rows: DiskUsage['games'][number][]; data: StorageData; defaultFolder?: string }) {
   const { t } = useTranslation(['storage', 'gameSettings', 'common']);
   const known = d.total_bytes > 0;
@@ -662,5 +738,6 @@ function StoragePanels({ outside, leftovers, otherLeftovers, defaultFolder, data
         );
       })}
     </section>
+    <PrefixBackups backups={data.backups} data={data} />
   </div>;
 }

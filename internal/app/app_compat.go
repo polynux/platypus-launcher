@@ -184,7 +184,11 @@ func storeLauncherName(raw string) string {
 
 // GetGameCompat returns the compatibility and protection facts of a game.
 func (a *App) GetGameCompat(game types.Game) types.Compat {
-	c := types.Compat{RatingsOnline: a.settings == nil || a.settings.RatingsOnline(), Badges: []types.CompatBadge{}}
+	c := types.Compat{
+		RatingsOnline:    a.settings == nil || a.settings.RatingsOnline(),
+		ProtectionOnline: a.settings == nil || a.settings.ProtectionOnline(),
+		Badges:           []types.CompatBadge{},
+	}
 	hints := a.pluginHints(game)
 	a.requestCompatFacts([]types.Game{game}, func(types.Game) *types.GameDetails { return hints })
 	c.Native = game.Native || (hints != nil && slices.Contains(hints.Platforms, "linux"))

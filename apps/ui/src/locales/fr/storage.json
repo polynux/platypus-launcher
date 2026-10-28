@@ -51,5 +51,14 @@
     "canceledUpdate": "mise à jour annulée",
     "clean": "Nettoyer {{size}}",
     "nothingLeft": "Aucun fichier restant."
+  },
+  "backups": {
+    "title": "Sauvegardes de préfixes",
+    "intro": "Anciens préfixes Wine conservés quand une réinitialisation les a remplacés. Une sauvegarde de préfixe peut encore contenir les sauvegardes de vos jeux : ne supprimez que ce dont vous n'avez plus besoin.",
+    "delete": "Supprimer {{name}}",
+    "confirmTitle": "Supprimer cette sauvegarde de préfixe ?",
+    "confirmBody": "L'ancien préfixe Wine de « {{title}} » ({{name}}, {{size}}) sera définitivement supprimé, avec les sauvegardes de jeu qu'il contient encore.",
+    "confirmGo": "Supprimer définitivement",
+    "deleted": "{{name}} supprimé, {{size}} libérés."
   }
 }

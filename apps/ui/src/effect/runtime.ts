@@ -47,6 +47,7 @@ import type {
   RestorePreview,
   AutoBackupState,
   PrefixApplyResult,
+  PrefixBackup,
   PrefixResetResult,
   PrefixPreset,
   PrefixShare,
@@ -585,6 +586,11 @@ export const LauncherApi = {
   // refuses user-chosen folders outside the prefixes root, prefix-less games
   // and running games; the UI confirms first.
   resetPrefix: (gameId: string) => call<PrefixResetResult>('ResetPrefix', () => App.ResetPrefix(gameId)),
+
+  // The prefix backups the resets left in the prefixes folder (issue #163):
+  // listed with the space they take, and deleted for good.
+  prefixBackups: () => call<PrefixBackup[]>('PrefixBackups', async () => (await App.PrefixBackups()) ?? []),
+  deletePrefixBackup: (path: string) => call<number>('DeletePrefixBackup', () => App.DeletePrefixBackup(path)),
 
   // Friends lists of the stores that offer them (protocol 1.6).
   socialViews: () => call<SocialView[]>('SocialViews', async () => (await App.SocialViews()) ?? []),

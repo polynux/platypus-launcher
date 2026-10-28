@@ -856,6 +856,16 @@ type PrefixResetResult struct {
 	Backup string `json:"backup,omitempty"`
 }
 
+// PrefixBackup is one prefix ResetPrefix kept next to the fresh one: the
+// folder, the space it takes, and when it was moved aside (unix seconds, read
+// from the folder's name).
+type PrefixBackup struct {
+	Name  string `json:"name"`
+	Path  string `json:"path"`
+	Bytes int64  `json:"bytes"`
+	At    int64  `json:"at"`
+}
+
 // Relocation says core moved a game's folder: the folder the plugin reports
 // (From) and where the game is now (To). It is kept until the plugin reports
 // the new folder itself (game.relocated) or the game is moved again.

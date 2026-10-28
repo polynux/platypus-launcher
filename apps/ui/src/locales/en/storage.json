@@ -51,5 +51,14 @@
     "canceledUpdate": "canceled update",
     "clean": "Clean {{size}}",
     "nothingLeft": "Nothing left behind."
+  },
+  "backups": {
+    "title": "Prefix backups",
+    "intro": "Old Wine prefixes kept when a reset replaced them. A backup may still hold saves from before the reset, so delete only what you no longer need.",
+    "delete": "Delete {{name}}",
+    "confirmTitle": "Delete this prefix backup?",
+    "confirmBody": "The old Wine prefix of {{title}} ({{name}}, {{size}}) is deleted for good, with any saves it still holds.",
+    "confirmGo": "Delete for good",
+    "deleted": "Deleted {{name}} and freed {{size}}."
   }
 }

@@ -57,6 +57,7 @@ describe('CompatFacts', () => {
     steam_app_id_source: 'plugin',
     native: true,
     ratings_online: true,
+    protection_online: true,
     badges: [...pdb('platinum')!, { kind: 'online', label: 'Online required', detail: 'The store says it needs the network.', source: 'Epic', checked_at: 1791589136 }, { kind: 'anticheat', label: 'Easy Anti-Cheat', detail: 'Linux: supported.', source: 'AreWeAntiCheatYet (MIT)', checked_at: 1791589136 }],
     notes: ['Echo fixture notes'],
   };
@@ -115,7 +116,7 @@ describe('CompatFacts', () => {
   });
 
   it('says so when nothing is reported, and leaves out a rating that was never asked for', () => {
-    const { getByText, queryByText } = render(<CompatFacts compat={{ native: false, ratings_online: false, badges: [] }} />);
+    const { getByText, queryByText } = render(<CompatFacts compat={{ native: false, ratings_online: false, protection_online: false, badges: [] }} />);
     expect(getByText('No DRM or anti-cheat reported for this game.')).toBeTruthy();
     expect(queryByText(/reports/)).toBeNull();
   });

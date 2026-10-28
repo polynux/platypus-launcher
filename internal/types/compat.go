@@ -21,6 +21,9 @@ type Compat struct {
 	// RatingsOnline says whether Platypus may fetch ratings from the network
 	// (the "Fetch ratings online" setting).
 	RatingsOnline bool `json:"ratings_online"`
+	// ProtectionOnline says whether it may fetch protection facts from the
+	// network (the "Fetch protection data online" setting, issue #150).
+	ProtectionOnline bool `json:"protection_online"`
 	// Wiki credits PCGamingWiki for the facts above that came from it: nil when
 	// none did. The UI shows the licence line and the page with it.
 	Wiki *WikiCredit `json:"wiki,omitempty"`

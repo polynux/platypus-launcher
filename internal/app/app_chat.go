@@ -46,6 +46,17 @@ func (a *App) startChat(ctx context.Context) {
 	})
 }
 
+// chatCleared tells the UI that a store's conversations are gone: a logout or
+// a removal drops its previews and its live conversations, and the rows it
+// already holds are its own (they came from ChatConversations or a view). A
+// dropped event with no friend means every conversation of the store.
+func (a *App) chatCleared(id string) {
+	if a.host == nil || id == "" {
+		return
+	}
+	a.host.Emit("chat", chat.Event{View: chat.View{Plugin: id}, Dropped: true})
+}
+
 // chatPlugins are the ready plugins that offer chat.
 func (a *App) chatPlugins() []string {
 	var ids []string

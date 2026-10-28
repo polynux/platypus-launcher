@@ -18,6 +18,7 @@ vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
     getDiskUsage: () => Effect.succeed(usage()),
     getGameFolders: () => Effect.succeed([{ path: '/mnt/a/Games', is_default: true, exists: true, free_bytes: 40 * GB }]),
+    prefixBackups: () => Effect.succeed([]),
     listActivity: () => Effect.succeed([] as never),
     listJobs: () => Effect.succeed([]),
     refreshDiskUsage: () => Effect.succeed(usage()),
@@ -33,6 +34,7 @@ vi.mock('../../effect/runtime', () => ({
     mock.subs.push(cb);
     return () => {};
   },
+  onLibrary: () => () => {},
 }));
 
 import { StorageView } from '../StorageView';

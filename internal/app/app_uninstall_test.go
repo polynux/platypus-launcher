@@ -280,3 +280,51 @@ func TestUninstallPickedThemeFallsBack(t *testing.T) {
 		t.Fatalf("theme = %q, want the built-in default (empty)", got)
 	}
 }
+
+// A disabled plugin's themes aren't in the picker (only ready ones are), so
+// the picked theme's source has to be found on the plugin itself: uninstalling
+// it still falls back to the default (issue #163).
+func TestUninstallPickedThemeOfDisabledPluginFallsBack(t *testing.T) {
+	t.Parallel()
+	a, mgr := themeApp(t, "fixture-theme", "fixture", pluginThemeTOML, map[string][]byte{
+		"assets/bg.png": pluginThemePNG,
+	})
+	a.dataDir = t.TempDir()
+	a.host = stderrHost{}
+	a.data = dataplug.NewRegistry()
+	a.library.snapDir = filepath.Join(a.dataDir, "library-snapshots")
+	var err error
+	a.jobs, err = jobs.Open(filepath.Join(a.dataDir, "jobs.json"), jobBackend{a}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.Approve("fixture-theme"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.settings.SetTheme("fixture"); err != nil {
+		t.Fatal(err)
+	}
+	state, ok := a.settings.PluginState("fixture-theme")
+	if !ok {
+		t.Fatal("no plugin state after the approval")
+	}
+	state.Enabled = false
+	if err := a.settings.SetPluginState("fixture-theme", state); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.Discover(); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := mgr.Plugin("fixture-theme"); p.Status != plugins.StatusDisabled {
+		t.Fatalf("status = %q, want the plugin disabled", p.Status)
+	}
+	if got := a.pickedTheme(); got != "fixture" {
+		t.Fatalf("picked theme with the plugin disabled = %q, want the setting kept", got)
+	}
+	if err := a.UninstallPlugin("fixture-theme", false); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.settings.Theme(); got != "" {
+		t.Fatalf("theme = %q, want the built-in default (empty)", got)
+	}
+}

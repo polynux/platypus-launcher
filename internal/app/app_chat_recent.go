@@ -67,6 +67,7 @@ func (a *App) openChatRecents(dataDir string) {
 	defer a.chatRecentMu.Unlock()
 	a.chatRecentPath = ""
 	a.chatRecents = map[chatRecentKey]chatRecent{}
+	a.chatRecentSeq = map[chatRecentKey]uint64{}
 	if dataDir == "" {
 		return
 	}
@@ -206,6 +207,9 @@ func clipChatPreview(s string) string {
 // seeds carry no preview, and unread is never persisted (C1), so there is
 // nothing to keep. The map updates under the lock; the file follows on a
 // short debounce, never on the caller's (often the plugin reader's) path.
+// A view older than the one already seen for that conversation is dropped:
+// the manager stamps each change with a rising Seq, so a late emit can't put
+// an old preview back.
 func (a *App) recordChatRecent(v chat.View) {
 	if v.Plugin == "" || v.FriendID == "" {
 		return
@@ -229,7 +233,14 @@ func (a *App) recordChatRecent(v chat.View) {
 	if a.chatRecents == nil {
 		a.chatRecents = map[chatRecentKey]chatRecent{}
 	}
+	if a.chatRecentSeq == nil {
+		a.chatRecentSeq = map[chatRecentKey]uint64{}
+	}
 	k := chatRecentKey{v.Plugin, v.FriendID}
+	if last, ok := a.chatRecentSeq[k]; ok && v.Seq < last {
+		return
+	}
+	a.chatRecentSeq[k] = v.Seq
 	if old, ok := a.chatRecents[k]; ok && old == next {
 		return
 	}
@@ -246,6 +257,8 @@ func (a *App) recordChatRecent(v chat.View) {
 
 // forgetChatPlugin drops a plugin's rows and its live conversations: a
 // logout or removal must not leave the previous account's previews behind.
+// The window hears about it: its rows are its own (some never came back
+// through a view), so it can't tell they are gone otherwise.
 func (a *App) forgetChatPlugin(id string) {
 	if id == "" {
 		return
@@ -258,6 +271,11 @@ func (a *App) forgetChatPlugin(id string) {
 			changed = true
 		}
 	}
+	for k := range a.chatRecentSeq {
+		if k.plugin == id {
+			delete(a.chatRecentSeq, k)
+		}
+	}
 	if changed && a.chatRecentPath != "" {
 		a.chatRecentDirty = true
 	}
@@ -268,6 +286,7 @@ func (a *App) forgetChatPlugin(id string) {
 	if changed {
 		a.flushChatRecents()
 	}
+	a.chatCleared(id)
 }
 
 // pruneChatRecentsOfRemoved drops the rows of plugins a scan no longer
@@ -282,6 +301,12 @@ func (a *App) pruneChatRecentsOfRemoved(present map[string]bool) {
 			pruned[k.plugin] = true
 		}
 	}
+	for k := range a.chatRecentSeq {
+		if !present[k.plugin] {
+			delete(a.chatRecentSeq, k)
+			pruned[k.plugin] = true
+		}
+	}
 	if len(pruned) > 0 && a.chatRecentPath != "" {
 		a.chatRecentDirty = true
 	}
@@ -293,6 +318,9 @@ func (a *App) pruneChatRecentsOfRemoved(present map[string]bool) {
 	}
 	if len(pruned) > 0 {
 		a.flushChatRecents()
+		for id := range pruned {
+			a.chatCleared(id)
+		}
 	}
 }
 
@@ -376,9 +404,11 @@ func (a *App) ChatConversations() []chat.View {
 	return out
 }
 
-// lastChatAt is what a conversation sorts by: its last message, or, when it
-// holds none, its sequence (a live unread seed) — zero for a persisted row
-// without a preview, which sorts last.
+// lastChatAt is what the listing sorts by: the last message's SentAt, or 0
+// when the conversation holds none (a live unread seed, or a persisted row
+// without a preview), which sorts last. The file's own order uses At instead
+// (see chatRecent.At): that one is the last change, the listing is the last
+// message.
 func lastChatAt(v chat.View) int64 {
 	if len(v.Messages) > 0 {
 		return v.Messages[len(v.Messages)-1].SentAt
