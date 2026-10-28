@@ -859,11 +859,15 @@ type DiskUsage struct {
 // DriveUsage is one drive's share: what Platypus games use (GamesBytes, from
 // the game files and prefixes measured separately), what else is on it
 // (OtherBytes, derived from the filesystem totals, never scanned) and what
-// is free.
+// is free. FsType and DeviceKind say what the drive is (issue #148); Label is
+// the filesystem's own label, "" when it has none.
 type DriveUsage struct {
 	ID         string   `json:"id"`
 	Mount      string   `json:"mount"`
 	Folders    []string `json:"folders"`
+	FsType     string   `json:"fs_type"`     // ext4, btrfs, nfs, "" when unknown
+	DeviceKind string   `json:"device_kind"` // nvme, ssd, hdd, removable, network, "" when unknown
+	Label      string   `json:"label,omitempty"`
 	TotalBytes int64    `json:"total_bytes"` // -1 when the disk can't be read
 	FreeBytes  int64    `json:"free_bytes"`  // -1 when the disk can't be read
 	GamesBytes int64    `json:"games_bytes"`

@@ -306,6 +306,9 @@ export namespace types {
     id: string;
     mount: string;
     folders: string[];
+    fs_type: string;
+    device_kind: string;
+    label?: string;
     total_bytes: number;
     free_bytes: number;
     games_bytes: number;

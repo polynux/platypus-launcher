@@ -18,7 +18,7 @@ import { StorageView } from '../StorageView';
 
 const mk = (id: string, install_dir: string): Game => ({ id, source: 'steam', store: 'steam', store_app_id: id, title: id, cover_url: '', banner_url: '', hero_url: '', install_dir, executable: `${install_dir}/run`, is_installed: true, outside_folder: id === 'outside', size_bytes: 3e9, settings: {}, features: [] }) as Game;
 const usage: DiskUsage = {
-  drives: [{ id: '/', mount: '/', folders: ['/home/games'], total_bytes: 100e9, free_bytes: 30e9, games_bytes: 10e9, other_bytes: 60e9 }],
+  drives: [{ id: '/', mount: '/', folders: ['/home/games'], fs_type: '', device_kind: '', total_bytes: 100e9, free_bytes: 30e9, games_bytes: 10e9, other_bytes: 60e9 }],
   games: [{ game_id: 'inside', title: 'Inside', source: 'steam', store: 'steam', install_dir: '/home/games/Inside', size_bytes: 10e9, prefix_bytes: 0, from_plugin: false, measured: true }],
   scanning: false, generated_at: 1,
 };
@@ -43,6 +43,16 @@ describe('Atlas Storage panels', () => {
     expect(screen.getByText('Moved: /old')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Clean 12.0 GB' }));
     await waitFor(() => expect(api.discardJob).toHaveBeenCalledWith('left'));
+  });
+
+  it('uses the filesystem label as the drive name and shows the device under it', async () => {
+    api.getDiskUsage.mockReturnValue(Effect.succeed({
+      ...usage,
+      drives: [{ ...usage.drives[0], label: 'JEUX', device_kind: 'ssd', fs_type: 'btrfs' }],
+    }));
+    render(<StorageView games={[mk('inside', '/home/games/Inside')]} onNotify={() => {}} onRemove={() => {}} onUninstall={() => {}} />);
+    expect(await screen.findByText('JEUX')).toBeInTheDocument();
+    expect(screen.getByText('/home/games, SSD, btrfs')).toBeInTheDocument();
   });
 
   it('keeps what the user unticked after a clean', async () => {

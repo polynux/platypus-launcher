@@ -21,6 +21,21 @@ function figure(n: number): string {
   return formatBytes(n) || '0 B';
 }
 
+/** What the drive is (issue #148), e.g. "NVMe, ext4": the device kind the
+ *  core read from sysfs, translated, and the filesystem type from
+ *  mountinfo — either one alone when the other is unknown, "" when both
+ *  are. An unrecognised kind shows the filesystem only. */
+function deviceFacts(d: DiskUsage['drives'][number], t: (key: string) => string): string {
+  const kinds: Record<string, string> = {
+    nvme: t('storage:device.nvme'),
+    ssd: t('storage:device.ssd'),
+    hdd: t('storage:device.hdd'),
+    removable: t('storage:device.removable'),
+    network: t('storage:device.network'),
+  };
+  return [kinds[d.device_kind] ?? '', d.fs_type].filter(Boolean).join(', ');
+}
+
 function isWithinFolder(path: string, folder: string): boolean {
   const base = folder.endsWith('/') ? folder.slice(0, -1) : folder;
   return path === folder || path.startsWith(`${base}/`);
@@ -342,10 +357,15 @@ function DriveCard({ drive: d }: { drive: DiskUsage['drives'][number] }) {
   const known = d.total_bytes > 0;
   const gamesPct = known ? Math.min(100, (d.games_bytes / d.total_bytes) * 100) : 0;
   const otherPct = known ? Math.min(100 - gamesPct, (d.other_bytes / d.total_bytes) * 100) : 0;
+  // Its own label and what it is (issue #148): "JEUX · NVMe, ext4" under the mount.
+  const facts = [d.label, deviceFacts(d, t)].filter(Boolean).join(' · ');
   return (
     <div className="rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className="text-[13px] font-bold">{d.mount}</span>
+        <span className="flex items-baseline gap-2">
+          <span className="text-[13px] font-bold">{d.mount}</span>
+          {facts && <span className="text-[11.5px] text-text-muted">{facts}</span>}
+        </span>
         <span className="min-w-0 truncate font-mono text-hint text-text-muted select-text">
           {d.folders.join(' · ')}
         </span>
@@ -454,19 +474,23 @@ function AtlasDriveCard({ drive: d, rows, data, defaultFolder }: { drive: DiskUs
   const shown = rows;
   const total = rows.reduce((a, r) => a + r.size_bytes + r.prefix_bytes, 0);
   const isDefaultDrive = !!defaultFolder && d.folders.some((f) => isWithinFolder(defaultFolder, f));
+  // The design's drive head: the label when the filesystem has one, then
+  // what the drive is (issue #148) over its folders.
+  const name = d.label || (d.mount === '/' ? t('storage:atlas.systemDrive') : d.mount.split('/').filter(Boolean).at(-1) || d.mount);
+  const facts = deviceFacts(d, t);
   return (
     <section aria-label={d.mount} className="grid gap-2.5 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <span className="inline-flex items-center gap-2 text-[14px] font-bold">
           <HardDrive className="h-[18px] w-[18px] text-text-faint" aria-hidden />
-          {d.mount === '/' ? t('storage:atlas.systemDrive') : d.mount.split('/').filter(Boolean).at(-1) || d.mount}
+          {name}
           {isDefaultDrive && <span className="rounded-md bg-surface-strong px-[7px] py-0.5 text-[11.5px] font-semibold text-text-muted">{t('storage:atlas.default')}</span>}
         </span>
         <span className="text-[12.5px] text-text-muted">
           <strong className={d.free_bytes < 20e9 ? 'font-bold text-danger' : 'font-bold text-text'}>{figure(d.free_bytes)}</strong> {t('storage:atlas.freeOf', { total: figure(d.total_bytes) })}
         </span>
       </header>
-      <div className="min-w-0 truncate text-[12px] text-text-faint select-text">{d.folders.join(' · ')}</div>
+      <div className="min-w-0 truncate text-[12px] text-text-faint select-text">{d.folders.join(' · ')}{facts && <>, {facts}</>}</div>
       <div
         role="progressbar"
         aria-label={d.mount}

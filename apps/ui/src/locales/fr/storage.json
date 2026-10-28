@@ -17,6 +17,13 @@
     "scanned": "mesuré",
     "prefix": "Préfixe Wine"
   },
+  "device": {
+    "nvme": "NVMe",
+    "ssd": "SSD",
+    "hdd": "HDD",
+    "removable": "Amovible",
+    "network": "Réseau"
+  },
   "action": {
     "open": "Ouvrir le dossier de {{title}}",
     "move": "Déplacer {{title}}",

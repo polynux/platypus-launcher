@@ -17,6 +17,13 @@
     "scanned": "scanned",
     "prefix": "Wine prefix"
   },
+  "device": {
+    "nvme": "NVMe",
+    "ssd": "SSD",
+    "hdd": "HDD",
+    "removable": "Removable",
+    "network": "Network"
+  },
   "action": {
     "open": "Open the folder of {{title}}",
     "move": "Move {{title}}",
