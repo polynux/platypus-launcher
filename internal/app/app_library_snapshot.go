@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"platypus/internal/stores"
 	"platypus/internal/types"
 )
 
@@ -72,4 +73,46 @@ func loadLibrarySnapshot(snapDir, source string) []types.Game {
 		return nil
 	}
 	return games
+}
+
+// storeMissingGames serves installed rows from snapshots whose store is gone
+// (issue #161): an uninstalled store's games stay in the library as "store
+// missing" instead of dropping out. Rows that were never installed are
+// omitted: with no store they can't be installed. Removal (the uninstall
+// option) deletes the snapshot, so its entries go with it.
+func (a *App) storeMissingGames(all []stores.Store) []types.Game {
+	if a.library.snapDir == "" {
+		return nil
+	}
+	known := map[string]bool{}
+	for _, s := range all {
+		known[s.ID()] = true
+	}
+	entries, err := os.ReadDir(a.library.snapDir)
+	if err != nil {
+		return nil
+	}
+	var out []types.Game
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".json") || strings.HasPrefix(name, ".") {
+			continue
+		}
+		source := strings.TrimSuffix(name, ".json")
+		if source == "" || known[source] || !filepath.IsLocal(source) {
+			continue
+		}
+		for _, g := range loadLibrarySnapshot(a.library.snapDir, source) {
+			if !g.IsInstalled {
+				continue
+			}
+			g.StoreMissing = true
+			a.applySavedSettings(&g)
+			out = append(out, g)
+		}
+	}
+	return out
 }

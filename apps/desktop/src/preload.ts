@@ -1,7 +1,7 @@
 // Runs in the sandboxed renderer before the page. It is the page's only way
 // out: the three calls of the bridge (apps/ui/src/effect/bridge.ts), each a
 // message to the main process, which checks it.
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 type Reply = { ok: true; result: unknown } | { ok: false; error: string; data?: { code: string; params?: Record<string, string> } };
 type StoreReply = { ok: true } | { ok: false; error: string };
@@ -108,6 +108,12 @@ contextBridge.exposeInMainWorld('platypus', {
     return () => {
       ipcRenderer.removeListener('platypus:chat-open', fn);
     };
+  },
+  // A dropped file's real path (Electron removed File.path): the Plugins
+  // page installs dropped zips through the core, which validates the
+  // archive itself. Main-side checks are unchanged.
+  pathForFile(file: File): string {
+    return webUtils.getPathForFile(file);
   },
   // The embedded store view (issue #17): the native view over the Store
   // page's content area. Main validates every call (known enabled plugin,

@@ -64,6 +64,7 @@
   "sharedBy": "Shared by {{name}}",
   "cardHours": "{{hours}}h",
   "cardUpdate": "update",
+  "cardStoreMissing": "store missing",
   "cardNotInstalled": "not installed",
   "cardOwned": "owned",
   "job": {

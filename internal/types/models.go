@@ -112,6 +112,9 @@ type Game struct {
 	// Native marks plugin games with a Linux build: they run without Proton,
 	// so the runner pick and Proton-only settings don't apply to them.
 	Native bool `json:"native,omitempty"`
+	// StoreMissing marks games whose store was uninstalled (issue #161): the
+	// files stay on disk and installed games stay launchable where possible.
+	StoreMissing bool `json:"store_missing,omitempty"`
 	// ClientLaunch says the store client must launch the game and owns its compatibility data.
 	ClientLaunch bool `json:"client_launch,omitempty"`
 	// Offline says whether the game launches without a network (protocol

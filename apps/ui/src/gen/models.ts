@@ -349,6 +349,7 @@ export namespace types {
     note?: string;
     outside_folder?: boolean;
     native?: boolean;
+    store_missing?: boolean;
     client_launch?: boolean;
     offline?: string;
     cloud_sync?: boolean;

@@ -126,15 +126,17 @@
   },
   "uninstall": {
     "title": "Désinstaller {{name}} ?",
-    "detail": "Supprime le plugin et ses données enregistrées (approbation, réglages, connexion, listes de jeux). Vos fichiers de jeux installés restent sur le disque.",
-    "removeGames": "Oublier aussi ses réglages par jeu",
+    "detail": "Supprime le plugin et ses données enregistrées (approbation, réglages, connexion). Les jeux installés restent sur le disque et dans la bibliothèque, marqués « boutique manquante ».",
+    "removeGames": "Supprimer aussi ses jeux de la bibliothèque",
     "confirm": "Désinstaller",
     "actionFailed": "Platypus n'a pas pu désinstaller {{name}}."
   },
   "install": {
     "actionFailed": "Platypus n'a pas pu installer ce plugin.",
+    "notAZip": "Ce fichier n'est pas un zip de plugin.",
     "replaceTitle": "Remplacer {{name}} ?",
     "replaceDetail": "La version {{current}} est installée. Installer {{new}} à la place ? L'ancien dossier est remplacé, jamais fusionné.",
+    "replaceDetailUnknown": "Un dossier nommé {{name}} existe déjà, mais sa version est illisible. Installer {{new}} à la place ? L'ancien dossier est remplacé, jamais fusionné.",
     "confirmReplace": "Remplacer"
   },
   "builtIn": {

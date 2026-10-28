@@ -816,6 +816,22 @@ func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs [
 		a.startPlaytimeOnce(s.ID())
 	}
 	lib.Games = append(lib.Games, a.customGames()...)
+	for _, g := range a.storeMissingGames(all) {
+		lib.Games = append(lib.Games, g)
+		seen := false
+		for _, w := range lib.Warnings {
+			if w.Source == g.Source {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			lib.Warnings = append(lib.Warnings, types.SourceWarning{
+				Source: g.Source, Stale: true,
+				Message: fmt.Sprintf("%s is not installed; showing its installed games from the last listing", g.Source),
+			})
+		}
+	}
 	a.noteLibraryGames(lib.Games)
 	a.applyPlaytime(lib.Games)
 	a.applyPins(&lib)
@@ -905,7 +921,10 @@ func sourceOf(game types.Game) string {
 func (a *App) syncDataPlugins(found []plugins.Plugin) {
 	a.data.Reset()
 	for _, p := range found {
-		if p.Data != nil {
+		// Only approved data applies: a zip-installed plugin waits for
+		// approval first, so its fixes, tweaks and theme stay inert
+		// (issue #147).
+		if p.Data != nil && p.Status == plugins.StatusReady {
 			a.data.Add(p.Data)
 		}
 	}
@@ -963,9 +982,11 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 			return nil, err
 		}
 		launch = l
-	} else if game.Source != "" && game.Source != types.SourceCustom {
+	} else if game.Source != "" && game.Source != types.SourceCustom && !game.StoreMissing {
 		return nil, apperr.New("plugin.notApproved", fmt.Sprintf("%s comes from %s, which isn't approved and enabled", game.Title, game.Source), map[string]string{"title": game.Title, "source": game.Source})
 	}
+	// A store-missing game (issue #161) falls through to its executable on
+	// disk, like a sideloaded game: no store, no launch spec.
 
 	switch {
 	case launch != nil && launch.Client != nil:

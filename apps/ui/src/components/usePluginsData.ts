@@ -130,7 +130,9 @@ export function usePluginsData({ plugins, onPlugins, onLibraryChanged, onNotify 
               onPlugins(list);
               const p = list.find((x) => x.id === res.id) ?? plugins.find((x) => x.id === res.id);
               onNotify(t('plugins:notify.installed', { name: p?.name ?? res.id }));
-              if (p) setReviewing(p);
+              // The approval sheet only opens for plugins waiting for a
+              // decision; anything else just toasts.
+              if (p && (p.status === 'unapproved' || p.status === 'changed')) setReviewing(p);
               onLibraryChanged();
             });
         })

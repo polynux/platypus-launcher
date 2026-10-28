@@ -60,20 +60,23 @@ export function PluginsView({ plugins, games = [], warnings, onPlugins, onLibrar
   const data = usePluginsData({ plugins, onPlugins, onLibraryChanged, onNotify });
   const { reviewing, setReviewing, loggingIn, setLoggingIn, auth, busy, storeAuth, refresh, act, uninstalling, setUninstalling, replacing, setReplacing, install, installFile, confirmUninstall } = data;
   const atlas = useVariant('shell.navigation') === 'sourcebar';
-  // The lab's file drop installs a plugin zip: the shell exposes the path
-  // on the dropped file (Electron), so the core validates the real archive.
+  // The lab's file drop installs plugin zips: the shell exposes the real
+  // path through the preload bridge (Electron removed File.path), and the
+  // core validates the archive itself.
   const dropProps = {
     onDragOver: (e: React.DragEvent) => {
       if ([...e.dataTransfer.types].includes('Files')) e.preventDefault();
     },
     onDrop: (e: React.DragEvent) => {
-      const zips = [...e.dataTransfer.files]
-        .map((f) => (f as File & { path?: string }).path ?? '')
-        .filter((p) => p.toLowerCase().endsWith('.zip'));
-      if (zips.length > 0) {
-        e.preventDefault();
-        zips.forEach((p) => installFile(p));
+      if (![...e.dataTransfer.types].includes('Files')) return;
+      const paths = [...e.dataTransfer.files].map((f) => window.platypus?.pathForFile?.(f) ?? '');
+      const zips = paths.filter((p) => p.toLowerCase().endsWith('.zip'));
+      if (zips.length === 0) {
+        onNotify(t('plugins:install.notAZip'), 'err');
+        return;
       }
+      e.preventDefault();
+      zips.forEach((p) => installFile(p));
     },
   };
   const dialogs = (
@@ -105,6 +108,7 @@ export function PluginsView({ plugins, games = [], warnings, onPlugins, onLibrar
       {uninstalling && (
         <UninstallModal
           plugin={uninstalling}
+          showGames={uninstalling.kind === 'store'}
           onClose={() => setUninstalling(null)}
           onConfirm={(removeGames) => confirmUninstall(uninstalling, removeGames)}
         />
@@ -186,7 +190,7 @@ function pluginsBlocks({ plugins, warnings, auth, busy, data, onNotify, onLibrar
         onNotify={onNotify}
       />
     ),
-    data: <PluginsData plugins={plugins.filter((p) => p.kind === 'data')} />,
+    data: <PluginsData plugins={plugins.filter((p) => p.kind === 'data')} onUninstall={(p) => data.setUninstalling(p)} busy={busy} />,
     builtin: <PluginsBuiltIn />,
   };
 }
@@ -366,13 +370,13 @@ function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNotify, on
               onNotify={onNotify}
             />
           ) : current ? (
-            <DataPluginCard plugin={current} />
+            <DataPluginCard plugin={current} onUninstall={() => data.setUninstalling(current)} busy={busy} />
           ) : (
             <p className="text-[13px] text-text-muted">{t('plugins:empty.detail')}</p>
           )}
         </div>
       </div>
-      {store.length > 0 && rest.length > 0 && <PluginsData plugins={rest} />}
+      {store.length > 0 && rest.length > 0 && <PluginsData plugins={rest} onUninstall={(p) => data.setUninstalling(p)} busy={busy} />}
       <PluginsBuiltIn />
     </div>
   );
@@ -685,7 +689,7 @@ export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogo
   );
 }
 
-export function PluginsData({ plugins }: { plugins: StorePlugin[] }) {
+export function PluginsData({ plugins, onUninstall, busy }: { plugins: StorePlugin[]; onUninstall: (p: StorePlugin) => void; busy: string | null }) {
   const { t } = useTranslation('plugins');
   if (plugins.length === 0) return null;
   // One root: the heading and the cards stay together, so a row counts the
@@ -695,14 +699,14 @@ export function PluginsData({ plugins }: { plugins: StorePlugin[] }) {
       <MonoLabel as="h2" className="mb-3 mt-8 normal-case tracking-normal">{t('plugins:section.data')}</MonoLabel>
       <div className="grid gap-4 xl:grid-cols-2">
         {plugins.map((p) => (
-          <DataPluginCard key={p.id} plugin={p} />
+          <DataPluginCard key={p.id} plugin={p} onUninstall={() => onUninstall(p)} busy={busy} />
         ))}
       </div>
     </div>
   );
 }
 
-export function DataPluginCard({ plugin: p }: { plugin: StorePlugin }) {
+export function DataPluginCard({ plugin: p, onUninstall, busy }: { plugin: StorePlugin; onUninstall: () => void; busy: string | null }) {
   const { t } = useTranslation('plugins');
   const st = STATUS[p.status] ?? STATUS.invalid;
   return (
@@ -725,6 +729,18 @@ export function DataPluginCard({ plugin: p }: { plugin: StorePlugin }) {
         <p className="mt-auto text-[12px] text-text-body">
           {t('plugins:card.dataNote')}
         </p>
+      )}
+      {!p.bundled && (
+        <div className="mt-auto flex gap-2 pt-1">
+          <Button
+            variant="neutral"
+            className="flex-1"
+            onClick={onUninstall}
+            disabled={busy === p.id + 'uninstall'}
+          >
+            {t('plugins:card.uninstall')}
+          </Button>
+        </div>
       )}
     </Panel>
   );
@@ -761,8 +777,9 @@ function ManifestRow({ label, items, empty }: { label: string; items: string[]; 
   );
 }
 
-/** Confirms removing a plugin: lists what goes and what stays (issue #161). */
-function UninstallModal({ plugin: p, onClose, onConfirm }: { plugin: StorePlugin; onClose: () => void; onConfirm: (removeGames: boolean) => void }) {
+/** Confirms removing a plugin: lists what goes and what stays (issue #161).
+ *  Data/theme plugins have no games, so they hide the checkbox. */
+function UninstallModal({ plugin: p, showGames = true, onClose, onConfirm }: { plugin: StorePlugin; showGames?: boolean; onClose: () => void; onConfirm: (removeGames: boolean) => void }) {
   const { t } = useTranslation(['plugins', 'common']);
   const [removeGames, setRemoveGames] = useState(false);
   return (
@@ -770,10 +787,12 @@ function UninstallModal({ plugin: p, onClose, onConfirm }: { plugin: StorePlugin
       <div>
         <h2 className="text-[20px] font-extrabold tracking-tight">{t('plugins:uninstall.title', { name: p.name })}</h2>
         <p className="mt-1 text-[12px] leading-relaxed text-text-body">{t('plugins:uninstall.detail')}</p>
-        <label className="mt-4 flex items-center gap-2 text-[13px] text-text">
-          <input type="checkbox" checked={removeGames} onChange={(e) => setRemoveGames(e.target.checked)} className="h-4 w-4 accent-attention" />
-          {t('plugins:uninstall.removeGames')}
-        </label>
+        {showGames && (
+          <label className="mt-4 flex items-center gap-2 text-[13px] text-text">
+            <input type="checkbox" checked={removeGames} onChange={(e) => setRemoveGames(e.target.checked)} className="h-4 w-4 accent-attention" />
+            {t('plugins:uninstall.removeGames')}
+          </label>
+        )}
         <div className="mt-5 flex gap-2.5">
           <Button variant="neutral" className="flex-1" onClick={onClose}>{t('common:cancel')}</Button>
           <Button variant="primary" className="flex-1" onClick={() => onConfirm(removeGames)}>{t('plugins:uninstall.confirm')}</Button>
@@ -783,14 +802,19 @@ function UninstallModal({ plugin: p, onClose, onConfirm }: { plugin: StorePlugin
   );
 }
 
-/** Confirms replacing the installed version with the zip's (issue #147). */
+/** Confirms replacing the installed version with the zip's (issue #147): an
+ *  unreadable existing folder has no version to show. */
 function ReplaceModal({ name, current, next, onClose, onConfirm }: { name: string; current: string; next: string; onClose: () => void; onConfirm: () => void }) {
   const { t } = useTranslation(['plugins', 'common']);
   return (
     <Modal label={t('plugins:install.replaceTitle', { name })} onClose={onClose} size="md">
       <div>
         <h2 className="text-[20px] font-extrabold tracking-tight">{t('plugins:install.replaceTitle', { name })}</h2>
-        <p className="mt-1 text-[12px] leading-relaxed text-text-body">{t('plugins:install.replaceDetail', { current, new: next })}</p>
+        <p className="mt-1 text-[12px] leading-relaxed text-text-body">
+          {current
+            ? t('plugins:install.replaceDetail', { current, new: next })
+            : t('plugins:install.replaceDetailUnknown', { name, new: next })}
+        </p>
         <div className="mt-5 flex gap-2.5">
           <Button variant="neutral" className="flex-1" onClick={onClose}>{t('common:cancel')}</Button>
           <Button variant="primary" className="flex-1" onClick={onConfirm}>{t('plugins:install.confirmReplace')}</Button>

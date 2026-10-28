@@ -121,13 +121,13 @@ describe('plugin lifecycle', () => {
       <PluginsView plugins={[plugin()]} warnings={[]} onPlugins={() => {}} onLibraryChanged={() => {}} onNotify={(msg, kind) => notifyCalls.push({ msg, kind })} />
     );
     fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }));
-    expect(screen.getByText(/installed game files stay on disk/i)).toBeTruthy();
+    expect(screen.getByText(/stay on disk and in the library/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /^Uninstall$/ }));
     await waitFor(() => expect(calls.uninstall).toEqual([{ id: 'echo', removeGames: false }]));
     await waitFor(() => expect(notifyCalls.some((n) => /uninstalled/i.test(n.msg))).toBe(true));
   });
 
-  it('the uninstall checkbox also forgets per-game settings', async () => {
+  it('the uninstall checkbox also removes the library entries', async () => {
     render(
       <PluginsView plugins={[plugin()]} warnings={[]} onPlugins={() => {}} onLibraryChanged={() => {}} onNotify={(msg, kind) => notifyCalls.push({ msg, kind })} />
     );
@@ -135,6 +135,23 @@ describe('plugin lifecycle', () => {
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /^Uninstall$/ }));
     await waitFor(() => expect(calls.uninstall).toEqual([{ id: 'echo', removeGames: true }]));
+  });
+
+  it('data plugins uninstall without the games checkbox', async () => {
+    render(
+      <PluginsView
+        plugins={[plugin({ id: 'data', name: 'Data', kind: 'data', status: 'ready' })]}
+        warnings={[]}
+        onPlugins={() => {}}
+        onLibraryChanged={() => {}}
+        onNotify={(msg, kind) => notifyCalls.push({ msg, kind })}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }));
+    expect(screen.getByText(/stay on disk and in the library/i)).toBeTruthy();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Uninstall$/ }));
+    await waitFor(() => expect(calls.uninstall).toEqual([{ id: 'data', removeGames: false }]));
   });
 
   it('Add a store installs the zip and opens the approval sheet', async () => {
@@ -162,5 +179,57 @@ describe('plugin lifecycle', () => {
       { path: '/tmp/p.zip', confirm: false },
       { path: '/tmp/p.zip', confirm: true },
     ]));
+  });
+
+  it('an unreadable folder asks before replacing, without a version', async () => {
+    installAnswer = { id: 'echo', version: '2.0.0', needsConfirm: true, currentVersion: '', newVersion: '2.0.0' };
+    render(
+      <PluginsView plugins={[plugin()]} warnings={[]} onPlugins={() => {}} onLibraryChanged={() => {}} onNotify={(msg, kind) => notifyCalls.push({ msg, kind })} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add a store' }));
+    await waitFor(() => expect(screen.getByText('Replace Echo?')).toBeTruthy());
+    expect(screen.getByText(/version can't be read/i)).toBeTruthy();
+    installAnswer = { id: 'echo', version: '2.0.0', replaced: true };
+    fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
+    await waitFor(() => expect(calls.install).toEqual([
+      { path: '/tmp/p.zip', confirm: false },
+      { path: '/tmp/p.zip', confirm: true },
+    ]));
+  });
+
+  it('dropping a zip installs it through the shell path bridge', async () => {
+    const platypus = (window as unknown as { platypus?: unknown }).platypus;
+    (window as unknown as { platypus?: object }).platypus = {
+      pathForFile: (f: File) => (f.name.endsWith('.zip') ? '/tmp/p.zip' : '/tmp/n.txt'),
+    };
+    try {
+      listed = [zippy()];
+      const { container } = render(
+        <PluginsView plugins={[]} warnings={[]} onPlugins={() => {}} onLibraryChanged={() => {}} onNotify={(msg, kind) => notifyCalls.push({ msg, kind })} />
+      );
+      const zip = new File(['x'], 'p.zip', { type: 'application/zip' });
+      fireEvent.drop(container.firstChild as Element, { dataTransfer: { files: [zip], types: ['Files'] } });
+      await waitFor(() => expect(calls.install).toEqual([{ path: '/tmp/p.zip', confirm: false }]));
+      await waitFor(() => expect(screen.getByText('Approve Zippy')).toBeTruthy());
+    } finally {
+      (window as unknown as { platypus?: unknown }).platypus = platypus;
+    }
+  });
+
+  it('dropping a non-zip toasts instead of installing', async () => {
+    (window as unknown as { platypus?: object }).platypus = {
+      pathForFile: () => '/tmp/n.txt',
+    };
+    try {
+      const { container } = render(
+        <PluginsView plugins={[]} warnings={[]} onPlugins={() => {}} onLibraryChanged={() => {}} onNotify={(msg, kind) => notifyCalls.push({ msg, kind })} />
+      );
+      const txt = new File(['x'], 'n.txt', { type: 'text/plain' });
+      fireEvent.drop(container.firstChild as Element, { dataTransfer: { files: [txt], types: ['Files'] } });
+      await waitFor(() => expect(notifyCalls.some((n) => n.kind === 'err' && /not a plugin zip/i.test(n.msg))).toBe(true));
+      expect(calls.install).toEqual([]);
+    } finally {
+      delete (window as unknown as { platypus?: unknown }).platypus;
+    }
   });
 });

@@ -571,11 +571,16 @@ func TestDataPluginNeedsNoApproval(t *testing.T) {
 	if p.Status != StatusReady || p.Data == nil || len(p.Data.Fixes) != 1 {
 		t.Fatalf("data plugin: %+v", p)
 	}
-	if p.Hash != "" || len(p.Missing) != 0 {
-		t.Fatalf("data plugin has approval machinery: %+v", p)
+	if p.Hash == "" || len(p.Missing) != 0 {
+		t.Fatalf("data plugin not hashed: %+v", p)
 	}
-	if err := e.m.Approve("community-fixes"); err == nil {
-		t.Fatal("data plugin approved")
+	// A hand-installed data plugin stays approval-free, but approving one
+	// pins its folder hash like a store plugin (issue #147).
+	if err := e.m.Approve("community-fixes"); err != nil {
+		t.Fatalf("data plugin not approved: %v", err)
+	}
+	if p := e.discover(t)["community-fixes"]; p.Status != StatusReady {
+		t.Fatalf("approved data plugin: %+v", p)
 	}
 	if err := e.m.SetEnabled("community-fixes", false); err == nil {
 		t.Fatal("data plugin disabled")

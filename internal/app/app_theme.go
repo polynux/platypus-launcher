@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"platypus/internal/apperr"
+	"platypus/internal/plugins"
 	"platypus/internal/themes"
 	"platypus/internal/types"
 )
@@ -42,6 +43,11 @@ func (a *App) pluginThemes() []themes.Theme {
 	var out []themes.Theme
 	for _, p := range a.plugins.Plugins() {
 		if p.Theme == nil {
+			continue
+		}
+		// Only an approved theme is pickable: a zip-installed data plugin
+		// waits for approval first (issue #147).
+		if p.Status != plugins.StatusReady {
 			continue
 		}
 		th := *p.Theme

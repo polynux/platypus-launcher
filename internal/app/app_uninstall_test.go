@@ -12,6 +12,8 @@ import (
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
 	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 func uninstallApp(t *testing.T) (*App, string, string) {
@@ -37,7 +39,8 @@ func uninstallApp(t *testing.T) (*App, string, string) {
 	a := &App{
 		host: stderrHost{}, settings: st, plugins: mgr,
 		optHome: root, dataDir: root,
-		data: dataplug.NewRegistry(),
+		data:   dataplug.NewRegistry(),
+		stores: stores.NewRegistry(nil),
 	}
 	a.library.snapDir = filepath.Join(root, "library-snapshots")
 	var err2 error
@@ -98,8 +101,10 @@ func TestUninstallRemovesFolderAndState(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "plugin-data", "echo")); !os.IsNotExist(err) {
 		t.Fatal("plugin data folder still there")
 	}
-	if _, err := os.Stat(filepath.Join(a.library.snapDir, "echo.json")); !os.IsNotExist(err) {
-		t.Fatal("library snapshot still there")
+	// The snapshot stays by default: its installed rows show as
+	// "store missing" instead of dropping out of the library.
+	if _, err := os.Stat(filepath.Join(a.library.snapDir, "echo.json")); err != nil {
+		t.Fatalf("snapshot should stay by default: %v", err)
 	}
 	if _, err := os.Stat(keep); err != nil {
 		t.Fatalf("game files were touched: %v", err)
@@ -141,6 +146,24 @@ func TestUninstallRemoveGamesForgetsPerGameSettings(t *testing.T) {
 	if _, ok := a.settings.PluginGameSettings("p.echo.tiny"); ok {
 		t.Fatal("per-game settings should go with removeGames")
 	}
+}
+
+func TestUninstallRemoveGamesDropsSnapshot(t *testing.T) {
+	t.Parallel()
+	a, root, _ := uninstallApp(t)
+	if err := os.MkdirAll(a.library.snapDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(a.library.snapDir, "echo.json"), []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.UninstallPlugin("echo", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(a.library.snapDir, "echo.json")); !os.IsNotExist(err) {
+		t.Fatal("snapshot should go with removeGames")
+	}
+	_ = root
 }
 
 func TestUninstallBundledRefused(t *testing.T) {
@@ -185,6 +208,31 @@ func TestUninstallRefusesTraversal(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); err != nil {
 		t.Fatalf("file outside the plugins folder was touched: %v", err)
+	}
+}
+
+// A store-missing game launches from its executable on disk (issue #161:
+// installed games stay launchable where possible); without the flag the same
+// game refuses with "isn't approved and enabled".
+func TestStoreMissingGameLaunchesFromDisk(t *testing.T) {
+	t.Parallel()
+	a, _, _ := uninstallApp(t)
+	exe := filepath.Join(t.TempDir(), "tiny")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	missing := types.Game{ID: "p.echo.tiny", Source: "echo", Title: "Tiny", IsInstalled: true, Executable: exe, Native: true, StoreMissing: true}
+	p, err := a.prepareLaunch(missing, true)
+	if err != nil {
+		t.Fatalf("store-missing launch: %v", err)
+	}
+	if len(p.args) == 0 || p.args[0] != exe {
+		t.Fatalf("args = %v, want the executable on disk", p.args)
+	}
+	plain := missing
+	plain.StoreMissing = false
+	if _, err := a.prepareLaunch(plain, true); err == nil {
+		t.Fatal("a game whose store is present-but-unapproved must not launch direct")
 	}
 }
 

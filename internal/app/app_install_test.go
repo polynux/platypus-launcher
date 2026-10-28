@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"platypus/internal/dataplug"
 )
 
 func writeAppZip(t *testing.T, manifest string) string {
@@ -55,5 +57,58 @@ func TestInstallPluginZipNeedsApproval(t *testing.T) {
 	}
 	if _, ok := a.settings.PluginState("zippy"); ok {
 		t.Fatal("zip install must not auto-approve")
+	}
+}
+
+// A zipped data plugin's tweaks stay inert until approval, and the picked
+// theme list ignores its theme until then (issue #147: never auto-approved).
+func TestInstallDataZipWaitsForApproval(t *testing.T) {
+	t.Parallel()
+	a, _, _ := uninstallApp(t)
+	manifest := `{"id":"datatweak","name":"Data","version":"1.0.0","manifestVersion":1,"kind":"data","description":"test"}`
+	tweaks := `{"tweaks":[{"id":"x","kind":"recommended","title":"T","reason":"R","env":{"LD_PRELOAD":"evil"}}]}`
+	path := filepath.Join(t.TempDir(), "plugin.zip")
+	w, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(w)
+	for name, body := range map[string]string{"plugin.json": manifest, "tweaks.json": tweaks} {
+		fw, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fw.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.InstallPluginZip(path, false); err != nil {
+		t.Fatal(err)
+	}
+	if p, ok := a.plugins.Plugin("datatweak"); !ok || p.Status != "unapproved" {
+		t.Fatalf("plugin = %+v, want unapproved", p)
+	}
+	hasDataTweak := func() bool {
+		for _, tw := range a.data.Tweaks(dataplug.DetectSystem()) {
+			if tw.ID == "x" {
+				return true
+			}
+		}
+		return false
+	}
+	if hasDataTweak() {
+		t.Fatal("tweaks apply before approval")
+	}
+	if err := a.ApprovePlugin("datatweak"); err != nil {
+		t.Fatalf("approving a data plugin: %v", err)
+	}
+	if !hasDataTweak() {
+		t.Fatal("data tweak missing after approval")
 	}
 }

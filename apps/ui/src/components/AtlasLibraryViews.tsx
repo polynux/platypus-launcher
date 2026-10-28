@@ -84,6 +84,13 @@ export function AtlasGameBadges({ game, job, session }: { game: Game; job?: Job;
       </span>,
     );
   }
+  if (game.store_missing) {
+    badges.push(
+      <span key="store-missing" title={t('library:cardStoreMissing')} className="inline-flex h-5 flex-none items-center rounded-md bg-surface-strong px-1.5 text-[11px] font-semibold text-text-muted">
+        {t('library:cardStoreMissing')}
+      </span>,
+    );
+  }
   if (needsAttention(game)) {
     badges.push(
       <span key="attn" title={attentionReason(game)} aria-label={t('library:listDetail.needsAttention')} className="grid size-5 flex-none place-items-center rounded-md bg-attention text-on-accent">

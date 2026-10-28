@@ -172,6 +172,8 @@ func (a *App) ApprovePlugin(id string) error {
 	a.invalidateAuth(id)
 	a.failStoppedJobs()
 	a.syncSocial()
+	// Approving a data plugin applies its fixes, tweaks and theme.
+	a.syncDataPlugins(a.plugins.Plugins())
 	return nil
 }
 
@@ -193,10 +195,12 @@ func (a *App) SetPluginEnabled(id string, enabled bool) error {
 // UninstallPlugin removes a plugin cleanly (issue #161): it stops the plugin
 // process first, deletes its folder, and forgets what the core kept for it
 // (approval, install folder, plugin settings, chat/social/cloud switches,
-// login cache, library rows, snapshots, its private data folder). Game files
-// are never touched: they stay on disk either way. removeGames also forgets
-// the plugin's per-game settings values; otherwise those stay so a reinstall
-// restores them. Bundled plugins can't be uninstalled, only disabled.
+// login cache, library cache, its private data folder). Game files are never
+// touched: installed games stay on disk and in the library, marked "store
+// missing" (launchable where possible). removeGames also removes the library
+// entries (the snapshot) and forgets the plugin's per-game settings values;
+// otherwise those stay so a reinstall restores them. Bundled plugins can't be
+// uninstalled, only disabled.
 func (a *App) UninstallPlugin(id string, removeGames bool) error {
 	if plugins.BundledPluginIDs[id] {
 		return fmt.Errorf("the bundled %s plugin can't be uninstalled, only disabled", id)
@@ -204,17 +208,22 @@ func (a *App) UninstallPlugin(id string, removeGames bool) error {
 	if _, ok := a.plugins.Plugin(id); !ok {
 		return fmt.Errorf("unknown plugin %q", id)
 	}
-	// A theme plugin that carries the picked theme: fall back to the
-	// built-in default first, so the theme never points at a gone plugin.
+	// A theme plugin may carry the picked theme: remember it, so the theme
+	// falls back after the folder is gone. Resetting before a failed removal
+	// would lose the user's theme while the plugin stays.
+	themeFallback := false
 	if picked := a.settings.Theme(); picked != "" {
 		if t, ok := a.findTheme(picked); ok && t.Info.Source == id {
-			if err := a.settings.SetTheme(""); err != nil {
-				return err
-			}
+			themeFallback = true
 		}
 	}
 	if err := a.plugins.Uninstall(id); err != nil {
 		return err
+	}
+	if themeFallback {
+		if err := a.settings.SetTheme(""); err != nil {
+			return err
+		}
 	}
 	if err := a.settings.ForgetPlugin(id, removeGames); err != nil {
 		return err
@@ -226,7 +235,11 @@ func (a *App) UninstallPlugin(id string, removeGames bool) error {
 	a.invalidateAuth(id)
 	a.invalidateLibrary(id)
 	a.dropArtCache(id)
-	a.dropSnapshot(id)
+	if removeGames {
+		// The library entries go with the store; otherwise the snapshot
+		// stays and its installed rows show as "store missing".
+		a.dropSnapshot(id)
+	}
 	found, err := a.plugins.Discover()
 	if err != nil {
 		return err
@@ -286,8 +299,8 @@ func (a *App) dropArtCache(source string) {
 	}
 }
 
-// dropSnapshot deletes one source's library snapshot, so its games don't
-// linger as stale rows after the store is gone.
+// dropSnapshot deletes one source's library snapshot: the uninstall option
+// that removes the library entries.
 func (a *App) dropSnapshot(source string) {
 	path := snapshotPath(a.library.snapDir, source)
 	if path == "" {

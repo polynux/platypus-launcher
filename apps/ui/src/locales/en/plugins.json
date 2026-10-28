@@ -126,15 +126,17 @@
   },
   "uninstall": {
     "title": "Uninstall {{name}}?",
-    "detail": "Removes the plugin and its saved data (approval, settings, login, game lists). Your installed game files stay on disk.",
-    "removeGames": "Also forget its per-game settings",
+    "detail": "Removes the plugin and its saved data (approval, settings, login). Installed games stay on disk and in the library as 'store missing'.",
+    "removeGames": "Also remove its games from the library",
     "confirm": "Uninstall",
     "actionFailed": "Platypus couldn't uninstall {{name}}."
   },
   "install": {
     "actionFailed": "Platypus couldn't install that plugin.",
+    "notAZip": "That file is not a plugin zip.",
     "replaceTitle": "Replace {{name}}?",
     "replaceDetail": "Version {{current}} is installed. Install {{new}} instead? The old folder is replaced, never merged.",
+    "replaceDetailUnknown": "A folder named {{name}} already exists, but its version can't be read. Install {{new}} instead? The old folder is replaced, never merged.",
     "confirmReplace": "Replace"
   },
   "builtIn": {
