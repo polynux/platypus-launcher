@@ -301,6 +301,12 @@ func (m *Manager) inspect(dir string) *Plugin {
 			p.Status, p.Problem = StatusInvalid, err.Error()
 			return p
 		}
+		// The theme loads whatever the approval state: only the status
+		// decides whether it applies or picks (issue #147).
+		if man.Theme != "" {
+			th := themes.LoadFS(os.DirFS(dir), man.Theme, man.ID)
+			p.Theme = &th
+		}
 		// A data plugin with an approval record follows it (issue #147): a
 		// zip install files an empty record first, so it waits for approval
 		// instead of applying its fixes, tweaks and theme at once. Without
@@ -319,10 +325,6 @@ func (m *Manager) inspect(dir string) *Plugin {
 			return p
 		}
 		p.Status = StatusReady
-		if man.Theme != "" {
-			th := themes.LoadFS(os.DirFS(dir), man.Theme, man.ID)
-			p.Theme = &th
-		}
 		return p
 	}
 	if p.Hash, err = hashPlugin(dir); err != nil {

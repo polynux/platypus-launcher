@@ -11,6 +11,7 @@ const calls = {
   chooseZip: 0,
   install: [] as Array<{ path: string; confirm: boolean }>,
   uninstall: [] as Array<{ id: string; removeGames: boolean }>,
+  approve: [] as string[],
   rescan: 0,
 };
 let installAnswer: unknown = { id: 'zippy', version: '1.0.0' };
@@ -25,7 +26,10 @@ vi.mock('../../effect/runtime', () => ({
       calls.rescan += 1;
       return Effect.succeed([] as never);
     },
-    approvePlugin: () => Effect.succeed(undefined as never),
+    approvePlugin: (id: string) => {
+      calls.approve.push(id);
+      return Effect.succeed(undefined as never);
+    },
     setPluginEnabled: () => Effect.succeed(undefined as never),
     retryPlugin: () => Effect.succeed(undefined as never),
     openPluginsFolder: () => Effect.succeed(undefined as never),
@@ -99,6 +103,7 @@ describe('plugin lifecycle', () => {
     calls.chooseZip = 0;
     calls.install.length = 0;
     calls.uninstall.length = 0;
+    calls.approve.length = 0;
     calls.rescan = 0;
     notifyCalls.length = 0;
     listed = [];
@@ -152,6 +157,23 @@ describe('plugin lifecycle', () => {
     expect(screen.queryByRole('checkbox')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /^Uninstall$/ }));
     await waitFor(() => expect(calls.uninstall).toEqual([{ id: 'data', removeGames: false }]));
+  });
+
+  it('a pending data plugin re-opens the approval sheet from its card', async () => {
+    render(
+      <PluginsView
+        plugins={[plugin({ id: 'data', name: 'Data', kind: 'data', status: 'unapproved' })]}
+        warnings={[]}
+        onPlugins={() => {}}
+        onLibraryChanged={() => {}}
+        onNotify={(msg, kind) => notifyCalls.push({ msg, kind })}
+      />
+    );
+    expect(screen.getByRole('button', { name: 'Uninstall' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Review and approve' }));
+    expect(screen.getByText('Approve Data')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and enable' }));
+    await waitFor(() => expect(calls.approve).toEqual(['data']));
   });
 
   it('Add a store installs the zip and opens the approval sheet', async () => {
@@ -208,7 +230,8 @@ describe('plugin lifecycle', () => {
         <PluginsView plugins={[]} warnings={[]} onPlugins={() => {}} onLibraryChanged={() => {}} onNotify={(msg, kind) => notifyCalls.push({ msg, kind })} />
       );
       const zip = new File(['x'], 'p.zip', { type: 'application/zip' });
-      fireEvent.drop(container.firstChild as Element, { dataTransfer: { files: [zip], types: ['Files'] } });
+      const cancelled = fireEvent.drop(container.firstChild as Element, { dataTransfer: { files: [zip], types: ['Files'] } });
+      expect(cancelled).toBe(false);
       await waitFor(() => expect(calls.install).toEqual([{ path: '/tmp/p.zip', confirm: false }]));
       await waitFor(() => expect(screen.getByText('Approve Zippy')).toBeTruthy());
     } finally {
@@ -225,7 +248,8 @@ describe('plugin lifecycle', () => {
         <PluginsView plugins={[]} warnings={[]} onPlugins={() => {}} onLibraryChanged={() => {}} onNotify={(msg, kind) => notifyCalls.push({ msg, kind })} />
       );
       const txt = new File(['x'], 'n.txt', { type: 'text/plain' });
-      fireEvent.drop(container.firstChild as Element, { dataTransfer: { files: [txt], types: ['Files'] } });
+      const cancelled = fireEvent.drop(container.firstChild as Element, { dataTransfer: { files: [txt], types: ['Files'] } });
+      expect(cancelled).toBe(false);
       await waitFor(() => expect(notifyCalls.some((n) => n.kind === 'err' && /not a plugin zip/i.test(n.msg))).toBe(true));
       expect(calls.install).toEqual([]);
     } finally {

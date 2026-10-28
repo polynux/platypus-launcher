@@ -69,13 +69,15 @@ export function PluginsView({ plugins, games = [], warnings, onPlugins, onLibrar
     },
     onDrop: (e: React.DragEvent) => {
       if (![...e.dataTransfer.types].includes('Files')) return;
+      // Always prevent the default: without it the shell may navigate to the
+      // dropped file, even when it is not a plugin zip.
+      e.preventDefault();
       const paths = [...e.dataTransfer.files].map((f) => window.platypus?.pathForFile?.(f) ?? '');
       const zips = paths.filter((p) => p.toLowerCase().endsWith('.zip'));
       if (zips.length === 0) {
         onNotify(t('plugins:install.notAZip'), 'err');
         return;
       }
-      e.preventDefault();
       zips.forEach((p) => installFile(p));
     },
   };
@@ -190,7 +192,7 @@ function pluginsBlocks({ plugins, warnings, auth, busy, data, onNotify, onLibrar
         onNotify={onNotify}
       />
     ),
-    data: <PluginsData plugins={plugins.filter((p) => p.kind === 'data')} onUninstall={(p) => data.setUninstalling(p)} busy={busy} />,
+    data: <PluginsData plugins={plugins.filter((p) => p.kind === 'data')} onUninstall={(p) => data.setUninstalling(p)} onReview={(p) => data.setReviewing(p)} busy={busy} />,
     builtin: <PluginsBuiltIn />,
   };
 }
@@ -370,13 +372,13 @@ function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNotify, on
               onNotify={onNotify}
             />
           ) : current ? (
-            <DataPluginCard plugin={current} onUninstall={() => data.setUninstalling(current)} busy={busy} />
+            <DataPluginCard plugin={current} onUninstall={() => data.setUninstalling(current)} onReview={() => data.setReviewing(current)} busy={busy} />
           ) : (
             <p className="text-[13px] text-text-muted">{t('plugins:empty.detail')}</p>
           )}
         </div>
       </div>
-      {store.length > 0 && rest.length > 0 && <PluginsData plugins={rest} onUninstall={(p) => data.setUninstalling(p)} busy={busy} />}
+      {store.length > 0 && rest.length > 0 && <PluginsData plugins={rest} onUninstall={(p) => data.setUninstalling(p)} onReview={(p) => data.setReviewing(p)} busy={busy} />}
       <PluginsBuiltIn />
     </div>
   );
@@ -689,7 +691,7 @@ export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogo
   );
 }
 
-export function PluginsData({ plugins, onUninstall, busy }: { plugins: StorePlugin[]; onUninstall: (p: StorePlugin) => void; busy: string | null }) {
+export function PluginsData({ plugins, onUninstall, onReview, busy }: { plugins: StorePlugin[]; onUninstall: (p: StorePlugin) => void; onReview: (p: StorePlugin) => void; busy: string | null }) {
   const { t } = useTranslation('plugins');
   if (plugins.length === 0) return null;
   // One root: the heading and the cards stay together, so a row counts the
@@ -699,14 +701,14 @@ export function PluginsData({ plugins, onUninstall, busy }: { plugins: StorePlug
       <MonoLabel as="h2" className="mb-3 mt-8 normal-case tracking-normal">{t('plugins:section.data')}</MonoLabel>
       <div className="grid gap-4 xl:grid-cols-2">
         {plugins.map((p) => (
-          <DataPluginCard key={p.id} plugin={p} onUninstall={() => onUninstall(p)} busy={busy} />
+          <DataPluginCard key={p.id} plugin={p} onUninstall={() => onUninstall(p)} onReview={() => onReview(p)} busy={busy} />
         ))}
       </div>
     </div>
   );
 }
 
-export function DataPluginCard({ plugin: p, onUninstall, busy }: { plugin: StorePlugin; onUninstall: () => void; busy: string | null }) {
+export function DataPluginCard({ plugin: p, onUninstall, onReview, busy }: { plugin: StorePlugin; onUninstall: () => void; onReview: () => void; busy: string | null }) {
   const { t } = useTranslation('plugins');
   const st = STATUS[p.status] ?? STATUS.invalid;
   return (
@@ -729,6 +731,15 @@ export function DataPluginCard({ plugin: p, onUninstall, busy }: { plugin: Store
         <p className="mt-auto text-[12px] text-text-body">
           {t('plugins:card.dataNote')}
         </p>
+      )}
+      {/* A pending data plugin waits for approval (issue #147): closing the
+          approval sheet must not strand it, so the card re-opens the review. */}
+      {(p.status === 'unapproved' || p.status === 'changed') && (
+        <div className="mt-auto flex gap-2 pt-1">
+          <Button variant="primary" className="flex-1" onClick={onReview}>
+            <ShieldCheck className="h-4 w-4" /> {p.status === 'changed' ? t('plugins:card.reapprove') : t('plugins:card.approve')}
+          </Button>
+        </div>
       )}
       {!p.bundled && (
         <div className="mt-auto flex gap-2 pt-1">

@@ -112,3 +112,52 @@ func TestInstallDataZipWaitsForApproval(t *testing.T) {
 		t.Fatal("data tweak missing after approval")
 	}
 }
+
+// A zipped theme becomes pickable only after approval: before that it is
+// listed nowhere, after that findTheme resolves it.
+func TestInstallThemeZipBecomesPickableAfterApproval(t *testing.T) {
+	t.Parallel()
+	a, _, _ := uninstallApp(t)
+	path := filepath.Join(t.TempDir(), "plugin.zip")
+	w, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(w)
+	manifest := `{"id":"fixture-theme","name":"Fixture theme","version":"1.0.0","manifestVersion":1,"kind":"data","description":"test","theme":"theme.toml"}`
+	for name, body := range map[string]string{
+		"plugin.json":         manifest,
+		"theme.toml":          pluginThemeTOML,
+		"assets/bg.png":       string(pluginThemePNG),
+		"fonts/fixture.woff2": string(pluginThemeWOFF),
+	} {
+		fw, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fw.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.InstallPluginZip(path, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := a.findTheme("fixture"); ok {
+		t.Fatal("theme applies before approval")
+	}
+	if err := a.ApprovePlugin("fixture-theme"); err != nil {
+		t.Fatalf("approving a theme plugin: %v", err)
+	}
+	if _, ok := a.findTheme("fixture"); !ok {
+		t.Fatal("approved theme not found")
+	}
+	if got := a.GetTheme("fixture"); got.ID != "fixture" {
+		t.Fatalf("GetTheme = %q, want fixture", got.ID)
+	}
+}

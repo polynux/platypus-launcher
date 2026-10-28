@@ -213,10 +213,14 @@ func TestUninstallRefusesTraversal(t *testing.T) {
 
 // A store-missing game launches from its executable on disk (issue #161:
 // installed games stay launchable where possible); without the flag the same
-// game refuses with "isn't approved and enabled".
+// game refuses with "isn't approved and enabled". The store really is gone
+// here: the plugin was uninstalled first.
 func TestStoreMissingGameLaunchesFromDisk(t *testing.T) {
 	t.Parallel()
 	a, _, _ := uninstallApp(t)
+	if err := a.UninstallPlugin("echo", false); err != nil {
+		t.Fatal(err)
+	}
 	exe := filepath.Join(t.TempDir(), "tiny")
 	if err := os.WriteFile(exe, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
@@ -232,7 +236,22 @@ func TestStoreMissingGameLaunchesFromDisk(t *testing.T) {
 	plain := missing
 	plain.StoreMissing = false
 	if _, err := a.prepareLaunch(plain, true); err == nil {
-		t.Fatal("a game whose store is present-but-unapproved must not launch direct")
+		t.Fatal("a game whose store is gone must not launch without the flag")
+	}
+}
+
+// A flagged game still refuses when a plugin with that id is installed
+// (disabled, unapproved or changed): only a missing store launches direct.
+func TestStoreMissingLaunchRefusedWhenPluginInstalled(t *testing.T) {
+	t.Parallel()
+	a, _, _ := uninstallApp(t)
+	exe := filepath.Join(t.TempDir(), "tiny")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	missing := types.Game{ID: "p.echo.tiny", Source: "echo", Title: "Tiny", IsInstalled: true, Executable: exe, Native: true, StoreMissing: true}
+	if _, err := a.prepareLaunch(missing, true); err == nil {
+		t.Fatal("an installed store must keep the not-approved refusal")
 	}
 }
 

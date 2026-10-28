@@ -982,8 +982,14 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 			return nil, err
 		}
 		launch = l
-	} else if game.Source != "" && game.Source != types.SourceCustom && !game.StoreMissing {
-		return nil, apperr.New("plugin.notApproved", fmt.Sprintf("%s comes from %s, which isn't approved and enabled", game.Title, game.Source), map[string]string{"title": game.Title, "source": game.Source})
+	} else if game.Source != "" && game.Source != types.SourceCustom {
+		// A store-missing game falls through to its executable on disk, like
+		// a sideloaded game — but only when no plugin with that id is
+		// installed at all (issue #161). A disabled or unapproved store
+		// keeps the not-approved refusal.
+		if !game.StoreMissing || a.pluginInstalled(game.Source) {
+			return nil, apperr.New("plugin.notApproved", fmt.Sprintf("%s comes from %s, which isn't approved and enabled", game.Title, game.Source), map[string]string{"title": game.Title, "source": game.Source})
+		}
 	}
 	// A store-missing game (issue #161) falls through to its executable on
 	// disk, like a sideloaded game: no store, no launch spec.

@@ -75,6 +75,16 @@ func loadLibrarySnapshot(snapDir, source string) []types.Game {
 	return games
 }
 
+// pluginInstalled reports whether a plugin folder with this id exists,
+// whatever its status (ready, disabled, unapproved, changed, invalid).
+func (a *App) pluginInstalled(source string) bool {
+	if a.plugins == nil {
+		return false
+	}
+	_, ok := a.plugins.Plugin(source)
+	return ok
+}
+
 // storeMissingGames serves installed rows from snapshots whose store is gone
 // (issue #161): an uninstalled store's games stay in the library as "store
 // missing" instead of dropping out. Rows that were never installed are
@@ -103,6 +113,11 @@ func (a *App) storeMissingGames(all []stores.Store) []types.Game {
 		}
 		source := strings.TrimSuffix(name, ".json")
 		if source == "" || known[source] || !filepath.IsLocal(source) {
+			continue
+		}
+		// Installed but not running (disabled, unapproved, changed, broken):
+		// not missing. Only a source with no plugin folder at all counts.
+		if a.pluginInstalled(source) {
 			continue
 		}
 		for _, g := range loadLibrarySnapshot(a.library.snapDir, source) {

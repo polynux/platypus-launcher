@@ -20,6 +20,7 @@ vi.mock('../../lib/theme', async (importOriginal) => {
 const calls = {
   install: [] as Array<{ path: string; confirm: boolean }>,
   uninstall: [] as Array<{ id: string; removeGames: boolean }>,
+  approve: [] as string[],
 };
 let installAnswer: unknown = { id: 'zippy', version: '1.0.0' };
 const notifyCalls: Array<{ msg: string; kind?: 'ok' | 'err' | 'busy' }> = [];
@@ -30,7 +31,10 @@ vi.mock('../../effect/runtime', () => ({
     authStatus: () => Effect.succeed({ loggedIn: false } as never),
     listPlugins: () => Effect.succeed(listed as never),
     rescanPlugins: () => Effect.succeed([] as never),
-    approvePlugin: () => Effect.succeed(undefined as never),
+    approvePlugin: (id: string) => {
+      calls.approve.push(id);
+      return Effect.succeed(undefined as never);
+    },
     setPluginEnabled: () => Effect.succeed(undefined as never),
     retryPlugin: () => Effect.succeed(undefined as never),
     openPluginsFolder: () => Effect.succeed(undefined as never),
@@ -96,6 +100,7 @@ describe('plugin lifecycle under Atlas', () => {
   beforeEach(() => {
     calls.install.length = 0;
     calls.uninstall.length = 0;
+    calls.approve.length = 0;
     notifyCalls.length = 0;
     listed = [];
     installAnswer = { id: 'zippy', version: '1.0.0' };
@@ -135,5 +140,21 @@ describe('plugin lifecycle under Atlas', () => {
     expect(screen.queryByRole('checkbox')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /^Uninstall$/ }));
     await waitFor(() => expect(calls.uninstall).toEqual([{ id: 'data', removeGames: false }]));
+  });
+
+  it('a pending data plugin re-opens approval from the Atlas detail', async () => {
+    render(
+      <PluginsView
+        plugins={[plugin({ id: 'data', name: 'Data', kind: 'data', status: 'unapproved' })]}
+        warnings={[]}
+        onPlugins={() => {}}
+        onLibraryChanged={() => {}}
+        onNotify={(msg, kind) => notifyCalls.push({ msg, kind })}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Review and approve' }));
+    expect(screen.getByText('Approve Data')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and enable' }));
+    await waitFor(() => expect(calls.approve).toEqual(['data']));
   });
 });
