@@ -98,6 +98,7 @@ export interface CoreApi {
   MakeGameExecutable(gameID: string): Promise<types.Game>;
   MigrationNotice(): Promise<types.MigrationNotice | null>;
   MoveGame(game: types.Game, parent: string): Promise<types.Job>;
+  MoveJobToFront(id: string): Promise<void>;
   OpenCrashLog(game: types.Game): Promise<void>;
   OpenGameFolder(game: types.Game): Promise<void>;
   OpenPluginsFolder(): Promise<void>;
@@ -283,6 +284,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'MakeGameExecutable',
   'MigrationNotice',
   'MoveGame',
+  'MoveJobToFront',
   'OpenCrashLog',
   'OpenGameFolder',
   'OpenPluginsFolder',

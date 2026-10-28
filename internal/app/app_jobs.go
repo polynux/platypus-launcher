@@ -350,6 +350,12 @@ func (a *App) RetryJob(id string) error {
 	return a.jobs.Retry(id)
 }
 
+// MoveJobToFront moves a queued or paused download to the top of the queue,
+// so it starts next. The running download keeps running.
+func (a *App) MoveJobToFront(id string) error {
+	return a.jobs.MoveToFront(id)
+}
+
 func (a *App) ClearFinishedJobs() {
 	a.jobs.ClearFinished()
 }
