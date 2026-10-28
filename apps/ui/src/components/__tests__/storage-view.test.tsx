@@ -19,6 +19,8 @@ const mock = vi.hoisted(() => ({
     checkMove: vi.fn(),
     pickMoveFolder: vi.fn(),
     moveGame: vi.fn(),
+    prefixBackups: vi.fn(),
+    deletePrefixBackup: vi.fn(),
   },
   subs: [] as ((d: unknown) => void)[],
 }));
@@ -93,6 +95,7 @@ beforeEach(() => {
   mock.api.getGameFolders.mockReturnValue(Effect.succeed([]));
   mock.api.listJobs.mockReturnValue(Effect.succeed([]));
   mock.api.discardJob.mockReturnValue(Effect.succeed(undefined as never));
+  mock.api.prefixBackups.mockReturnValue(Effect.succeed([]));
 });
 
 describe('StorageView', () => {

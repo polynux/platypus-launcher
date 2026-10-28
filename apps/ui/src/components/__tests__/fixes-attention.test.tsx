@@ -67,3 +67,4 @@ describe('atlas attention signals', () => {
     expect(screen.getByText("2 games can't start or need a decision.")).toBeInTheDocument();
   });
 });
+

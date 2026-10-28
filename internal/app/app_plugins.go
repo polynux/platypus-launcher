@@ -210,10 +210,14 @@ func (a *App) UninstallPlugin(id string, removeGames bool) error {
 	}
 	// A theme plugin may carry the picked theme: remember it, so the theme
 	// falls back after the folder is gone. Resetting before a failed removal
-	// would lose the user's theme while the plugin stays.
+	// would lose the user's theme while the plugin stays. A disabled plugin's
+	// themes aren't listed (the picker offers only approved ones), so
+	// findTheme misses them: the plugin's own theme is the answer then.
 	themeFallback := false
 	if picked := a.settings.Theme(); picked != "" {
-		if t, ok := a.findTheme(picked); ok && t.Info.Source == id {
+		if t, ok := a.findTheme(picked); ok {
+			themeFallback = t.Info.Source == id
+		} else if p, ok := a.plugins.Plugin(id); ok && p.Theme != nil && p.Theme.Info.ID == picked {
 			themeFallback = true
 		}
 	}

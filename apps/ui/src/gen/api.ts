@@ -36,6 +36,7 @@ export interface CoreApi {
   CreateCollection(name: string, smart: types.SmartFilter): Promise<types.Collection[]>;
   CreateSaveBackup(game: types.Game): Promise<types.Job>;
   DeleteCollection(id: string): Promise<types.Collection[]>;
+  DeletePrefixBackup(path: string): Promise<number>;
   DeletePrefixPreset(id: string): Promise<void>;
   DeleteSaveBackup(gameID: string, backupID: string): Promise<void>;
   DetectGameExecutable(path: string): Promise<types.DetectResult>;
@@ -119,6 +120,7 @@ export interface CoreApi {
   PluginAuthComplete(id: string, fields: Record<string, string>): Promise<types.AuthStatus>;
   PluginAuthStatus(id: string): Promise<types.AuthStatus>;
   PluginLogout(id: string): Promise<types.AuthStatus>;
+  PrefixBackups(): Promise<types.PrefixBackup[]>;
   PrefixUsage(): Promise<types.PrefixShare[]>;
   PreviewLaunchCommand(game: types.Game): Promise<string>;
   PreviewRestoreSaveBackup(game: types.Game, backupID: string): Promise<types.RestorePreview>;
@@ -231,6 +233,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'CreateCollection',
   'CreateSaveBackup',
   'DeleteCollection',
+  'DeletePrefixBackup',
   'DeletePrefixPreset',
   'DeleteSaveBackup',
   'DetectGameExecutable',
@@ -314,6 +317,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'PluginAuthComplete',
   'PluginAuthStatus',
   'PluginLogout',
+  'PrefixBackups',
   'PrefixUsage',
   'PreviewLaunchCommand',
   'PreviewRestoreSaveBackup',

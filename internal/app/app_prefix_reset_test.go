@@ -247,3 +247,118 @@ func TestResetPrefixClearsTheFlagForAPlayedGame(t *testing.T) {
 		}
 	}
 }
+
+// A custom prefix whose parent doesn't exist yet under a symlinked folder is
+// refused too (issue #163): the missing part must not hide the link, or the
+// reset would create empty folders and its marker outside the root.
+func TestResetPrefixRefusesMissingParentUnderASymlink(t *testing.T) {
+	t.Parallel()
+	outside := t.TempDir()
+	a, _ := resetTestApp(t, []types.Game{resetWineGame("missing", nil)})
+	root := a.effectivePrefixesFolder()
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		t.Fatal(err)
+	}
+	// The saved setting wins over the default, like a launch.
+	prefix := filepath.Join(root, "link", "new", "Documents")
+	if err := a.settings.SetGameSettings("missing", map[string]any{"wine_prefix": prefix}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.ResetPrefix("missing"); resetCode(t, err) != "prefix.reset.outsideRoot" {
+		t.Fatalf("reset under a link with a missing parent = %v, want a refusal", err)
+	}
+	if _, err := os.Lstat(filepath.Join(outside, "new")); !os.IsNotExist(err) {
+		t.Fatalf("folders were created outside the prefixes folder: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "link", "new", "Documents", runner.FreshMarker)); !os.IsNotExist(err) {
+		t.Fatalf("a fresh prefix was created through the link: %v", err)
+	}
+}
+
+// Prefix backups pile up silently: Storage lists them with their size, and
+// deleting one frees it (issue #163).
+func TestPrefixBackupsListAndDelete(t *testing.T) {
+	t.Parallel()
+	a, _ := resetTestApp(t, []types.Game{resetWineGame("kept", nil)})
+	root := a.effectivePrefixesFolder()
+	old := filepath.Join(root, "kept.bak-1700000000")
+	if err := os.MkdirAll(filepath.Join(old, "drive_c"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(old, "drive_c", "x.dll"), []byte("12345"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	newer := filepath.Join(root, "kept.bak-1800000000-1")
+	if err := os.MkdirAll(newer, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A game's own prefix and a link are not backups.
+	if err := os.MkdirAll(filepath.Join(root, "kept"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(old, filepath.Join(root, "linked.bak-1")); err != nil {
+		t.Fatal(err)
+	}
+
+	got := a.PrefixBackups()
+	if len(got) != 2 {
+		t.Fatalf("backups = %+v, want the two .bak-* folders only", got)
+	}
+	// Stalest first, with the space each takes.
+	if got[0].Name != "kept.bak-1700000000" || got[0].Bytes != 5 || got[0].At != 1700000000 {
+		t.Fatalf("first backup = %+v", got[0])
+	}
+	if got[1].Name != "kept.bak-1800000000-1" || got[1].Bytes != 0 {
+		t.Fatalf("second backup = %+v", got[1])
+	}
+
+	freed, err := a.DeletePrefixBackup(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if freed != 5 {
+		t.Fatalf("freed = %d, want the folder's bytes", freed)
+	}
+	if _, err := os.Lstat(old); !os.IsNotExist(err) {
+		t.Fatalf("the backup survived: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "kept")); err != nil {
+		t.Fatalf("deleting a backup touched the game's prefix: %v", err)
+	}
+	if got := a.PrefixBackups(); len(got) != 1 || got[0].Path != newer {
+		t.Fatalf("after the delete: %+v", got)
+	}
+}
+
+// Only a backup folder in the prefixes folder can be deleted: the path comes
+// from the UI, so core checks it again.
+func TestDeletePrefixBackupRefusesAnythingElse(t *testing.T) {
+	t.Parallel()
+	a, _ := resetTestApp(t, []types.Game{resetWineGame("safe", nil)})
+	root := a.effectivePrefixesFolder()
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	prefix := filepath.Join(root, "safe")
+	if err := os.MkdirAll(prefix, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "elsewhere.bak-1")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{prefix, outside, filepath.Join(root, "safe.txt")} {
+		if _, err := a.DeletePrefixBackup(path); err == nil {
+			t.Fatalf("deleted %q, want a refusal", path)
+		}
+	}
+	if _, err := os.Lstat(prefix); err != nil {
+		t.Fatalf("the game's prefix was deleted: %v", err)
+	}
+	if _, err := os.Lstat(outside); err != nil {
+		t.Fatalf("a folder outside the prefixes folder was deleted: %v", err)
+	}
+}

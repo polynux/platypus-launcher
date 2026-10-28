@@ -24,6 +24,9 @@ export function useStorageData({ games: library, jobs: liveJobs, onNotify, onRem
   const [usage, setUsage] = useState<DiskUsage | null>(null);
   const [folders, setFolders] = useState<import('../types').GameFolder[] | null>(null);
   const [jobs, setJobs] = useState<import('../types').Job[]>([]);
+  // The prefix backups a reset left behind (issue #163): read once when the
+  // view opens, and kept in step by the deletes made here.
+  const [backups, setBackups] = useState<import('../types').PrefixBackup[]>([]);
   // Rows whose Scan was pressed, waiting for the next snapshot (local, not
   // global: only this view shows them).
   const [measuring, setMeasuring] = useState<ReadonlySet<string>>(new Set());
@@ -47,6 +50,7 @@ export function useStorageData({ games: library, jobs: liveJobs, onNotify, onRem
   useEffect(() => {
     Effect.runPromise(LauncherApi.getDiskUsage()).then(apply).catch(() => {});
     Effect.runPromise(LauncherApi.getGameFolders()).then(setFolders).catch(() => {});
+    Effect.runPromise(LauncherApi.prefixBackups()).then(setBackups).catch(() => {});
     // Without the App's live job list, read it once.
     if (!liveJobs) Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch(() => {});
     return onDiskUsage(apply);
@@ -84,8 +88,21 @@ export function useStorageData({ games: library, jobs: liveJobs, onNotify, onRem
   };
   const refreshJobs = () => Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch((err) => onNotify(coreErrMsg(err), 'err'));
   const discardJob = (id: string) => Effect.runPromise(LauncherApi.discardJob(id)).catch((err) => onNotify(coreErrMsg(err), 'err'));
+  // Deletes one prefix backup and answers the space it freed, or null when the
+  // core refused (the panel then keeps the row and says nothing else).
+  const deleteBackup = (backup: import('../types').PrefixBackup) =>
+    Effect.runPromise(LauncherApi.deletePrefixBackup(backup.path)).then(
+      (freed) => {
+        setBackups((list) => list.filter((b) => b.path !== backup.path));
+        return freed;
+      },
+      (err) => {
+        onNotify(coreErrMsg(err), 'err');
+        return null;
+      },
+    );
   return {
-    usage, measuring, moveId, setMoveId, removeId, setRemoveId, uninstallId, setUninstallId,
-    rescan, scanning, sorted, byId, drives, folders, jobs, refreshJobs, discardJob, scan, openFolder, onNotify, onRemove, onUninstall, library,
+    usage, backups, measuring, moveId, setMoveId, removeId, setRemoveId, uninstallId, setUninstallId,
+    rescan, scanning, sorted, byId, drives, folders, jobs, refreshJobs, discardJob, deleteBackup, scan, openFolder, onNotify, onRemove, onUninstall, library,
   };
 }

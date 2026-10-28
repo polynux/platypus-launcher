@@ -642,6 +642,13 @@ export namespace types {
     windows_version: string;
   }
 
+  export interface PrefixBackup {
+    name: string;
+    path: string;
+    bytes: number;
+    at: number;
+  }
+
   export interface PrefixGame {
     id: string;
     title: string;

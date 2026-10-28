@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { Effect } from 'effect';
 import type { DiskUsage, Game } from '../../types';
 
-const api = vi.hoisted(() => ({ getDiskUsage: vi.fn(), getGameFolders: vi.fn(), listJobs: vi.fn(), discardJob: vi.fn() }));
+const api = vi.hoisted(() => ({ getDiskUsage: vi.fn(), getGameFolders: vi.fn(), listJobs: vi.fn(), discardJob: vi.fn(), prefixBackups: vi.fn(), deletePrefixBackup: vi.fn() }));
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: new Proxy({}, { get: (_t, k: string) => (...args: unknown[]) => (api as Record<string, (...a: unknown[]) => unknown>)[k](...args) }),
   onDiskUsage: () => () => {},
@@ -28,6 +28,8 @@ beforeEach(() => {
   api.getGameFolders.mockReturnValue(Effect.succeed([{ path: '/home/games', is_default: true, exists: true, free_bytes: 30e9 }]));
   api.listJobs.mockReturnValue(Effect.succeed([{ id: 'left', kind: 'install', source: 'steam', game_id: 'old', store_game_id: 'old', title: 'Canceled', state: 'canceled', bytes: 12e9, total: 0, speed: 0, percent: 0, attempts: 1, created_at: 1, updated_at: 1, leftover: '/tmp/left' }]));
   api.discardJob.mockReturnValue(Effect.succeed(undefined as never));
+  api.prefixBackups.mockReturnValue(Effect.succeed([]));
+  api.deletePrefixBackup.mockReturnValue(Effect.succeed(0));
 });
 
 describe('Atlas Storage panels', () => {
@@ -81,6 +83,29 @@ describe('Atlas Storage panels', () => {
     render(<StorageView games={[mk('outside', '/home/games-old/Outside')]} onNotify={() => {}} onRemove={() => {}} onUninstall={() => {}} />);
     expect(within(await screen.findByRole('region', { name: '/home/games-old' })).getAllByText('Outside')).toHaveLength(2);
     expect(within(screen.getByRole('region', { name: '/home/games' })).queryByText('Outside')).toBeNull();
+  });
+
+  it('lists the prefix backups a reset left, with the space each takes', async () => {
+    api.prefixBackups.mockReturnValue(Effect.succeed([
+      { name: 'inside.bak-1700000000', path: '/prefixes/inside.bak-1700000000', bytes: 2.5e9, at: 1700000000 },
+    ]));
+    render(<StorageView games={[mk('inside', '/home/games/Inside')]} onNotify={() => {}} onRemove={() => {}} onUninstall={() => {}} />);
+    expect(await screen.findByText('Prefix backups')).toBeInTheDocument();
+    expect(screen.getByText('inside.bak-1700000000')).toBeInTheDocument();
+    expect(screen.getByText('2.5 GB')).toBeInTheDocument();
+  });
+
+  it('deletes a prefix backup and reports the space it freed', async () => {
+    const onNotify = vi.fn();
+    api.prefixBackups.mockReturnValue(Effect.succeed([
+      { name: 'inside.bak-1700000000', path: '/prefixes/inside.bak-1700000000', bytes: 2.5e9, at: 1700000000 },
+    ]));
+    api.deletePrefixBackup.mockReturnValue(Effect.succeed(2.5e9));
+    render(<StorageView games={[mk('inside', '/home/games/Inside')]} onNotify={onNotify} onRemove={() => {}} onUninstall={() => {}} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete inside.bak-1700000000' }));
+    await waitFor(() => expect(api.deletePrefixBackup).toHaveBeenCalledWith('/prefixes/inside.bak-1700000000'));
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Deleted inside.bak-1700000000 and freed 2.5 GB.', 'ok'));
+    expect(screen.queryByText('inside.bak-1700000000')).toBeNull();
   });
 
   it('renders one move dialog for an outside-folder game', async () => {

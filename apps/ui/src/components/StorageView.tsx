@@ -2,7 +2,7 @@
 import { useTranslation } from 'react-i18next';
 import React, { useMemo, useState } from 'react';
 import { FolderInput, FolderOpen, HardDrive, HardDriveDownload, Loader2, RefreshCw, ScanLine, Trash2, TriangleAlert } from 'lucide-react';
-import type { DiskUsage, Game, Job, RemoveOptions } from '../types';
+import type { DiskUsage, Game, Job, PrefixBackup, RemoveOptions } from '../types';
 import { ATLAS_PAGE, Cover, EmptyState, MonoLabel, ViewHeader } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
@@ -83,6 +83,11 @@ function ClassicStorage({ data }: { data: ReturnType<typeof useStorageData> }) {
             ? 'grid gap-5 xl:grid-cols-[1.75fr_1fr]'
             : undefined}
       />
+      {data.backups.length > 0 && (
+        <div className="mt-6">
+          <PrefixBackups backups={data.backups} data={data} />
+        </div>
+      )}
     </div>
   );
 }
@@ -468,6 +473,42 @@ function AtlasStorage({ data }: { data: StorageData }) {
   );
 }
 
+/** The prefix backups the resets left behind (issue #163): each one listed
+ *  with the space it takes, and deleted for good from here. Hidden when a
+ *  reset never left one, which is the usual case. */
+function PrefixBackups({ backups, data }: { backups: PrefixBackup[]; data: StorageData }) {
+  const { t } = useTranslation('storage');
+  if (backups.length === 0) return null;
+  const remove = (backup: PrefixBackup) => {
+    void data.deleteBackup(backup).then((freed) => {
+      if (freed !== null) data.onNotify(t('storage:backups.deleted', { name: backup.name, size: figure(freed) }), 'ok');
+    });
+  };
+  return (
+    <section className="rounded-xl bg-surface px-4 py-3.5">
+      <h2 className="mb-2 text-[14px] font-bold">{t('storage:backups.title')}</h2>
+      <p className="mb-2 text-[12.5px] text-text-muted">{t('storage:backups.intro')}</p>
+      <ul className="divide-y divide-hairline">
+        {backups.map((backup) => (
+          <li key={backup.path} className="flex items-center gap-2 py-2 text-[12.5px]">
+            <span className="min-w-0 flex-1 truncate select-text" title={backup.path}>{backup.name}</span>
+            <span className="tabular-nums text-text-muted">{figure(backup.bytes)}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              aria-label={t('storage:backups.delete', { name: backup.name })}
+              onClick={() => remove(backup)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function AtlasDriveCard({ drive: d, rows, data, defaultFolder }: { drive: DiskUsage['drives'][number]; rows: DiskUsage['games'][number][]; data: StorageData; defaultFolder?: string }) {
   const { t } = useTranslation(['storage', 'gameSettings', 'common']);
   const known = d.total_bytes > 0;
@@ -662,5 +703,6 @@ function StoragePanels({ outside, leftovers, otherLeftovers, defaultFolder, data
         );
       })}
     </section>
+    <PrefixBackups backups={data.backups} data={data} />
   </div>;
 }

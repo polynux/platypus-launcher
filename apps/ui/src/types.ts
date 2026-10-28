@@ -197,6 +197,8 @@ export type PrefixShare = gen.PrefixShare;
 /** What resetting a Wine prefix did (issue #144): the fresh prefix path and,
  *  when something was there, where the old one was kept. */
 export type PrefixResetResult = gen.PrefixResetResult;
+/** One prefix backup a reset left in the prefixes folder (issue #163). */
+export type PrefixBackup = gen.PrefixBackup;
 /** A named Wine prefix template (issue #52) and what applying it did. */
 export type PrefixPreset = gen.PrefixPreset;
 export type PrefixApplyResult = gen.PrefixApplyResult;
