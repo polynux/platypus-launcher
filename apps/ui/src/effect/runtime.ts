@@ -170,8 +170,16 @@ export const LauncherApi = {
   setGameSteamAppID: (game: Game, appId: string) =>
     call<Compat>('SetGameSteamAppID', async () => normalizeCompat(await App.SetGameSteamAppID(backend(game), appId))),
 
-  // The "Fetch ratings online" switch.
+  // The "Fetch ratings online" switch (ProtonDB).
   setRatingsOnline: (on: boolean) => call<LauncherSettings>('SetRatingsOnline', () => App.SetRatingsOnline(on)),
+
+  // The "Fetch protection data online" switch: PCGamingWiki and
+  // AreWeAntiCheatYet, apart from ProtonDB ratings (issue #150).
+  setProtectionOnline: (on: boolean) => call<LauncherSettings>('SetProtectionOnline', () => App.SetProtectionOnline(on)),
+
+  // The "Store client notices" switch (issue #149): what a store client is
+  // doing while it starts a game.
+  setClientNotices: (on: boolean) => call<LauncherSettings>('SetClientNotices', () => App.SetClientNotices(on)),
 
   // Summary, screenshots and achievements for the game page (every source;
   // sideloaded games resolve theirs from the linked online info, issue #38).

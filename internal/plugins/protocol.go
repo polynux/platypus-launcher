@@ -146,8 +146,12 @@ type CompatLookupGame struct {
 	SteamAppID string   `json:"steamAppId,omitempty"`
 	Platforms  []string `json:"platforms,omitempty"`
 	InstallDir string   `json:"installDir,omitempty"`
-	Online     bool     `json:"online"`
-	StoreDRM   bool     `json:"storeDRM,omitempty"`
+	// Online allows ProtonDB ratings (and Steam Deck verdicts); ProtectionOnline
+	// allows PCGamingWiki and AreWeAntiCheatYet (issue #150). Both are false
+	// when the machine is offline.
+	Online           bool `json:"online"`
+	ProtectionOnline bool `json:"protectionOnline"`
+	StoreDRM         bool `json:"storeDRM,omitempty"`
 }
 
 // CompatBadge is a provider supplied compatibility badge.

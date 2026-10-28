@@ -349,6 +349,12 @@ type LauncherSettings struct {
 	CancelCleanupDays int `json:"cancel_cleanup_days"`
 	// RatingsOnline is the "Fetch ratings online" switch (see compat.go).
 	RatingsOnline bool `json:"ratings_online"`
+	// ProtectionOnline is the "Fetch protection data online" switch (issue
+	// #150): PCGamingWiki and AreWeAntiCheatYet, apart from ProtonDB ratings.
+	ProtectionOnline bool `json:"protection_online"`
+	// ClientNotices is the "Store client notices" switch (issue #149): what a
+	// store's client is doing while it starts a game.
+	ClientNotices bool `json:"client_notices"`
 	// ArtworkOnline is the "Find artwork online" switch for sideloaded games
 	// (issue #36): the background lookup after an add and on-demand search.
 	ArtworkOnline bool `json:"artwork_online"`

@@ -101,6 +101,13 @@ type file struct {
 	// FetchRatings is the "Fetch ratings online" switch. A pointer: unset
 	// means on (see compat.go).
 	FetchRatings *bool `json:"fetch_ratings,omitempty"`
+	// FetchProtection is the "Fetch protection data online" switch (issue
+	// #150: PCGamingWiki and AreWeAntiCheatYet). A pointer: unset means on,
+	// and an old file's single switch sets both.
+	FetchProtection *bool `json:"fetch_protection,omitempty"`
+	// ClientNotices is the "Store client notices" switch (issue #149). A
+	// pointer: unset means on (see notices.go).
+	ClientNotices *bool `json:"client_notices,omitempty"`
 	// FindArtwork is the "Find artwork online" switch (issue #36). A
 	// pointer: unset means on, like FetchRatings.
 	FindArtwork *bool `json:"find_artwork,omitempty"`

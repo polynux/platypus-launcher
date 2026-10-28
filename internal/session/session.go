@@ -67,6 +67,9 @@ type entry struct {
 	message        string
 	clientStatus   *types.ClientStatus
 	clientStatusFn func(time.Time) (*types.ClientStatus, error)
+	// clientNotices is whether the client's status reaches the UI (issue
+	// #149); the polling above happens either way.
+	clientNotices bool
 
 	done     chan struct{} // closed when the launch is no longer tracked
 	doneOnce sync.Once
@@ -123,12 +126,16 @@ func (t *Tracker) Snapshot() []types.SessionEvent {
 	defer t.mu.Unlock()
 	out := make([]types.SessionEvent, 0, len(t.active))
 	for gameID, e := range t.active {
+		status := e.clientStatus
+		if !e.clientNotices {
+			status = nil // the user switched the client's notices off (issue #149)
+		}
 		out = append(out, types.SessionEvent{
 			GameID:       gameID,
 			State:        e.state,
 			PID:          e.pid,
 			Message:      e.message,
-			ClientStatus: e.clientStatus,
+			ClientStatus: status,
 		})
 	}
 	return out
@@ -146,7 +153,7 @@ func (t *Tracker) tryClaim(gameID string, cmd *exec.Cmd) *entry {
 	if _, ok := t.active[gameID]; ok {
 		return nil
 	}
-	e := &entry{cmd: cmd, state: "starting", done: make(chan struct{})}
+	e := &entry{cmd: cmd, state: "starting", done: make(chan struct{}), clientNotices: true}
 	if cmd != nil && cmd.Process != nil {
 		e.state = "running"
 		e.pid = cmd.Process.Pid
@@ -195,6 +202,15 @@ func (t *Tracker) setMessage(gameID, message string) {
 // WithClientStatus polls a store-neutral status source while a client launch is pending.
 func WithClientStatus(status func(time.Time) (*types.ClientStatus, error)) StartOption {
 	return func(e *entry) { e.clientStatusFn = status }
+}
+
+// WithClientNotices says whether the client's status reaches the UI (issue
+// #149). The status is polled either way: it drives the launch deadline and
+// the idle grace, so a client that updates or compiles shaders for longer than
+// the start timeout still starts the game. Off, the launch keeps its plain
+// "Waiting for <client> to start the game" message and sends no status.
+func WithClientNotices(on bool) StartOption {
+	return func(e *entry) { e.clientNotices = on }
 }
 
 // StopAll kills direct-launch processes and their groups (on app shutdown).
@@ -253,8 +269,9 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 					if changed {
 						e.clientStatus = status
 					}
+					notices := e.clientNotices
 					t.mu.Unlock()
-					if changed {
+					if changed && notices {
 						t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: client + " is " + status.State, ClientStatus: status})
 					}
 					switch status.State {

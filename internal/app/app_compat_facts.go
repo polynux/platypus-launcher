@@ -31,17 +31,49 @@ type compatFactEntry struct {
 	SteamAppID string             `json:"steamAppId,omitempty"`
 	Expires    time.Time          `json:"expires"`
 	RetryAt    time.Time          `json:"retryAt,omitempty"`
-	Online     bool               `json:"online"`
-	InstallDir string             `json:"installDir,omitempty"`
+	// Online and Protection record which network sources the answer may hold
+	// (issue #150: ratings and protection have their own switches). Protection
+	// is a pointer: an entry saved before the split followed Online.
+	Online     bool   `json:"online"`
+	Protection *bool  `json:"protectionOnline,omitempty"`
+	InstallDir string `json:"installDir,omitempty"`
 }
 
-// compatFactFresh reports whether an answer or retry delay still covers this app id.
-func compatFactFresh(e compatFactEntry, appID, installDir string, online bool, now time.Time) bool {
-	if e.SteamAppID != appID || e.InstallDir != installDir || (online && !e.Online) {
+// protection reports whether the answer was fetched with the protection
+// sources allowed. An entry saved before the split (no field) followed the
+// single old switch, which Online still holds.
+func (e compatFactEntry) protection() bool {
+	if e.Protection == nil {
+		return e.Online
+	}
+	return *e.Protection
+}
+
+// fetchedWith records which sources the answer was fetched with, so switching
+// one on later makes it stale instead of waiting for its expiry (issue #150).
+func (e compatFactEntry) fetchedWith(g plugins.CompatLookupGame) compatFactEntry {
+	e.Online = g.Online
+	e.Protection = &g.ProtectionOnline
+	return e
+}
+
+// compatFactFresh reports whether an answer or retry delay still covers this
+// app id. A source the user switched on since the answer was fetched makes it
+// stale: it may never have been asked.
+func compatFactFresh(e compatFactEntry, appID, installDir string, ratings, protection bool, now time.Time) bool {
+	if e.SteamAppID != appID || e.InstallDir != installDir {
+		return false
+	}
+	if (ratings && !e.Online) || (protection && !e.protection()) {
 		return false
 	}
 	return (e.Fact.ID != "" && now.Before(e.Expires)) || now.Before(e.RetryAt)
 }
+
+// lookupOnline reports whether a lookup request let any network source out.
+// Ratings and protection have their own switches (issue #150), and an answer
+// fetched with either allowed is an online snapshot.
+func lookupOnline(g plugins.CompatLookupGame) bool { return g.Online || g.ProtectionOnline }
 
 // openCompatFactsCache loads the persisted facts cache, falling back to an empty cache.
 func openCompatFactsCache(path string) *compatFactsCache {
@@ -101,6 +133,9 @@ func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *typ
 		return
 	}
 	online := a.netOnline() && (a.settings == nil || a.settings.RatingsOnline())
+	// Protection facts have their own switch since #150: ProtonDB ratings and
+	// PCGamingWiki/AreWeAntiCheatYet are fetched independently.
+	protection := a.netOnline() && (a.settings == nil || a.settings.ProtectionOnline())
 	now := time.Now()
 	for _, plugin := range a.plugins.Plugins() {
 		if plugin.Manifest.IsData() || !slices.Contains(plugin.Manifest.Capabilities, "compat-facts") {
@@ -116,7 +151,7 @@ func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *typ
 			appID, _ := a.ratingAppID(g, d)
 			a.compatFacts.mu.Lock()
 			e := a.compatFacts.facts[pluginID][g.ID]
-			fresh := compatFactFresh(e, appID, g.InstallDir, online, now)
+			fresh := compatFactFresh(e, appID, g.InstallDir, online, protection, now)
 			a.compatFacts.mu.Unlock()
 			if fresh {
 				continue
@@ -125,7 +160,7 @@ func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *typ
 			if store == "" {
 				store = sourceOf(g)
 			}
-			item := plugins.CompatLookupGame{ID: g.ID, Store: store, StoreAppID: g.StoreAppID, SteamAppID: appID, InstallDir: g.InstallDir, Online: online}
+			item := plugins.CompatLookupGame{ID: g.ID, Store: store, StoreAppID: g.StoreAppID, SteamAppID: appID, InstallDir: g.InstallDir, Online: online, ProtectionOnline: protection}
 			if d != nil {
 				item.Platforms = d.Platforms
 				item.StoreDRM = d.DRM != nil
@@ -167,7 +202,7 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 			for _, game := range pending {
 				a.compatFacts.mu.Lock()
 				e := a.compatFacts.facts[pluginID][game.ID]
-				fresh := compatFactFresh(e, game.SteamAppID, game.InstallDir, game.Online, time.Now())
+				fresh := compatFactFresh(e, game.SteamAppID, game.InstallDir, game.Online, game.ProtectionOnline, time.Now())
 				a.compatFacts.mu.Unlock()
 				if !fresh {
 					batch = append(batch, game)
@@ -197,7 +232,7 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 	}
 	if err != nil {
 		for _, g := range games {
-			if !g.Online {
+			if !lookupOnline(g) {
 				continue
 			}
 			e := a.compatFacts.facts[pluginID][g.ID]
@@ -205,6 +240,7 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 				e.Fact = plugins.CompatFact{}
 				e.Expires = time.Time{}
 			}
+			e = e.fetchedWith(g)
 			e.SteamAppID = g.SteamAppID
 			e.InstallDir = g.InstallDir
 			e.RetryAt = now.Add(compatFactRetry)
@@ -236,7 +272,8 @@ func (a *App) cacheCompatFactResultLocked(pluginID string, games []plugins.Compa
 		if fact.Badges == nil {
 			fact.Badges = []plugins.CompatBadge{}
 		}
-		a.compatFacts.facts[pluginID][fact.ID] = compatFactEntry{Fact: fact, SteamAppID: request.SteamAppID, Expires: now.Add(ttl), Online: request.Online, InstallDir: request.InstallDir}
+		entry := compatFactEntry{Fact: fact, SteamAppID: request.SteamAppID, Expires: now.Add(ttl), InstallDir: request.InstallDir}.fetchedWith(request)
+		a.compatFacts.facts[pluginID][fact.ID] = entry
 		returned[fact.ID] = true
 	}
 	for _, g := range games {
@@ -244,7 +281,8 @@ func (a *App) cacheCompatFactResultLocked(pluginID string, games []plugins.Compa
 			continue
 		}
 		e := a.compatFacts.facts[pluginID][g.ID]
-		if g.Online {
+		if lookupOnline(g) {
+			e = e.fetchedWith(g)
 			e.SteamAppID = g.SteamAppID
 			e.RetryAt = now.Add(compatFactRetry)
 			a.compatFacts.facts[pluginID][g.ID] = e

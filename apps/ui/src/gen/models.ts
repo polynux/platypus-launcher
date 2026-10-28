@@ -541,6 +541,8 @@ export namespace types {
     default_games_folder: string;
     cancel_cleanup_days: number;
     ratings_online: boolean;
+    protection_online: boolean;
+    client_notices: boolean;
     artwork_online: boolean;
     game_info_online: boolean;
     chat_desktop_notify: boolean;

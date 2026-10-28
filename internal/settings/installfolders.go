@@ -165,8 +165,14 @@ func (s *Store) RemoveGameFolder(path string) ([]string, error) {
 
 // migrate moves a version 1 file's folders into the list: the default folder
 // (games_folder, or ~/Games when unset) comes first, then the library folders.
-// The next save writes the list.
+// The next save writes the list. It also splits the old single online switch
+// into ratings and protection (issue #150): both take the old value, and an
+// unset switch still means on.
 func (s *Store) migrate() {
+	if s.data.FetchProtection == nil && s.data.FetchRatings != nil {
+		old := *s.data.FetchRatings
+		s.data.FetchProtection = &old
+	}
 	if s.data.Version >= 2 {
 		return
 	}

@@ -46,7 +46,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   const navigation = useVariant('settings.navigation');
   const chrome = useVariant('section.chrome');
   const atlas = useVariant('shell.navigation') === 'sourcebar';
-  const sectionNames = ['language', 'theme', 'appearance', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'tray', 'backups', 'cloud'];
+  const sectionNames = ['language', 'theme', 'appearance', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'notices', 'tray', 'backups', 'cloud'];
   const [, setRenderTick] = useState(0);
   const setActiveSection = (index: number) => {
     persistedSettingsSection = sectionNames[index] ?? persistedSettingsSection;
@@ -119,16 +119,16 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
     <ArtworkSetting onNotify={onNotify} />,
     <GameInfoSetting onNotify={onNotify} />,
     <SocialSettings plugins={plugins} onNotify={onNotify} />,
+    <ClientNoticesSetting onNotify={onNotify} />,
     <TraySetting onNotify={onNotify} />,
     <BackupsSetting onNotify={onNotify} />,
     <CloudSavesDefaults plugins={plugins} />,
   ];
-  const sectionLabels = [t('sections.language'), t('sections.theme'), t('sections.appearance'), t('sections.folders'), t('sections.prefixes'), t('sections.cleanup'), t('sections.ratings'), t('sections.artwork'), t('sections.gameInfo'), t('sections.chat'), t('sections.tray'), t('sections.backups'), t('sections.cloud')];
+  const sectionLabels = [t('sections.language'), t('sections.theme'), t('sections.appearance'), t('sections.folders'), t('sections.prefixes'), t('sections.cleanup'), t('sections.ratings'), t('sections.artwork'), t('sections.gameInfo'), t('sections.chat'), t('sections.notices'), t('sections.tray'), t('sections.backups'), t('sections.cloud')];
   const chromeClass = chrome === 'framed' ? '[&>section]:rounded-2xl [&>section]:border [&>section]:border-hairline-strong [&>section]:bg-surface [&>section]:px-5' : chrome === 'plain' ? '[&>section]:border-t-0' : '';
 
-  // Atlas renders the /22 Settings page (issue #138): the lab's six backed
-  // categories in the left nav. The lab's "Store clients" row has no backing
-  // setting in the core, so it has no category here.
+  // Atlas renders the /22 Settings page (issue #138): the lab's categories in
+  // the left nav. "Store clients" holds the client notices switch (issue #149).
   if (atlas) {
     return <AtlasSettingsPage sections={sections} loadError={error} />;
   }
@@ -165,18 +165,19 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 /** The /22 Settings page (issue #138, Atlas only): the left category nav and
  *  the right body reusing the same section components as the classic view.
  *  Appearance comes from #134 and stays untouched. */
-const ATLAS_CATS = ['general', 'appearance', 'folders', 'saves', 'data', 'social'] as const;
+const ATLAS_CATS = ['general', 'appearance', 'folders', 'saves', 'data', 'social', 'stores'] as const;
 type AtlasCat = (typeof ATLAS_CATS)[number];
 const ATLAS_SECTIONS: Record<AtlasCat, number[]> = {
   // Indexes into the sections array above: language, tray / theme, appearance
-  // / folders, prefixes, cleanup / backups, cloud / ratings, artwork,
-  // gameInfo / chat.
-  general: [0, 10],
+  // / folders, prefixes, cleanup / backups, cloud / ratings (with protection),
+  // artwork, gameInfo / chat / store client notices.
+  general: [0, 11],
   appearance: [1, 2],
   folders: [3, 4, 5],
-  saves: [11, 12],
+  saves: [12, 13],
   data: [6, 7, 8],
   social: [9],
+  stores: [10],
 };
 
 function AtlasSettingsPage({ sections, loadError }: {
@@ -572,38 +573,65 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
   );
 }
 
-/** "Fetch game info online" and the credits for the data Platypus shows. Off, Platypus
- *  keeps what it fetched before and asks the network for nothing new. */
+/** Online compatibility data (issues #150): ProtonDB ratings and the
+ *  protection facts (PCGamingWiki, AreWeAntiCheatYet) have their own switches.
+ *  Off, Platypus keeps what it fetched before and asks the network for
+ *  nothing new. */
 export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
   const { t } = useTranslation('settings');
-  const [on, setOn] = useState<boolean | null>(null);
+  const [ratings, setRatings] = useState<boolean | null>(null);
+  const [protection, setProtection] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     Effect.runPromise(LauncherApi.getLauncherSettings())
-      .then((s) => setOn(s.ratings_online ?? true))
-      .catch(() => setOn(true));
+      .then((s) => {
+        setRatings(s.ratings_online ?? true);
+        setProtection(s.protection_online ?? true);
+      })
+      .catch(() => {
+        setRatings(true);
+        setProtection(true);
+      });
   }, []);
-  const toggle = (next: boolean) => {
+  const toggleRatings = (next: boolean) => {
     setBusy(true);
     Effect.runPromise(LauncherApi.setRatingsOnline(next))
       .then((s) => {
-        setOn(s.ratings_online ?? next);
+        setRatings(s.ratings_online ?? next);
         onNotify(next ? t('ratings.on') : t('ratings.off'));
       })
       .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
+  const toggleProtection = (next: boolean) => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setProtectionOnline(next))
+      .then((s) => {
+        setProtection(s.protection_online ?? next);
+        onNotify(next ? t('protection.on') : t('protection.off'));
+      })
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  const credits = <>{t('ratings.creditCompat')} {t('protection.creditWiki')} {t('protection.creditAnticheat')}</>;
   if (useVariant('shell.navigation') === 'sourcebar') {
     return (
       <section>
         <AtlasSSwitch
           label={t('ratings.heading')}
           desc={t('ratings.description')}
-          checked={on ?? true}
-          disabled={on === null || busy}
-          onChange={() => toggle(!(on ?? true))}
+          checked={ratings ?? true}
+          disabled={ratings === null || busy}
+          onChange={() => toggleRatings(!(ratings ?? true))}
         />
-        <p className="border-t border-hairline pt-3 text-[12px] font-sans text-text-faint">{t('ratings.creditCompat')} {t('ratings.creditWiki')} {t('ratings.creditAnticheat')}</p>
+        <AtlasSSwitch
+          label={t('protection.heading')}
+          desc={t('protection.description')}
+          checked={protection ?? true}
+          disabled={protection === null || busy}
+          onChange={() => toggleProtection(!(protection ?? true))}
+        />
+        <p className="border-t border-hairline pt-3 text-[12px] font-sans text-text-faint">{credits}</p>
       </section>
     );
   }
@@ -616,12 +644,21 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
 {t('ratings.description')}
           </p>
         </div>
-        <Switch aria-label={t('ratings.label')} checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
+        <Switch aria-label={t('ratings.label')} checked={ratings ?? true} disabled={ratings === null || busy} onCheckedChange={toggleRatings} />
+      </div>
+      <div className="mt-6 flex items-start justify-between gap-6">
+        <div>
+          <h3 className="text-[13px] font-bold">{t('protection.heading')}</h3>
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">
+{t('protection.description')}
+          </p>
+        </div>
+        <Switch aria-label={t('protection.label')} checked={protection ?? true} disabled={protection === null || busy} onCheckedChange={toggleProtection} />
       </div>
       <div className="mt-4 space-y-1.5 border-t border-hairline pt-3 font-mono text-hint leading-relaxed text-text-muted">
         <p>{t('ratings.creditCompat')}</p>
-        <p>{t('ratings.creditWiki')}</p>
-        <p>{t('ratings.creditAnticheat')}</p>
+        <p>{t('protection.creditWiki')}</p>
+        <p>{t('protection.creditAnticheat')}</p>
       </div>
     </section>
   );
@@ -843,6 +880,57 @@ export function TraySetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' 
           </p>
         </div>
         <Switch aria-label={t('tray.label')} checked={on ?? false} disabled={on === null || busy} onCheckedChange={toggle} />
+      </div>
+    </section>
+  );
+}
+
+/** "Store client notices" (issue #149): tell the user what a store's client is
+ *  doing while it starts a game (Steam updating, validating, …). Off, the
+ *  launch still waits for the game, it just reports nothing. On by default,
+ *  like the other notices. */
+export function ClientNoticesSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const { t } = useTranslation('settings');
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => setOn(s.client_notices ?? true))
+      .catch(() => setOn(true));
+  }, []);
+  const toggle = (next: boolean) => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setClientNotices(next))
+      .then((s) => {
+        setOn(s.client_notices ?? next);
+        onNotify(next ? t('notices.on') : t('notices.off'));
+      })
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return (
+      <section>
+        <AtlasSSwitch
+          label={t('notices.heading')}
+          desc={t('notices.description')}
+          checked={on ?? true}
+          disabled={on === null || busy}
+          onChange={() => toggle(!(on ?? true))}
+        />
+      </section>
+    );
+  }
+  return (
+    <section className={SECTION}>
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <h2 className="text-[14px] font-bold">{t('notices.heading')}</h2>
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">
+{t('notices.description')}
+          </p>
+        </div>
+        <Switch aria-label={t('notices.label')} checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
       </div>
     </section>
   );
