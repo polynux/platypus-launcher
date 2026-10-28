@@ -48,6 +48,26 @@ func (e *env) cmLog() string {
 	return string(data)
 }
 
+// waitCMLog waits for the fake CM to log a line and returns the whole log.
+// The fake writes its log in its own process, so a line for something it
+// answers *after* a client frame (its heartbeat is read only once the
+// service response is out) can land after the RPC that triggered it has
+// returned — reading the log once is a race that load widens.
+func (e *env) waitCMLog(want string) string {
+	e.t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		log := e.cmLog()
+		if strings.Contains(log, want) {
+			return log
+		}
+		if time.Now().After(deadline) {
+			e.t.Fatalf("CM log never showed %q: %s", want, log)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // rpcCode extracts the JSON-RPC error code from a failed call.
 func (e *env) rpcCode(err error) int {
 	var rpcErr *jsonrpc.Error
@@ -137,14 +157,12 @@ func TestSteamCMExchangeAndCache(t *testing.T) {
 	}
 
 	// Wire sanity: the plugin really logged on, called the service and
-	// logged off again.
-	log := e.cmLog()
+	// logged off again. The fake CM writes its log in its own process, so
+	// wait for each line instead of reading it once.
 	for _, want := range []string{"logon ", "service Authentication.GenerateAccessTokenForApp#1", "logoff"} {
-		if !strings.Contains(log, want) {
-			t.Fatalf("CM log missing %q: %s", want, log)
-		}
+		e.waitCMLog(want)
 	}
-	if strings.Contains(log, "unexpected") {
+	if log := e.cmLog(); strings.Contains(log, "unexpected") {
 		t.Fatalf("plugin surprised the fake CM: %s", log)
 	}
 
@@ -180,9 +198,10 @@ func TestSteamCMMultiAndHeartbeat(t *testing.T) {
 	if lib := e.library(); len(lib) == 0 {
 		t.Fatal("empty library with Multi-wrapped logon response")
 	}
-	if !strings.Contains(e.cmLog(), "heartbeat_reply") {
-		t.Fatalf("plugin ignored the CM heartbeat: %s", e.cmLog())
-	}
+	// The fake sends its heartbeat before the service response and only
+	// reads the client's reply afterwards, so the line can arrive after
+	// library.list returned.
+	e.waitCMLog("heartbeat_reply")
 }
 
 // expireAccessCache rewrites the cached access token with a past exp so
