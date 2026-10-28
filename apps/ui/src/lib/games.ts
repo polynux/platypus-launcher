@@ -1,9 +1,9 @@
-import type { Game, GameSettings, Job, ProtonVersion } from '../types';
+import type { Game, GameSettings, CloudEvent, Job, ProtonVersion } from '../types';
 import { formatBytes as formatBytesLocale, formatLastPlayed } from './format';
 import i18n from './i18n';
 import { ratingBadge } from './compat';
 
-export type AttentionIssue = { game: Game; kind: 'install' | 'outside' | 'runner' | 'update' | 'rating'; error?: string; runnerId?: string; failedJobKind?: 'install' | 'update' };
+export type AttentionIssue = { game: Game; kind: 'install' | 'outside' | 'runner' | 'update' | 'conflict' | 'prefix' | 'rating'; error?: string; runnerId?: string; failedJobKind?: 'install' | 'update' };
 
 /** Issues the frontend can identify from its current library, job and runner snapshots. */
 export function attentionIssues(games: Game[], jobs: Job[], runners: ProtonVersion[]): AttentionIssue[] {
@@ -25,20 +25,34 @@ export function attentionIssues(games: Game[], jobs: Job[], runners: ProtonVersi
       out.push({ game, kind: 'runner', runnerId });
     }
     if (game.update_available && game.is_installed) out.push({ game, kind: 'update' });
-    if (needsAttention(game)) out.push({ game, kind: 'rating' });
+    // Save conflicts and damaged prefixes come from the core (issue #144):
+    // the library carries them, the frontend never derives them. The rating
+    // row is only for the rating signal, so a signal game shows once.
+    if (game.has_save_conflict) out.push({ game, kind: 'conflict' });
+    if (game.prefix_damaged) out.push({ game, kind: 'prefix' });
+    if (hasRatingSignal(game)) out.push({ game, kind: 'rating' });
   }
   return out;
 }
 
-/** A game "needs attention" when it has a curated fix recipe or a poor rating badge. */
+/** A game "needs attention" when it has a curated fix recipe, a poor rating
+ *  badge, a save conflict, or a damaged Wine prefix (issue #144). */
 export function needsAttention(g: Game): boolean {
-  const f = g.fix_info;
-  if (f && f.description) return true;
+  return g.has_save_conflict || g.prefix_damaged || hasRatingSignal(g);
+}
+
+/** The rating signal alone: a curated fix recipe or a poor rating badge. */
+function hasRatingSignal(g: Game): boolean {
+  if (g.fix_info?.description) return true;
   const tier = ratingBadge(g)?.tone;
   return tier === 'bronze' || tier === 'borked';
 }
 
-export function attentionReason(g: Game): string {
+export function attentionReason(g: Game, kind?: AttentionIssue['kind']): string {
+  // The actionable signals speak first; the rating speaks when alone or on
+  // its own row. A kind narrows to that row's text.
+  if ((kind === undefined || kind === 'conflict') && g.has_save_conflict) return i18n.t('fixes:attention.conflict');
+  if ((kind === undefined || kind === 'prefix') && g.prefix_damaged) return i18n.t('fixes:attention.prefix');
   const f = g.fix_info;
   if (f?.description) return f.description;
   const badge = ratingBadge(g);
@@ -165,6 +179,49 @@ export function mergePlaytime(prev: Game[], fresh: Game[]): Game[] {
   return changed ? next : prev;
 }
 
+/** Take only the needs-attention signals (issue #144) from a fresh library
+ *  read, so a reset clears its card without a rescan. Returns `prev` itself
+ *  when nothing changed. */
+export function mergeAttentionSignals(prev: Game[], fresh: Game[]): Game[] {
+  const byId = new Map(fresh.map((x) => [x.id, x]));
+  let changed = false;
+  const next = prev.map((g) => {
+    const f = byId.get(g.id);
+    if (!f) return g;
+    const same = g.has_save_conflict === f.has_save_conflict && g.prefix_damaged === f.prefix_damaged;
+    if (same) return g;
+    changed = true;
+    return { ...g, has_save_conflict: f.has_save_conflict, prefix_damaged: f.prefix_damaged };
+  });
+  return changed ? next : prev;
+}
+
+/** Fold one cloud sync event into the library flags (issue #144): any event
+ *  carrying a conflict status flags the game — a launch prompt, the post-exit
+ *  push failing, or a "check now" — and only a push or a non-conflict status
+ *  clears it again. A canceled resolve settles nothing, so the flag stays.
+ *  Returns `prev` itself when nothing changed. */
+export function mergeCloudEvent(prev: Game[], e: CloudEvent): Game[] {
+  if (e.status?.state === 'conflict') {
+    let changed = false;
+    const next = prev.map((g) => {
+      if (g.id !== e.game_id || g.has_save_conflict) return g;
+      changed = true;
+      return { ...g, has_save_conflict: true };
+    });
+    return changed ? next : prev;
+  }
+  if (e.kind === 'pushed' || (e.kind === 'status' && e.status && e.status.state !== 'conflict')) {
+    let changed = false;
+    const next = prev.map((g) => {
+      if (g.id !== e.game_id || !g.has_save_conflict) return g;
+      changed = true;
+      return { ...g, has_save_conflict: false };
+    });
+    return changed ? next : prev;
+  }
+  return prev;
+}
 /** Take only the family fields (who shares a borrowed game, its copies and the
  *  preferred copy) from a fresh library read, so a copy pick shows without a
  *  rescan. Returns `prev` itself when nothing changed. */

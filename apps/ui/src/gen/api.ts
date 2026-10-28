@@ -137,6 +137,7 @@ export interface CoreApi {
   RescanPlugins(): Promise<types.StorePlugin[]>;
   ResetCustomArt(gameID: string, kind: string): Promise<types.Customization>;
   ResetCustomization(gameID: string): Promise<types.Customization>;
+  ResetPrefix(gameID: string): Promise<types.PrefixResetResult>;
   ResolveCloudSaves(game: types.Game, choices: Record<string, string>): Promise<types.CloudInfo>;
   RestartSocial(pluginID: string): Promise<void>;
   RestoreSaveBackup(game: types.Game, backupID: string): Promise<types.Job>;
@@ -331,6 +332,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'RescanPlugins',
   'ResetCustomArt',
   'ResetCustomization',
+  'ResetPrefix',
   'ResolveCloudSaves',
   'RestartSocial',
   'RestoreSaveBackup',

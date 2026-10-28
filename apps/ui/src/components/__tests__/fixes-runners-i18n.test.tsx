@@ -1,6 +1,6 @@
 import React from 'react';
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import i18n from '../../lib/i18n';
 import { FixesView } from '../FixesView';
 import { SystemView } from '../SystemView';
@@ -62,5 +62,28 @@ describe('fixes and runners live language switching', () => {
     await i18n.changeLanguage('en');
     expect(screen.getByText('custom')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Rescan/ })).toBeInTheDocument();
+  });
+});
+
+describe('classic fixes attention signals (issue #144)', () => {
+  const signal = (id: string, o: object) =>
+    ({ id, title: id, store: 'echo', cover_url: 'https://example.com/cover.jpg', install_dir: '/games/test', is_installed: true, settings: {}, ...o }) as unknown as Game;
+
+  it('lists a save conflict with its reason and opens the game', async () => {
+    await i18n.changeLanguage('en');
+    const onOpenGame = vi.fn();
+    render(<FixesView games={[signal('conflicted', { has_save_conflict: true })]} onOpenGame={onOpenGame} />);
+    expect(screen.getByText(/Saves changed on this device and in the cloud/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('conflicted').closest('button')!);
+    expect(onOpenGame).toHaveBeenCalledWith('conflicted');
+  });
+
+  it('lists a damaged prefix with its reason and opens the game', async () => {
+    await i18n.changeLanguage('en');
+    const onOpenGame = vi.fn();
+    render(<FixesView games={[signal('broken', { prefix_damaged: true })]} onOpenGame={onOpenGame} />);
+    expect(screen.getByText(/The Wine prefix looks damaged/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('broken').closest('button')!);
+    expect(onOpenGame).toHaveBeenCalledWith('broken');
   });
 });

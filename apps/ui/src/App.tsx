@@ -33,7 +33,7 @@ import { MigrationNotice as MigrationBanner } from './components/MigrationNotice
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onActivity, onJobs, onLibrary, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
+import { LauncherApi, onActivity, onCloud, onJobs, onLibrary, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
 import type { types as gen } from './gen/models';
 import { reconcileViews, upsertView } from './lib/social';
 import { ensureTerms } from './lib/termsRequest';
@@ -41,7 +41,7 @@ import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
 import { usePauseWhileGameRuns } from './lib/pauseWhileHidden';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
-import { attentionIssues, heroImages, needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
+import { attentionIssues, heroImages, mergeAttentionSignals, mergeCloudEvent, needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Collection, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 import type { TierFilter } from './lib/compat';
 import type { StatusFilter } from './components/LibraryView';
@@ -642,9 +642,17 @@ export function AppContent() {
   // A plugin's playtime report changed a library value (protocol 1.7).
   useEffect(() => onPlaytime(() => refreshLibraryQuietly(mergePlaytime)), [refreshLibraryQuietly]);
 
+  // A save conflict appeared or was settled after the last scan (issue #144):
+  // any event carrying a conflict status flags the game — a launch prompt,
+  // the post-exit push failing, or a "check now" — and only a push or a
+  // non-conflict status clears it again. A canceled resolve settles nothing.
+  useEffect(() => onCloud((e) => setGames((prev) => mergeCloudEvent(prev, e))), []);
+
   // The background artwork lookup (issue #36) applied art to a sideloaded
   // game: take the new art from a quiet read, like a manual customization.
-  useEffect(() => onLibrary(() => refreshLibraryQuietly(mergeCustomization)), [refreshLibraryQuietly]);
+  // Attention signals (issue #144) merge the same way: a reset clears its
+  // card when the core's library event lands.
+  useEffect(() => onLibrary(() => refreshLibraryQuietly((prev, fresh) => mergeAttentionSignals(mergeCustomization(prev, fresh), fresh))), [refreshLibraryQuietly]);
 
   const runJob = (kind: 'install' | 'update' | 'uninstall', game: Game) => {
     const op = kind === 'install' ? LauncherApi.installGame : kind === 'update' ? LauncherApi.updateGame : LauncherApi.uninstallGame;
@@ -671,6 +679,17 @@ export function AppContent() {
         notify(t('game:folderAllowed', { folder }));
         loadData('update');
       })
+      .catch((err) => notify(coreErrMsg(err), 'err'));
+  };
+
+  // Resetting a damaged Wine prefix (issue #144): the row confirmed first.
+  // The core moves the old prefix aside and emits a library event, whose
+  // quiet read clears the card; the toast names the backup.
+  const resetPrefix = (game: Game) => {
+    Effect.runPromise(LauncherApi.resetPrefix(game.id))
+      .then((res) => notify(res.backup
+        ? t('fixes:atlas.resetDone', { title: game.title, backup: res.backup })
+        : t('fixes:atlas.resetDoneFresh', { title: game.title })))
       .catch((err) => notify(coreErrMsg(err), 'err'));
   };
 
@@ -1095,7 +1114,7 @@ export function AppContent() {
       case 'activity':
         return <ActivityView events={activity} games={games} onOpenGame={openGame} />;
       case 'fixes':
-        return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onSaveSettings={(game, runner) => saveSettings(game.id, { ...game.settings, runner_id: runner }).catch(() => {})} onOpenRunners={() => setView({ name: 'runners' })} />;
+        return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onResetPrefix={resetPrefix} onSaveSettings={(game, runner) => saveSettings(game.id, { ...game.settings, runner_id: runner }).catch(() => {})} onOpenRunners={() => setView({ name: 'runners' })} />;
       case 'runners':
         return (
           <SystemView

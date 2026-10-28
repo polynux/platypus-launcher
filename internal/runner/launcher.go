@@ -44,6 +44,30 @@ func PrefixPath(game types.Game, home, prefixesFolder string) string {
 	return filepath.Join(datadir.Path(home), "prefixes", game.ID)
 }
 
+// FreshMarker is the file ResetPrefix leaves in a recreated prefix: its
+// modification time says when the prefix was recreated. prefixDamaged treats
+// a marker newer than the last local session as a fresh prefix awaiting its
+// first run, not damage.
+const FreshMarker = ".platypus-fresh"
+
+// PrefixDamaged reports whether a Wine prefix's layout looks broken (issue
+// #144): no Windows side, neither drive_c nor pfx/drive_c, as a failed
+// creation leaves it, or a file blocks the path. A missing folder is not
+// damage: the launch creates it. Freshness (a prefix Platypus just recreated,
+// see FreshMarker) is the caller's call: it needs the play history.
+func PrefixDamaged(prefixPath string) bool {
+	if st, err := os.Stat(prefixPath); err != nil || !st.IsDir() {
+		return err == nil
+	}
+	if st, err := os.Stat(filepath.Join(prefixPath, "drive_c")); err == nil && st.IsDir() {
+		return false
+	}
+	if st, err := os.Stat(filepath.Join(prefixPath, "pfx", "drive_c")); err == nil && st.IsDir() {
+		return false
+	}
+	return true
+}
+
 // BuildCommand constructs, for games Platypus starts itself (see
 // steam.IsClientLaunch for the other case), the full Linux gaming command pipeline (gamescope, mangohud, gamemode, proton/wine).
 // When preview is true, no on-disk state is created: the Proton prefix is

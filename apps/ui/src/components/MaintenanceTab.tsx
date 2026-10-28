@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
-import { FolderInput, ShieldCheck, Trash2 } from 'lucide-react';
+import { FolderInput, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 import type { Game, GameJobKind, Job, RemoveCheck, RemoveOptions, RemoveTarget, SavePath, StorePlugin, AutoBackupState } from '../types';
 import { Button } from '@/components/ds/button';
 import { CapabilitySurface, offers } from '../lib/capabilities';
@@ -129,6 +129,9 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
     return (
       <div className="space-y-5">
         <SaveBackupsSection game={game} onNotify={onNotify} />
+        {game.is_installed && !game.native && !game.client_launch && (
+          <ResetPrefixRow game={game} running={running} onNotify={onNotify} />
+        )}
         {confirm ? (
           <RemoveConfirmPanel game={game} check={removeCheck.check} error={removeCheck.error} onCancel={() => setConfirm(false)} onRemove={(opts) => { setConfirm(false); onRemove?.(opts); onClose(); }} />
         ) : (
@@ -178,6 +181,10 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
         <Row title={t('gameSettings:maintenance.moveTitle')} text={t('gameSettings:maintenance.moveText')}>
           <Button onClick={() => setMoveOpen(true)}><FolderInput className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.moveAction')}</Button>
         </Row>
+      )}
+
+      {installed && !game.native && !game.client_launch && (
+        <ResetPrefixRow game={game} running={running} onNotify={onNotify} />
       )}
 
       {installed && offers(plugin, 'install', { game }) && (confirm ? (
@@ -474,6 +481,50 @@ function TargetBox({ label, target, measuring, checked, onChange }: {
         <span className="block min-h-[18px] truncate font-mono text-[12px] text-text-muted" title={target?.path ?? detail}>{detail}</span>
       </span>
     </label>
+  );
+}
+
+/** Resetting a damaged Wine prefix (issue #144): the broken one moves aside
+ *  (kept, never deleted) and a fresh one takes its place. The first click
+ *  only arms the confirm; the core refuses prefix-less and running games. */
+function ResetPrefixRow({ game, running, onNotify }: { game: Game; running?: boolean; onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void }) {
+  const { t } = useTranslation(['gameSettings', 'common']);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setConfirming(false); }, [game.id]);
+  const reset = () => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.resetPrefix(game.id)).then(
+      (res) => {
+        setBusy(false);
+        setConfirming(false);
+        onNotify(res.backup
+          ? t('gameSettings:maintenance.resetDone', { title: game.title, backup: res.backup })
+          : t('gameSettings:maintenance.resetDoneFresh', { title: game.title }), 'ok');
+      },
+      (e) => {
+        setBusy(false);
+        onNotify(coreErrMsg(e), 'err');
+      },
+    );
+  };
+  if (!confirming) {
+    return (
+      <Row title={t('gameSettings:maintenance.resetTitle')} text={t('gameSettings:maintenance.resetText')}>
+        <Button onClick={() => setConfirming(true)} disabled={running || busy}><RefreshCw className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.resetAction')}</Button>
+      </Row>
+    );
+  }
+  return (
+    <Row title={t('gameSettings:maintenance.resetTitle')} text={t('gameSettings:maintenance.resetConfirm', { title: game.title })}>
+      <div className="space-y-2">
+        <p className="text-[12px] text-text-muted">{t('gameSettings:maintenance.resetConfirmText')}</p>
+        <div className="flex gap-2">
+          <Button variant="ghost" autoFocus onClick={() => setConfirming(false)}>{t('common:cancel')}</Button>
+          <Button variant="danger" disabled={busy} onClick={reset}><RefreshCw className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.resetAction')}</Button>
+        </div>
+      </div>
+    </Row>
   );
 }
 

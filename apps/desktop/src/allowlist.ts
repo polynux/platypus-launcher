@@ -131,6 +131,7 @@ export const APP_PAGE_METHODS: readonly string[] = [
   'RescanPlugins',
   'ResetCustomArt',
   'ResetCustomization',
+  'ResetPrefix',
   'ResolveCloudSaves',
   'RestartSocial',
   'RestoreSaveBackup',

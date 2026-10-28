@@ -378,8 +378,11 @@ export function DashboardActivity({ events, limit = 8, onNavigate }: {
 }
 
 /** Why a game needs attention, in words. Curated recipes speak for
- *  themselves; rating explanations name the badge's source. */
+ *  themselves; rating explanations name the badge's source. Save conflicts
+ *  and damaged prefixes (issue #144) speak first: they have a fix. */
 function attentionReason(g: Game, t: TFunction): string {
+  if (g.has_save_conflict) return t('dashboard:reason.conflict');
+  if (g.prefix_damaged) return t('dashboard:reason.prefix');
   const f = g.fix_info;
   if (f?.description) return f.description;
   const badge = ratingBadge(g);

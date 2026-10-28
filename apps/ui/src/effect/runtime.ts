@@ -47,6 +47,7 @@ import type {
   RestorePreview,
   AutoBackupState,
   PrefixApplyResult,
+  PrefixResetResult,
   PrefixPreset,
   PrefixShare,
   RemoveCheck,
@@ -572,6 +573,12 @@ export const LauncherApi = {
   savePrefixPreset: (p: PrefixPreset) => call<PrefixPreset>('SavePrefixPreset', () => App.SavePrefixPreset(p)),
   deletePrefixPreset: (id: string) => call<void>('DeletePrefixPreset', () => App.DeletePrefixPreset(id)),
   applyPrefixPreset: (gameID: string, presetID: string) => call<PrefixApplyResult>('ApplyPrefixPreset', () => App.ApplyPrefixPreset(gameID, presetID)),
+
+  // Resetting a damaged Wine prefix (issue #144): the broken prefix moves
+  // aside (kept, never deleted) and a fresh one takes its place. The core
+  // refuses user-chosen folders outside the prefixes root, prefix-less games
+  // and running games; the UI confirms first.
+  resetPrefix: (gameId: string) => call<PrefixResetResult>('ResetPrefix', () => App.ResetPrefix(gameId)),
 
   // Friends lists of the stores that offer them (protocol 1.6).
   socialViews: () => call<SocialView[]>('SocialViews', async () => (await App.SocialViews()) ?? []),

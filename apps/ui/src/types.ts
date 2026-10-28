@@ -194,6 +194,9 @@ export type RemoveCheck = gen.RemoveCheck;
 export type RemoveTarget = gen.RemoveTarget;
 /** One Wine prefix and the games using it (issue #52), for the prefix picker. */
 export type PrefixShare = gen.PrefixShare;
+/** What resetting a Wine prefix did (issue #144): the fresh prefix path and,
+ *  when something was there, where the old one was kept. */
+export type PrefixResetResult = gen.PrefixResetResult;
 /** A named Wine prefix template (issue #52) and what applying it did. */
 export type PrefixPreset = gen.PrefixPreset;
 export type PrefixApplyResult = gen.PrefixApplyResult;

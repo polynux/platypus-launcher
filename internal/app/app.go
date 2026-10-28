@@ -27,6 +27,7 @@ import (
 	"platypus/internal/paths"
 	"platypus/internal/playlog"
 	"platypus/internal/plugins"
+	"platypus/internal/runner"
 	"platypus/internal/savebackup"
 	"platypus/internal/session"
 	"platypus/internal/settings"
@@ -853,6 +854,7 @@ func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs [
 	a.applyCustomization(lib.Games)
 	a.applyGameStatus(lib.Games)
 	a.applyFixes(lib.Games)
+	a.applyAttentionSignals(lib.Games)
 	return lib, nil
 }
 
@@ -893,6 +895,72 @@ func (a *App) applyFixes(games []types.Game) {
 		}
 		games[i].FixInfo = a.gameFix(games[i])
 	}
+}
+
+// applyAttentionSignals flags the library-wide needs-attention signals the
+// frontend can't derive (issue #144): save conflicts known this session and
+// damaged Wine prefixes. Old snapshots load with both unset (omitempty).
+func (a *App) applyAttentionSignals(games []types.Game) {
+	for i := range games {
+		games[i].HasSaveConflict = a.hasSaveConflict(games[i])
+		games[i].PrefixDamaged = a.prefixDamaged(games[i])
+	}
+}
+
+// hasSaveConflict reports whether the cloud layer's last status for the game
+// is an unresolved conflict. The orchestrator only remembers statuses from
+// its own checks and syncs, so a conflict here is always this session's.
+func (a *App) hasSaveConflict(game types.Game) bool {
+	if a.cloud == nil {
+		return false
+	}
+	st := a.cloud.Last(game.ID)
+	return st != nil && st.State == types.CloudStateConflict
+}
+
+// prefixDamaged reports whether the game's Wine prefix looks broken: an
+// existing prefix without a Windows side (a failed creation leaves it so), a
+// path blocked by a file, or a missing prefix for a game with local play
+// history (its launch created one). Only local evidence counts: the store's
+// numbers also cover machines that never launched here. Native games, store
+// client launches and games without local history are never damaged: they
+// have no prefix to break. A prefix Platypus just recreated (ResetPrefix's
+// marker, newer than the last local session) is fresh, not damaged.
+func (a *App) prefixDamaged(game types.Game) bool {
+	if !game.IsInstalled || game.Native || game.ClientLaunch {
+		return false
+	}
+	if game.Settings.RunMode == "native" {
+		return false
+	}
+	var lastPlay int64
+	if a.playlog != nil {
+		lastPlay = a.playlog.LastPlayed(game.ID)
+	}
+	local := lastPlay > 0 || (game.PlaytimeLocalMin != nil && *game.PlaytimeLocalMin > 0)
+	prefix := runner.PrefixPath(game, a.homeDir(), a.effectivePrefixesFolder())
+	if _, err := os.Stat(prefix); err != nil {
+		// A missing folder is not damage on its own: the launch creates it.
+		// It is damage when the game has local history (its launch created one).
+		return os.IsNotExist(err) && local
+	}
+	if runner.PrefixDamaged(prefix) {
+		if mtime, ok := freshMarkerTime(prefix); ok && !mtime.Before(time.Unix(lastPlay, 0)) {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+// freshMarkerTime is when the prefix was recreated by ResetPrefix, ok=false
+// when it wasn't (no marker file).
+func freshMarkerTime(prefix string) (time.Time, bool) {
+	st, err := os.Stat(filepath.Join(prefix, runner.FreshMarker))
+	if err != nil {
+		return time.Time{}, false
+	}
+	return st.ModTime(), true
 }
 
 // sourceWarning describes a source that failed to list. The plugin's message

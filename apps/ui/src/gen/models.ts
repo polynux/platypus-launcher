@@ -355,6 +355,8 @@ export namespace types {
     store_missing?: boolean;
     client_launch?: boolean;
     offline?: string;
+    has_save_conflict?: boolean;
+    prefix_damaged?: boolean;
     cloud_sync?: boolean;
     features: string[];
     pinned?: types.VersionPin | null;
@@ -653,6 +655,11 @@ export namespace types {
     env?: Record<string, string>;
     windows_version?: string;
     launch_args?: string;
+  }
+
+  export interface PrefixResetResult {
+    prefix: string;
+    backup?: string;
   }
 
   export interface PrefixShare {
