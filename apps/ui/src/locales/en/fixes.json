@@ -34,7 +34,12 @@
     "defaultRunner": "default runner",
     "useDefaultRunner": "Use {{runner}}",
     "issue": { "install": "Install failed", "updateFailed": "Update failed", "outside": "Outside your game folders", "runner": "Runner missing", "update": "Update ready", "conflict": "Save conflict", "prefix": "Wine prefix damaged", "rating": "Runs badly on Linux" },
-    "fix": { "install": "Retry install", "outside": "Allow this folder", "runner": "Use default runner", "update": "Update now", "conflict": "Compare saves", "prefix": "Open game", "rating": "Open game" },
+    "fix": { "install": "Retry install", "outside": "Allow this folder", "runner": "Use default runner", "update": "Update now", "conflict": "Compare saves", "prefix": "Reset prefix", "rating": "Open game" },
+    "resetTitle": "Reset the Wine prefix?",
+    "resetBody": "This moves the broken prefix aside and creates a fresh one. Your saves stay where they are.",
+    "resetBackup": "The old prefix is kept as a backup next to the new one.",
+    "resetDone": "{{title}} has a fresh prefix. The old one is kept at {{backup}}.",
+    "resetDoneFresh": "{{title}} has a fresh prefix.",
     "emptyTitle": "Everything works",
     "emptyBody": "Games that fail to install, lose their runner or need an update show up here."
   }

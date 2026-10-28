@@ -117,6 +117,15 @@
     },
     "unknown": "Unknown plugin {{id}}."
   },
+  "prefix": {
+    "reset": {
+      "native": "Prefixes don't apply to {{title}}: it runs natively, without a Wine prefix.",
+      "clientLaunch": "Prefixes don't apply to {{title}}: its store client launches it and owns its prefix.",
+      "outsideRoot": "Refusing to reset {{title}}: its custom prefix is outside the prefixes folder; reset it by hand.",
+      "notDir": "Refusing to reset {{title}}: a file blocks its prefix path; remove it by hand.",
+      "moveFailed": "Couldn't reset the prefix of {{title}}: {{error}}."
+    }
+  },
   "redeem": {
     "busy": "A code is already being redeemed.",
     "notStore": "{{source}} isn't a store plugin.",

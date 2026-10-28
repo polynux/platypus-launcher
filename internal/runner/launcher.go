@@ -44,11 +44,17 @@ func PrefixPath(game types.Game, home, prefixesFolder string) string {
 	return filepath.Join(datadir.Path(home), "prefixes", game.ID)
 }
 
-// PrefixDamaged reports whether a Wine prefix looks broken (issue #144): it
-// has no Windows side, neither drive_c nor pfx/drive_c, as a failed creation
-// or a failed winetricks run leaves it, or a file blocks its path. A missing
-// folder is not damage on its own: the launch creates it, so the App only
-// flags a missing prefix for a game that ran before.
+// FreshMarker is the file ResetPrefix leaves in a recreated prefix: its
+// modification time says when the prefix was recreated. prefixDamaged treats
+// a marker newer than the last local session as a fresh prefix awaiting its
+// first run, not damage.
+const FreshMarker = ".platypus-fresh"
+
+// PrefixDamaged reports whether a Wine prefix's layout looks broken (issue
+// #144): no Windows side, neither drive_c nor pfx/drive_c, as a failed
+// creation leaves it, or a file blocks the path. A missing folder is not
+// damage: the launch creates it. Freshness (a prefix Platypus just recreated,
+// see FreshMarker) is the caller's call: it needs the play history.
 func PrefixDamaged(prefixPath string) bool {
 	if st, err := os.Stat(prefixPath); err != nil || !st.IsDir() {
 		return err == nil

@@ -40,13 +40,23 @@ describe('atlas attention signals', () => {
     expect(onOpenGame).toHaveBeenCalledWith('conflicted');
   });
 
-  it('shows a damaged prefix with an open-game action', () => {
+  it('shows a damaged prefix with a reset action behind a confirm', () => {
     const onOpenGame = vi.fn();
-    render(<FixesView games={[mkGame('broken', { title: 'Broken', prefix_damaged: true })]} onOpenGame={onOpenGame} />);
+    const onResetPrefix = vi.fn();
+    render(<FixesView games={[mkGame('broken', { title: 'Broken', prefix_damaged: true })]} onOpenGame={onOpenGame} onResetPrefix={onResetPrefix} />);
     expect(screen.getByText('Wine prefix damaged')).toBeInTheDocument();
     expect(screen.getByText('The Wine prefix has no Windows side. The game may not start.')).toBeInTheDocument();
+    // The primary action asks first; the ghost still opens the game.
     fireEvent.click(screen.getByRole('button', { name: 'Open game' }));
     expect(onOpenGame).toHaveBeenCalledWith('broken');
+    expect(onResetPrefix).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset prefix' }));
+    expect(screen.getByText('Reset the Wine prefix?')).toBeInTheDocument();
+    expect(screen.getByText('The old prefix is kept as a backup next to the new one.')).toBeInTheDocument();
+    // The modal hides the card from assistive tech: its confirm is the match.
+    fireEvent.click(screen.getByRole('button', { name: 'Reset prefix' }));
+    expect(onResetPrefix).toHaveBeenCalledWith(expect.objectContaining({ id: 'broken' }));
+    expect(onOpenGame).toHaveBeenCalledTimes(1);
   });
 
   it('counts both signals in the header', () => {

@@ -803,6 +803,14 @@ type PrefixApplyResult struct {
 	WindowsVersion string            `json:"windows_version"`
 }
 
+// PrefixResetResult is what resetting a Wine prefix did (issue #144): the
+// fresh prefix path and, when something was there, where the old one was kept.
+type PrefixResetResult struct {
+	Prefix string `json:"prefix"`
+	// Backup is where the old prefix was kept, "" when there was nothing there.
+	Backup string `json:"backup,omitempty"`
+}
+
 // Relocation says core moved a game's folder: the folder the plugin reports
 // (From) and where the game is now (To). It is kept until the plugin reports
 // the new folder itself (game.relocated) or the game is moved again.

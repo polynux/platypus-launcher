@@ -179,6 +179,22 @@ export function mergePlaytime(prev: Game[], fresh: Game[]): Game[] {
   return changed ? next : prev;
 }
 
+/** Take only the needs-attention signals (issue #144) from a fresh library
+ *  read, so a reset clears its card without a rescan. Returns `prev` itself
+ *  when nothing changed. */
+export function mergeAttentionSignals(prev: Game[], fresh: Game[]): Game[] {
+  const byId = new Map(fresh.map((x) => [x.id, x]));
+  let changed = false;
+  const next = prev.map((g) => {
+    const f = byId.get(g.id);
+    if (!f) return g;
+    const same = g.has_save_conflict === f.has_save_conflict && g.prefix_damaged === f.prefix_damaged;
+    if (same) return g;
+    changed = true;
+    return { ...g, has_save_conflict: f.has_save_conflict, prefix_damaged: f.prefix_damaged };
+  });
+  return changed ? next : prev;
+}
 /** Take only the family fields (who shares a borrowed game, its copies and the
  *  preferred copy) from a fresh library read, so a copy pick shows without a
  *  rescan. Returns `prev` itself when nothing changed. */

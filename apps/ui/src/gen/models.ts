@@ -642,6 +642,11 @@ export namespace types {
     launch_args?: string;
   }
 
+  export interface PrefixResetResult {
+    prefix: string;
+    backup?: string;
+  }
+
   export interface PrefixShare {
     path: string;
     games: types.PrefixGame[];

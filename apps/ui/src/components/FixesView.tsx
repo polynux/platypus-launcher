@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowDownToLine, Check, Cloud, Download, FolderOpen, Har
 import { ATLAS_PAGE, Cover, EmptyState, ListRow, Section, SegRow, TierBadge, TweakDot, ViewHeader } from './ui';
 import { Badge } from './ds/badge';
 import { Button } from './ds/button';
+import { Modal } from './Modal';
 import { attentionIssues, attentionReason, heroImages, coverImages, needsAttention, storeLabel } from '../lib/games';
 import { useVariant } from '../lib/theme';
 import { plainError } from '../lib/plainError';
@@ -15,16 +16,17 @@ type FixesProps = {
   games: Game[]; onOpenGame: (id: string) => void; jobs?: Job[]; runners?: ProtonVersion[];
   onJobAction?: (action: 'retry', id: string) => void; onJob?: (kind: 'update', game: Game) => void;
   onAllowFolder?: (game: Game) => void;
+  onResetPrefix?: (game: Game) => void;
   onSaveSettings?: (game: Game, runner: string) => Promise<void>; // i18n:allow: Promise return type
   onOpenRunners?: () => void;
 };
 
-export function FixesView({ games, onOpenGame, jobs = [], runners = [], onJobAction, onJob, onAllowFolder, onSaveSettings, onOpenRunners }: FixesProps) {
+export function FixesView({ games, onOpenGame, jobs = [], runners = [], onJobAction, onJob, onAllowFolder, onResetPrefix, onSaveSettings, onOpenRunners }: FixesProps) {
   // Atlas renders the /22 Needs attention page (issue #138); other themes keep the rows below.
   if (useVariant('shell.navigation') === 'sourcebar') {
-    return <AtlasAttention games={games} jobs={jobs} runners={runners} onOpenGame={onOpenGame} onJobAction={onJobAction} onJob={onJob} onAllowFolder={onAllowFolder} onSaveSettings={onSaveSettings} onOpenRunners={onOpenRunners} />;
+    return <AtlasAttention games={games} jobs={jobs} runners={runners} onOpenGame={onOpenGame} onJobAction={onJobAction} onJob={onJob} onAllowFolder={onAllowFolder} onResetPrefix={onResetPrefix} onSaveSettings={onSaveSettings} onOpenRunners={onOpenRunners} />;
   }
-  return <ClassicFixesView games={games} onOpenGame={onOpenGame} onJobAction={onJobAction} onJob={onJob} onAllowFolder={onAllowFolder} onSaveSettings={onSaveSettings} onOpenRunners={onOpenRunners} />;
+  return <ClassicFixesView games={games} onOpenGame={onOpenGame} onJobAction={onJobAction} onJob={onJob} onAllowFolder={onAllowFolder} onResetPrefix={onResetPrefix} onSaveSettings={onSaveSettings} onOpenRunners={onOpenRunners} />;
 }
 
 function ClassicFixesView({ games, onOpenGame, onJobAction, onJob, onAllowFolder, onSaveSettings, onOpenRunners }: FixesProps) {
@@ -93,10 +95,12 @@ function ClassicFixesView({ games, onOpenGame, onJobAction, onJob, onAllowFolder
  *  per-kind actions (retry install, install runner, move, repair, update,
  *  compare) have no backing in this view: those fixes live on the game page,
  *  so the card opens it. */
-function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJobAction, onJob, onAllowFolder, onSaveSettings, onOpenRunners }: FixesProps) {
-  const { t } = useTranslation(['nav', 'fixes']);
+function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJobAction, onJob, onAllowFolder, onResetPrefix, onSaveSettings, onOpenRunners }: FixesProps) {
+  const { t } = useTranslation(['nav', 'fixes', 'common']);
   const issues = attentionIssues(games, jobs, runners);
   const gameCount = new Set(issues.map((issue) => issue.game.id)).size;
+  // Resetting a prefix asks first: the game confirmed is the one reset.
+  const [resetTarget, setResetTarget] = useState<Game | null>(null);
   return (
     <div className={ATLAS_PAGE}>
       <header>
@@ -131,10 +135,17 @@ function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJobActio
               else if (issue.kind === 'outside') onAllowFolder?.(g);
               else if (issue.kind === 'runner' && fallbackRunner) onSaveSettings?.(g, fallbackRunner.id);
               else if (issue.kind === 'update') onJob?.('update', g);
-              // Conflicts and damaged prefixes resolve on the game page: the
-              // cloud panel compares the saves, the settings repair the prefix.
+              else if (issue.kind === 'prefix') setResetTarget(g);
+              // Save conflicts resolve on the game page: the cloud panel compares them.
               else onOpenGame(g.id);
             };
+            const ghost = issue.kind === 'runner'
+              ? { label: t('fixes:atlas.openRunners'), run: () => onOpenRunners?.() }
+              : issue.kind === 'prefix'
+                ? { label: t('fixes:atlas.openGame'), run: () => onOpenGame(g.id) }
+                : (issue.kind === 'install' || issue.kind === 'outside' || issue.kind === 'update')
+                  ? { label: t('fixes:atlas.openGame'), run: () => onOpenGame(g.id) }
+                  : null;
             return (
               <li key={`${g.id}-${issue.kind}-${index}`} className="grid grid-cols-[150px_minmax(0,1fr)_auto] items-center gap-4 rounded-xl bg-surface p-3">
                 <button type="button" onClick={() => onOpenGame(g.id)} className="block overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label={g.title}>
@@ -152,12 +163,25 @@ function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJobActio
                 </div>
                 <div className="grid gap-1">
                   <Button variant="primary" onClick={action}>{fix}</Button>
-                  {(issue.kind === 'install' || issue.kind === 'outside' || issue.kind === 'runner' || issue.kind === 'update') && <Button variant="ghost" onClick={() => issue.kind === 'runner' ? onOpenRunners?.() : onOpenGame(g.id)}>{issue.kind === 'runner' ? t('fixes:atlas.openRunners') : t('fixes:atlas.openGame')}</Button>}
+                  {ghost && <Button variant="ghost" onClick={ghost.run}>{ghost.label}</Button>}
                 </div>
               </li>
             );
           })}
         </ul>
+      )}
+      {resetTarget && (
+        <Modal label={t('fixes:atlas.resetTitle')} onClose={() => setResetTarget(null)} size="sm">
+          <div className="p-6">
+            <h2 className="mb-2 text-[17px] font-bold">{t('fixes:atlas.resetTitle')}</h2>
+            <p className="text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.resetBody', { title: resetTarget.title })}</p>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.resetBackup')}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" autoFocus onClick={() => setResetTarget(null)}>{t('common:cancel')}</Button>
+              <Button variant="primary" onClick={() => { onResetPrefix?.(resetTarget); setResetTarget(null); }}>{t('fixes:atlas.fix.prefix')}</Button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

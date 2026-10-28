@@ -888,11 +888,13 @@ func (a *App) hasSaveConflict(game types.Game) bool {
 }
 
 // prefixDamaged reports whether the game's Wine prefix looks broken: an
-// existing prefix without a Windows side (a failed creation or a failed
-// winetricks run leaves it so), a path blocked by a file, or a missing prefix
-// for a game that ran before (its launch created one). Native games, store
-// client launches and never-run games are never damaged: they have no prefix
-// to break.
+// existing prefix without a Windows side (a failed creation leaves it so), a
+// path blocked by a file, or a missing prefix for a game with local play
+// history (its launch created one). Only local evidence counts: the store's
+// numbers also cover machines that never launched here. Native games, store
+// client launches and games without local history are never damaged: they
+// have no prefix to break. A prefix Platypus just recreated (ResetPrefix's
+// marker, newer than the last local session) is fresh, not damaged.
 func (a *App) prefixDamaged(game types.Game) bool {
 	if !game.IsInstalled || game.Native || game.ClientLaunch {
 		return false
@@ -900,14 +902,34 @@ func (a *App) prefixDamaged(game types.Game) bool {
 	if game.Settings.RunMode == "native" {
 		return false
 	}
+	var lastPlay int64
+	if a.playlog != nil {
+		lastPlay = a.playlog.LastPlayed(game.ID)
+	}
+	local := lastPlay > 0 || (game.PlaytimeLocalMin != nil && *game.PlaytimeLocalMin > 0)
 	prefix := runner.PrefixPath(game, a.homeDir(), a.effectivePrefixesFolder())
 	if _, err := os.Stat(prefix); err != nil {
 		// A missing folder is not damage on its own: the launch creates it.
-		// It is damage when the game ran before (its launch created one).
-		return os.IsNotExist(err) &&
-			(game.LastPlayed != 0 || (game.PlaytimeLocalMin != nil && *game.PlaytimeLocalMin > 0))
+		// It is damage when the game has local history (its launch created one).
+		return os.IsNotExist(err) && local
 	}
-	return runner.PrefixDamaged(prefix)
+	if runner.PrefixDamaged(prefix) {
+		if mtime, ok := freshMarkerTime(prefix); ok && !mtime.Before(time.Unix(lastPlay, 0)) {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+// freshMarkerTime is when the prefix was recreated by ResetPrefix, ok=false
+// when it wasn't (no marker file).
+func freshMarkerTime(prefix string) (time.Time, bool) {
+	st, err := os.Stat(filepath.Join(prefix, runner.FreshMarker))
+	if err != nil {
+		return time.Time{}, false
+	}
+	return st.ModTime(), true
 }
 
 // sourceWarning describes a source that failed to list. The plugin's message

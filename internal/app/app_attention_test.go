@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"platypus/internal/cloudsync"
+	"platypus/internal/playlog"
 	"platypus/internal/runner"
 	"platypus/internal/stores"
 	"platypus/internal/types"
@@ -45,8 +47,13 @@ func TestLibraryFlagsSaveConflictsAndDamagedPrefixes(t *testing.T) {
 		wine("conflict", nil),
 		wine("broken", nil),
 		wine("healthy", nil),
+		// The store says this game played elsewhere, but Platypus never ran
+		// it here: a missing prefix is not damage (issue #144 review).
 		wine("missing-played", func(g *types.Game) { g.LastPlayed = played }),
 		wine("missing-played-local", func(g *types.Game) { g.PlaytimeLocalMin = localMin }),
+		// Platypus ran this one here (a short session: last-played is set but
+		// no minutes accrued), though the store knows nothing of it.
+		wine("missing-local-log", nil),
 		wine("missing-new", nil),
 		wine("native", func(g *types.Game) { g.Native = true; g.LastPlayed = played }),
 		wine("client", func(g *types.Game) { g.ClientLaunch = true; g.LastPlayed = played }),
@@ -64,6 +71,14 @@ func TestLibraryFlagsSaveConflictsAndDamagedPrefixes(t *testing.T) {
 	a := libraryApp(t, src)
 	home := t.TempDir()
 	a.optHome = home
+	// A short local session for missing-local-log: last-played without minutes.
+	pl, err := playlog.Open(filepath.Join(t.TempDir(), "play-sessions.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pl.StartAt("missing-local-log", time.Now().Add(-time.Minute))
+	pl.FinishAt("missing-local-log", time.Now().Add(-55*time.Second))
+	a.playlog = pl
 	prefixOf := func(id string) string {
 		for _, g := range src.games {
 			if g.ID == id {
@@ -112,8 +127,8 @@ func TestLibraryFlagsSaveConflictsAndDamagedPrefixes(t *testing.T) {
 	for _, g := range lib.Games {
 		byID[g.ID] = g
 	}
-	conflict, broken, healthy, missingPlayed, missingPlayedLocal, missingNew, native, client, notinstalled, customNative :=
-		byID["conflict"], byID["broken"], byID["healthy"], byID["missing-played"], byID["missing-played-local"],
+	conflict, broken, healthy, missingPlayed, missingPlayedLocal, missingLocalLog, missingNew, native, client, notinstalled, customNative :=
+		byID["conflict"], byID["broken"], byID["healthy"], byID["missing-played"], byID["missing-played-local"], byID["missing-local-log"],
 		byID["missing-new"], byID["native"], byID["client"], byID["notinstalled"], byID["custom-native"]
 	if !conflict.HasSaveConflict || conflict.PrefixDamaged {
 		t.Fatalf("conflict = %+v, want the save flag only", conflict)
@@ -124,14 +139,17 @@ func TestLibraryFlagsSaveConflictsAndDamagedPrefixes(t *testing.T) {
 	if healthy.HasSaveConflict || healthy.PrefixDamaged {
 		t.Fatalf("healthy = %+v, want no flags", healthy)
 	}
-	if missingPlayed.HasSaveConflict || !missingPlayed.PrefixDamaged {
-		t.Fatalf("missing-played = %+v, want the prefix flag: it ran before", missingPlayed)
+	if missingPlayed.HasSaveConflict || missingPlayed.PrefixDamaged {
+		t.Fatalf("missing-played = %+v, want no flags: the store's last-played covers other machines too", missingPlayed)
 	}
 	if missingPlayedLocal.HasSaveConflict || !missingPlayedLocal.PrefixDamaged {
 		t.Fatalf("missing-played-local = %+v, want the prefix flag: local playtime counts as ran", missingPlayedLocal)
 	}
+	if missingLocalLog.HasSaveConflict || !missingLocalLog.PrefixDamaged {
+		t.Fatalf("missing-local-log = %+v, want the prefix flag: Platypus ran it here", missingLocalLog)
+	}
 	for name, g := range map[string]types.Game{
-		"missing-new": missingNew, "native": native, "client": client,
+		"missing-played": missingPlayed, "missing-new": missingNew, "native": native, "client": client,
 		"notinstalled": notinstalled, "custom-native": customNative,
 	} {
 		if g.HasSaveConflict || g.PrefixDamaged {

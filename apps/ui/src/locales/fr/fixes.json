@@ -34,7 +34,12 @@
     "defaultRunner": "runner par défaut",
     "useDefaultRunner": "Utiliser {{runner}}",
     "issue": { "install": "Échec de l'installation", "updateFailed": "Échec de la mise à jour", "outside": "En dehors de vos dossiers de jeux", "runner": "Runner manquant", "update": "Mise à jour disponible", "conflict": "Conflit de sauvegardes", "prefix": "Préfixe Wine endommagé", "rating": "Fonctionne mal sous Linux" },
-    "fix": { "install": "Réessayer l'installation", "outside": "Autoriser ce dossier", "runner": "Utiliser le runner par défaut", "update": "Mettre à jour", "conflict": "Comparer les sauvegardes", "prefix": "Ouvrir le jeu", "rating": "Ouvrir le jeu" },
+    "fix": { "install": "Réessayer l'installation", "outside": "Autoriser ce dossier", "runner": "Utiliser le runner par défaut", "update": "Mettre à jour", "conflict": "Comparer les sauvegardes", "prefix": "Réinitialiser le préfixe", "rating": "Ouvrir le jeu" },
+    "resetTitle": "Réinitialiser le préfixe Wine ?",
+    "resetBody": "Le préfixe cassé est mis de côté et un préfixe neuf est créé. Vos sauvegardes restent où elles sont.",
+    "resetBackup": "L'ancien préfixe est gardé en sauvegarde à côté du nouveau.",
+    "resetDone": "« {{title}} » a un préfixe neuf. L'ancien est gardé dans {{backup}}.",
+    "resetDoneFresh": "« {{title}} » a un préfixe neuf.",
     "emptyTitle": "Tout fonctionne",
     "emptyBody": "Les jeux qui ne s’installent pas, perdent leur runner ou attendent une mise à jour apparaissent ici."
   }
