@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, screen, fireEvent, act } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { renderHook } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as matchers from 'vitest-axe/matchers';
@@ -297,6 +297,28 @@ describe('atlas drawer save model', () => {
     render(<GameSettingsModal {...props()} onClose={closed} />);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(closed).not.toHaveBeenCalled();
+  });
+
+  it('returns focus to the Tune button when the drawer closes after its opener is gone (issue #130)', async () => {
+    const user = userEvent.setup();
+    const tune = document.createElement('button');
+    tune.setAttribute('data-tune-anchor', '');
+    tune.textContent = 'Tune';
+    document.body.appendChild(tune);
+    const opener = document.createElement('button');
+    opener.textContent = 'All settings';
+    document.body.appendChild(opener);
+    opener.focus();
+    const Harness = () => {
+      const [open, setOpen] = React.useState(true);
+      return open ? <GameSettingsModal {...props()} onClose={() => setOpen(false)} /> : null;
+    };
+    render(<Harness />);
+    // The flyout (and its All settings button) closes under the drawer.
+    opener.remove();
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(document.activeElement).toBe(tune));
+    tune.remove();
   });
 
   it('B3: extra switch fields fall back to their default when the draft is missing', async () => {

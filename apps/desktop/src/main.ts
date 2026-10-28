@@ -477,7 +477,7 @@ function createWindow(): StoreViews {
     ...bounds,
     title: 'Platypus',
     icon: runtime.iconFile,
-    backgroundColor: '#1b2636',
+    backgroundColor: '#13161b',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(import.meta.dirname, 'preload.cjs'),

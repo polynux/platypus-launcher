@@ -148,7 +148,10 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: Col
   const black = scheme === 'black';
   if (mode === 'accent') {
     if (scheme === 'light') {
-      const accent = toneAt(tone, 0.75, 0.38);
+      // The accent itself is clamped dark until white reads on it, so the
+      // button text (near-white) and the focus ring clear their ratios even
+      // for a yellow sample (issue #130).
+      const accent = readable(tone, 0.75, 0.38, [255, 255, 255], 4.5, -1);
       derived.accent = accent;
       derived.focus = accent;
       derived['accent-strong'] = accent;
@@ -176,7 +179,7 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: Col
     derived.hairline = toneAt(tone, 0.25, 0.85);
     derived['hairline-strong'] = toneAt(tone, 0.25, 0.76);
     derived.popover = toneAt(tone, 0.25, 0.98);
-    const accent = toneAt(tone, 0.75, 0.38);
+    const accent = readable(tone, 0.75, 0.38, [255, 255, 255], 4.5, -1);
     derived.accent = accent;
     derived.focus = accent;
     derived['accent-strong'] = accent;
