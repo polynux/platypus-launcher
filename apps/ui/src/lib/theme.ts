@@ -272,14 +272,7 @@ export function applyAndRemember(theme: ThemeTokens): void {
   }
 }
 
-/** Boot, before the first paint (main.tsx): the theme applied last time, or the
- *  default theme when nothing is cached, so the first paint is Atlas and not
- *  the stylesheet's own values. A cache written by an older catalog (issue
- *  #156) has sourcebar chrome but none of the new page axes, and would paint
- *  sourcebar chrome with classic pages until the core answers: when the
- *  cached chrome is Atlas but any 1.1 axis is missing, the entry is stale
- *  and the defaults paint instead. Warm-like caches (no sourcebar) are
- *  harmless: the built-ins for the missing axes already match classic. */
+/** The page axes added in catalog 1.1 (issue #156). */
 const STALE_AXES = [
   'dashboard.presentation',
   'fixes.presentation',
@@ -293,6 +286,15 @@ const STALE_AXES = [
   'settings-row.style',
   'toast.style',
 ];
+
+/** Boot, before the first paint (main.tsx): the theme applied last time, or the
+ *  default theme when nothing is cached, so the first paint is Atlas and not
+ *  the stylesheet's own values. A cache written by an older catalog (issue
+ *  #156) has sourcebar chrome but none of the new page axes, and would paint
+ *  sourcebar chrome with classic pages until the core answers: when the
+ *  cached chrome is Atlas but any 1.1 axis is missing, the entry is stale
+ *  and the defaults paint instead. Warm-like caches (no sourcebar) are
+ *  harmless: the built-ins for the missing axes already match classic. */
 export function applyCachedTheme(): void {
   try {
     const rawScheme = window.localStorage.getItem(SCHEME_CACHE_KEY);
