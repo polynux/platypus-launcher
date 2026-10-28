@@ -25,6 +25,7 @@ vi.mock('../../effect/runtime', () => ({
     logout: () => Effect.succeed({ loggedIn: false } as never),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
   onSocial: () => () => {},

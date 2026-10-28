@@ -19,6 +19,7 @@ vi.mock('../../effect/runtime', () => ({
     return () => {};
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
 }));
 

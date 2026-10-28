@@ -185,6 +185,7 @@ vi.mock('../effect/runtime', () => ({
     }),
   }),
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onCloud: () => () => {},
   onFamily: () => () => {},

@@ -46,7 +46,15 @@ export function CloudSavesHost({
         const title = gamesRef.current.find((g) => g.id === e.game_id)?.title ?? e.title ?? e.game_id;
         const n = cloudNotice(e, title);
         if (n?.toast) notifyRef.current(n.toast.msg, n.toast.kind);
-        if (n?.activity) logRef.current({ type: 'cloud', game: title, ...n.activity });
+        // The core records uploads, downloads and conflicts in the persisted
+        // feed and pushes them (issues #145, A10): a session-only row here
+        // would show each twice. The toast still fires.
+        const loggedByCore =
+          e.kind === 'pushed' ||
+          (e.kind === 'status' && (e.done ?? 0) > 0) ||
+          (e.kind === 'prompt' && e.prompt === 'conflict') ||
+          (e.kind === 'failed' && e.status?.state === 'conflict');
+        if (n?.activity && !loggedByCore) logRef.current({ type: 'cloud', game: e.game_id, ...n.activity });
         // Keyed by id: a prompt is never dropped because the library lacks its game.
         if (e.kind === 'prompt' && e.prompt) {
           setPending({ gameId: e.game_id, title, kind: e.prompt, message: e.message ?? '', status: e.status, client: e.client });

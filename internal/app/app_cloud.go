@@ -46,10 +46,74 @@ func (a *App) startCloud(ctx context.Context, dataDir string) {
 		Backend:   cloudBackend{a},
 		Settings:  a.settings,
 		StatePath: filepath.Join(dataDir, "cloud.json"),
-		Emit:      func(e types.CloudEvent) { a.host.Emit("cloud", e) },
+		Emit:      func(e types.CloudEvent) { a.cloudEmit(e) },
 		Logf:      func(f string, args ...any) { a.host.Infof("cloud: "+f, args...) },
 	})
 	a.cloud.Resume()
+}
+
+// cloudEmit forwards a cloud event to the UI and logs its result (uploaded,
+// downloaded, conflict) to the activity feed (issue #145). Downloads come
+// from the pull's Done count (A3), never from the English message text, and
+// carry the file count for the UI's own wording (A5). A push-time conflict
+// arrives as Failed (A7); prompt conflicts are deduped per game until the
+// next push or clean status.
+func (a *App) cloudEmit(e types.CloudEvent) {
+	if a.host != nil {
+		a.host.Emit("cloud", e)
+	}
+	a.activityMu.Lock()
+	if a.cloudConflict == nil {
+		a.cloudConflict = map[string]bool{}
+	}
+	switch e.Kind {
+	case types.CloudEvPushed:
+		delete(a.cloudConflict, e.GameID)
+		a.activityMu.Unlock()
+		n := e.Done
+		if n < 0 {
+			n = 0
+		}
+		a.recordCloudActivity("cloud", e.GameID, "activity:log.cloudUploaded",
+			map[string]string{"files": fmt.Sprint(n)})
+	case types.CloudEvPrompt:
+		if e.Prompt != types.CloudPromptConflict {
+			a.activityMu.Unlock()
+			return
+		}
+		if a.cloudConflict[e.GameID] {
+			a.activityMu.Unlock()
+			return
+		}
+		a.cloudConflict[e.GameID] = true
+		a.activityMu.Unlock()
+		a.recordCloudActivity("cloud", e.GameID, "activity:log.cloudConflict", nil)
+	case types.CloudEvStatus:
+		if e.Status != nil && e.Status.State == types.CloudStateSynced {
+			delete(a.cloudConflict, e.GameID)
+		}
+		if e.Done <= 0 {
+			a.activityMu.Unlock()
+			return
+		}
+		a.activityMu.Unlock()
+		a.recordCloudActivity("cloud", e.GameID, "activity:log.cloudDownloaded",
+			map[string]string{"files": fmt.Sprint(e.Done)})
+	case types.CloudEvFailed:
+		if e.Status == nil || e.Status.State != types.CloudStateConflict {
+			a.activityMu.Unlock()
+			return
+		}
+		if a.cloudConflict[e.GameID] {
+			a.activityMu.Unlock()
+			return
+		}
+		a.cloudConflict[e.GameID] = true
+		a.activityMu.Unlock()
+		a.recordCloudActivity("cloud", e.GameID, "activity:log.cloudConflict", nil)
+	default:
+		a.activityMu.Unlock()
+	}
 }
 
 // cloudGame says whether the game has cloud saves Platypus can sync: it comes

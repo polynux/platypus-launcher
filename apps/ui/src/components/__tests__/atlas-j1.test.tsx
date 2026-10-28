@@ -26,6 +26,7 @@ vi.mock('../../effect/runtime', () => ({
     getCloudInfo: () => Effect.succeed(null as never),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onCloud: () => () => {},
   onFamily: () => () => {},

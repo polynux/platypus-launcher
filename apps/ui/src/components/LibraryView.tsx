@@ -354,7 +354,11 @@ export function LibraryView(p: LibraryProps) {
     setSort((s) => (s?.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: defaultDir(key) }));
   const rest = useMemo(() => (sort ? tableRows : filtered).filter((g) => !played.includes(g)), [sort, tableRows, filtered, played]);
   const maxHours = useMemo(() => Math.max(1, ...p.games.map((g) => hoursPlayed(g) ?? 0)), [p.games]);
-  const recentlyAdded = useMemo(() => p.games.filter((g) => g.store === 'custom').slice(0, 6), [p.games]);
+  // Newest added_at first (issue #151); without it sideloaded games stand in.
+  const recentlyAdded = useMemo(() => {
+    if (p.games.some((g) => (g.added_at ?? 0) > 0)) return [...p.games].sort((a, b) => (b.added_at ?? 0) - (a.added_at ?? 0)).slice(0, 6);
+    return p.games.filter((g) => g.store === 'custom').slice(0, 6);
+  }, [p.games]);
   // Offline (issue #44): a small indicator in the toolbar while the machine
   // looks offline — the library shows the last known listing.
   const { online } = useNetState();

@@ -1,9 +1,9 @@
 {
  "view": {
-  "subtitle": "This session's scans, launches and setting changes. The log isn't saved between sessions yet."
+  "subtitle": "Launches, installs, syncs and unlocks, newest first. The feed is saved between sessions."
  },
  "feed": {
-  "empty": "Nothing yet this session. Launches, scans and setting changes show up here."
+  "empty": "Nothing yet. Launches, installs and setting changes show up here."
  },
  "type": {
   "session": "session",
@@ -59,7 +59,16 @@
   "sideloaded": "Sideloaded {{title}}",
   "removed": "Removed {{title}} from library",
   "jobVerbBackedUp": "backed up",
-  "jobVerbRestored": "restored"
+  "jobVerbRestored": "restored",
+  "jobVerbVerified": "verified",
+  "jobVerbMoved": "moved",
+  "added": "Added {{title}}",
+  "cloudConflict": "Cloud conflict for {{title}}",
+  "achievementUnlocked": "Unlocked {{name}} in {{title}}",
+  "cloudUploaded_one": "Cloud uploaded {{count}} file for {{title}}",
+  "cloudUploaded_other": "Cloud uploaded {{count}} files for {{title}}",
+  "cloudDownloaded_one": "Cloud downloaded {{count}} file for {{title}}",
+  "cloudDownloaded_other": "Cloud downloaded {{count}} files for {{title}}"
  },
  "atlas": {
   "sub": "What happened in your library, newest first.",

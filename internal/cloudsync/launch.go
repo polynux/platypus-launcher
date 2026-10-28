@@ -80,8 +80,9 @@ func (c *Orchestrator) beforeLaunch(ctx context.Context, g Game, cc types.CloudC
 		return c.unreachable(g, mode, st)
 	}
 	note := ""
+	downloads := 0
 	if st.Counts.Download > 0 {
-		downloads := st.Counts.Download
+		downloads = st.Counts.Download
 		pulled, err := c.call(jctx, j, g, cc, "cloud.pull", nil)
 		if errors.Is(err, ErrCanceled) {
 			c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvCanceled, Message: "Cloud sync canceled."})
@@ -99,7 +100,9 @@ func (c *Orchestrator) beforeLaunch(ctx context.Context, g Game, cc types.CloudC
 		}
 		note = fmt.Sprintf("Downloaded %d file%s from the cloud", downloads, plural(downloads))
 	}
-	c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvStatus, Status: &st, Message: note})
+	// Done carries the pulled file count (like the push path): the App's
+	// activity feed logs downloads from it, not from the message text.
+	c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvStatus, Status: &st, Message: note, Done: int64(downloads)})
 	if st.State == types.CloudStateConflict {
 		return c.prompt(g, types.CloudPromptConflict, st.Message, &st)
 	}

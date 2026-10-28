@@ -42,6 +42,7 @@ vi.mock('../../effect/runtime', () => ({
     getThemeLayout: () => Effect.succeed(null as never),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onCloud: () => () => {},
   onFamily: () => () => {},

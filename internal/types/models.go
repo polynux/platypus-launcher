@@ -91,6 +91,9 @@ type Game struct {
 	FixInfo       *GameFixInfo   `json:"fix_info,omitempty"`
 	CompatBadges  []CompatBadge  `json:"compat_badges,omitempty"`
 	LastPlayed    int64          `json:"last_played_at,omitempty"` // unix seconds
+	// AddedAt is when the game first appeared in the library (issue #151):
+	// unix ms, 0 when unknown (a library from before it was recorded).
+	AddedAt int64 `json:"added_at,omitempty"`
 	// PlaytimeMin is the playtime shown and sorted by: max(local, store) for
 	// a plugin game with a playtime report (playtime capability, protocol 1.7),
 	// else the local value. The two parts ride along for the tooltip.
@@ -878,4 +881,17 @@ type GameSize struct {
 	PrefixBytes int64     `json:"prefix_bytes"`
 	FromPlugin  bool      `json:"from_plugin"`
 	Measured    bool      `json:"measured"`
+}
+
+// ActivityEvent is one row of the persisted activity feed (issues #145, #151):
+// a finished session, a finished job, a cloud sync result, an achievement
+// unlock or a library add. The UI renders TextKey with Args in the user's
+// language; GameID links back to the library ("" when there is no game).
+type ActivityEvent struct {
+	ID      int64             `json:"id"`
+	TS      int64             `json:"ts"`   // unix ms
+	Kind    string            `json:"kind"` // session|install|update|uninstall|verify|move|cloud|achievement|add
+	GameID  string            `json:"game_id,omitempty"`
+	TextKey string            `json:"text_key"`
+	Args    map[string]string `json:"args,omitempty"`
 }

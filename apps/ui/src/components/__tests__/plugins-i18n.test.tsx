@@ -14,6 +14,7 @@ vi.mock('../../effect/runtime', () => ({
     saveGameSettingsFields: () => Effect.succeed({ applied: true } as never),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
   onSocial: () => () => {},

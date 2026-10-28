@@ -26,6 +26,7 @@ vi.mock('../../effect/runtime', () => ({
     return () => { family.onWarning = null; };
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
 }));
 

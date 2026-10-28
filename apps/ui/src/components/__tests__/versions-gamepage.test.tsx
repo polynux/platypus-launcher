@@ -18,6 +18,7 @@ vi.mock('../../effect/runtime', () => ({
     previewCommand: () => Effect.succeed('wine game.exe'),
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
   onSocial: () => () => {},

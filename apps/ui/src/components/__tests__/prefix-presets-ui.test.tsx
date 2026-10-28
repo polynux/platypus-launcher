@@ -33,6 +33,7 @@ vi.mock('../../effect/runtime', () => ({
     }),
   }),
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
   onSocial: () => () => {},

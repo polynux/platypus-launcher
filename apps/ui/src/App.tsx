@@ -33,7 +33,8 @@ import { MigrationNotice as MigrationBanner } from './components/MigrationNotice
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onJobs, onLibrary, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
+import { LauncherApi, onActivity, onJobs, onLibrary, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
+import type { types as gen } from './gen/models';
 import { reconcileViews, upsertView } from './lib/social';
 import { ensureTerms } from './lib/termsRequest';
 import { friendNameOf, useChat } from './lib/useChat';
@@ -60,6 +61,55 @@ import { notify as toastNotify, type LegacyKind as NoticeKind } from './lib/noti
 import { X } from 'lucide-react';
 import { RouterProvider, useRouter } from '@tanstack/react-router';
 import { createAppRouter, useSetView, useView, viewToLocation } from './router';
+
+const CORE_KIND_TO_TYPE: Record<string, ActivityEvent['type']> = {
+  session: 'session', install: 'download', update: 'update', verify: 'update',
+  move: 'download', uninstall: 'remove', cloud: 'cloud', achievement: 'unlock', add: 'add',
+};
+
+/** One persisted feed row as the UI shows it (issues #145, #151). Exported
+ *  for tests: it is the same converter the App uses, with the same i18n. */
+export function toActivityRow(
+  e: gen.ActivityEvent,
+  byId: Map<string, Game>,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): ActivityEvent {
+  const type = CORE_KIND_TO_TYPE[e.kind] ?? 'scan';
+  const title = byId.get(e.game_id ?? '')?.title ?? e.args?.title ?? e.game_id ?? '';
+  const verb = (k: string) => {
+    switch (k) {
+      case 'install': return t('activity:log.jobVerbInstalled');
+      case 'update': return t('activity:log.jobVerbUpdated');
+      case 'uninstall': return t('activity:log.jobVerbUninstalled');
+      case 'verify': return t('activity:log.jobVerbVerified');
+      case 'move': return t('activity:log.jobVerbMoved');
+      default: return k;
+    }
+  };
+  let detail = '';
+  let meta: string | undefined;
+  if (e.kind === 'session') {
+    detail = t('activity:log.sessionStopped', { title });
+    const secs = Number(e.args?.seconds ?? 0);
+    if (secs > 0) meta = t('activity:log.sessionMinutes', { count: Math.max(1, Math.round(secs / 60)) });
+  } else if (e.kind === 'install' || e.kind === 'update' || e.kind === 'uninstall' || e.kind === 'verify' || e.kind === 'move') {
+    detail = t('activity:log.jobDone', { action: verb(e.kind), title });
+    meta = e.args?.store ?? e.args?.version;
+  } else if (e.kind === 'cloud') {
+    const files = Number(e.args?.files ?? 0);
+    if (e.text_key === 'activity:log.cloudConflict') {
+      detail = t('activity:log.cloudConflict', { title });
+    } else {
+      detail = t(e.text_key, { title, count: files });
+    }
+  } else {
+    detail = t(e.text_key, { title, ...(e.args ?? {}) });
+    meta = e.args?.message ?? e.args?.store;
+  }
+  // Stable ids (A6): stored rows keep their core id in a high lane, synth
+  // session rows keep their negative id; the ephemeral log owns the low lane.
+  return { id: (e.id ?? 0) >= 0 ? 1e12 + (e.id ?? 0) : (e.id ?? 0), ts: e.ts, type, game: e.game_id || title || undefined, detail, meta };
+}
 
 export function AppContent() {
   const view = useView();
@@ -173,6 +223,24 @@ export function AppContent() {
   const eventId = useRef(0);
   const log = useCallback((e: Omit<ActivityEvent, 'id' | 'ts'>) => {
     setActivity((prev) => [{ ...e, id: ++eventId.current, ts: Date.now() }, ...prev].slice(0, 200));
+  }, []);
+
+  // The persisted feed (issues #145, #151): stored rows plus the playlog's
+  // sessions, newest first. Rendered through the same rows as the ephemeral
+  // log above, so yesterday's sessions survive a restart.
+  const [feed, setFeed] = useState<gen.ActivityEvent[]>([]);
+  const feedRows = useMemo(() => {
+    // One id→game map for the whole batch (A1): no find per row per render.
+    const byId = new Map(games.map((g) => [g.id, g]));
+    return feed.map((e) => toActivityRow(e, byId, t));
+  }, [feed, games, t]);
+  const allActivity = useMemo(
+    () => [...activity, ...feedRows].sort((a, b) => b.ts - a.ts).slice(0, 200),
+    [activity, feedRows],
+  );
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.listActivity(0, 200)).then((rows) => setFeed(rows ?? [])).catch(() => {});
+    return onActivity((e) => setFeed((prev) => [...prev, e].slice(-500)));
   }, []);
 
   // The one-time Hydra→Platypus migration notice (issue #14). Null when there
@@ -427,7 +495,7 @@ export function AppContent() {
           if (e.state === 'running') {
             sessionStart.current[e.game_id] = Date.now();
             if (shellNavigation !== 'sourcebar') notify(t('game:nowRunning', { title }), 'busy');
-            log({ type: 'session', game: title, detail: t('activity:log.sessionStarted', { title }), meta: e.pid ? t('activity:log.sessionPid', { pid: e.pid }) : undefined });
+            log({ type: 'session', game: e.game_id, detail: t('activity:log.sessionStarted', { title }), meta: e.pid ? t('activity:log.sessionPid', { pid: e.pid }) : undefined });
           }
           return;
         }
@@ -438,12 +506,12 @@ export function AppContent() {
         if (e.state === 'failed') {
           setSessionFailures((prev) => ({ ...prev, [e.game_id]: e }));
           notify(t('errors:gameFailed', { title, error: e.message ?? t('errors:launchFailedText') }), 'err');
-          log({ type: 'session', game: title, detail: t('activity:log.sessionFailed', { title }), meta: e.message?.slice(0, 80) });
+          log({ type: 'session', game: e.game_id, detail: t('activity:log.sessionFailed', { title }), meta: e.message?.slice(0, 80) });
         } else {
           const started = sessionStart.current[e.game_id];
           delete sessionStart.current[e.game_id];
           const mins = started ? Math.round((Date.now() - started) / 60000) : 0;
-          log({ type: 'session', game: title, detail: t('activity:log.sessionStopped', { title }), meta: started ? t('activity:log.sessionMinutes', { count: mins }) : undefined });
+          log({ type: 'session', game: e.game_id, detail: t('activity:log.sessionStopped', { title }), meta: started ? t('activity:log.sessionMinutes', { count: mins }) : undefined });
         }
       }),
     [log, notify, shellNavigation, t]
@@ -486,11 +554,11 @@ export function AppContent() {
     return Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
       .then(() => {
         notify(t('common:settingsSaved'));
-        log({ type: 'tweak', game: g.title, detail: t('activity:log.tweakDetail', { what, title: g.title }) });
+        log({ type: 'tweak', game: g.id, detail: t('activity:log.tweakDetail', { what, title: g.title }) });
       })
       .catch((err) => {
         notify(t('errors:notPersisted', { error: coreErrMsg(err) }), 'err');
-        log({ type: 'tweak', game: g.title, detail: t('activity:log.tweakDetail', { what, title: g.title }), meta: t('activity:log.tweakSessionOnly') });
+        log({ type: 'tweak', game: g.id, detail: t('activity:log.tweakDetail', { what, title: g.title }), meta: t('activity:log.tweakSessionOnly') });
         throw err;
       });
   };
@@ -526,10 +594,14 @@ export function AppContent() {
           // round-trip (FE-4); the refresh reconciles afterwards.
           setGames((prev) => optimisticGamesAfterJob(prev, j));
           notify(t(`downloads:${verbKey}`, { title: j.title }));
-          log({ type: 'download', game: j.title, detail: t('activity:log.jobDone', { action, title: j.title }), meta: j.source });
+          // Finished installs, updates, uninstalls, verifies and moves also
+          // arrive on the persisted feed (issue #145): only the rest log here.
+          if (!['install', 'update', 'uninstall', 'verify', 'move'].includes(j.kind)) {
+            log({ type: 'download', game: j.game_id, detail: t('activity:log.jobDone', { action, title: j.title }), meta: j.source });
+          }
         } else if (j.state === 'failed') {
           notify(t('downloads:jobFailed', { title: j.title, error: j.error ?? t(`downloads:actionFailed.${j.kind}`) }), 'err');
-          log({ type: 'download', game: j.title, detail: t('activity:log.jobFailed', { kind: t(jobKindKey(j.kind)), title: j.title }), meta: j.error });
+          log({ type: 'download', game: j.game_id, detail: t('activity:log.jobFailed', { kind: t(jobKindKey(j.kind)), title: j.title }), meta: j.error });
         }
       }
       if (refresh) loadRef.current('update');
@@ -619,9 +691,9 @@ export function AppContent() {
       opts,
     ).then(({ game }) => {
       // Sideloaded games lead the library, like before, with their saved settings.
+      // The add lands on the persisted feed (issue #145), so no row here.
       setGames((prev) => [game, ...prev.filter((x) => x.id !== game.id)]);
       notify(t('game:added', { title }));
-      log({ type: 'add', game: title, detail: t('activity:log.sideloaded', { title }), meta: game.executable });
     });
   };
 
@@ -642,7 +714,7 @@ export function AppContent() {
           invalidateGameDetailsCache(game.id);
           setView((v) => (v.name === 'game' && v.id === game.id ? { name: v.from } : v));
           notify(t('game:removed', { title: game.title }));
-          log({ type: 'remove', game: game.title, detail: t('activity:log.removed', { title: game.title }), meta: game.install_dir || undefined });
+          log({ type: 'remove', game: game.id, detail: t('activity:log.removed', { title: game.title }), meta: game.install_dir || undefined });
         })
         .catch((err) => notify(coreErrMsg(err), 'err'));
       return;
@@ -783,7 +855,7 @@ export function AppContent() {
       installIntent={installIntentId === game.id}
       onInstallIntentHandled={() => setInstallIntentId(null)}
       runners={runners}
-      activity={activity}
+      activity={allActivity}
       backLabel={t(`nav:${from}`)}
       onBack={() => setView({ name: from } as View)}
       hideBack={hideBack}
@@ -895,7 +967,7 @@ export function AppContent() {
             allGames={games}
             ownedCount={games.length}
             runners={runners}
-            activity={activity}
+            activity={allActivity}
             social={social}
             sourceLogos={sourceLogos}
             onOpenFriends={() => setFriendsOpen(true)}
@@ -943,7 +1015,7 @@ export function AppContent() {
               jobs={activeJobs}
               sessions={sessions}
               runners={runners}
-              activity={activity}
+              activity={allActivity}
               sourceLogos={sourceLogos}
               view={atlasView}
               onOpen={openGame}
@@ -963,7 +1035,7 @@ export function AppContent() {
           <LibraryView
             games={games}
             runners={runners}
-            activity={activity}
+            activity={allActivity}
             search={search}
             onSearch={setSearch}
             source={source}

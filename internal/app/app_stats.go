@@ -281,6 +281,7 @@ func (a *App) GetGameAchievements(game types.Game) (*types.AchievementProgress, 
 	}
 	progress := stats.NormalizeAchievements(reply)
 	a.stats.putAchievements(game.ID, progress)
+	a.noteAchievementUnlocks(game, progress)
 	return &progress, nil
 }
 

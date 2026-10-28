@@ -30,6 +30,7 @@ vi.mock('../../lib/theme', async (importOriginal) => {
 const mock = vi.hoisted(() => ({
   getDiskUsage: vi.fn(),
   getGameFolders: vi.fn(),
+  listActivity: () => Effect.succeed([] as never),
   listJobs: vi.fn(),
   discardJob: vi.fn(),
   refreshDiskUsage: vi.fn(),
@@ -66,6 +67,7 @@ vi.mock('../../effect/runtime', () => ({
     return () => {};
   },
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onSocial: () => () => {},
   onChat: () => () => {},

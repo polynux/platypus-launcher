@@ -70,6 +70,7 @@ vi.mock('../../effect/runtime', () => ({
   }),
   onDiskUsage: () => () => {},
   onJobs: () => () => {},
+  onActivity: () => () => {},
   onSession: () => () => {},
   onSocial: () => () => {},
   onChat: () => () => {},

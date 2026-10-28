@@ -337,6 +337,27 @@ func (l *Log) Recent(gameID string, n int) []Session {
 	return append([]Session{}, recent[len(recent)-n:]...)
 }
 
+// RecentSession is one closed session with the game it belongs to.
+type RecentSession struct {
+	GameID  string
+	Session Session
+}
+
+// AllRecent returns every kept closed session, oldest first per game. The
+// activity feed (issue #145) merges these so yesterday's sessions survive a
+// restart without a separate store.
+func (l *Log) AllRecent() []RecentSession {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []RecentSession
+	for id, r := range l.data.Games {
+		for _, s := range r.Recent {
+			out = append(out, RecentSession{GameID: id, Session: s})
+		}
+	}
+	return out
+}
+
 // pruneGames drops the games played longest ago past maxGames. Callers hold l.mu.
 func (l *Log) pruneGames() {
 	if len(l.data.Games) <= l.maxGames {

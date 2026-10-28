@@ -83,6 +83,7 @@ export const APP_PAGE_METHODS: readonly string[] = [
   'LaunchGameAnyway',
   'LaunchGameViaClient',
   'LinkGameInfo',
+  'ListActivity',
   'ListCollections',
   'ListJobs',
   'ListPrefixPresets',

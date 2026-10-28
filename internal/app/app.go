@@ -162,6 +162,28 @@ type App struct {
 	// GetNetState and the "netstate" event. Nil in tests that don't need
 	// it (every helper tolerates nil).
 	net *netstate.State
+	// activityMu guards the persisted activity feed and the first-seen map
+	// (issues #145, #151). Tests that don't open them use the zero value:
+	// no path means memory only, and every helper tolerates nil maps.
+	activityMu     sync.Mutex
+	activityPath   string
+	activityEvents []types.ActivityEvent
+	activityNextID int64
+	addedAtPath    string
+	addedAt        map[string]int64
+	// addedAtSeen marks sources with a seeded first listing (A1): a
+	// store's first login must not flood the feed. addedAtFresh is set
+	// when library-added.json didn't exist at open: the next scan seeds
+	// every id silently.
+	addedAtSeen  map[string]bool
+	addedAtFresh bool
+	// achSeenPath/achSeen is the persisted unlock set apart from the
+	// capped feed (A2): game id to achievement id to unlock time.
+	achSeenPath string
+	achSeen     map[string]map[string]int64
+	// cloudConflict marks games with an unanswered logged conflict (A7):
+	// a prompt re-fires on every launch until it is resolved or pushed.
+	cloudConflict map[string]bool
 }
 
 // Options carries the folders one App run uses (issue #41). Empty fields
@@ -350,6 +372,11 @@ func (a *App) startup(ctx context.Context) {
 	// recovery reads the folder in use. Dangling sessions close at their
 	// last heartbeat inside Open.
 	a.openPlaylog(dataDir)
+	// The activity feed and the first-seen map live beside it (issues
+	// #145, #151): yesterday's sessions and adds survive a restart.
+	a.openActivity(dataDir)
+	a.openAddedAt(dataDir)
+	a.openAchSeen(dataDir)
 
 	// Store plugins start on demand: when the library is listed, on login,
 	// or when an interrupted install resumes.
@@ -540,6 +567,7 @@ func (a *App) customGames() []types.Game {
 			StoreAppID:  types.SourceCustom,
 			Title:       g.Title,
 			ReleaseYear: g.ReleaseYear,
+			AddedAt:     g.AddedAt,
 			InstallDir:  filepath.Dir(g.Executable),
 			Executable:  g.Executable,
 			IsInstalled: true,
@@ -617,19 +645,29 @@ func (a *App) AddCustomGame(title, executable string) (types.Game, error) {
 		return types.Game{}, err
 	}
 	a.maybeAutoArtwork(g.ID, g.Title)
-	return types.Game{
+	// The add lands on the feed at once (issue #145): an explicit add is
+	// always a genuine new row, even on a first run (noteLibraryGames would
+	// seed it silently as backfill).
+	out := types.Game{
 		ID:          g.ID,
 		Source:      types.SourceCustom,
 		Store:       types.StoreCustom,
 		StoreAppID:  types.SourceCustom,
 		Title:       g.Title,
 		ReleaseYear: g.ReleaseYear,
+		AddedAt:     g.AddedAt,
 		InstallDir:  filepath.Dir(g.Executable),
 		Executable:  g.Executable,
 		IsInstalled: true,
 		Settings:    types.GameSettings{UseGameMode: true},
 		Native:      a.customNative(g.Executable, ""),
-	}, nil
+	}
+	if out.AddedAt == 0 {
+		out.AddedAt = time.Now().UnixMilli()
+	}
+	a.noteExplicitAdd(out)
+	out.AddedAt = a.addedAt[out.ID]
+	return out, nil
 }
 
 // DetectGameExecutable reports how a sideloaded executable would run by
@@ -658,7 +696,7 @@ func (a *App) UpdateCustomGameExecutable(id, executable string) (types.Game, err
 	}
 	return types.Game{
 		ID: g.ID, Source: types.SourceCustom, Store: types.StoreCustom, StoreAppID: types.SourceCustom,
-		Title: g.Title, ReleaseYear: g.ReleaseYear, InstallDir: filepath.Dir(g.Executable),
+		Title: g.Title, ReleaseYear: g.ReleaseYear, AddedAt: g.AddedAt, InstallDir: filepath.Dir(g.Executable),
 		Executable: g.Executable, IsInstalled: true,
 		Settings: types.GameSettings{UseGameMode: true}, Native: a.customNative(g.Executable, ""),
 	}, nil
@@ -778,6 +816,7 @@ func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs [
 		a.startPlaytimeOnce(s.ID())
 	}
 	lib.Games = append(lib.Games, a.customGames()...)
+	a.noteLibraryGames(lib.Games)
 	a.applyPlaytime(lib.Games)
 	a.applyPins(&lib)
 	a.applyCustomization(lib.Games)

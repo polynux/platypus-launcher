@@ -337,8 +337,8 @@ func (q *Queue) SetOnInstalled(f func(job types.Job, installed types.Installed))
 	q.mu.Unlock()
 }
 
-// SetOnFinished registers the callback for installs, updates, uninstalls and
-// moves that are done. The job is as it was when it ended.
+// SetOnFinished registers the callback for installs, updates, uninstalls,
+// verifies and moves that are done. The job is as it was when it ended.
 func (q *Queue) SetOnFinished(f func(job types.Job)) {
 	q.mu.Lock()
 	q.onFinished = f
@@ -674,7 +674,7 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 		if u.Installed != nil && job.Kind != KindUninstall && installed != nil {
 			installed(job, *u.Installed)
 		}
-		if (job.Kind == KindInstall || job.Kind == KindUpdate || job.Kind == KindUninstall || job.Kind == KindMove || job.Kind == KindRemove) && finished != nil {
+		if (job.Kind == KindInstall || job.Kind == KindUpdate || job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindRemove) && finished != nil {
 			finished(job)
 		}
 		q.finish(job.ID, StateDone, "")
