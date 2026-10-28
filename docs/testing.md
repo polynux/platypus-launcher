@@ -145,9 +145,21 @@ Desktop shell: 31 tests, 0.7 s, unchanged.
   failing; wrong statuses and missing methods still fail at once. Same
   treatment for echo-b in `TestTwoStoresHaveTheirOwnFriends`.
 - `TestSteamQRRefresh` (15 s deadline waited out under full-suite load;
-  passes solo in 1.5 s): moved to slow with the other QR/auth
-  polling tests. `TestSteamLegacyInstallFolderKeepsWorking` varied
+  passes solo in 1.5 s) was moved to slow with the other QR/auth polling
+  tests; its real cause turned up in #78: the helper polls right after
+  `BeginQR`, so with `auth_qr_refresh` set before `auth.begin` the art
+  `auth.begin` answered with could already be the refreshed one, and the
+  test then waited out its deadline for a change that had happened. The
+  knob is now flipped after the first art is captured (15 runs under CPU
+  load: clean). `TestSteamLegacyInstallFolderKeepsWorking` varied
   0.9–10.9 s with load (paced downloads): moved to slow too.
+- `TestSteamCMMultiAndHeartbeat` (#78) read the fake CM's log once for
+  `heartbeat_reply`, but the fake writes that line only after it has sent
+  the service response the plugin is waiting for, so the write lands after
+  `library.list` returned under load (4 of 25 runs under CPU load). The
+  tests now wait for the line (`env.waitCMLog`) instead of reading the log
+  once; the same wait covers `logon` / `service …` / `logoff` in the cache
+  test. `-count=20` under load, twice in parallel: clean.
 
 ### Follow-ups (not done)
 

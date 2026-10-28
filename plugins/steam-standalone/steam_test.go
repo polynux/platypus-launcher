@@ -1192,14 +1192,18 @@ func checkQRArt(t *testing.T, art string) {
 func TestSteamQRRefresh(t *testing.T) {
 	testenv.RequireSlow(t)
 	e := setup(t)
-	e.setCMState("auth_qr_refresh", true)
+	// Turn the refresh knob on only once the first art is captured (below):
+	// the helper polls right after Begin, so a knob set earlier can make the
+	// refreshed art the one auth.begin already returns — the check then
+	// waits for a change that already happened (the load flake).
 	var pr types.AuthPrompt
 	if err := e.call("auth.begin", nil, &pr); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	checkQRArt(t, pr.QR)
 	first := pr.QR
-	// The fake refreshes on the first poll; auth.status must pick the new
+	e.setCMState("auth_qr_refresh", true)
+	// The fake refreshes on the next poll; auth.status must pick the new
 	// art up.
 	var st types.AuthStatus
 	deadline := time.Now().Add(15 * time.Second)
