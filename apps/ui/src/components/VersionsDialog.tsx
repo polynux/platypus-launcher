@@ -219,7 +219,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
           {info.channels.length > 0 && (
             <section className="mt-5">
               <MonoLabel className="mb-1.5">{t('gameOps:versions.channelsKicker')}</MonoLabel>
-              <div role="radiogroup" aria-label={t('gameOps:versions.channelsAria')} className="space-y-1.5">
+              <div role="radiogroup" aria-orientation="vertical" aria-label={t('gameOps:versions.channelsAria')} className="space-y-1.5">
                 {info.channels.map((c) => (
                   <ChannelRow
                     key={c.id}
@@ -238,7 +238,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
           {info.builds.length > 0 && (
             <section className="mt-5">
               <MonoLabel className="mb-1.5">{t('gameOps:versions.buildsKicker')}</MonoLabel>
-              <div role="radiogroup" aria-label={t('gameOps:versions.buildsAria')} className="space-y-1.5">
+              <div role="radiogroup" aria-orientation="vertical" aria-label={t('gameOps:versions.buildsAria')} className="space-y-1.5">
                 {info.builds.map((b) => (
                   <BuildRow
                     key={b.id}

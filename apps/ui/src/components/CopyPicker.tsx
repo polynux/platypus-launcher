@@ -44,7 +44,7 @@ export function CopyPicker({ game, plugin, onChanged }: { game: Game; plugin: St
         <h2 className="mb-2 text-[15px] font-bold">{t('gameOps:copies.title')}</h2>
         <p className="font-mono text-hint text-text select-text">{t('gameOps:copies.from', { name: from })}</p>
         {copies.length > 1 && (
-          <div role="radiogroup" aria-label={t('gameOps:copies.group')} className="mt-3 space-y-2">
+          <div role="radiogroup" aria-orientation="vertical" aria-label={t('gameOps:copies.group')} className="mt-3 space-y-2">
             {copies.map((copy) => {
               const status = copyStatusLabel(t, copy);
               const chosen = copy.owner_id === played;

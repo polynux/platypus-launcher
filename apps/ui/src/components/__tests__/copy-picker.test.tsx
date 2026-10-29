@@ -16,6 +16,7 @@ vi.mock('../../effect/runtime', () => ({
 }));
 
 import { CopyPicker } from '../CopyPicker';
+import { widgetOf } from '../../lib/spatialNav';
 
 const plugin = (o: Partial<StorePlugin> = {}): StorePlugin =>
   ({ id: 'echo', name: 'Echo', status: 'ready', capabilities: ['family'], declared: ['family'], ...o }) as StorePlugin;
@@ -57,6 +58,12 @@ describe('CopyPicker', () => {
     expect(radios[1]).toHaveTextContent('in use');
     expect(radios[2]).toBeDisabled();
     expect(radios[2]).toHaveTextContent('unavailable');
+  });
+
+  it('stacks the copies vertically for controller navigation (issue #53)', () => {
+    render(<CopyPicker game={borrowed()} plugin={plugin()} onChanged={() => {}} />);
+    // Up/Down walk the copies; an unmarked radio group counts as horizontal.
+    expect(widgetOf(screen.getAllByRole('radio')[0])?.axis).toBe('vertical');
   });
 
   it('follows the pick the user made', () => {
