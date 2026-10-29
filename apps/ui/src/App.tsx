@@ -185,15 +185,13 @@ export function AppContent() {
   // actions. A activates, B backs out of the topmost layer else history,
   // LB/RB cycle the main sections in both presentations.
   useEffect(() => installControllerKeyboard(), []);
-  // After a pad section switch or back-step the focused element is gone
-  // (body): move focus into the new view, unless something (a dialog's
-  // focus restore) already took it.
+  // After a pad section switch or back-step, always move focus into the
+  // new view: the old nav button survives the switch and would keep a stale
+  // ring otherwise.
   const refocusView = useRef(false);
   useEffect(() => {
     if (!refocusView.current) return;
     refocusView.current = false;
-    const ae = document.activeElement;
-    if (ae instanceof HTMLElement && ae !== document.body && document.contains(ae)) return;
     focusFirstInView();
   }, [viewKey]);
   const stepSection = useCallback(
@@ -1392,7 +1390,7 @@ export function AppContent() {
             {renderView()}
           </main>
           {friendsOpen && (
-            <div data-keys-local><AtlasFriendsPanel
+            <AtlasFriendsPanel
               views={social}
               labels={socialLabels}
               plugins={plugins}
@@ -1416,7 +1414,7 @@ export function AppContent() {
               conversations={chat.conversations}
               chatTarget={chat.target}
               playingTitle={playingTitle}
-            /></div>
+            />
           )}
         </div>
       ) : (

@@ -208,7 +208,12 @@ export function LibraryListDetail(p: ListDetailProps) {
   const move = (dir: 1 | -1) => {
     if (filtered.length === 0) return;
     const i = filtered.findIndex((g) => g.id === selectedId);
-    const next = filtered[(i < 0 ? (dir === 1 ? -1 : 0) : i + dir + filtered.length) % filtered.length];
+    // Stop at the ends instead of wrapping: leaving the list (to the
+    // toolbar above or the stage beside it) is the spatial handler's job,
+    // which runs first and stops the key before it gets here.
+    const nextIdx = i < 0 ? (dir === 1 ? 0 : filtered.length - 1) : i + dir;
+    if (nextIdx < 0 || nextIdx >= filtered.length) return;
+    const next = filtered[nextIdx];
     setSelectedId(next.id);
     requestAnimationFrame(() => {
       listRef.current?.querySelector<HTMLElement>(`[data-game-row="${CSS.escape(next.id)}"]`)?.focus({ preventScroll: true });
@@ -443,7 +448,7 @@ export function LibraryListDetail(p: ListDetailProps) {
             </button>
           </p>
         ) : (
-          <ul ref={listRef} onKeyDown={onListKey} data-keys-local className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
+          <ul ref={listRef} onKeyDown={onListKey} className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
             {filtered.map((g) => {
               const sub = subLine(t, g);
               const on = g.id === selected?.id;

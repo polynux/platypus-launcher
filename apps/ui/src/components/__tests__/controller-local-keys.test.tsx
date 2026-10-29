@@ -97,6 +97,77 @@ describe('library list keeps its keys', () => {
     fireEvent.keyDown(gamma, { key: 'Enter' });
     expect(onPlay).toHaveBeenCalledWith('gamma');
   });
+
+  it('A on a row plays like Enter instead of just selecting', async () => {
+    uninstall = installControllerKeyboard();
+    const { onPlay } = list();
+    const { activateFocused } = await import('../../lib/spatialNav');
+    const gamma = screen.getByRole('button', { name: /Gamma/ });
+    fireEvent.click(gamma);
+    expect(screen.getByTestId('stage')).toHaveTextContent('Gamma');
+    gamma.focus();
+    activateFocused();
+    expect(onPlay).toHaveBeenCalledWith('gamma');
+  });
+
+  it('j/k stop at the ends instead of wrapping', async () => {
+    uninstall = installControllerKeyboard();
+    list();
+    const alpha = screen.getByRole('button', { name: /Alpha/ });
+    alpha.focus();
+    fireEvent.keyDown(alpha, { key: 'k' });
+    expect(screen.getByTestId('stage')).toHaveTextContent('Alpha');
+    const gamma = screen.getByRole('button', { name: /Gamma/ });
+    fireEvent.click(gamma);
+    expect(screen.getByTestId('stage')).toHaveTextContent('Gamma');
+    gamma.focus();
+    fireEvent.keyDown(gamma, { key: 'j' });
+    expect(screen.getByTestId('stage')).toHaveTextContent('Gamma');
+  });
+
+  it('Right on a row leaves the list toward the stage', async () => {
+    uninstall = installControllerKeyboard();
+    list();
+    const rows = screen.getAllByRole('button', { name: /Alpha|Beta|Gamma/ });
+    rows.forEach((r, i) => rect(r, 0, i * 40));
+    const stage = document.createElement('button');
+    stage.type = 'button';
+    stage.textContent = 'Play';
+    stage.setAttribute('data-testid', 'stage-play');
+    document.body.append(stage);
+    rect(stage, 300, 0);
+    try {
+      const alpha = screen.getByRole('button', { name: /Alpha/ });
+      alpha.focus();
+      fireEvent.keyDown(alpha, { key: 'ArrowRight' });
+      // Across the row axis: the list must not consume it, focus leaves.
+      expect(document.activeElement).toBe(stage);
+      expect(screen.getByTestId('stage')).toHaveTextContent('Alpha');
+    } finally {
+      stage.remove();
+    }
+  });
+
+  it('Up on the first row leaves upward instead of wrapping', async () => {
+    uninstall = installControllerKeyboard();
+    list();
+    const rows = screen.getAllByRole('button', { name: /Alpha|Beta|Gamma/ });
+    rows.forEach((r, i) => rect(r, 0, i * 40));
+    const toolbar = document.createElement('button');
+    toolbar.type = 'button';
+    toolbar.textContent = 'Filter';
+    document.body.append(toolbar);
+    rect(toolbar, 0, -60);
+    try {
+      const alpha = screen.getByRole('button', { name: /Alpha/ });
+      alpha.focus();
+      fireEvent.keyDown(alpha, { key: 'ArrowUp' });
+      expect(document.activeElement).toBe(toolbar);
+      expect(screen.getByTestId('stage')).toHaveTextContent('Alpha');
+    } finally {
+      toolbar.remove();
+    }
+  });
 });
 
 describe('command palette keeps its keys', () => {
@@ -144,6 +215,19 @@ describe('command palette keeps its keys', () => {
     expect(options()[0]).toHaveAttribute('aria-selected', 'true');
     expect(document.activeElement).toBe(input);
     extra.remove();
+  });
+
+  it('A runs the highlighted entry like Enter', async () => {
+    uninstall = installControllerKeyboard();
+    const calls = setup();
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    const input = await screen.findByRole('combobox', { name: 'Command' });
+    input.focus();
+    const { activateFocused } = await import('../../lib/spatialNav');
+    activateFocused();
+    // First entry with no current game: the Dashboard place.
+    expect(calls.navigate).toHaveBeenCalledWith({ name: 'dashboard' });
+    expect(document.activeElement).toBe(input);
   });
 });
 

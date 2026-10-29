@@ -16,6 +16,7 @@ import {
   nextSection,
   sectionOf,
   shouldIgnoreArrows,
+  widgetOf,
 } from './spatialNav';
 import { dispatchPadArrow } from './useGamepad';
 
@@ -122,6 +123,8 @@ describe('guards', () => {
     expect(shouldIgnoreArrows(combo)).toBe(false);
     input.remove();
     combo.remove();
+    // Permanent in-page menus/listboxes are composite widgets, not popups:
+    // arrows move within them, they never trap the scope.
     const select = document.createElement('select');
     const slider = document.createElement('div');
     slider.setAttribute('role', 'slider');
@@ -131,9 +134,21 @@ describe('guards', () => {
     const listbox = document.createElement('ul');
     listbox.setAttribute('role', 'listbox');
     document.body.append(select, slider, menu, listbox);
-    for (const el of [select, slider, menu, listbox]) {
-      expect(shouldIgnoreArrows(el)).toBe(true);
-    }
+    expect(shouldIgnoreArrows(slider)).toBe(true);
+    expect(shouldIgnoreArrows(menu)).toBe(false);
+    expect(shouldIgnoreArrows(listbox)).toBe(false);
+    // An open popup owns its keys.
+    const popper = document.createElement('div');
+    popper.setAttribute('data-radix-popper-content-wrapper', '');
+    const content = document.createElement('div');
+    content.setAttribute('role', 'menu');
+    content.setAttribute('data-state', 'open');
+    popper.append(content);
+    const item = document.createElement('button');
+    item.type = 'button';
+    content.append(item);
+    document.body.append(popper);
+    expect(shouldIgnoreArrows(item)).toBe(true);
     // With a popup open even a trigger yields to it.
     document.body.append(combo);
     expect(shouldIgnoreArrows(combo)).toBe(true);
@@ -423,13 +438,18 @@ describe('lost focus (finding 3)', () => {
 
 describe('menus as the topmost layer (finding 5)', () => {
   it('B targets an open menu and does not go back', () => {
+    // Realistic open Radix menu: portalled wrapper, open menu content.
     const popper = document.createElement('div');
     popper.setAttribute('data-radix-popper-content-wrapper', '');
-    document.body.append(popper);
+    const content = document.createElement('div');
+    content.setAttribute('role', 'menu');
+    content.setAttribute('data-state', 'open');
+    popper.append(content);
     const item = document.createElement('button');
     item.type = 'button';
     item.textContent = 'item';
-    popper.append(item);
+    content.append(item);
+    document.body.append(popper);
     rect(item, 0, 0);
     expect(getScopeRoot()).toBe(popper);
     const seen: string[] = [];
@@ -446,6 +466,23 @@ describe('menus as the topmost layer (finding 5)', () => {
       window.removeEventListener('keydown', onKey);
       popper.remove();
     }
+  });
+
+  it('a tooltip is never scope', () => {
+    const trigger = button('trigger', 0, 0);
+    const popper = document.createElement('div');
+    popper.setAttribute('data-radix-popper-content-wrapper', '');
+    const tip = document.createElement('div');
+    tip.setAttribute('role', 'tooltip');
+    tip.setAttribute('data-state', 'open');
+    popper.append(tip);
+    document.body.append(popper);
+    expect(getScopeRoot()).toBe(document);
+    const goBack = vi.fn();
+    handleBackAction(goBack);
+    expect(goBack).toHaveBeenCalledTimes(1);
+    expect(trigger).toBeDefined();
+    popper.remove();
   });
 
   it('handleBackAction goes back only with no layer open', () => {
@@ -514,5 +551,173 @@ describe('stale ring (finding 7)', () => {
     } finally {
       uninstall();
     }
+  });
+});
+
+describe('composite widgets', () => {
+  it('collapses a selected listbox to its active option', () => {
+    const list = document.createElement('ul');
+    list.setAttribute('role', 'listbox');
+    const a = document.createElement('button');
+    a.type = 'button';
+    a.setAttribute('role', 'option');
+    a.setAttribute('aria-selected', 'true');
+    a.textContent = 'a';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'option');
+    b.textContent = 'b';
+    list.append(a, b);
+    document.body.append(list);
+    rect(a, 0, 0);
+    rect(b, 0, 100);
+    const els = getFocusableElements(document);
+    expect(els).toContain(a);
+    expect(els).not.toContain(b);
+  });
+
+  it('resolves rows into the vertical library widget', () => {
+    const ul = document.createElement('ul');
+    const mkRow = (id: string): HTMLButtonElement => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.setAttribute('data-game-row', id);
+      li.append(btn);
+      ul.append(li);
+      return btn;
+    };
+    const r1 = mkRow('1');
+    const r2 = mkRow('2');
+    document.body.append(ul);
+    const w = widgetOf(r1);
+    expect(w?.axis).toBe('vertical');
+    expect(w?.items).toEqual([r1, r2]);
+    expect(w?.index).toBe(0);
+    expect(widgetOf(r2)?.index).toBe(1);
+  });
+
+  it('reads tablist orientation, defaulting to horizontal', () => {
+    const tabs = document.createElement('div');
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-orientation', 'vertical');
+    document.body.append(tabs);
+    const t = document.createElement('button');
+    t.setAttribute('role', 'tab');
+    tabs.append(t);
+    expect(widgetOf(t)?.axis).toBe('vertical');
+    const plain = document.createElement('div');
+    plain.setAttribute('role', 'tablist');
+    document.body.append(plain);
+    const p = document.createElement('button');
+    p.setAttribute('role', 'tab');
+    plain.append(p);
+    expect(widgetOf(plain)?.axis).toBe('horizontal');
+  });
+});
+
+describe('bounded angle (finding 5)', () => {
+  it('rejects a steep diagonal with nothing on-axis', () => {
+    const from = button('from', 0, 0);
+    const steep = button('steep', 500, 100);
+    rect(steep, 500, 100, 60, 24);
+    expect(nearestInDirection(from, getFocusableElements(document), 'down')).toBeNull();
+  });
+
+  it('still reaches a far on-axis target past a rejected diagonal', () => {
+    const from = button('from', 0, 0);
+    const steep = button('steep', 500, 100);
+    rect(steep, 500, 100, 60, 24);
+    const play = button('play', 0, 600);
+    rect(play, 0, 600, 120, 24);
+    expect(nearestInDirection(from, getFocusableElements(document), 'down')).toBe(play);
+  });
+});
+
+describe('native controls (finding 6)', () => {
+  it('keyboard keeps select Up/Down and number Up, leaves the rest', () => {
+    const uninstall = installControllerKeyboard();
+    try {
+      const above = button('above', 0, 0);
+      const sel = document.createElement('select');
+      document.body.append(sel);
+      rect(sel, 0, 100);
+      sel.focus();
+      sel.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(sel);
+      const right = button('right', 100, 100);
+      sel.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(right);
+      const num = document.createElement('input');
+      num.type = 'number';
+      document.body.append(num);
+      rect(num, 0, 200);
+      num.focus();
+      num.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(num);
+      const below = button('below', -100, 200);
+      num.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(below);
+      expect(above).toBeDefined();
+    } finally {
+      uninstall();
+    }
+  });
+
+  it('pad leaves select, number and checkbox in every direction', () => {
+    const uninstall = installControllerKeyboard();
+    try {
+      const left = button('left', 0, 100);
+      for (const [tag, type] of [['select', ''], ['input', 'number'], ['input', 'checkbox']] as const) {
+        const el = document.createElement(tag) as HTMLElement;
+        if (type) (el as HTMLInputElement).type = type;
+        document.body.append(el);
+        rect(el, 100, 100);
+        el.focus();
+        dispatchPadArrow('left');
+        expect(document.activeElement).toBe(left);
+        left.blur?.();
+      }
+    } finally {
+      uninstall();
+    }
+  });
+
+  it('checkbox arrows leave for the keyboard too', () => {
+    const uninstall = installControllerKeyboard();
+    try {
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      document.body.append(box);
+      rect(box, 0, 0);
+      const next = button('next', 100, 0);
+      box.focus();
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(next);
+    } finally {
+      uninstall();
+    }
+  });
+});
+
+describe('A behaves like Enter (finding 7)', () => {
+  it('dispatches Enter keydown/keyup and falls back to click', () => {
+    const seen: string[] = [];
+    const b = button('b', 0, 0);
+    b.addEventListener('keydown', (e) => seen.push(`down:${(e as KeyboardEvent).key}`));
+    b.addEventListener('keyup', (e) => seen.push(`up:${(e as KeyboardEvent).key}`));
+    b.focus();
+    expect(activateFocused()).toBe(true);
+    expect(seen).toEqual(['down:Enter', 'up:Enter']);
+  });
+
+  it('does not click when Enter was consumed', () => {
+    const onClick = vi.fn();
+    const b = button('b', 0, 0);
+    b.addEventListener('click', onClick);
+    b.addEventListener('keydown', (e) => e.preventDefault());
+    b.focus();
+    expect(activateFocused()).toBe(true);
+    expect(onClick).not.toHaveBeenCalled();
   });
 });

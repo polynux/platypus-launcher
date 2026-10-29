@@ -12,6 +12,12 @@ import {
   installControllerKeyboard,
 } from '../../lib/spatialNav';
 import { dispatchPadArrow } from '../../lib/useGamepad';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ds/dropdown-menu';
 
 function rect(el: HTMLElement, x: number, y: number, w = 40, h = 24): void {
   el.getBoundingClientRect = () =>
@@ -201,5 +207,147 @@ describe('B backs out', () => {
     // B with nothing open: the App's back branch runs.
     handleBackAction(onBack);
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('composite widgets', () => {
+  function Tabs() {
+    const tabs = ['a', 'b'];
+    const [tab, setTab] = React.useState('a');
+    return (
+      <div>
+        <div role="tablist" aria-label="sections" aria-orientation="vertical">
+          {tabs.map((name) => (
+            <button
+              key={name}
+              type="button"
+              role="tab"
+              id={`t-${name}`}
+              data-testid={`tab-${name}`}
+              aria-selected={tab === name}
+              tabIndex={tab === name ? 0 : -1}
+              onClick={() => setTab(name)}
+              onKeyDown={(e) => {
+                const i = tabs.indexOf(name);
+                const next =
+                  e.key === 'ArrowDown' || e.key === 'ArrowRight' ? tabs[(i + 1) % tabs.length]
+                  : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? tabs[(i - 1 + tabs.length) % tabs.length]
+                  : null;
+                if (!next) return;
+                e.preventDefault();
+                setTab(next);
+                document.getElementById(`t-${next}`)?.focus();
+              }}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+        <div data-testid="panel">
+          <button type="button" data-testid="content">content</button>
+        </div>
+        <button type="button" data-testid="below">below</button>
+      </div>
+    );
+  }
+
+  function tabLayout(): void {
+    layOut({ 'tab-a': [0, 0], 'tab-b': [0, 100], content: [200, 0], below: [0, 300] });
+  }
+
+  it('along-axis arrows stay in the tablist, across-axis leave it', () => {
+    uninstall = installControllerKeyboard();
+    render(<Tabs />);
+    tabLayout();
+    screen.getByTestId('tab-a').focus();
+    fireEvent.keyDown(screen.getByTestId('tab-a'), { key: 'ArrowDown' });
+    // The tablist's own handler moves within: selection follows, focus too.
+    expect(screen.getByTestId('tab-b')).toHaveAttribute('aria-selected', 'true');
+    expect(document.activeElement).toBe(screen.getByTestId('tab-b'));
+    // Across the axis the widget must not pull focus back.
+    fireEvent.keyDown(screen.getByTestId('tab-b'), { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(screen.getByTestId('content'));
+    expect(screen.getByTestId('tab-b')).toHaveAttribute('aria-selected', 'true');
+    // Back across lands on the active tab, not the nearest one.
+    fireEvent.keyDown(screen.getByTestId('content'), { key: 'ArrowLeft' });
+    expect(document.activeElement).toBe(screen.getByTestId('tab-b'));
+  });
+
+  it('along-axis at the last item leaves instead of wrapping', () => {
+    uninstall = installControllerKeyboard();
+    render(<Tabs />);
+    tabLayout();
+    screen.getByTestId('tab-b').focus();
+    fireEvent.keyDown(screen.getByTestId('tab-b'), { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(screen.getByTestId('below'));
+    // No wrap: the selection stays where it was.
+    expect(screen.getByTestId('tab-a')).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('A opens menus like Enter', () => {
+  it('opens a DropdownMenu trigger', async () => {
+    uninstall = installControllerKeyboard();
+    render(
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" data-testid="more">More places</button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => {}}>Settings</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    screen.getByTestId('more').focus();
+    activateFocused();
+    expect(await screen.findByRole('menu')).not.toBeNull();
+  });
+});
+
+describe('segmented controls (SegRow radiogroup)', () => {
+  it('keyboard moves between segments, leaves at the ends and Up/Down', async () => {
+    const { SegRow } = await import('../ui');
+    uninstall = installControllerKeyboard();
+    const onChange = vi.fn();
+    render(
+      <div>
+        <button type="button" data-testid="above">above</button>
+        <div style={{ display: 'flex' }}>
+          <SegRow
+            label="Scheme"
+            value="dark"
+            onChange={onChange}
+            options={[
+              { value: 'dark', label: 'Dark' },
+              { value: 'light', label: 'Light' },
+              { value: 'black', label: 'Black' },
+            ]}
+          />
+        </div>
+        <button type="button" data-testid="outside">outside</button>
+      </div>,
+    );
+    const segs = screen.getAllByRole('radio');
+    expect(segs).toHaveLength(3);
+    layOut({ above: [100, 0] });
+    segs.forEach((s, i) => rect(s, 100 + i * 100, 100));
+    rect(screen.getByTestId('outside'), 0, 100);
+    // Entering from above lands on the selected segment.
+    screen.getByTestId('above').focus();
+    fireEvent.keyDown(screen.getByTestId('above'), { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(segs[0]);
+    // Along the axis the roving group owns the key: middle moves to first
+    // (Radix focuses async, like real roving widgets).
+    segs[1].focus();
+    fireEvent.keyDown(segs[1], { key: 'ArrowLeft' });
+    await waitFor(() => expect(document.activeElement).toBe(segs[0]));
+    // At the first item Left leaves instead of wrapping or sticking.
+    fireEvent.keyDown(segs[0], { key: 'ArrowLeft' });
+    expect(document.activeElement).toBe(screen.getByTestId('outside'));
+    expect(onChange).not.toHaveBeenCalled();
+    // Across the axis leaves upward.
+    segs[1].focus();
+    fireEvent.keyDown(segs[1], { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(screen.getByTestId('above'));
   });
 });
