@@ -178,6 +178,9 @@ export function LibraryListDetail(p: ListDetailProps) {
   useEffect(() => {
     if (!atlas) return;
     const onGlobalKey = (e: KeyboardEvent) => {
+      // The shared controller handler (capture) runs first and marks what
+      // it moves: never handle the same press twice.
+      if (e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
       if (!target || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable) return;
       if (target.closest('[role=listbox],[role=menu],[role=dialog],[data-keys-local]') || document.querySelector('[role=dialog]')) return;
@@ -205,7 +208,12 @@ export function LibraryListDetail(p: ListDetailProps) {
   const move = (dir: 1 | -1) => {
     if (filtered.length === 0) return;
     const i = filtered.findIndex((g) => g.id === selectedId);
-    const next = filtered[(i < 0 ? (dir === 1 ? -1 : 0) : i + dir + filtered.length) % filtered.length];
+    // Stop at the ends instead of wrapping: leaving the list (to the
+    // toolbar above or the stage beside it) is the spatial handler's job,
+    // which runs first and stops the key before it gets here.
+    const nextIdx = i < 0 ? (dir === 1 ? 0 : filtered.length - 1) : i + dir;
+    if (nextIdx < 0 || nextIdx >= filtered.length) return;
+    const next = filtered[nextIdx];
     setSelectedId(next.id);
     requestAnimationFrame(() => {
       listRef.current?.querySelector<HTMLElement>(`[data-game-row="${CSS.escape(next.id)}"]`)?.focus({ preventScroll: true });

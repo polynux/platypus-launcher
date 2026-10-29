@@ -167,7 +167,7 @@ function PaletteDialog({ p, onClose }: { p: CommandPaletteProps; onClose: () => 
   };
   if (!plain) return (
     <Modal label={t('palette:label')} size="md" onClose={onClose}>
-      <div onKeyDown={onKeyDown}>
+      <div onKeyDown={onKeyDown} data-keys-local>
         <Input
           autoFocus
           value={query}
@@ -238,7 +238,7 @@ function PaletteDialog({ p, onClose }: { p: CommandPaletteProps; onClose: () => 
       contentStyle={{ boxShadow: '0 24px 64px rgba(0,0,0,.55)' }}
       onEscapeKeyDown={(e) => { if (mode !== 'root') { e.preventDefault(); setMode('root'); } }}
     >
-      <div onKeyDown={onKeyDown}>
+      <div onKeyDown={onKeyDown} data-keys-local>
         <div className="flex h-[50px] flex-none items-center gap-2 border-b border-hairline px-3.5">
           {mode !== 'root' && (
             <button

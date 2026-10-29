@@ -60,6 +60,15 @@ import { notify as toastNotify, type LegacyKind as NoticeKind } from './lib/noti
 import { X } from 'lucide-react';
 import { RouterProvider, useRouter } from '@tanstack/react-router';
 import { createAppRouter, useSetView, useView, viewToLocation } from './router';
+import {
+  activateFocused,
+  focusFirstInView,
+  handleBackAction,
+  installControllerKeyboard,
+  nextSection,
+  sectionOf,
+} from './lib/spatialNav';
+import { dispatchPadArrow, useGamepad } from './lib/useGamepad';
 
 const CORE_KIND_TO_TYPE: Record<string, ActivityEvent['type']> = {
   session: 'session', install: 'download', update: 'update', verify: 'update',
@@ -171,6 +180,48 @@ export function AppContent() {
     window.addEventListener('mouseup', onMouseUp);
     return () => window.removeEventListener('mouseup', onMouseUp);
   }, [router]);
+  // Controller navigation (issue #53): arrows move focus spatially (the one
+  // shared handler, installed once), the pad translates into the same
+  // actions. A activates, B backs out of the topmost layer else history,
+  // LB/RB cycle the main sections in both presentations.
+  useEffect(() => installControllerKeyboard(), []);
+  // After a pad section switch or back-step, always move focus into the
+  // new view: the old nav button survives the switch and would keep a stale
+  // ring otherwise.
+  const refocusView = useRef(false);
+  useEffect(() => {
+    if (!refocusView.current) return;
+    refocusView.current = false;
+    focusFirstInView();
+  }, [viewKey]);
+  const stepSection = useCallback(
+    (delta: 1 | -1) => {
+      refocusView.current = true;
+      setView((v) => {
+        const cur = sectionOf(v.name, v.name === 'game' ? v.from : undefined);
+        const next = nextSection(cur, delta);
+        if (next === cur) return v;
+        return { name: next } as View;
+      });
+    },
+    [],
+  );
+  useGamepad((action) => {
+    if (action === 'up' || action === 'down' || action === 'left' || action === 'right') {
+      dispatchPadArrow(action);
+    } else if (action === 'activate') {
+      activateFocused();
+    } else if (action === 'back') {
+      handleBackAction(() => {
+        refocusView.current = true;
+        router.history.back();
+      });
+    } else if (action === 'prevSection') {
+      stepSection(-1);
+    } else {
+      stepSection(1);
+    }
+  });
   const {
     ownership, setOwnership,
     source, setSource,
@@ -1339,7 +1390,7 @@ export function AppContent() {
             {renderView()}
           </main>
           {friendsOpen && (
-            <div data-keys-local><AtlasFriendsPanel
+            <AtlasFriendsPanel
               views={social}
               labels={socialLabels}
               plugins={plugins}
@@ -1363,7 +1414,7 @@ export function AppContent() {
               conversations={chat.conversations}
               chatTarget={chat.target}
               playingTitle={playingTitle}
-            /></div>
+            />
           )}
         </div>
       ) : (

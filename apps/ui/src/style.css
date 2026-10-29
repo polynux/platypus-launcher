@@ -186,6 +186,14 @@
     outline-offset: 2px;
   }
 
+  /* Controller navigation (issue #53): programmatic focus() never matches
+     :focus-visible, so the spatial module marks its target and paints the
+     same token ring. Cleared on pointer input. */
+  [data-controller-focus] {
+    outline: 2px solid color-mix(in srgb, var(--color-focus) 80%, transparent);
+    outline-offset: 2px;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

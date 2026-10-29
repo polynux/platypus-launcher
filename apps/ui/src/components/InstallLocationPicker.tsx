@@ -83,7 +83,7 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
       {atlas ? <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-bold text-text-faint"><Folder className="size-3.5" aria-hidden />{t('gameOps:location.heading')}</div> : <MonoLabel className="mb-1.5">{t('gameOps:location.heading')}</MonoLabel>}
       {!rows && !error && <p className="font-mono text-micro uppercase tracking-widest text-white/55">{t('gameOps:location.loading')}</p>}
       {rows && (
-        <div role="radiogroup" aria-label={t('gameOps:location.group')} className="space-y-1.5">
+        <div role="radiogroup" aria-orientation="vertical" aria-label={t('gameOps:location.group')} className="space-y-1.5">
           {rows.map((r) => {
             const chosen = (r.kind === 'default' ? '' : r.folder) === value;
             const short = isShort(needBytes, r.free_bytes);
