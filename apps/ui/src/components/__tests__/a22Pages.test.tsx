@@ -225,7 +225,8 @@ describe('a22 downloads', () => {
     expect(screen.getByText('Recent')).toBeInTheDocument();
     expect(screen.getByText('Civ VII')).toBeInTheDocument();
     expect(screen.queryByText('Store Subnautica')).toBeNull();
-    expect(screen.getByText('No space left')).toBeInTheDocument();
+    // Audit F4: failures read "Failed: …" with the raw behind the tooltip.
+    expect(screen.getByText('Failed: No space left')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Pause Civ VII' }));
     expect(onAction).toHaveBeenCalledWith('pause', 'a');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Civ VII' }));

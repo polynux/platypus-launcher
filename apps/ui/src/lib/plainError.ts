@@ -17,3 +17,28 @@ export function hasDetails(raw: string | null | undefined, fallback: string): bo
   const text = (raw ?? '').trim();
   return text !== '' && plainError(text, fallback) !== text;
 }
+
+/** The core's known failure kinds as app copy (audit F4): lowercase engine
+ *  sentences become translated sentences, with the raw text kept behind
+ *  Details/title by the caller. Plugin-written sentences pass through (null),
+ *  so they stay readable. Not a wider `plainError`: that filter hid useful
+ *  plugin messages before. */
+export function friendlyCoreError(
+  raw: string | null | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string | null {
+  const text = (raw ?? '').trim();
+  if (!text) return null;
+  const system = text.match(/refusing to allow system folder\s+(\S+)/i);
+  if (system) {
+    return t('downloads:atlas.failedSystemFolder', { path: system[1].replace(/[.,;:'"]+$/, '') });
+  }
+  const space = text.match(/not enough space in\s+(\S+)/i);
+  if (space) {
+    return t('downloads:atlas.failedNoSpace', { dir: space[1].replace(/[.,;:'"]+$/, '') });
+  }
+  if (/refusing tar (entry|archive|symlink)/i.test(text)) {
+    return t('downloads:atlas.failedSafetyCheck');
+  }
+  return null;
+}

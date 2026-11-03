@@ -20,7 +20,7 @@
     "prefix": "Le préfixe Wine semble endommagé. Réparez-le ou le jeu risque de ne pas démarrer."
   },
   "atlas": {
-    "reason": { "install": "La dernière tentative a échoué.", "outside": "{{title}} se trouve dans {{dir}}. Platypus ne lance que les jeux de vos dossiers de jeux.", "runner": "{{title}} utilise {{runner}}, qui a été supprimé.", "update": "Une mise à jour est disponible.", "conflict": "Les sauvegardes ont changé sur cet appareil et dans le cloud.", "prefix": "Le préfixe Wine n'a plus de partie Windows. Le jeu risque de ne pas démarrer." },
+    "reason": { "install": "La dernière tentative a échoué.", "outside": "{{title}} se trouve dans {{dir}}. Platypus ne lance que les jeux de vos dossiers de jeux.", "outsideSystem": "« {{title}} » se trouve dans {{dir}}, un dossier système que Platypus ne peut pas autoriser. Déplacez-le plutôt vers votre dossier de jeux.", "runner": "{{title}} utilise {{runner}}, qui a été supprimé.", "update": "Une mise à jour est disponible.", "conflict": "Les sauvegardes ont changé sur cet appareil et dans le cloud.", "prefix": "Le préfixe Wine n'a plus de partie Windows. Le jeu risque de ne pas démarrer." },
     "title": "À surveiller",
     "sub_one": "{{count}} jeu ne démarre pas ou attend une décision.",
     "sub_other": "{{count}} jeux ne démarrent pas ou attendent une décision.",

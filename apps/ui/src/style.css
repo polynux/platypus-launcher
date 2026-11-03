@@ -231,6 +231,22 @@
      `translate` is its own property, so it stacks with Sonner's transform. */
   animation: toast-in 150ms ease-out;
 }
+/* The /22 bottom-center pill (audit F5): Sonner centres its fixed-width list
+   (--width, 356px), and the w-auto pill left-aligns inside its li. Centre the
+   toast in its slot instead. `translate` stays free for the slide-in above;
+   the X shift lives in `transform` with Sonner's own Y. Mobile toasts are
+   full-width (Sonner's 600px rule), so only centre on wider screens. */
+@media (min-width: 601px) {
+  [data-sonner-toaster][data-x-position='center'] [data-sonner-toast]:not([data-swiping='true']) {
+    left: 50%;
+    transform: translateX(-50%) var(--y);
+  }
+}
+/* Error pills read as failures (audit F8): a 3px danger edge inside the same
+   ring, with the pill's outer shadow kept. Theme token, not a raw colour. */
+.platypus-toast[data-type='error'] {
+  box-shadow: inset 3px 0 0 var(--color-danger), 0 10px 30px rgba(0, 0, 0, 0.45);
+}
 @keyframes toast-in {
   from {
     opacity: 0;
@@ -285,7 +301,9 @@
 }
 /* A ghost icon button inside the panel's top-right corner. Sonner's dark-theme
    rule paints a black disc on it (specificity above ours), hence !important.
-   Hidden until the toast is hovered or focused; errors keep it visible. */
+   Hidden until the toast is hovered or focused; errors keep it visible.
+   The × stays readable in light (audit F7): Sonner's dark close colour wins
+   on the light pill, so the muted text token wins instead. */
 .platypus-toast-close {
   top: 0.5rem;
   right: 0.5rem;
@@ -294,6 +312,7 @@
   opacity: 0;
   background: transparent !important;
   border: 0 !important;
+  color: var(--color-text-muted) !important;
   transition:
     opacity 120ms,
     background-color 120ms,

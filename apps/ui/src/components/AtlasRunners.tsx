@@ -74,7 +74,7 @@ export function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDe
                 const used = uses(r.id, r.name);
                 const removable = !r.is_system && r.id.startsWith('compat:');
                 return (
-                  <li key={r.id} className="grid min-h-14 grid-cols-[minmax(200px,1.3fr)_minmax(160px,1fr)_70px_130px] items-center gap-3.5 border-b border-hairline">
+                  <li key={r.id} className="grid min-h-14 grid-cols-[minmax(200px,1.3fr)_minmax(160px,1fr)_70px_130px] items-center gap-3.5 rounded-lg border-b border-hairline transition hover:bg-surface">
                     <div className="grid min-w-0 gap-[3px]">
                       <div className="flex items-center gap-2"><span className="basis-auto text-[13px] font-bold text-text">{r.name}</span>
                         {r.is_default && (
@@ -120,7 +120,7 @@ export function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDe
               <h2 className="mb-2.5 mt-6 text-[13px] font-bold text-text-muted">{t('runners:atlas.available')}</h2>
               <ul className="divide-y divide-hairline">
                 {pending.map((a) => (
-                  <li key={a.tag} className="grid min-h-14 grid-cols-[minmax(200px,1.3fr)_minmax(160px,1fr)_70px_130px] items-center gap-3.5 border-b border-hairline">
+                  <li key={a.tag} className="grid min-h-14 grid-cols-[minmax(200px,1.3fr)_minmax(160px,1fr)_70px_130px] items-center gap-3.5 rounded-lg border-b border-hairline transition hover:bg-surface">
                     <div className="grid min-w-0 gap-[3px]">
                       <div className="flex items-center gap-2"><span className="basis-auto text-[13px] font-bold text-text">{a.name}</span></div>
                       <div className="truncate text-[12.5px] text-text-faint select-text">{a.tag}</div>

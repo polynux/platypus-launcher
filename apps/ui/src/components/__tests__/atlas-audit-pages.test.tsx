@@ -190,9 +190,10 @@ describe('finding 7: downloads recent rows', () => {
     const { container } = render(
       <AtlasDownloads {...dlProps([mkJob({ id: 'c', game_id: 'sub', kind: 'install', state: 'failed', error: raw })])} />,
     );
-    // The engine string never shows in the narrow status column.
+    // The engine string never shows in the narrow status column (audit F4:
+    // failures read "Failed" with the raw behind the tooltip).
     expect(screen.queryByText(raw)).toBeNull();
-    const status = screen.getByText('failed');
+    const status = screen.getByText('Failed');
     expect(status.getAttribute('title')).toBe(raw);
   });
 

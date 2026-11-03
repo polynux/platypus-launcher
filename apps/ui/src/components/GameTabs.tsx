@@ -29,7 +29,7 @@ import { useCompat } from '../lib/useCompat';
 import { LauncherApi, onCloud, onSession } from '../effect/runtime';
 import { useVariant } from '../lib/theme';
 import { formatBytes, lastPlayedAgo, storeLabel } from '../lib/games';
-import { plainError } from '../lib/plainError';
+import { plainError, friendlyCoreError } from '../lib/plainError';
 import { currentLocale, formatClock, formatDate, formatPercentValue } from '../lib/format';
 import { playedCopy, pickableCopies } from '../lib/family';
 import { setTweak, tweakApplied } from '../lib/settings';
@@ -216,6 +216,7 @@ export function StripJob({ job, onJobAction }: { job: Job; onJobAction: (action:
   const { t } = useTranslation(['game', 'downloads']);
   const paused = job.state === 'paused';
   const queued = job.state === 'queued';
+  const running = job.state === 'running';
   const pct = job.percent >= 0 ? Math.round(job.percent) : null;
   const kind = job.kind;
   const label = paused
@@ -227,6 +228,14 @@ export function StripJob({ job, onJobAction }: { job: Job; onJobAction: (action:
         : kind === 'verify'
           ? t('game:strip.jobVerifying')
           : t('game:strip.jobInstalling');
+  // Static clock for queued (audit F13): the spinner means work in progress.
+  const icon = paused ? (
+    <Play className="size-3.5" aria-hidden />
+  ) : queued ? (
+    <Clock className="size-[15px]" aria-hidden />
+  ) : (
+    <Loader2 className="size-[15px] animate-spin" aria-hidden />
+  );
   return (
     <>
       <button
@@ -240,8 +249,8 @@ export function StripJob({ job, onJobAction }: { job: Job; onJobAction: (action:
         aria-valuemax={100}
         className="relative inline-flex h-[42px] items-center gap-[9px] overflow-hidden rounded-[9px] bg-[color-mix(in_srgb,var(--color-accent)_25%,var(--color-surface-strong))] pl-5 pr-[26px] text-[15px] font-extrabold text-text"
       >
-        <span aria-hidden className={cx('absolute inset-y-0 left-0 transition-[width] duration-700 ease-linear', paused ? 'bg-text-faint/35' : 'bg-accent/45', pct == null && 'w-full animate-pulse opacity-50')} style={pct != null ? { width: `${pct}%` } : undefined} />
-        <span className="relative">{paused ? <Play className="size-3.5" aria-hidden /> : <Loader2 className="size-[15px] animate-spin" aria-hidden />}</span>
+        <span aria-hidden className={cx('absolute inset-y-0 left-0 transition-[width] duration-700 ease-linear', paused ? 'bg-text-faint/35' : 'bg-accent/45', pct == null && running && 'w-full animate-pulse opacity-50')} style={pct != null ? { width: `${pct}%` } : running ? undefined : { width: '0%' }} />
+        <span className="relative">{icon}</span>
         <span className="relative">{label}</span>
         {pct != null && <span className="relative font-mono text-[12px] font-medium tabular-nums">{pct}%</span>}
       </button>
@@ -471,7 +480,7 @@ function ActionStrip({ d }: { d: GameTabsData }) {
   // The live transfer figures sit under the strip while a job runs (R4-12):
   // "1.3 MB of 41.9 MB · 140 KB/s · about 4 min left".
   const jobNote = (() => {
-    if (failedInstall && d.job) return plainError(d.job.error, t('game:install.lastAttempt'));
+    if (failedInstall && d.job) return friendlyCoreError(d.job.error, t) ?? plainError(d.job.error, t('game:install.lastAttempt'));
     const job = active ? d.job : undefined;
     if (!job) return null;
     const parts: string[] = [];
