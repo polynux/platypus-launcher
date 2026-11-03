@@ -139,7 +139,9 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
                             <span className="truncate text-[12px] text-text-faint">{t(VERB_KEY[j.kind])}</span>
                           </div>
                           <div className="h-1.5 overflow-hidden rounded-[3px] bg-surface-strong" role="progressbar" aria-label={t('downloads:aria.progressOf', { title: name })} aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
-                            <div className={cx('h-full rounded-[3px] transition-[width]', paused ? 'bg-text-faint' : 'bg-accent', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
+                            {/* Unknown progress pulses full width only while running: a queued or
+                               paused job with no figure yet shows an empty track, not a full one. */}
+                            <div className={cx('h-full rounded-[3px] transition-[width]', paused ? 'bg-text-faint' : 'bg-accent', pct == null && running && 'animate-pulse')} style={{ width: `${pct ?? (running ? 100 : 0)}%` }} />
                           </div>
                           <div className="flex gap-3.5 text-[12px] text-text-faint tabular-nums">
                             {pct != null && <span>{pct}%</span>}

@@ -155,6 +155,20 @@ describe('finding 7: downloads recent rows', () => {
     onAction: () => {}, onClear: () => {}, onOpenGame: () => {},
   });
 
+  it('shows an empty track for a queued or paused job with no progress yet, a full pulse only while running', () => {
+    const { container } = render(
+      <AtlasDownloads {...dlProps([
+        mkJob({ id: 'q', game_id: 'civ', state: 'queued', percent: -1 }),
+        mkJob({ id: 'p', game_id: 'sub', state: 'paused', percent: -1 }),
+        mkJob({ id: 'r', game_id: 'civ', state: 'running', percent: -1 }),
+      ])} />,
+    );
+    const fills = [...container.querySelectorAll<HTMLElement>('[style*="width"]')].filter((el) => el.className.includes('rounded-[3px]'));
+    expect(fills.map((el) => el.style.width)).toEqual(['0%', '0%', '100%']);
+    expect(fills[2]!.className).toContain('animate-pulse');
+    expect(fills[0]!.className).not.toContain('animate-pulse');
+  });
+
   it('labels finished jobs by verb instead of "done"', () => {
     render(
       <AtlasDownloads {...dlProps([
