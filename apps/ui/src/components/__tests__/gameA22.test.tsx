@@ -58,6 +58,7 @@ vi.mock('../../effect/runtime', () => ({
     getCrashHints: () => Effect.succeed(null),
     getInstallSize: () => Effect.succeed({ state: 'known', total: 1500000000, added: 0 } as never),
     getGameOptions: () => Effect.succeed({ groups: [], chosen: {} } as never),
+    getRunnerOptions: () => Effect.succeed([] as never),
     getGameAchievements: () => Effect.fail(new Error('no achievements')),
     getCloudInfo: () => Effect.succeed({ mode: 'auto', plugin_mode: 'auto', game_mode: '', status: cloudState.status, running: false } as never),
     checkCloudSaves: () => Effect.succeed({ mode: 'auto', plugin_mode: 'auto', game_mode: '', status: cloudState.status, running: false } as never),
@@ -230,6 +231,42 @@ describe('/22 game strip states (issue #137)', () => {
 });
 
 describe('/22 hero, tabs and side (issue #137)', () => {
+  it('caps the Tune flyout to the remaining space above its anchor', async () => {
+    page(game());
+    const anchor = await screen.findByRole('button', { name: /Tune/ });
+    const parent = anchor.parentElement!;
+    parent.style.overflowY = 'auto';
+    parent.getBoundingClientRect = () => ({ bottom: 200 } as DOMRect);
+    anchor.getBoundingClientRect = () => ({ left: 20, top: 100, bottom: 120 } as DOMRect);
+    await userEvent.setup().click(anchor);
+    const flyout = await screen.findByRole('dialog');
+    expect(flyout).toHaveStyle({ maxHeight: '86px', overflowY: 'auto' });
+  });
+
+  it('keeps the artless game hero dark behind its white title in light scheme', async () => {
+    const root = document.documentElement;
+    const previousScheme = root.getAttribute('data-scheme');
+    root.setAttribute('data-scheme', 'light');
+    try {
+      page(game());
+      const title = await screen.findByRole('heading', { name: /^A22 Game/ });
+      expect(root).toHaveAttribute('data-scheme', 'light');
+      expect(title.closest('div.relative')).toHaveClass('bg-hero-backdrop');
+      expect(title).toHaveClass('text-white');
+    } finally {
+      if (previousScheme === null) root.removeAttribute('data-scheme');
+      else root.setAttribute('data-scheme', previousScheme);
+    }
+  });
+
+  it('leaves bottom scroll room for the last compatibility Apply button', async () => {
+    const g = game();
+    page(g, { tweaks: [{ id: 'nvapi', title: 'Enable NVAPI', reason: 'Required by this game', kind: 'env', env: { DXVK_NVAPI: '1' } }] });
+    await userEvent.setup().click(await screen.findByRole('tab', { name: /Compatibility/ }));
+    const apply = await screen.findByRole('button', { name: 'Apply' });
+    expect(apply.closest('section')?.parentElement).toHaveClass('pb-20');
+  });
+
   it('the back button overlays the art, and hides on the list-detail stage', async () => {
     const first = page(game());
     const back = await screen.findByRole('button', { name: 'Library' });
