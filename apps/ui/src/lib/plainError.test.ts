@@ -15,6 +15,11 @@ describe('plainError', () => {
     expect(plainError('TypeError: Cannot read properties of undefined', FALLBACK)).toBe(FALLBACK);
   });
 
+  it('hides the core unknown-game size check, but keeps a plugin size-check sentence', () => {
+    expect(plainError('size check: unknown game "bulk-0001"', FALLBACK)).toBe(FALLBACK);
+    expect(plainError('size check: log in to Echo first', FALLBACK)).toBe('size check: log in to Echo first');
+  });
+
   it('uses the fallback for an empty message', () => {
     expect(plainError('   ', FALLBACK)).toBe(FALLBACK);
     expect(plainError(undefined, FALLBACK)).toBe(FALLBACK);

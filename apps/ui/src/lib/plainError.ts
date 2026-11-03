@@ -1,7 +1,7 @@
 /** Developer text that never belongs on screen by default: JSON-RPC codes and
  *  parameter checks, decoder and runtime errors, stack positions, and the
  *  core's engine strings ("size check: unknown game …"). */
-const DEVELOPER = /invalid params|-3\d{4}|jsonrpc|\bjson:|unmarshal|unexpected end|\bEOF\b|\bnil\b|\bpanic\b|\bundefined\b|TypeError|ReferenceError|NetworkError|Failed to fetch|\bctx\b|\.go:\d+|size check|unknown game/i;
+const DEVELOPER = /invalid params|-3\d{4}|jsonrpc|\bjson:|unmarshal|unexpected end|\bEOF\b|\bnil\b|\bpanic\b|\bundefined\b|TypeError|ReferenceError|NetworkError|Failed to fetch|\bctx\b|\.go:\d+|size check: unknown game/i;
 
 /** The sentence to show for an error message: the message itself when it reads
  *  as a sentence for a person (core's "X is not installed"), otherwise the
