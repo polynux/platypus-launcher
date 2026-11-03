@@ -10,6 +10,11 @@ import { Effect } from 'effect';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Shell } from '../Shell';
+// Static, not `await import()` inside a test (issue #167): the whole-App module
+// graph is a large cost under load, and an in-test import is billed to the 5 s
+// test budget, where it timed out in full runs. Loaded with the other App tests
+// instead, before any test starts.
+import { App } from '../../App';
 import { TooltipProvider } from '../ds/tooltip';
 import i18n from '../../lib/i18n';
 import type { Game } from '../../types';
@@ -242,10 +247,15 @@ function mockApp(games: Game[] = []) {
   });
 }
 
-describe('/22 friends panel and banners in App (issue #135)', () => {
+// These three mount the whole App — router, shell, every view — and switch
+// views four or five times each, which is integration-test work: measured
+// 2.3–5.3 s per test with 16 vitest workers on a loaded box (under 2 s idle),
+// against the 5 s unit-test default (issue #167). The in-test
+// `import('../../App')` that used to be billed to this budget is gone; what is
+// left is the App's own render cost, so the budget matches it.
+describe('/22 friends panel and banners in App (issue #135)', { timeout: 15_000 }, () => {
   it('toggles the side panel from the avatar and closes it with Escape', async () => {
     const user = userEvent.setup();
-    const { App } = await import('../../App');
     mockApp([mkGame('alpha', { title: 'Alpha' })]);
     render(<App />);
     await user.click(await screen.findByRole('button', { name: 'Library' }));
@@ -262,7 +272,6 @@ describe('/22 friends panel and banners in App (issue #135)', () => {
 
   it('shows the migration banner between the top bar and the library bar', async () => {
     const user = userEvent.setup();
-    const { App } = await import('../../App');
     mockApp([mkGame('alpha', { title: 'Alpha' })]);
     h.api.migrationNotice = ok({ moved: true, copied: false, set_aside: ['echo'], warnings: [] });
     render(<App />);
@@ -278,7 +287,6 @@ describe('/22 friends panel and banners in App (issue #135)', () => {
 
   it('shows the Atlas grid under Atlas and keeps it across navigation', async () => {
     const user = userEvent.setup();
-    const { App } = await import('../../App');
     mockApp([mkGame('alpha', { title: 'Alpha' }), mkGame('beta', { title: 'Beta' })]);
     render(<App />);
     await user.click(await screen.findByRole('button', { name: 'Library' }));

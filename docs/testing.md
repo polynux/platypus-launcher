@@ -160,6 +160,17 @@ Desktop shell: 31 tests, 0.7 s, unchanged.
   tests now wait for the line (`env.waitCMLog`) instead of reading the log
   once; the same wait covers `logon` / `service …` / `logoff` in the cache
   test. `-count=20` under load, twice in parallel: clean.
+- `atlas-22-shell.test.tsx` App tests (#167) hit the 5 s timeout in full
+  runs on a loaded box. Two costs, measured: each test's
+  `await import('../../App')` was billed to the test budget (0.5 s idle,
+  1.5 s with 16 workers) — it is a static import now, like the other App
+  tests — and the three tests then mount the whole App (router, shell,
+  every view) and switch views four or five times each, 2.3–5.3 s per test
+  at 16 workers and 9.4 s with the box at load 35. That is integration-test
+  work, so the describe has a 15 s budget. userEvent's per-event delay was
+  measured too (a click is 6–24 ms, timers 1–4 ms): not the cause, the
+  setups keep the default. 20 of 20 `bun run test` runs with the UI at 16
+  workers pass.
 
 ### Follow-ups (not done)
 
@@ -172,6 +183,11 @@ Desktop shell: 31 tests, 0.7 s, unchanged.
   serial: the `ECHO_*` plugin-knob tests (~20 `t.Setenv` sites; per-test
   values would need threading through `plugins.Manager.Env` at each call
   site) and the overlap-sensitive `TestAuthStatusRefreshSingleFlight`.
+- The oversubscription #167 was measured under (16 vitest workers, box at
+  load 25–35) still flakes about a dozen other UI files that mount the whole
+  App or run axe: `maintenance`, `gameTabs`, `shellNavigation`,
+  `launcherSettingsVariants` (18 axe tests), `fe8-qr`, `library-sort`, … Same
+  class of problem, out of scope for #167 (scoped to `atlas-22-shell`).
 
 ### Follow-up: XDG paths (issue #41, 2026-10-13)
 
