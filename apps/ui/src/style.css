@@ -29,6 +29,9 @@
   --color-accent-strong: oklch(87.9% 0.169 91.605);
   --color-accent-dim: #2f240d;
   --color-on-accent: #130f0a;
+  /* Fixed dark art backdrop (shared with the game hero): the hero text is
+     white in every scheme, so this must not follow scheme tokens. */
+  --color-hero-backdrop: #0b0d12;
   --color-ok: oklch(76.5% 0.177 163.223);
   --color-attention: oklch(75% 0.183 55.934);
   --color-info: oklch(82.8% 0.111 230.318);
@@ -366,6 +369,15 @@
    fallback gets top clearance, so warm 2:3 cards stay pixel-identical. */
 .card-compat[data-aspect="16:9"] .cover-fallback {
   padding-top: 2.5rem;
+}
+/* The store shop bar (audit finding 6): the bar is the container, so the
+   Redeem button collapses to its ticket icon (keeping its tooltip) when the
+   bar narrows, e.g. with the friends panel open. The tabs shrink and scroll
+   first (overflow-x-auto + min-w-0 in the markup). */
+@container (max-width: 720px) {
+  .shop-bar .shop-redeem-label {
+    display: none;
+  }
 }
 .no-scrollbar {
   scrollbar-width: none;

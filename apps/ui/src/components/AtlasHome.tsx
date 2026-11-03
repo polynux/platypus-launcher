@@ -9,11 +9,12 @@ import type { ActivityEvent, Game } from '../types';
 import { ATLAS_PAGE, Cover } from './ui';
 import { Button } from './ds/button';
 import { Download, Play, X } from 'lucide-react';
-import { byRecent, coverImages, formatBytes, heroImages, lastPlayedAgo, needsAttention } from '../lib/games';
+import { attentionIssues, byRecent, coverImages, formatBytes, heroImages, lastPlayedAgo, needsAttention } from '../lib/games';
 import { formatHours } from '../lib/format';
 import { sortKey } from '../lib/customize';
 import { ratingBadge } from '../lib/compat';
 import { AtlasMainAction } from './GameTabs';
+import { useAttentionFix } from './AtlasAttention';
 import { PluginLogo } from './PluginLogo';
 import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
@@ -54,15 +55,18 @@ function recentAdded(games: Game[], activity: ActivityEvent[]): Game[] {
   return games.filter((g) => g.store === 'custom').slice(0, 5);
 }
 
-export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, onOpenGame, onNavigate, jobs, sessions, sessionStartedAt, onPlay, onInstall, onStop, onJobAction, social = [], onOpenFriends, sourceLogos }: DashboardProps & { allGames: Game[] }) {
-  const { t } = useTranslation(['dashboard', 'common', 'game', 'activity']);
+export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, onOpenGame, onNavigate, jobs, sessions, sessionStartedAt, onPlay, onInstall, onStop, onJobAction, onJob, onRetryJob, onAllowFolder, onResetPrefix, onSaveSettings, runners = [], social = [], onOpenFriends, sourceLogos }: DashboardProps & { allGames: Game[] }) {
+  const { t } = useTranslation(['dashboard', 'common', 'game', 'activity', 'fixes']);
   const waiting = games.filter(needsAttention);
+  // The card counts what the badge and the Needs attention page count (the
+  // full issue list over the whole library), not the hero's subset above.
+  const owned = allGames.length > 0 ? allGames : games;
+  const issues = attentionIssues(owned, jobs ?? [], runners);
   const hasSocial = social.some((v) => v.enabled);
   const pending = waiting.filter((g) => !dismissedHero.has(g.id));
   // The lab's suggestion: the first owned, not-installed game, else an
   // installed never-played one, skipping dismissed ones, else the game
   // needing attention.
-  const owned = allGames.length > 0 ? allGames : games;
   const suggested = owned.find((g) => !g.is_installed && !dismissedHero.has(g.id))
     ?? games.find((g) => g.is_installed && !g.last_played_at && !dismissedHero.has(g.id))
     ?? pending[0];
@@ -87,6 +91,11 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
     </AtlasMainAction>
   );
   const hour = new Date().getHours();
+  // The card shares the Needs attention page's fix behaviour (same sentence
+  // and primary action per issue), without its secondary ghost actions.
+  const { issueText, primaryAction, fixDialogs } = useAttentionFix({
+    jobs, runners, onOpenGame, onRetryJob, onJob, onAllowFolder, onResetPrefix, onSaveSettings,
+  });
   const greeting = hour < 5
     ? t('dashboard:greeting.night')
     : hour < 12
@@ -112,8 +121,10 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
         <p className="mt-[3px] text-[13px] text-text-muted">{t('dashboard:home.ready', { count: installed })}</p>
       </header>
       {suggested && (
-        <section aria-label={suggested.title} className="relative min-h-[230px] overflow-hidden rounded-2xl text-white">
-          <img src={heroImages(suggested)[0]} alt="" aria-hidden loading="lazy" className="absolute inset-0 h-full min-h-[230px] w-full object-cover" style={{ objectPosition: 'center 30%' }} />
+        <section aria-label={suggested.title} className="relative min-h-[230px] overflow-hidden rounded-2xl bg-hero-backdrop text-white">
+          {heroImages(suggested).length > 0 && (
+            <Cover src={heroImages(suggested)} title={suggested.title} fallback={null} className="absolute inset-0 h-full min-h-[230px] w-full object-cover [object-position:center_30%]" />
+          )}
           <div aria-hidden className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,10,14,.92)_0%,rgba(8,10,14,.6)_45%,transparent_75%)]" />
           <div className="relative grid min-h-[230px] max-w-[460px] content-end gap-2 px-7 py-[26px]">
             <small className="text-[12px] font-semibold text-white opacity-70">{t('dashboard:home.fromBacklog')}</small>
@@ -121,7 +132,7 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
             {suggestedDescription && <p className={`leading-normal text-white/[.82] ${suggestedRunning ? '' : 'line-clamp-2'}`}>{suggestedDescription}</p>}
             <div className="mt-1 flex gap-2.5">
               {mainAction(suggested, (
-                <Button variant="primary" onClick={() => { if (suggested.is_installed) { if (onPlay) onPlay(suggested.id); else onOpenGame(suggested.id); } else if (onInstall) onInstall(suggested); else onOpenGame(suggested.id); }} className="h-[38px] px-4">
+                <Button variant="primary" onClick={() => { if (suggested.is_installed) { if (onPlay) onPlay(suggested.id); else onOpenGame(suggested.id); } else if (onInstall) onInstall(suggested); else onOpenGame(suggested.id); }} className="h-[38px] bg-accent px-4">
                   {suggested.is_installed ? t('game:play.play') : (<><Download className="size-3.5" aria-hidden />{t('game:install.install')}{installSize && <span className="font-mono text-[12px]">{installSize}</span>}</>)}
                 </Button>
               ))}
@@ -156,15 +167,15 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
                     <div className="truncate text-[12px] text-text-faint"><ContinueMeta game={g} sub={sub} /></div>
                   </div>
                   {mainAction(g, (
-                    <button
-                      type="button"
+                    <Button
+                      variant="primary"
                       onClick={() => (onPlay ? onPlay(g.id) : onOpenGame(g.id))}
                       aria-label={`${t('game:play.play')}: ${g.title}`}
-                      className="inline-flex h-[38px] flex-none items-center gap-1.5 rounded-lg bg-accent px-4 text-[13px] font-bold text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      className="h-[38px] flex-none bg-accent px-4 text-[13px]"
                     >
                       <Play className="size-3.5 fill-current" aria-hidden />
                       {t('game:play.play')}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </li>
@@ -224,7 +235,7 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
         <section aria-label={t('dashboard:home.yourLibrary')} className="grid content-start gap-3 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
           <div className="flex items-center justify-between gap-2.5">
             <h2 className="text-[14px] font-bold">{t('dashboard:home.yourLibrary')}</h2>
-            <Button variant="link" onClick={() => onNavigate({ name: 'library' })}>{t('dashboard:home.openLibrary')}</Button>
+            <Button variant="quiet" onClick={() => onNavigate({ name: 'library' })}>{t('dashboard:home.openLibrary')}</Button>
           </div>
           <dl className="grid grid-cols-4 gap-2">
             {([
@@ -250,34 +261,38 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
         <section aria-label={t('dashboard:home.needsAttention')} className="grid content-start gap-3 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
           <div className="flex items-center justify-between gap-2.5">
             <h2 className="text-[14px] font-bold">{t('dashboard:home.needsAttention')}</h2>
-            {waiting.length > 0 && (
-              <Button variant="link" onClick={() => onNavigate({ name: 'fixes' })}>
-                {t('dashboard:home.seeAll', { count: waiting.length })}
+            {issues.length > 0 && (
+              <Button variant="quiet" onClick={() => onNavigate({ name: 'fixes' })}>
+                {t('dashboard:home.seeAll', { count: issues.length })}
               </Button>
             )}
           </div>
-          {waiting.length === 0 ? (
+          {issues.length === 0 ? (
             <p className="text-[13px] text-text-muted">{t('dashboard:home.everythingWorks')}</p>
           ) : (
             <ul className="grid gap-2">
-              {waiting.slice(0, 3).map((g) => (
-                <li key={g.id} className="flex items-center gap-2.5">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-bold">{g.title}</span>
-                    <span className="block truncate text-[12px] text-text-muted">{attentionReason(g, t)}</span>
-                  </span>
-                  <Button variant="neutral" size="sm" className="flex-none" onClick={() => onOpenGame(g.id)}>
-                    {t('dashboard:hero.openGame')}
-                  </Button>
-                </li>
-              ))}
+              {issues.slice(0, 3).map((issue) => {
+                const primary = primaryAction(issue);
+                return (
+                  <li key={`${issue.game.id}-${issue.kind}`} className="flex items-center gap-2.5">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-bold">{issue.game.title}</span>
+                      <span className="block truncate text-[12px] text-text-muted">{issueText(issue)}</span>
+                    </span>
+                    <Button variant="neutral" size="sm" className="flex-none" onClick={primary.run}>
+                      {primary.label}
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
           )}
+          {fixDialogs}
         </section>
         {hasSocial ? <section aria-label={t('dashboard:home.friendsOnline')} className="grid content-start gap-3 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
           <div className="flex items-center justify-between gap-2.5">
             <h2 className="text-[14px] font-bold">{t('dashboard:home.friendsOnline')}</h2>
-            <Button variant="link" onClick={onOpenFriends}>{t('dashboard:home.onlineCount', { count: social.flatMap((v) => v.friends).filter((f) => f.state === 'online').length })}</Button>
+            <Button variant="quiet" onClick={onOpenFriends}>{t('dashboard:home.onlineCount', { count: social.flatMap((v) => v.friends).filter((f) => f.state === 'online').length })}</Button>
           </div>
           <ul className="grid gap-2">
             {social.filter((v) => v.enabled).flatMap((v) => v.friends.filter((f) => f.state === 'online').map((f) => ({ ...f, plugin: v.plugin }))).slice(0, 4).map((f) => (

@@ -35,17 +35,36 @@ const BOX: Record<'xs' | 'md' | 'store' | 'glyph', string> = {
   glyph: 'h-[11px] w-[11px] rounded-[3px] text-[7px]',
 };
 
+/** Bare fallback text sizes: the caller provides the tile (the Atlas plugin
+ *  list's 32px row tile, the detail header's 46px tile), so the letter is
+ *  sized to that tile instead of to a tile of its own. */
+const BARE_TEXT: Record<keyof typeof BOX, string> = {
+  xs: 'text-[15px]',
+  md: 'text-[20px]',
+  store: 'text-[8px]',
+  glyph: 'text-[7px]',
+};
+
 /**
  * A store plugin's logo: the locally served file from its folder, drawn
  * through <img> (scripts in SVG never run there). When there is no logo or
  * it fails to load, a monogram tile with a consistent tint — the Cover-like
- * onError approach.
+ * onError approach. Pass `bare` where the caller already provides the tile
+ * (the Atlas plugin list and detail header): the fallback is then just the
+ * letter in muted text, not a tile inside a tile (audit finding 11).
  */
-export function PluginLogo({ src, name, size = 'md' }: { src?: string | null; name: string; size?: keyof typeof BOX }) {
+export function PluginLogo({ src, name, size = 'md', bare = false }: { src?: string | null; name: string; size?: keyof typeof BOX; bare?: boolean }) {
   const [broken, setBroken] = React.useState(false);
   React.useEffect(() => setBroken(false), [src]);
   const box = BOX[size];
   if (!src || broken) {
+    if (bare) {
+      return (
+        <span aria-hidden className={cx('font-extrabold leading-none text-text-muted', BARE_TEXT[size])}>
+          {monogramFor(name)}
+        </span>
+      );
+    }
     return (
       <span aria-hidden className={cx('grid flex-none place-items-center font-extrabold leading-none ring-1 ring-hairline', tintFor(name), box)}>
         {monogramFor(name)}

@@ -53,6 +53,14 @@ export interface DashboardProps {
   onInstall?: (game: Game) => void;
   onStop?: (id: string) => void;
   onJobAction?: (action: 'pause' | 'resume' | 'cancel', id: string) => void;
+  /** Needs-attention fix actions: the Atlas Home card mirrors the Needs
+   *  attention page (same sentence and action per issue), opening the game
+   *  where it has no backing of its own. */
+  onJob?: (kind: 'update', game: Game) => void;
+  onRetryJob?: (id: string) => void;
+  onAllowFolder?: (game: Game) => void;
+  onResetPrefix?: (game: Game) => void;
+  onSaveSettings?: (game: Game, runner: string, notifySaved?: boolean) => Promise<void>; // i18n:allow: Promise return type
   social?: SocialView[];
   onOpenFriends?: () => void;
   sourceLogos?: Record<string, string>;

@@ -8,6 +8,7 @@ import type { Game, Job } from '../types';
 import { ATLAS_PAGE, Cover, EmptyState, cx, relTime } from './ui';
 import { Button } from './ds/button';
 import { formatBytes, heroImages } from '../lib/games';
+import { hasDetails, plainError } from '../lib/plainError';
 
 const VERB_KEY: Record<Job['kind'], string> = {
   install: 'downloads:action.install',
@@ -28,6 +29,20 @@ const STATE_KEY: Record<Job['state'], string> = {
   done: 'downloads:state.done',
   failed: 'downloads:state.failed',
   canceled: 'downloads:state.canceled',
+};
+
+/** Finished-job labels with the verb each job actually did (/22 shows
+ *  "Installed", "Updated", "Moved"), not the engine's lowercase "done". */
+const FINISHED_KEY: Record<Job['kind'], string> = {
+  install: 'downloads:atlas.finished.install',
+  update: 'downloads:atlas.finished.update',
+  uninstall: 'downloads:atlas.finished.uninstall',
+  verify: 'downloads:atlas.finished.verify',
+  move: 'downloads:atlas.finished.move',
+  backup: 'downloads:atlas.finished.backup',
+  restore: 'downloads:atlas.finished.restore',
+  remove: 'downloads:atlas.finished.remove',
+  'runner-install': 'downloads:atlas.finished.install',
 };
 
 export type AtlasDownloadsProps = {
@@ -58,7 +73,7 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
   const speed = active.reduce((a, j) => a + (j.speed > 0 ? j.speed : 0), 0);
   return (
     <div className={ATLAS_PAGE}>
-      <header className="flex flex-wrap items-end justify-between gap-4">
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.downloads')}</h1>
           <p className="mt-[3px] text-[13px] text-text-muted">
@@ -152,21 +167,24 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
                 })}
               </ul>
             ) : (
-              <EmptyState icon={Download} label={t('downloads:atlas.emptyTitle')}>{t('downloads:atlas.emptyBody')}</EmptyState>
+              <p className="text-[13px] text-text-muted">{t('downloads:atlas.queueEmpty')}</p>
             )}
           </section>
           {finished.length > 0 && (
             <section aria-label={t('downloads:atlas.recent')}>
               <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.recent')}</h2>
-              <ul className="divide-y divide-hairline">
+              <ul className="grid grid-cols-[minmax(0,1fr)_140px_80px_90px_auto] divide-y divide-hairline">
                 {finished.map((j) => (
-                  <li key={j.id} className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto_auto_auto] items-center gap-3 py-1.5">
+                  <li key={j.id} className="col-span-full grid grid-cols-subgrid items-center gap-3 py-1.5">
                     <button onClick={() => onOpenGame(j.game_id)} className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-                      <Cover src={artOf(j.game_id)} title={byId.get(j.game_id)?.title ?? j.title} className="h-5 w-11 flex-none rounded ring-1 ring-hairline" />
+                      <Cover src={artOf(j.game_id)} title={byId.get(j.game_id)?.title ?? j.title} compact className="h-5 w-11 flex-none rounded ring-1 ring-hairline" />
                       <span className="truncate text-[13px] font-semibold">{byId.get(j.game_id)?.title ?? j.title}</span>
                     </button>
-                    <span className={cx('truncate text-[12.5px]', j.state === 'failed' ? 'text-danger' : 'text-text-muted')}>
-                      {j.state === 'failed' ? (j.error || t('downloads:state.failed')) : t(STATE_KEY[j.state])}
+                    <span
+                      className={cx('truncate text-[12.5px]', j.state === 'failed' ? 'text-danger' : 'text-text-muted')}
+                      title={j.state === 'failed' && hasDetails(j.error, t('downloads:state.failed')) ? j.error ?? undefined : undefined}
+                    >
+                      {j.state === 'failed' ? plainError(j.error, t('downloads:state.failed')) : j.state === 'done' ? t(FINISHED_KEY[j.kind]) : t(STATE_KEY[j.state])}
                     </span>
                     <span className="text-[12px] tabular-nums text-text-muted">{j.total > 0 ? formatBytes(j.total) : ''}</span>
                     <span className="text-[12px] text-text-muted">{relTime(j.updated_at)}</span>

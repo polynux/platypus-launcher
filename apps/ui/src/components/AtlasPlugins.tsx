@@ -4,7 +4,7 @@
 import { useTranslation, Trans } from 'react-i18next';
 import { useState } from 'react';
 import { Effect } from 'effect';
-import { FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
+import { FolderOpen, Loader2, LogIn, LogOut, Plus, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
 import type { Game, SourceWarning, StorePlugin } from '../types';
 import { LauncherApi } from '../effect/runtime';
 import { ATLAS_PAGE, cx } from './ui';
@@ -60,9 +60,6 @@ export function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNot
           <p className="mt-[3px] text-[13px] text-text-muted">{t('plugins:header.atlasSubtitle')}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="primary" onClick={onAddStore}>
-            {t('plugins:header.addStore')}
-          </Button>
           <Button variant="neutral" onClick={() => {
             Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(coreErrMsg(e), 'err'));
           }}>
@@ -70,6 +67,9 @@ export function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNot
           </Button>
           <Button variant="neutral" onClick={() => { void data.refresh(true); }}>
             <RefreshCw className="h-3.5 w-3.5" /> {t('plugins:header.rescan')}
+          </Button>
+          <Button variant="primary" onClick={onAddStore}>
+            <Plus className="h-3.5 w-3.5" /> {t('plugins:header.addStore')}
           </Button>
         </div>
       </header>
@@ -91,7 +91,7 @@ export function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNot
                   )}
                 >
                   <span className="grid size-8 flex-none place-items-center overflow-hidden rounded-[9px] bg-surface-strong">
-                    <PluginLogo src={p.icon_url} name={p.name} size="xs" />
+                    <PluginLogo src={p.icon_url} name={p.name} size="xs" bare />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-semibold">{p.name}</span>
@@ -169,7 +169,7 @@ export function AtlasPluginDetail({ plugin: p, gameCount, authState: a, warning,
     <div className="grid content-start gap-4">
       <header className="flex items-center gap-3.5">
         <span className="grid size-[46px] flex-none place-items-center overflow-hidden rounded-xl bg-surface-strong">
-          <PluginLogo src={p.icon_url} name={p.name} size="md" />
+          <PluginLogo src={p.icon_url} name={p.name} size="md" bare />
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[19px] font-extrabold tracking-tight">{p.name}</h2>

@@ -80,7 +80,13 @@ export function AtlasStorage({ data }: { data: StorageData }) {
 export function AtlasDriveCard({ drive: d, rows, data, defaultFolder }: { drive: DiskUsage['drives'][number]; rows: DiskUsage['games'][number][]; data: StorageData; defaultFolder?: string }) {
   const { t } = useTranslation(['storage', 'gameSettings', 'common']);
   const known = d.total_bytes > 0;
-  const shown = rows;
+  // The lab shows the top 6 games in compact rows with an expandable "show
+  // all" line, not every game in tall rows. The rows show the same total the
+  // list is sorted on (files + prefix), so the order matches the column.
+  // Rows past the sixth keep their actions behind the toggle: Storage is
+  // where space is freed and games are moved.
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? rows : rows.slice(0, 6);
   const total = rows.reduce((a, r) => a + r.size_bytes + r.prefix_bytes, 0);
   const isDefaultDrive = !!defaultFolder && d.folders.some((f) => isWithinFolder(defaultFolder, f));
   // The design's drive head: the label when the filesystem has one, then
@@ -112,7 +118,7 @@ export function AtlasDriveCard({ drive: d, rows, data, defaultFolder }: { drive:
           <div
             key={r.game_id}
             className="shrink-0 bg-[color-mix(in_srgb,var(--color-accent)_75%,var(--color-surface-strong))] transition-[width]"
-            style={{ width: `${Math.max(0, ((r.size_bytes + r.prefix_bytes) / d.total_bytes) * 100)}%`, backgroundColor: `color-mix(in srgb, var(--color-accent) ${i % 2 ? 55 : 75}%, var(--color-surface-strong))` }}
+            style={{ width: `${Math.max(0, ((r.size_bytes + r.prefix_bytes) / d.total_bytes) * 100)}%`, minWidth: 3, backgroundColor: `color-mix(in srgb, var(--color-accent) ${i % 2 ? 55 : 75}%, var(--color-surface-strong))` }}
             title={`${r.title} · ${figure(r.size_bytes + r.prefix_bytes)}`}
           />
         ))}
@@ -127,6 +133,11 @@ export function AtlasDriveCard({ drive: d, rows, data, defaultFolder }: { drive:
           ))}
         </ul>
       )}
+      {rows.length > 6 && (
+        <Button variant="quiet" size="sm" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} className="justify-self-start">
+          {expanded ? t('storage:atlas.showLess') : t('storage:atlas.showAll', { count: rows.length })}
+        </Button>
+      )}
     </section>
   );
 }
@@ -135,7 +146,7 @@ export function AtlasGameRow({ row, data }: { row: DiskUsage['games'][number]; d
   const { t } = useTranslation(['storage', 'gameSettings', 'common']);
   const game = data.byId.get(row.game_id);
   return (
-    <li className="group py-1.5">
+    <li className="group py-0">
       <div className="grid h-10 grid-cols-[56px_minmax(0,1fr)_200px_90px_auto] items-center gap-3">
         <button
           type="button"
@@ -144,7 +155,7 @@ export function AtlasGameRow({ row, data }: { row: DiskUsage['games'][number]; d
           aria-label={game ? t('storage:action.open', { title: game.title }) : row.title}
           disabled={!game}
         >
-          <Cover src={game ? heroImages(game) : []} title={row.title} className="h-[26px] w-14 rounded" />
+          <Cover src={game ? heroImages(game) : []} title={row.title} compact className="h-[26px] w-14 rounded" />
         </button>
         <div className="truncate text-[13px] font-semibold hover:underline">{row.title}</div>
         <div className="truncate text-[12.5px] text-text-muted">{game?.last_played_at ? t('storage:atlas.played', { ago: lastPlayedAgo(game) ?? '' }) : t('storage:atlas.neverPlayed')}</div>
@@ -244,7 +255,7 @@ export function StoragePanels({ outside, leftovers, otherLeftovers, defaultFolde
   const pickedIds = new Set(leftovers.filter((j) => !unpicked.has(j.id)).map((j) => j.id));
   const defaultName = defaultFolder?.split('/').filter(Boolean).at(-1) || defaultFolder || t('storage:atlas.defaultFolder');
   const clean = () => { void Promise.all([...pickedIds].map((id) => data.discardJob(id))).then(data.refreshJobs); };
-  return <div className="grid gap-3 md:grid-cols-2">
+  return <div className="grid items-start gap-3 md:grid-cols-2">
     <section className="rounded-xl bg-surface px-4 py-3.5">
       <h2 className="mb-2 text-[14px] font-bold">{t('storage:atlas.outsideTitle')}</h2>
       {outside.length ? <ul className="divide-y divide-hairline">{outside.map(({ game, size }) => {
