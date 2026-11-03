@@ -98,11 +98,13 @@ export function ModalOrInline({ embedded, children, ...modal }: ModalProps & { e
  *
  *  The head spans the Modal's inner padding (which is `p-7`): callers wrap
  *  the dialog in `-m-7` and give the body its own padding. */
-export function ModalHead({ title, sub, kicker, onClose }: {
+export function ModalHead({ title, sub, kicker, onClose, disabled }: {
   title: React.ReactNode;
   sub?: React.ReactNode;
   kicker?: React.ReactNode;
   onClose: () => void;
+  /** While a request runs (Esc and the foot are already blocked): the × can't close either. */
+  disabled?: boolean;
 }) {
   const { t } = useTranslation('common');
   const plain = useVariant('label.style') === 'plain';
@@ -116,8 +118,9 @@ export function ModalHead({ title, sub, kicker, onClose }: {
       <button
         type="button"
         onClick={onClose}
+        disabled={disabled}
         aria-label={t('common:close')}
-        className="grid size-8 flex-none place-items-center rounded-lg text-text-muted transition hover:bg-surface hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className="grid size-8 flex-none place-items-center rounded-lg text-text-muted transition hover:bg-surface hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:pointer-events-none disabled:opacity-50"
       >
         <X className="size-[15px]" aria-hidden />
       </button>

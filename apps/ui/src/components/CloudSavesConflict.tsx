@@ -51,9 +51,9 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
   };
 
   return (
-    <Modal label={t('cloud:conflict.label')} onClose={onClose} size="lg">
+    <Modal label={t('cloud:conflict.label')} onClose={onClose} size="lg" dismissable={!busy}>
       <div className="-m-7">
-      <ModalHead title={t('cloud:conflict.heading')} onClose={onClose} />
+      <ModalHead title={t('cloud:conflict.heading')} onClose={onClose} disabled={busy} />
       <div className="p-5">
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-text-muted">
         {t('cloud:conflict.intro', { title: game.title, count: conflicts.length })}{' '}

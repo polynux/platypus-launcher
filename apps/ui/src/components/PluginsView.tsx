@@ -528,7 +528,7 @@ function ManifestRow({ label, items, empty }: { label: string; items: string[]; 
 
 /** Confirms removing a plugin: lists what goes and what stays (issue #161).
  *  Data/theme plugins have no games, so they hide the checkbox. */
-function UninstallModal({ plugin: p, showGames = true, onClose, onConfirm }: { plugin: StorePlugin; showGames?: boolean; onClose: () => void; onConfirm: (removeGames: boolean) => void }) {
+export function UninstallModal({ plugin: p, showGames = true, onClose, onConfirm }: { plugin: StorePlugin; showGames?: boolean; onClose: () => void; onConfirm: (removeGames: boolean) => void }) {
   const { t } = useTranslation(['plugins', 'common']);
   const [removeGames, setRemoveGames] = useState(false);
   return (
@@ -555,7 +555,7 @@ function UninstallModal({ plugin: p, showGames = true, onClose, onConfirm }: { p
 
 /** Confirms replacing the installed version with the zip's (issue #147): an
  *  unreadable existing folder has no version to show. */
-function ReplaceModal({ name, current, next, onClose, onConfirm }: { name: string; current: string; next: string; onClose: () => void; onConfirm: () => void }) {
+export function ReplaceModal({ name, current, next, onClose, onConfirm }: { name: string; current: string; next: string; onClose: () => void; onConfirm: () => void }) {
   const { t } = useTranslation(['plugins', 'common']);
   return (
     <Modal label={t('plugins:install.replaceTitle', { name })} onClose={onClose} size="md">
@@ -576,7 +576,7 @@ function ReplaceModal({ name, current, next, onClose, onConfirm }: { name: strin
 }
 
 /** Shows what the plugin runs and declares before the user trusts it. */
-function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; onClose: () => void; onApprove: () => void }) {
+export function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; onClose: () => void; onApprove: () => void }) {
   const { t } = useTranslation(['plugins', 'common']);
   return (
     <Modal label={t('plugins:approve.title', { name: p.name })} onClose={onClose} size="md">

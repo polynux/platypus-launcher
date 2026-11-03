@@ -59,12 +59,22 @@ export function FriendsModal(p: FriendsModalProps) {
   const { t } = useTranslation(['chat', 'common']);
   const [query, setQuery] = useState('');
   if (p.chat) {
+    // One header: the chat's own (Back + friend + ×). The × and Esc-outside
+    // close the dialog; Back and Esc return to the list first.
     return (
-      <Modal label={t('chat:modal.title')} onClose={p.onBackFromChat ?? p.onClose} size="lg">
+      <Modal
+        label={t('chat:modal.title')}
+        onClose={p.onClose}
+        size="lg"
+        onEscapeKeyDown={(e) => {
+          if (p.onBackFromChat) {
+            e.preventDefault();
+            p.onBackFromChat();
+          }
+        }}
+      >
         <div className="-m-7">
-          <ModalHead title={t('chat:modal.title')} onClose={p.onBackFromChat ?? p.onClose} />
           <div className="flex h-[70vh] max-h-[640px] flex-col p-5">{p.chat}</div>
-          <ModalFoot><Button variant="ghost" onClick={p.onBackFromChat ?? p.onClose}>{t('common:close')}</Button></ModalFoot>
         </div>
       </Modal>
     );

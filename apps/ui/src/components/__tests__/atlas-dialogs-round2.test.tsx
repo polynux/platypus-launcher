@@ -71,7 +71,7 @@ import { CollectionsDialog } from '../CollectionsDialog';
 import { CloudConflictDialog } from '../CloudSavesConflict';
 import { CloudSavesHost } from '../CloudSavesHost';
 import { FriendsModal } from '../FriendsModal';
-import { PluginsView } from '../PluginsView';
+import { PluginsView, UninstallModal, ReplaceModal, ApproveModal } from '../PluginsView';
 
 const renderDialog = (ui: React.ReactElement) => render(ui, { wrapper: TooltipProvider });
 afterEach(cleanup);
@@ -302,15 +302,48 @@ describe('converted dialogs share the header and footer (F3)', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('friends chat renders its title with a Close foot', () => {
+  it('friends chat shows one header: the chat’s own, with Back to the list', async () => {
+    const onClose = vi.fn();
+    const onBack = vi.fn();
     renderDialog(
-      <FriendsModal views={[]} labels={{}} plugins={[]} inLibrary={() => false} onClose={noop}
+      <FriendsModal views={[]} labels={{}} plugins={[]} inLibrary={() => false} onClose={onClose}
         onSetEnabled={noop} onSetStatus={noop} onSetPlaying={noop} onReconnect={noop} onOpenGame={noop}
-        chat={<div>chat body</div>} onBackFromChat={noop} />,
+        chat={
+          <div>
+            <button type="button" onClick={onBack}>Back</button>
+            <h2>Ana Ruiz</h2>
+            <button type="button" onClick={onClose}>Close</button>
+            <p>chat body</p>
+          </div>
+        }
+        onBackFromChat={onBack} />,
     );
     const dialog = screen.getByRole('dialog', { name: 'Friends' });
-    expectSharedChrome(dialog);
+    // One heading: the conversation's, not the list's "Friends".
+    expect(within(dialog).queryByRole('heading', { name: 'Friends' })).toBeNull();
+    expect(within(dialog).getByRole('heading', { name: 'Ana Ruiz' })).toBeInTheDocument();
     expect(dialog).toHaveTextContent('chat body');
+    // No shared foot: the chat owns Back (to the list) and Close (shuts the dialog).
+    expect(within(dialog).queryByRole('button', { name: 'Done' })).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back' }));
+    expect(onBack).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('friends chat Escape returns to the list instead of closing', () => {
+    const onClose = vi.fn();
+    const onBack = vi.fn();
+    renderDialog(
+      <FriendsModal views={[]} labels={{}} plugins={[]} inLibrary={() => false} onClose={onClose}
+        onSetEnabled={noop} onSetStatus={noop} onSetPlaying={noop} onReconnect={noop} onOpenGame={noop}
+        chat={<div>chat body</div>} onBackFromChat={onBack} />,
+    );
+    expect(screen.getByRole('dialog', { name: 'Friends' })).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('offline cloud prompt renders Cancel before Launch anyway', async () => {
@@ -352,6 +385,66 @@ describe('converted dialogs share the header and footer (F3)', () => {
     const confirm = within(dialog).getByRole('button', { name: 'Uninstall' });
     expect(confirm.className).toMatch(/bg-danger/);
     expect(confirm.className).toMatch(/text-danger/);
+  });
+});
+
+describe('busy dialogs block the header × too (Terms, cloud conflict)', () => {
+  it('terms disables × and Cancel while accepting, and Escape does not cancel', async () => {
+    const onCancel = vi.fn();
+    api.acceptGameTerms.mockImplementation(() => new Promise(() => {}));
+    renderDialog(<TermsDialog game={game()} terms={[{ id: 't', version: '3', title: 'Terms' }]} onAccepted={noop} onCancel={onCancel} />);
+    const dialog = screen.getByRole('dialog', { name: /terms for/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'I accept' }));
+    const close = dialog.querySelector('button[aria-label="Close"]') as HTMLButtonElement;
+    await waitFor(() => expect(close.disabled).toBe(true));
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: /terms for/i })).toBeInTheDocument();
+  });
+
+  it('cloud conflict disables × and Close while applying, and Escape does not close', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    api.resolveCloudSaves.mockImplementation(() => new Promise(() => {}));
+    renderDialog(<CloudConflictDialog game={game()} status={conflictStatus()} onClose={onClose} onResolved={noop} />);
+    const dialog = screen.getByRole('dialog', { name: /cloud save conflict/i });
+    await user.click(screen.getByRole('radio', { name: 'Keep cloud' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /apply 1 choice/i }));
+    const close = dialog.querySelector('button[aria-label="Close"]') as HTMLButtonElement;
+    await waitFor(() => expect(close.disabled).toBe(true));
+    expect(within(dialog).getAllByRole('button', { name: 'Close' })[1]).toBeDisabled();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: /cloud save conflict/i })).toBeInTheDocument();
+  });
+});
+
+describe('dialogs open on the safe action, not the ×', () => {
+  it('move focuses Choose folder', async () => {
+    renderDialog(<MoveDialog game={game()} startFolder="/g" onClose={noop} onQueued={noop} />);
+    const dialog = screen.getByRole('dialog', { name: 'Move Echo Tiny' });
+    const pick = within(dialog).getByRole('button', { name: /Choose folder/ });
+    await waitFor(() => expect(pick).toHaveFocus());
+    expect(dialog.querySelector('button[aria-label="Close"]')).not.toHaveFocus();
+  });
+
+  it('plugin uninstall focuses Cancel', async () => {
+    renderDialog(<UninstallModal plugin={pluginsReady} onClose={noop} onConfirm={noop} />);
+    const dialog = screen.getByRole('dialog', { name: 'Uninstall Steam?' });
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus());
+  });
+
+  it('plugin replace focuses Cancel', async () => {
+    renderDialog(<ReplaceModal name="Steam" current="1" next="2" onClose={noop} onConfirm={noop} />);
+    const dialog = screen.getByRole('dialog', { name: 'Replace Steam?' });
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus());
+  });
+
+  it('plugin approve focuses Cancel', async () => {
+    renderDialog(<ApproveModal plugin={pluginsReady} onClose={noop} onApprove={noop} />);
+    const dialog = screen.getByRole('dialog', { name: /Approve.*Steam/i });
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus());
   });
 });
 

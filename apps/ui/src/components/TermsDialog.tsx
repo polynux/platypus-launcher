@@ -48,7 +48,7 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
   return (
     <Modal label={t('common:terms.dialogLabel', { title: game.title })} onClose={onCancel} size="md" dismissable={!busy}>
       <div className="-m-7">
-      <ModalHead title={t('common:terms.heading', { title: game.title })} onClose={onCancel} />
+      <ModalHead title={t('common:terms.heading', { title: game.title })} onClose={onCancel} disabled={busy} />
       <div className="p-5">
       <p className="mt-1 text-[12.5px] text-text-muted">
         {t('common:terms.intro', { title: game.title })}
