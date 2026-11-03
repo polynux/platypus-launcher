@@ -27,6 +27,10 @@ vi.mock('../../lib/theme', async (importOriginal) => {
       if (axis === 'store.presentation') return 'storefronts';
       if (axis === 'settings-row.style') return 'srow';
       if (axis === 'toast.style') return 'pill';
+      // Issue #168: the dialogs follow their flow's presentation, not the shell.
+      if (axis === 'game.structure') return 'tabs';
+      if (axis === 'library.presentation') return 'list-detail';
+      if (axis === 'store.presentation') return 'storefronts';
       if (axis === 'settings.navigation') return 'scroll';
       if (axis === 'label.style') return 'plain';
       if (axis === 'section.chrome') return 'hairline';

@@ -288,7 +288,6 @@ export function GameInstallNote({ game, plugin, installing, installSize, job, ca
   const active = job && (job.state === 'queued' || job.state === 'running');
   const showNote = !active && (game.note || installing);
   const tabs = useVariant('game.structure') === 'tabs';
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
   if (tabs) {
     // Atlas (/21 has no row here): the note lives inline at the end of the
     // action strip (muted 12.5px, folder links in the accent), never as a
@@ -323,7 +322,7 @@ export function GameInstallNote({ game, plugin, installing, installSize, job, ca
             </p>
           </>
         )}
-        {!atlas && !game.is_installed && job?.state === 'failed' && <ErrorNotice className="mt-1" message={job.error ?? ''} fallback={t('game:install.lastAttempt')} />}
+        {!game.is_installed && job?.state === 'failed' && <ErrorNotice className="mt-1" message={job.error ?? ''} fallback={t('game:install.lastAttempt')} />}
       </div>
     );
   }
@@ -357,7 +356,7 @@ export function GameInstallNote({ game, plugin, installing, installSize, job, ca
               </p>
             </>
           )}
-          {!atlas && !game.is_installed && job?.state === 'failed' && <ErrorNotice className="mt-1" message={job.error ?? ''} fallback={t('game:install.lastAttempt')} />}
+          {!game.is_installed && job?.state === 'failed' && <ErrorNotice className="mt-1" message={job.error ?? ''} fallback={t('game:install.lastAttempt')} />}
         </div>
       )}
       {refreshing && (
@@ -540,16 +539,18 @@ export function GamePage(p: GamePageProps) {
   // entry to the game.
   const settingsPage = useVariant('game-settings.presentation') === 'page';
   // The theme picks the game structure (issue #127): sections is today's
-  // page, tabs is the /21 hero with the action strip and sticky tabs.
+  // page, tabs is the /21 hero with the action strip and sticky tabs. The
+  // install flow belongs to the structure (issue #168), not the shell: tabs
+  // review the location in the install dialog, sections install at once.
   const structure = useVariant('game.structure');
-  const atlasShell = useVariant('shell.navigation') === 'sourcebar';
+  const tabsInstall = structure === 'tabs';
   useEffect(() => {
     if (!p.installIntent) return;
     if (canChooseOptions) setOptionsOpen(true);
-    else if (atlasShell && plugin) setInstallTo(true);
+    else if (tabsInstall && plugin) setInstallTo(true);
     else p.onJob('install');
     p.onInstallIntentHandled?.();
-  }, [p.installIntent, canChooseOptions, atlasShell, plugin, p.onJob, p.onInstallIntentHandled]);
+  }, [p.installIntent, canChooseOptions, tabsInstall, plugin, p.onJob, p.onInstallIntentHandled]);
   const settingsModal = settingsTab ? (
     <GameSettingsModal
       game={game}
@@ -642,7 +643,7 @@ export function GamePage(p: GamePageProps) {
             installSize={installSize}
             canChooseOptions={canChooseOptions}
             canChooseVersion={canChooseVersion}
-            onInstall={() => (canChooseOptions ? setOptionsOpen(true) : atlasShell && plugin ? setInstallTo(true) : p.onJob('install'))}
+            onInstall={() => (canChooseOptions ? setOptionsOpen(true) : plugin ? setInstallTo(true) : p.onJob('install'))}
             onInstallTo={plugin && !canChooseOptions ? () => setInstallTo(true) : undefined}
             onOpenVersions={() => setSettingsTab('versions')}
             onOpenPlugins={() => p.onNavigate({ name: 'plugins' })}
@@ -725,7 +726,7 @@ export function GamePage(p: GamePageProps) {
       onPlay: p.onPlay,
       onStop: p.onStop,
       onForceStop: p.onForceStop,
-      onInstall: () => (canChooseOptions ? setOptionsOpen(true) : atlasShell && plugin ? setInstallTo(true) : p.onJob('install')),
+      onInstall: () => (canChooseOptions ? setOptionsOpen(true) : p.onJob('install')),
       onInstallTo: plugin && !canChooseOptions ? () => setInstallTo(true) : undefined,
       onSettings: () => setSettingsTab('general'),
       onOpenStore,

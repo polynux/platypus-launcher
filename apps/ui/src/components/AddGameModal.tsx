@@ -174,17 +174,19 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   };
 
   // Atlas dialog chrome (issue #139): the shared head with the X and the
-  // right-aligned footer. Other themes keep the dialog. Artwork lookup has
+  // right-aligned footer. It belongs to the library presentation (issue
+  // #168), not the shell: the dialog adds to the library. Other themes keep
+  // the dialog. Artwork lookup has
   // no per-game switch: the core looks art up automatically after an add
   // (Settings → artwork), so the dialog has Program, Title and Advanced.
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  const listDetail = useVariant('library.presentation') === 'list-detail';
 
   return (
     <Modal
       label={t('library:addDialog.title')}
       onClose={onClose}
       size="md"
-      contentClassName={atlas ? 'bg-glass backdrop-blur-[22px] backdrop-saturate-[1.4] rounded-[14px] ring-hairline-strong' : undefined}
+      contentClassName={listDetail ? 'bg-glass backdrop-blur-[22px] backdrop-saturate-[1.4] rounded-[14px] ring-hairline-strong' : undefined}
     >
       <div className="-m-7">
         <ModalHead title={t('library:addDialog.title')} sub={t('library:addDialog.description')} onClose={onClose} />

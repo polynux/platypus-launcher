@@ -87,7 +87,10 @@ function subLine(t: (k: string) => string, g: Game): { text: string; absent: boo
 }
 
 export function LibraryListDetail(p: ListDetailProps) {
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  // The list-detail keys (issue #168): j/k move, `/` focuses the filter.
+  // They belong to the list-detail presentation, not the shell, so a theme
+  // with the list and the stage gets them whatever its shell is.
+  const listDetail = useVariant('library.presentation') === 'list-detail';
   const { t } = useTranslation(['library', 'game', 'collections', 'nav']);
   const [queryInner, setQueryInner] = useState('');
   const query = p.queryValue ?? queryInner;
@@ -176,7 +179,7 @@ export function LibraryListDetail(p: ListDetailProps) {
   }, [selectedId]);
 
   useEffect(() => {
-    if (!atlas) return;
+    if (!listDetail) return;
     const onGlobalKey = (e: KeyboardEvent) => {
       // The shared controller handler (capture) runs first and marks what
       // it moves: never handle the same press twice.
@@ -193,7 +196,7 @@ export function LibraryListDetail(p: ListDetailProps) {
     };
     window.addEventListener('keydown', onGlobalKey);
     return () => window.removeEventListener('keydown', onGlobalKey);
-  }, [atlas, filtered, selectedId, selected, p.onPlay]);
+  }, [listDetail, filtered, selectedId, selected, p.onPlay]);
 
   useEffect(() => {
     p.onStageChange?.(selected?.id ?? null);

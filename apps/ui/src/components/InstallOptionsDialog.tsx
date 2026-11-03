@@ -39,7 +39,10 @@ export interface InstallOptionsDialogProps {
  *  the choices and checks them again when the install is queued. */
 export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, onNotify, embedded }: InstallOptionsDialogProps) {
   const { t } = useTranslation(['gameOps', 'common']);
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  // The install flow belongs to the game structure (issue #168), not the
+  // shell: tabs review the options in the dialog head and foot. Other
+  // themes keep the dialog.
+  const tabs = useVariant('game.structure') === 'tabs';
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);
   const [choices, setChoices] = useState<InstallChoices>({});
   // What the choices were when the dialog opened: an update compares with it.
@@ -116,10 +119,10 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
   };
 
   return (
-    <ModalOrInline embedded={embedded} label={installing ? t('gameOps:options.installLabel', { title: game.title }) : t('gameOps:options.updateLabel', { title: game.title })} onClose={onClose} size="md" dismissable={!busy} innerClassName={atlas ? 'p-0' : undefined}>
-      {atlas && !embedded && <ModalHead title={installing ? t('gameOps:install.title', { title: game.title }) : t('gameOps:options.updateTitle')} sub={`${plugin.name} · ${total != null ? formatBytes(total) : t('gameOps:options.totalUnknown')}`} onClose={onClose} />}
-      <div className={atlas && !embedded ? 'max-h-[60vh] overflow-y-auto px-5 py-3' : ''}>
-      {!embedded && !atlas && (
+    <ModalOrInline embedded={embedded} label={installing ? t('gameOps:options.installLabel', { title: game.title }) : t('gameOps:options.updateLabel', { title: game.title })} onClose={onClose} size="md" dismissable={!busy} innerClassName={tabs ? 'p-0' : undefined}>
+      {tabs && !embedded && <ModalHead title={installing ? t('gameOps:install.title', { title: game.title }) : t('gameOps:options.updateTitle')} sub={`${plugin.name} · ${total != null ? formatBytes(total) : t('gameOps:options.totalUnknown')}`} onClose={onClose} />}
+      <div className={tabs && !embedded ? 'max-h-[60vh] overflow-y-auto px-5 py-3' : ''}>
+      {!embedded && !tabs && (
         <>
           <h2 className="text-[20px] font-extrabold tracking-tight">{installing ? t('gameOps:options.installTitle') : t('gameOps:options.updateTitle')}</h2>
           <p className="mt-1 text-[12.5px] text-text-muted">
@@ -147,7 +150,7 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       ))}
 
       {groups && groups.length > 0 && (
-        <div className={cx('mt-6 rounded-2xl bg-surface px-4 py-3', atlas ? 'font-sans text-[13px] tabular-nums [&_[data-testid]]:font-semibold' : 'font-mono text-hint')}>
+        <div className={cx('mt-6 rounded-2xl bg-surface px-4 py-3', tabs ? 'font-sans text-[13px] tabular-nums [&_[data-testid]]:font-semibold' : 'font-mono text-hint')}>
           <div className="flex justify-between gap-4">
             <span className="text-text-muted">{t('gameOps:options.addonsLabel')}</span>
             <span className="text-text" data-testid="added-size">{added > 0 ? t('gameOps:options.addedSome', { size: formatBytes(added) }) : t('gameOps:options.addedNone')}</span>
@@ -189,14 +192,14 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
         </p>
       )}
 
-        {!atlas && <div className="mt-6 flex justify-end gap-2.5">
+        {!tabs && <div className="mt-6 flex justify-end gap-2.5">
         <Button variant="neutral" size="sm" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button>
         <Button variant="primary" size="sm" disabled={busy || !groups || short || unchanged} onClick={apply}>
           {installing ? t('gameOps:options.install') : t('gameOps:options.apply')}
         </Button>
         </div>}
       </div>
-      {atlas && !embedded && <ModalFoot><Button variant="ghost" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button><Button variant="primary" disabled={busy || !groups || short || unchanged} onClick={apply}>{installing ? t('gameOps:options.install') : t('gameOps:options.apply')}</Button></ModalFoot>}
+      {tabs && !embedded && <ModalFoot><Button variant="ghost" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button><Button variant="primary" disabled={busy || !groups || short || unchanged} onClick={apply}>{installing ? t('gameOps:options.install') : t('gameOps:options.apply')}</Button></ModalFoot>}
     </ModalOrInline>
   );
 }

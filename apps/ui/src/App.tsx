@@ -152,6 +152,12 @@ export function AppContent() {
   // Sidebar mode keeps today's row layout; topbar mode stacks the bar above
   // the main column.
   const shellNavigation = useVariant('shell.navigation');
+  // Atlas list-detail (issue #126): the library is the list plus the stage.
+  // The stage carries the live game state (Play becomes Stop with the
+  // elapsed time), so issue #168 keys the "now running" toast here instead
+  // of on the shell: a theme with the stage shows no toast, like Atlas.
+  const libraryPresentation = useVariant('library.presentation');
+  const isListDetail = libraryPresentation === 'list-detail';
   useEffect(() => {
     // The settings bounce replaces history (issue #140): going back from the
     // return view must not land on the bounced settings URL again.
@@ -524,7 +530,7 @@ export function AppContent() {
           setSessions((prev) => ({ ...prev, [e.game_id]: e }));
           if (e.state === 'running') {
             sessionStart.current[e.game_id] = Date.now();
-            if (shellNavigation !== 'sourcebar') notify(t('game:nowRunning', { title }), 'busy');
+            if (!isListDetail) notify(t('game:nowRunning', { title }), 'busy');
             log({ type: 'session', game: e.game_id, detail: t('activity:log.sessionStarted', { title }), meta: e.pid ? t('activity:log.sessionPid', { pid: e.pid }) : undefined });
           }
           return;
@@ -544,7 +550,7 @@ export function AppContent() {
           log({ type: 'session', game: e.game_id, detail: t('activity:log.sessionStopped', { title }), meta: started ? t('activity:log.sessionMinutes', { count: mins }) : undefined });
         }
       }),
-    [log, notify, shellNavigation, t]
+    [log, notify, isListDetail, t]
   );
 
   // A hidden window can miss nothing (events stay live) but re-checks on
@@ -891,8 +897,6 @@ export function AppContent() {
   };
 
   // Atlas list-detail (issue #126): the library is the list plus the stage.
-  const libraryPresentation = useVariant('library.presentation');
-  const isListDetail = libraryPresentation === 'list-detail';
   // The staged game in the library list-detail (for the game tone and the
   // palette's actions): tracked whenever the stage shows, whatever opened
   // it. Opening a game from the palette or dashboard lands on the stage,

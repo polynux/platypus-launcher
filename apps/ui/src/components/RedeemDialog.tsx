@@ -42,15 +42,17 @@ export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClo
   };
 
   // Atlas dialog chrome (issue #139): glass, 14px radius, the shared head
-  // with the X, and the right-aligned footer. Other themes keep the dialog.
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  // with the X, and the right-aligned footer. It belongs to the store
+  // presentation (issue #168), not the shell: redeeming is a store flow.
+  // Other themes keep the dialog.
+  const storefronts = useVariant('store.presentation') === 'storefronts';
 
   return (
     <Modal
       label={t('common:redeem.label')}
       onClose={onClose}
       size="md"
-      contentClassName={atlas ? 'bg-glass backdrop-blur-[22px] backdrop-saturate-[1.4] rounded-[14px] ring-hairline-strong' : undefined}
+      contentClassName={storefronts ? 'bg-glass backdrop-blur-[22px] backdrop-saturate-[1.4] rounded-[14px] ring-hairline-strong' : undefined}
     >
       <div className="-m-7">
         <ModalHead title={t('common:redeem.title')} sub={t('common:redeem.sub')} onClose={onClose} />
