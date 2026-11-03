@@ -36,11 +36,11 @@ import { setTweak, tweakApplied } from '../lib/settings';
 import { coreErrMsg } from '../lib/coreError';
 import { EmptyState, cx } from './ui';
 import {
-  AboutSection,
   GameInstallNote,
   GameOutsideAlert,
   TabsNoteLink,
-} from './GamePage';
+} from './game/blocks';
+import { AboutSection } from './game/sections';
 import type { useAchievementProgress } from './ProgressAchievements';
 import type { InstallSize } from '../lib/installSize';
 
