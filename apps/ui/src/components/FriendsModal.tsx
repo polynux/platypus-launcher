@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react';
-import { Modal } from './Modal';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { cx, LinkButton } from './ui';
 import { Button } from './ds/button';
 import { Input } from './ds/input';
@@ -56,20 +56,25 @@ const ROWS_PER_GROUP = 200;
 /** Every store's friends in one modal: a section per store, grouped In game /
  *  Online / Offline, with a search over all of them. */
 export function FriendsModal(p: FriendsModalProps) {
-  const { t } = useTranslation('chat');
+  const { t } = useTranslation(['chat', 'common']);
   const [query, setQuery] = useState('');
   if (p.chat) {
     return (
       <Modal label={t('chat:modal.title')} onClose={p.onBackFromChat ?? p.onClose} size="lg">
-        <div className="flex h-[70vh] max-h-[640px] flex-col p-5">{p.chat}</div>
+        <div className="-m-7">
+          <ModalHead title={t('chat:modal.title')} onClose={p.onBackFromChat ?? p.onClose} />
+          <div className="flex h-[70vh] max-h-[640px] flex-col p-5">{p.chat}</div>
+          <ModalFoot><Button variant="ghost" onClick={p.onBackFromChat ?? p.onClose}>{t('common:close')}</Button></ModalFoot>
+        </div>
       </Modal>
     );
   }
   return (
     <Modal label={t('chat:modal.title')} onClose={p.onClose} size="lg">
+      <div className="-m-7">
+      <ModalHead title={t('chat:modal.title')} onClose={p.onClose} />
       <div className="flex max-h-[80vh] flex-col gap-4 p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-[17px] font-extrabold tracking-tight">{t('chat:modal.title')}</h2>
+        <div className="flex items-center justify-end gap-3">
           <label className="relative block w-64">
             <span className="sr-only">{t('chat:modal.searchLabel')}</span>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
@@ -88,6 +93,8 @@ export function FriendsModal(p: FriendsModalProps) {
             <StoreSection key={v.plugin} view={v} label={p.labels[v.plugin] ?? v.plugin} query={query} {...p} />
           ))}
         </div>
+      </div>
+      <ModalFoot><Button variant="ghost" onClick={p.onClose}>{t('common:close')}</Button></ModalFoot>
       </div>
     </Modal>
   );

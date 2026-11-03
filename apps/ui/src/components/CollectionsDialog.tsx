@@ -7,6 +7,7 @@ import { Modal, ModalHead, ModalFoot } from './Modal';
 import { Button } from './ds/button';
 import { Input } from './ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
+import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
 import { Switch } from './ds/switch';
 import { MonoLabel, cx } from './ui';
 import { ErrorNotice } from './ErrorNotice';
@@ -45,7 +46,7 @@ export function smartFromDraft(d: SmartDraft): SmartFilter {
   if (d.installed) f.installed = d.installed === 'yes';
   if (d.played) f.played = d.played === 'yes';
   if (d.badgeKind) f.badge_kind = d.badgeKind;
-  if (d.badgeValue) f.badge_value = d.badgeValue;
+  if (d.badgeKind && d.badgeValue) f.badge_value = d.badgeValue;
   if (d.status) f.status = d.status;
   const hours = Number(d.minHours);
   if (Number.isFinite(hours) && hours > 0) f.min_playtime_minutes = Math.round(hours * 60);
@@ -72,6 +73,7 @@ export function draftFromSmart(f: SmartFilter): SmartDraft {
 }
 
 const STATUSES = ['none', 'backlog', 'playing', 'finished', 'abandoned'] as const;
+const ANY = '__any__';
 
 /** A tier filter value's label: the library's own words for native and unrated games. */
 function tierLabel(t: (key: string) => string, v: string): string {
@@ -287,24 +289,24 @@ export function CollectionsDialog({ collections, games, gameId, mode, onChanged,
             {!gameId && mode !== 'new' && (
               <div className="flex items-center gap-2">
                 <span className="text-[13px] text-text-muted">{t('collections:kind')}</span>
-                <div className="flex rounded-[9px] bg-surface p-[3px]">
-                  <button type="button" disabled={busy} onClick={() => setSmart(false)} className={cx('rounded-[7px] px-3 py-1.5 text-[13px] font-semibold', !smart ? 'bg-accent text-on-accent' : 'text-text-muted')}>{t('collections:kindManual')}</button>
-                  <button type="button" disabled={busy} onClick={() => setSmart(true)} className={cx('rounded-[7px] px-3 py-1.5 text-[13px] font-semibold', smart ? 'bg-accent text-on-accent' : 'text-text-muted')}>{t('collections:kindSmart')}</button>
-                </div>
+                <ToggleGroup type="single" value={smart ? 'smart' : 'manual'} onValueChange={(value) => value && setSmart(value === 'smart')} disabled={busy} aria-label={t('collections:kind')}>
+                  <ToggleGroupItem value="manual">{t('collections:kindManual')}</ToggleGroupItem>
+                  <ToggleGroupItem value="smart">{t('collections:kindSmart')}</ToggleGroupItem>
+                </ToggleGroup>
               </div>
             )}
             {mode !== 'new' && <Button type="submit" variant="primary" disabled={busy || !name.trim()}>
               {t('collections:create')}
             </Button>}
           </div>
-          {mode === 'new' && !gameId && <div className="flex items-center justify-between gap-4 border-t border-hairline py-3"><div><div className="text-[13px] font-semibold text-text">{t('collections:kind')}</div><div className="text-[12px] text-text-muted">{smart ? t('collections:kindSmartDesc') : t('collections:kindManualDesc')}</div></div><div className="flex rounded-[9px] bg-surface p-[3px]"><button type="button" onClick={() => setSmart(false)} className={cx('rounded-[7px] px-3 py-1.5 text-[13px] font-semibold', !smart ? 'bg-accent text-on-accent' : 'text-text-muted')}>{t('collections:kindManual')}</button><button type="button" onClick={() => setSmart(true)} className={cx('rounded-[7px] px-3 py-1.5 text-[13px] font-semibold', smart ? 'bg-accent text-on-accent' : 'text-text-muted')}>{t('collections:kindSmart')}</button></div></div>}
+          {mode === 'new' && !gameId && <div className="flex items-center justify-between gap-4 border-t border-hairline py-3"><div><div className="text-[13px] font-semibold text-text">{t('collections:kind')}</div><div className="text-[12px] text-text-muted">{smart ? t('collections:kindSmartDesc') : t('collections:kindManualDesc')}</div></div><ToggleGroup type="single" value={smart ? 'smart' : 'manual'} onValueChange={(value) => value && setSmart(value === 'smart')} disabled={busy} aria-label={t('collections:kind')}><ToggleGroupItem value="manual">{t('collections:kindManual')}</ToggleGroupItem><ToggleGroupItem value="smart">{t('collections:kindSmart')}</ToggleGroupItem></ToggleGroup></div>}
           {smart && !gameId && <SmartFields draft={draft} setDraft={setDraft} games={games} collections={collections} disabled={busy} />}
           {error && <ErrorNotice className="text-[13px]" message={error} fallback={t('collections:error')} />}
         </form>
 
       </div>
       <ModalFoot>
-        <Button variant="ghost" disabled={busy} onClick={onClose}>{mode === 'new' ? t('common:cancel') : t('common:done')}</Button>
+        <Button variant="ghost" disabled={busy} autoFocus={mode !== 'new'} onClick={onClose}>{mode === 'new' ? t('common:cancel') : t('common:done')}</Button>
         {mode === 'new' && <Button type="submit" form="atlas-new-collection" variant="primary" disabled={busy || !name.trim()}>{t('collections:create')}</Button>}
       </ModalFoot>
     </Modal>
@@ -319,9 +321,13 @@ function SmartFields({ draft, setDraft, games, collections, disabled }: { draft:
   const select = (k: keyof SmartDraft, label: string, options: { value: string; label: string }[]) => (
     <label className="text-[13px] text-text-muted" key={k}>
       {label}
-      <Select value={draft[k]} onValueChange={(value) => setDraft({ ...draft, [k]: value })} disabled={disabled}>
-        <SelectTrigger aria-label={label} className="mt-1.5 w-full"><SelectValue placeholder={t('collections:smart.any')} /></SelectTrigger>
+      <Select value={draft[k] || ANY} onValueChange={(value) => {
+        const next = value === ANY ? '' : value;
+        setDraft(k === 'badgeKind' ? { ...draft, badgeKind: next, badgeValue: '' } : { ...draft, [k]: next });
+      }} disabled={disabled}>
+        <SelectTrigger aria-label={label} className="mt-1.5 w-full"><SelectValue /></SelectTrigger>
         <SelectContent>
+          <SelectItem value={ANY}>{t('collections:smart.any')}</SelectItem>
           {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
         </SelectContent>
       </Select>

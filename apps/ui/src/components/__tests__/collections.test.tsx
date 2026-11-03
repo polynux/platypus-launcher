@@ -197,7 +197,7 @@ describe('collections dialog', () => {
   it('refuses a smart filter with no condition, before it reaches the core', async () => {
     h.api.createCollection = vi.fn(() => Effect.succeed(LIST));
     render(<CollectionsDialog collections={LIST} games={games} onChanged={() => {}} onClose={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Smart filter' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Smart filter' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: 'Nothing' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(screen.getByText('A smart filter needs at least one condition.')).toBeInTheDocument();
@@ -207,7 +207,7 @@ describe('collections dialog', () => {
   it('creates a smart filter from the fields the user set', async () => {
     h.api.createCollection = vi.fn(() => Effect.succeed([...LIST, { id: 'new', name: 'Night', pinned: true, smart: { installed: true } }]));
     render(<CollectionsDialog collections={LIST} games={games} onChanged={() => {}} onClose={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Smart filter' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Smart filter' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: 'Night' } });
     const user = userEvent.setup();
     await user.click(screen.getByRole('combobox', { name: 'Installed' }));

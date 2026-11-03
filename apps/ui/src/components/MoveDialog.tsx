@@ -75,7 +75,7 @@ export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogP
             <span className="text-text-muted">{t('gameOps:move.from')}</span>
             <div className="flex min-w-0 items-center gap-2">
               <span className="truncate text-right text-text" title={game.install_dir}>{game.install_dir}</span>
-              <Button variant="neutral" size="sm" onClick={pick} disabled={busy} className="flex-none font-sans">
+              <Button variant="neutral" size="sm" onClick={pick} disabled={busy} autoFocus className="flex-none font-sans">
                 {parent ? t('gameOps:move.pickAnother') : t('gameOps:move.pick')}
               </Button>
             </div>

@@ -2,7 +2,7 @@
 import { useTranslation, Trans } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import type { AuthPrompt, AuthStatus, Game, PluginStatus, SourceWarning, StorePlugin } from '../types';
 import { LauncherApi, onAuth } from '../effect/runtime';
 import { openExternal } from '../lib/external';
@@ -545,8 +545,8 @@ function UninstallModal({ plugin: p, showGames = true, onClose, onConfirm }: { p
           )}
         </div>
         <ModalFoot>
-          <Button variant="ghost" onClick={onClose}>{t('common:cancel')}</Button>
-          <Button variant="danger" onClick={() => onConfirm(removeGames)}>{t('plugins:uninstall.confirm')}</Button>
+          <Button variant="ghost" autoFocus onClick={onClose}>{t('common:cancel')}</Button>
+          <Button variant="danger" onClick={() => onConfirm(removeGames)}><Trash2 className="h-3.5 w-3.5" /> {t('plugins:uninstall.confirm')}</Button>
         </ModalFoot>
       </div>
     </Modal>
@@ -567,7 +567,7 @@ function ReplaceModal({ name, current, next, onClose, onConfirm }: { name: strin
             : t('plugins:install.replaceDetailUnknown', { name, new: next })}
         </p>
         <ModalFoot>
-          <Button variant="ghost" onClick={onClose}>{t('common:cancel')}</Button>
+          <Button variant="ghost" autoFocus onClick={onClose}>{t('common:cancel')}</Button>
           <Button variant="primary" onClick={onConfirm}>{t('plugins:install.confirmReplace')}</Button>
         </ModalFoot>
       </div>
@@ -616,7 +616,7 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
 
         </div>
         <ModalFoot>
-          <Button variant="ghost" onClick={onClose}>{t('common:cancel')}</Button>
+          <Button variant="ghost" autoFocus onClick={onClose}>{t('common:cancel')}</Button>
           <Button variant="primary" onClick={onApprove}>{t('plugins:approve.approveAndEnable')}</Button>
         </ModalFoot>
       </div>
