@@ -169,7 +169,7 @@ function AtlasHero({ game, hero, details, backLabel, onBack, hideBack }: { game:
   useEffect(() => setBroken(null), [game.id]);
   const logo = logoMode === 'logo' && game.logo_url && game.logo_url !== broken ? game.logo_url : null;
   return (
-    <div className={cx('relative flex-none overflow-hidden bg-ground', !src && 'bg-gradient-to-br from-accent/15 via-ground to-ground')} style={{ height: 'clamp(200px, 34vh, 380px)' }}>
+    <div className={cx('relative flex-none overflow-hidden', src ? 'bg-ground' : 'bg-hero-backdrop')} style={{ height: 'clamp(200px, 34vh, 380px)' }}>
       {src && (
         <img
           key={src}

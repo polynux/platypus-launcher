@@ -243,10 +243,20 @@ describe('/22 hero, tabs and side (issue #137)', () => {
     expect(flyout).toHaveStyle({ maxHeight: '86px', overflowY: 'auto' });
   });
 
-  it('gives a game without hero art a themed placeholder background', async () => {
-    page(game());
-    const title = await screen.findByRole('heading', { name: /^A22 Game/ });
-    expect(title.closest('div.relative')).toHaveClass('bg-gradient-to-br');
+  it('keeps the artless game hero dark behind its white title in light scheme', async () => {
+    const root = document.documentElement;
+    const previousScheme = root.getAttribute('data-scheme');
+    root.setAttribute('data-scheme', 'light');
+    try {
+      page(game());
+      const title = await screen.findByRole('heading', { name: /^A22 Game/ });
+      expect(root).toHaveAttribute('data-scheme', 'light');
+      expect(title.closest('div.relative')).toHaveClass('bg-hero-backdrop');
+      expect(title).toHaveClass('text-white');
+    } finally {
+      if (previousScheme === null) root.removeAttribute('data-scheme');
+      else root.setAttribute('data-scheme', previousScheme);
+    }
   });
 
   it('leaves bottom scroll room for the last compatibility Apply button', async () => {
