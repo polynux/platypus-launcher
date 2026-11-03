@@ -304,8 +304,10 @@ function isBadRender(img: HTMLImageElement): boolean {
  *  request (see lib/coverMisses) instead of refetching on every render.
  *  Pass `compact` for small thumbnails (below about 60px tall): the fallback
  *  is then a single initial on the tinted tile instead of the full title,
- *  which would spill out of the box next to the title itself. */
-export function Cover({ src, title, className, compact = false }: { src?: string | string[]; title: string; className?: string; compact?: boolean }) {
+ *  which would spill out of the box next to the title itself. Pass
+ *  `fallback={null}` where nothing should show when every source fails (the
+ *  Home hero: the dark backdrop behind it already carries the white text). */
+export function Cover({ src, title, className, compact = false, fallback }: { src?: string | string[]; title: string; className?: string; compact?: boolean; fallback?: React.ReactNode }) {
   const all = (Array.isArray(src) ? src : [src]).filter(Boolean) as string[];
   const sources = all.filter((s) => !coverMisses.isBad(s));
   const key = sources.join('|');
@@ -335,6 +337,7 @@ export function Cover({ src, title, className, compact = false }: { src?: string
     if (el?.complete && isBadRender(el)) fail();
   }, [current, fail]);
   if (!current) {
+    if (fallback !== undefined) return fallback === null ? null : <>{fallback}</>;
     if (compact) {
       const initial = title.trim().charAt(0).toUpperCase();
       return (

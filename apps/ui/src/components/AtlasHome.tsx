@@ -9,13 +9,12 @@ import type { ActivityEvent, Game } from '../types';
 import { ATLAS_PAGE, Cover } from './ui';
 import { Button } from './ds/button';
 import { Download, Play, X } from 'lucide-react';
-import { attentionIssues, attentionReason as issueReason, byRecent, coverImages, formatBytes, heroImages, lastPlayedAgo, needsAttention, type AttentionIssue } from '../lib/games';
+import { attentionIssues, byRecent, coverImages, formatBytes, heroImages, lastPlayedAgo, needsAttention } from '../lib/games';
 import { formatHours } from '../lib/format';
 import { sortKey } from '../lib/customize';
 import { ratingBadge } from '../lib/compat';
 import { AtlasMainAction } from './GameTabs';
-import { Modal } from './Modal';
-import { notify } from '../lib/notify';
+import { useAttentionFix } from './AtlasAttention';
 import { PluginLogo } from './PluginLogo';
 import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
@@ -92,56 +91,11 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
     </AtlasMainAction>
   );
   const hour = new Date().getHours();
-  // The card's rows mirror the Needs attention page: the same sentence and
-  // fix action per issue kind, with the game page as the fallback.
-  const [resetTarget, setResetTarget] = useState<Game | null>(null);
-  const [allowTarget, setAllowTarget] = useState<Game | null>(null);
-  const issueText = (issue: AttentionIssue): string => {
-    const g = issue.game;
-    switch (issue.kind) {
-      case 'install': return t('fixes:atlas.reason.install');
-      case 'outside': return t('fixes:atlas.reason.outside', { title: g.title, dir: g.install_dir });
-      case 'runner': return t('fixes:atlas.reason.runner', { title: g.title, runner: issue.runnerId });
-      case 'update': return t('fixes:atlas.reason.update');
-      case 'conflict': return t('fixes:atlas.reason.conflict');
-      case 'prefix': return t('fixes:atlas.reason.prefix');
-      default: return issueReason(g, 'rating');
-    }
-  };
-  const issueFixLabel = (issue: AttentionIssue): string => ({
-    install: t('fixes:atlas.fix.install'),
-    outside: t('fixes:atlas.fix.outside'),
-    runner: t('fixes:atlas.fix.runner'),
-    update: t('fixes:atlas.fix.update'),
-    conflict: t('fixes:atlas.fix.conflict'),
-    prefix: t('fixes:atlas.fix.prefix'),
-    rating: t('fixes:atlas.fix.rating'),
-  })[issue.kind];
-  const runIssueFix = (issue: AttentionIssue) => {
-    const g = issue.game;
-    if (issue.kind === 'install') {
-      const job = (jobs ?? []).filter((j) => j.game_id === g.id && j.state === 'failed' && (j.kind === 'install' || j.kind === 'update')).sort((a, b) => b.updated_at - a.updated_at)[0];
-      if (job && onRetryJob) { onRetryJob(job.id); return; }
-    } else if (issue.kind === 'outside') { setAllowTarget(g); return; }
-    else if (issue.kind === 'runner') {
-      const fallback = runners.find((r) => r.is_default);
-      if (fallback && onSaveSettings) {
-        const previous = g.settings.runner_id || '';
-        const save = onSaveSettings(g, fallback.id, false);
-        if (save) void save.then(() => notify.success(
-          t('fixes:atlas.runnerChanged', { runner: fallback.name, title: g.title }),
-          { action: { label: t('fixes:atlas.undo'), onClick: () => {
-            const undo = onSaveSettings?.(g, previous, false);
-            if (undo) void undo.catch(() => {});
-          } } },
-        )).catch(() => {});
-        return;
-      }
-    } else if (issue.kind === 'update') {
-      if (onJob) { onJob('update', g); return; }
-    } else if (issue.kind === 'prefix') { setResetTarget(g); return; }
-    onOpenGame(g.id);
-  };
+  // The card shares the Needs attention page's fix behaviour (same sentence
+  // and primary action per issue), without its secondary ghost actions.
+  const { issueText, primaryAction, fixDialogs } = useAttentionFix({
+    jobs, runners, onOpenGame, onRetryJob, onJob, onAllowFolder, onResetPrefix, onSaveSettings,
+  });
   const greeting = hour < 5
     ? t('dashboard:greeting.night')
     : hour < 12
@@ -167,9 +121,9 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
         <p className="mt-[3px] text-[13px] text-text-muted">{t('dashboard:home.ready', { count: installed })}</p>
       </header>
       {suggested && (
-        <section aria-label={suggested.title} className="relative min-h-[230px] overflow-hidden rounded-2xl bg-[#0b0d12] text-white">
+        <section aria-label={suggested.title} className="relative min-h-[230px] overflow-hidden rounded-2xl bg-hero-backdrop text-white">
           {heroImages(suggested).length > 0 && (
-            <Cover src={heroImages(suggested)} title={suggested.title} className="absolute inset-0 h-full min-h-[230px] w-full object-cover [object-position:center_30%]" />
+            <Cover src={heroImages(suggested)} title={suggested.title} fallback={null} className="absolute inset-0 h-full min-h-[230px] w-full object-cover [object-position:center_30%]" />
           )}
           <div aria-hidden className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,10,14,.92)_0%,rgba(8,10,14,.6)_45%,transparent_75%)]" />
           <div className="relative grid min-h-[230px] max-w-[460px] content-end gap-2 px-7 py-[26px]">
@@ -178,7 +132,7 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
             {suggestedDescription && <p className={`leading-normal text-white/[.82] ${suggestedRunning ? '' : 'line-clamp-2'}`}>{suggestedDescription}</p>}
             <div className="mt-1 flex gap-2.5">
               {mainAction(suggested, (
-                <Button variant="primary" onClick={() => { if (suggested.is_installed) { if (onPlay) onPlay(suggested.id); else onOpenGame(suggested.id); } else if (onInstall) onInstall(suggested); else onOpenGame(suggested.id); }} className="h-[38px] px-4">
+                <Button variant="primary" onClick={() => { if (suggested.is_installed) { if (onPlay) onPlay(suggested.id); else onOpenGame(suggested.id); } else if (onInstall) onInstall(suggested); else onOpenGame(suggested.id); }} className="h-[38px] bg-accent px-4">
                   {suggested.is_installed ? t('game:play.play') : (<><Download className="size-3.5" aria-hidden />{t('game:install.install')}{installSize && <span className="font-mono text-[12px]">{installSize}</span>}</>)}
                 </Button>
               ))}
@@ -217,7 +171,7 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
                       variant="primary"
                       onClick={() => (onPlay ? onPlay(g.id) : onOpenGame(g.id))}
                       aria-label={`${t('game:play.play')}: ${g.title}`}
-                      className="h-[38px] flex-none px-4 text-[13px]"
+                      className="h-[38px] flex-none bg-accent px-4 text-[13px]"
                     >
                       <Play className="size-3.5 fill-current" aria-hidden />
                       {t('game:play.play')}
@@ -317,44 +271,23 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
             <p className="text-[13px] text-text-muted">{t('dashboard:home.everythingWorks')}</p>
           ) : (
             <ul className="grid gap-2">
-              {issues.slice(0, 3).map((issue) => (
-                <li key={`${issue.game.id}-${issue.kind}`} className="flex items-center gap-2.5">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-bold">{issue.game.title}</span>
-                    <span className="block truncate text-[12px] text-text-muted">{issueText(issue)}</span>
-                  </span>
-                  <Button variant="neutral" size="sm" className="flex-none" onClick={() => runIssueFix(issue)}>
-                    {issueFixLabel(issue)}
-                  </Button>
-                </li>
-              ))}
+              {issues.slice(0, 3).map((issue) => {
+                const primary = primaryAction(issue);
+                return (
+                  <li key={`${issue.game.id}-${issue.kind}`} className="flex items-center gap-2.5">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-bold">{issue.game.title}</span>
+                      <span className="block truncate text-[12px] text-text-muted">{issueText(issue)}</span>
+                    </span>
+                    <Button variant="neutral" size="sm" className="flex-none" onClick={primary.run}>
+                      {primary.label}
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
           )}
-          {resetTarget && (
-            <Modal label={t('fixes:atlas.resetTitle')} onClose={() => setResetTarget(null)} size="sm">
-              <div className="p-6">
-                <h2 className="mb-2 text-[17px] font-bold">{t('fixes:atlas.resetTitle')}</h2>
-                <p className="text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.resetBody', { title: resetTarget.title })}</p>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.resetBackup')}</p>
-                <div className="mt-5 flex justify-end gap-2">
-                  <Button variant="ghost" autoFocus onClick={() => setResetTarget(null)}>{t('common:cancel')}</Button>
-                  <Button variant="primary" onClick={() => { onResetPrefix?.(resetTarget); setResetTarget(null); }}>{t('fixes:atlas.fix.prefix')}</Button>
-                </div>
-              </div>
-            </Modal>
-          )}
-          {allowTarget && (
-            <Modal label={t('fixes:atlas.allowTitle')} onClose={() => setAllowTarget(null)} size="sm">
-              <div className="p-6">
-                <h2 className="mb-2 text-[17px] font-bold">{t('fixes:atlas.allowTitle')}</h2>
-                <p className="text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.allowBody', { folder: allowTarget.install_dir || t('fixes:atlas.unknownFolder') })}</p>
-                <div className="mt-5 flex justify-end gap-2">
-                  <Button variant="ghost" autoFocus onClick={() => setAllowTarget(null)}>{t('common:cancel')}</Button>
-                  <Button variant="primary" onClick={() => { onAllowFolder?.(allowTarget); setAllowTarget(null); }}>{t('fixes:atlas.fix.outside')}</Button>
-                </div>
-              </div>
-            </Modal>
-          )}
+          {fixDialogs}
         </section>
         {hasSocial ? <section aria-label={t('dashboard:home.friendsOnline')} className="grid content-start gap-3 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
           <div className="flex items-center justify-between gap-2.5">

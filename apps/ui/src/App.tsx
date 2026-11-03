@@ -1386,7 +1386,7 @@ export function AppContent() {
           of the friends branch, so mixed themes show it exactly once. */}
       {isFriendsPanel ? (
         <div className="flex min-h-0 flex-1">
-          <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable]', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
+          <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden', !listDetailActive && view.name !== 'store' && '[scrollbar-gutter:stable]')}>
             {!isSourcebar && migration && (
               <div className="px-7 pt-7">
                 <MigrationBanner
@@ -1427,7 +1427,7 @@ export function AppContent() {
           )}
         </div>
       ) : (
-        <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable]', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
+        <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden', !listDetailActive && view.name !== 'store' && '[scrollbar-gutter:stable]')}>
           {!isSourcebar && migration && (
             <div className="px-7 pt-7">
               <MigrationBanner

@@ -3,7 +3,7 @@
 // (6, 10, 14, 18) and the store-bar layout need no jsdom test.
 import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { render as rtlRender, cleanup, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, cleanup, screen, fireEvent, within } from '@testing-library/react';
 import '../../lib/i18n';
 import { TooltipProvider } from '../ds/tooltip';
 import type { DiskUsage, Game, Job, ProtonVersion, StorePlugin } from '../../types';
@@ -68,7 +68,7 @@ describe('finding 1: hero art fallback', () => {
     const hero = container.querySelector('section[aria-label="Backlog game"]')!;
     expect(hero).toBeTruthy();
     expect(hero.querySelector('img')).toBeNull();
-    expect(hero.className).toMatch(/bg-\[#0b0d12\]/);
+    expect(hero.className).toMatch(/bg-hero-backdrop/);
   });
 
   it('renders the art when there is some', () => {
@@ -77,6 +77,17 @@ describe('finding 1: hero art fallback', () => {
     const { container } = render(<AtlasHome {...homeProps({ games: [installed], allGames: [installed, suggestion] })} />);
     const hero = container.querySelector('section[aria-label="Backlog game"]')!;
     expect(hero.querySelector('img')).toHaveAttribute('src', 'https://example.com/hero.jpg');
+  });
+
+  it('falls back to the dark backdrop when the art fails to load', () => {
+    const installed = mkGame('inst', { title: 'Installed', last_played_at: 10 });
+    const suggestion = mkGame('backlog', { title: 'Backlog game', is_installed: false, hero_url: 'https://example.com/404.jpg' });
+    const { container } = render(<AtlasHome {...homeProps({ games: [installed], allGames: [installed, suggestion] })} />);
+    const hero = container.querySelector('section[aria-label="Backlog game"]')!;
+    fireEvent.error(hero.querySelector('img')!);
+    // No fallback tile in the hero (no duplicated title): the dark section shows through.
+    expect(hero.querySelector('.cover-fallback')).toBeNull();
+    expect(within(hero as HTMLElement).getAllByText('Backlog game')).toHaveLength(1);
   });
 });
 
@@ -102,6 +113,16 @@ describe('finding 2: home attention card follows the issue list', () => {
     expect(onRetryJob).toHaveBeenCalledWith('job-1');
   });
 
+  it('asks before resetting a prefix', () => {
+    const onResetPrefix = vi.fn();
+    const g = mkGame('pre', { title: 'Prefix game', prefix_damaged: true });
+    render(<AtlasHome {...homeProps({ games: [g], allGames: [g], onResetPrefix })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Reset prefix' }));
+    expect(screen.getByText('Reset the Wine prefix?')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Reset prefix' }).at(-1)!);
+    expect(onResetPrefix).toHaveBeenCalledWith(expect.objectContaining({ id: 'pre' }));
+  });
+
   it('asks before allowing a game folder', () => {
     const onAllowFolder = vi.fn();
     const g = mkGame('out', { title: 'Outside', outside_folder: true, install_dir: '/tmp/out' });
@@ -114,17 +135,17 @@ describe('finding 2: home attention card follows the issue list', () => {
 });
 
 describe('finding 5: card Play buttons match the hero button', () => {
-  it('renders both as the primary button', () => {
+  it('renders both as the accent fill, like /22 and the game page', () => {
     const played = mkGame('played', { title: 'Played', last_played_at: 10 });
     const backlog = mkGame('backlog', { title: 'Backlog', is_installed: false });
-    const { container } = render(<AtlasHome {...homeProps({ games: [played], allGames: [played, backlog] })} />);
+    render(<AtlasHome {...homeProps({ games: [played], allGames: [played, backlog] })} />);
     const heroInstall = screen.getByRole('button', { name: /Install/ });
     const cardPlay = screen.getByRole('button', { name: 'Play: Played' });
     for (const b of [heroInstall, cardPlay]) {
-      expect(b.className).toMatch(/bg-accent-strong/);
+      expect(b.className).toMatch(/bg-accent(?!-strong)/);
+      expect(b.className).not.toMatch(/bg-accent-strong/);
       expect(b.className).toMatch(/rounded-xl/);
     }
-    expect(container.querySelector('button.bg-accent')).toBeNull();
   });
 });
 
@@ -150,13 +171,31 @@ describe('finding 7: downloads recent rows', () => {
     expect(screen.queryByText('done')).toBeNull();
   });
 
-  it('keeps the raw error in a tooltip behind a friendly line', () => {
+  it('shows the failed label for the screenshot error, with the raw text in a tooltip', () => {
+    const raw = 'size check: unknown game "bulk-0001"';
     const { container } = render(
-      <AtlasDownloads {...dlProps([mkJob({ id: 'c', game_id: 'sub', kind: 'install', state: 'failed', error: 'jsonrpc: code -32000' })])} />,
+      <AtlasDownloads {...dlProps([mkJob({ id: 'c', game_id: 'sub', kind: 'install', state: 'failed', error: raw })])} />,
     );
-    expect(screen.getByText('failed')).toBeInTheDocument();
-    const status = container.querySelector('span[title="jsonrpc: code -32000"]');
-    expect(status?.textContent).toBe('failed');
+    // The engine string never shows in the narrow status column.
+    expect(screen.queryByText(raw)).toBeNull();
+    const status = screen.getByText('failed');
+    expect(status.getAttribute('title')).toBe(raw);
+  });
+
+  it('aligns recent columns on one grid shared by every row', () => {
+    const { container } = render(
+      <AtlasDownloads {...dlProps([
+        mkJob({ id: 'a', game_id: 'civ', kind: 'install', state: 'done' }),
+        mkJob({ id: 'c', game_id: 'sub', kind: 'install', state: 'failed', error: 'No space left' }),
+      ])} />,
+    );
+    const recent = screen.getByText('Recent').closest('section')!;
+    // One template on the list, every row spans it: columns can't drift.
+    expect(recent.querySelector('ul')?.className).toMatch(/grid-cols-\[/);
+    for (const li of recent.querySelectorAll(':scope ul > li')) {
+      expect(li.className).toMatch(/grid-cols-subgrid/);
+    }
+    expect(container.querySelector('li.grid-cols-\\[')).toBeNull();
   });
 });
 
@@ -245,11 +284,11 @@ describe('finding 13: plugins header order', () => {
 });
 
 describe('finding 15: storage drive card', () => {
-  it('collapses to six rows with an "and N more" line', () => {
+  const driveCard = (n: number) => {
     const GB = 1e9;
-    const rows = Array.from({ length: 8 }, (_, i) => ({
+    const rows = Array.from({ length: n }, (_, i) => ({
       game_id: `g${i}`, title: `Game ${i}`, source: 'steam', store: 'steam',
-      install_dir: `/mnt/a/Games/g${i}`, size_bytes: (8 - i) * GB, prefix_bytes: 0,
+      install_dir: `/mnt/a/Games/g${i}`, size_bytes: (n - i) * GB, prefix_bytes: 0,
       from_plugin: false, measured: true,
     })) as DiskUsage['games'];
     const drive = {
@@ -257,14 +296,25 @@ describe('finding 15: storage drive card', () => {
       device_kind: 'ssd', total_bytes: 200 * GB, free_bytes: 40 * GB, games_bytes: 100 * GB, other_bytes: 60 * GB,
     } as DiskUsage['drives'][number];
     const data = {
-      byId: new Map(), moveId: null, removeId: null, uninstallId: null,
+      byId: new Map(rows.map((r) => [r.game_id, mkGame(r.game_id, { title: r.title })])),
+      moveId: null, removeId: null, uninstallId: null,
       setMoveId: () => {}, setRemoveId: () => {}, setUninstallId: () => {},
       measuring: new Set(), openFolder: () => {}, scan: () => {}, onNotify: () => {},
     } as never;
+    return { drive, rows, data };
+  };
+
+  it('collapses to six rows and expands to reach every row action', () => {
+    const { drive, rows, data } = driveCard(8);
     render(<AtlasDriveCard drive={drive} rows={rows} data={data} />);
-    expect(screen.getByText('and 2 more')).toBeInTheDocument();
+    expect(screen.getByText('Show all 8')).toBeInTheDocument();
     expect(screen.queryByText('Game 6')).toBeNull();
-    expect(screen.getByText('Game 5')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 8' }));
+    // Row 7's actions are reachable again after expanding.
+    expect(screen.getByText('Game 6')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Uninstall Game 6' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show less' }));
+    expect(screen.queryByText('Game 6')).toBeNull();
   });
 });
 

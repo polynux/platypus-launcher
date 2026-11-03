@@ -35,7 +35,8 @@
   "uninstallGo": "Désinstaller",
   "atlas": {
     "rescan": "Réanalyser",
-    "andMore": "et {{count}} de plus",
+    "showAll": "Tout afficher ({{count}})",
+    "showLess": "Réduire",
     "freeOf": "libres sur {{total}}",
     "played": "Joué {{ago}}",
     "neverPlayed": "Jamais joué",

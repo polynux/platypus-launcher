@@ -80,10 +80,13 @@ export function AtlasStorage({ data }: { data: StorageData }) {
 export function AtlasDriveCard({ drive: d, rows, data, defaultFolder }: { drive: DiskUsage['drives'][number]; rows: DiskUsage['games'][number][]; data: StorageData; defaultFolder?: string }) {
   const { t } = useTranslation(['storage', 'gameSettings', 'common']);
   const known = d.total_bytes > 0;
-  // The lab shows the top 6 games in compact rows with an "and N more" line,
-  // not every game in tall rows. The rows show the same total the list is
-  // sorted on (files + prefix), so the order matches the column.
-  const shown = rows.slice(0, 6);
+  // The lab shows the top 6 games in compact rows with an expandable "show
+  // all" line, not every game in tall rows. The rows show the same total the
+  // list is sorted on (files + prefix), so the order matches the column.
+  // Rows past the sixth keep their actions behind the toggle: Storage is
+  // where space is freed and games are moved.
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? rows : rows.slice(0, 6);
   const total = rows.reduce((a, r) => a + r.size_bytes + r.prefix_bytes, 0);
   const isDefaultDrive = !!defaultFolder && d.folders.some((f) => isWithinFolder(defaultFolder, f));
   // The design's drive head: the label when the filesystem has one, then
@@ -130,8 +133,10 @@ export function AtlasDriveCard({ drive: d, rows, data, defaultFolder }: { drive:
           ))}
         </ul>
       )}
-      {rows.length > shown.length && (
-        <p className="text-[12px] text-text-muted">{t('storage:atlas.andMore', { count: rows.length - shown.length })}</p>
+      {rows.length > 6 && (
+        <Button variant="quiet" size="sm" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} className="justify-self-start">
+          {expanded ? t('storage:atlas.showLess') : t('storage:atlas.showAll', { count: rows.length })}
+        </Button>
       )}
     </section>
   );

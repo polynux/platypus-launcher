@@ -173,9 +173,9 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
           {finished.length > 0 && (
             <section aria-label={t('downloads:atlas.recent')}>
               <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.recent')}</h2>
-              <ul className="divide-y divide-hairline">
+              <ul className="grid grid-cols-[minmax(0,1fr)_140px_80px_90px_auto] divide-y divide-hairline">
                 {finished.map((j) => (
-                  <li key={j.id} className="grid grid-cols-[minmax(0,1fr)_140px_80px_90px_auto] items-center gap-3 py-1.5">
+                  <li key={j.id} className="col-span-full grid grid-cols-subgrid items-center gap-3 py-1.5">
                     <button onClick={() => onOpenGame(j.game_id)} className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                       <Cover src={artOf(j.game_id)} title={byId.get(j.game_id)?.title ?? j.title} compact className="h-5 w-11 flex-none rounded ring-1 ring-hairline" />
                       <span className="truncate text-[13px] font-semibold">{byId.get(j.game_id)?.title ?? j.title}</span>
