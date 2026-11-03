@@ -376,6 +376,9 @@ func UnpackTarGz(ctx context.Context, r io.Reader, destDir string, maxBytes int6
 		case tar.TypeSymlink:
 			// The target is read relative to the link's own folder, like the
 			// filesystem reads it, and must stay under the build folder.
+			if filepath.IsAbs(filepath.FromSlash(hdr.Linkname)) {
+				return "", fmt.Errorf("refusing tar entry %q: symlink target is absolute", hdr.Name)
+			}
 			t := filepath.Join(filepath.Dir(name), filepath.FromSlash(hdr.Linkname))
 			if !filepath.IsLocal(t) || (t != top && !strings.HasPrefix(t, top+string(filepath.Separator))) {
 				return "", fmt.Errorf("refusing tar entry %q: symlink points outside the runner folder", hdr.Name)
@@ -401,13 +404,17 @@ func UnpackTarGz(ctx context.Context, r io.Reader, destDir string, maxBytes int6
 	if err != nil {
 		return "", err
 	}
+	buildRoot, err := filepath.EvalSymlinks(filepath.Join(resolvedDest, top))
+	if err != nil {
+		return "", err
+	}
 	for _, l := range links {
 		resolved, err := filepath.EvalSymlinks(filepath.Join(resolvedDest, l.path))
 		if err != nil {
 			return "", fmt.Errorf("refusing tar symlink %q: broken", relOf(resolvedDest, filepath.Join(resolvedDest, l.path)))
 		}
-		if !sameOrWithin(resolvedDest, resolved) {
-			return "", fmt.Errorf("refusing tar symlink %q: escapes the runner folder", relOf(resolvedDest, filepath.Join(resolvedDest, l.path)))
+		if !sameOrWithin(buildRoot, resolved) {
+			return "", fmt.Errorf("refusing tar symlink %q: escapes the runner build", relOf(resolvedDest, filepath.Join(resolvedDest, l.path)))
 		}
 	}
 	return top, nil

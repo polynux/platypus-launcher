@@ -11,6 +11,7 @@ import { Button } from './ds/button';
 import { Modal } from './Modal';
 import { attentionIssues, attentionReason, heroImages } from '../lib/games';
 import { plainError } from '../lib/plainError';
+import { notify } from '../lib/notify';
 import type { FixesProps } from './FixesView';
 
 /** The /22 Needs attention page (issue #138, Atlas only): each game as a
@@ -24,6 +25,7 @@ export function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJ
   const gameCount = new Set(issues.map((issue) => issue.game.id)).size;
   // Resetting a prefix asks first: the game confirmed is the one reset.
   const [resetTarget, setResetTarget] = useState<Game | null>(null);
+  const [allowTarget, setAllowTarget] = useState<Game | null>(null);
   return (
     <div className={ATLAS_PAGE}>
       <header>
@@ -55,8 +57,18 @@ export function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJ
             const fallbackRunner = runners.find((r) => r.is_default);
             const action = () => {
               if (issue.kind === 'install' && issueJob) onJobAction?.('retry', issueJob.id);
-              else if (issue.kind === 'outside') onAllowFolder?.(g);
-              else if (issue.kind === 'runner' && fallbackRunner) onSaveSettings?.(g, fallbackRunner.id);
+              else if (issue.kind === 'outside') setAllowTarget(g);
+              else if (issue.kind === 'runner' && fallbackRunner) {
+                const previous = g.settings.runner_id || '';
+                const save = onSaveSettings?.(g, fallbackRunner.id, false);
+                if (save) void save.then(() => notify.success(
+                  t('fixes:atlas.runnerChanged', { runner: fallbackRunner.name, title: g.title }),
+                  { action: { label: t('fixes:atlas.undo'), onClick: () => {
+                    const undo = onSaveSettings?.(g, previous, false);
+                    if (undo) void undo.catch(() => {});
+                  } } },
+                )).catch(() => {});
+              }
               else if (issue.kind === 'update') onJob?.('update', g);
               else if (issue.kind === 'prefix') setResetTarget(g);
               // Save conflicts resolve on the game page: the cloud panel compares them.
@@ -102,6 +114,18 @@ export function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJ
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="ghost" autoFocus onClick={() => setResetTarget(null)}>{t('common:cancel')}</Button>
               <Button variant="primary" onClick={() => { onResetPrefix?.(resetTarget); setResetTarget(null); }}>{t('fixes:atlas.fix.prefix')}</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {allowTarget && (
+        <Modal label={t('fixes:atlas.allowTitle')} onClose={() => setAllowTarget(null)} size="sm">
+          <div className="p-6">
+            <h2 className="mb-2 text-[17px] font-bold">{t('fixes:atlas.allowTitle')}</h2>
+            <p className="text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.allowBody', { folder: allowTarget.install_dir || t('fixes:atlas.unknownFolder') })}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" autoFocus onClick={() => setAllowTarget(null)}>{t('common:cancel')}</Button>
+              <Button variant="primary" onClick={() => { onAllowFolder?.(allowTarget); setAllowTarget(null); }}>{t('fixes:atlas.fix.outside')}</Button>
             </div>
           </div>
         </Modal>

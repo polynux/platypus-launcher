@@ -165,47 +165,53 @@ func (a *App) prefixOwners() map[string]types.Game {
 
 // PrefixBackups lists the prefix backups kept in the prefixes folder, stalest
 // first: each reset of a damaged prefix leaves one behind, and nothing else
-// ever tells the user they take space. Only the folder's own entries are
-// looked at (a game's prefix is <root>/<game id>): a backup of a custom prefix
-// nested deeper in the folder isn't listed. A link is never listed, and nor is
-// a backup a game uses as its prefix again.
+// ever tells the user they take space. Live prefixes are skipped during the
+// walk, including custom prefixes nested under the root. Links are never
+// listed, nor is a backup a game uses as its prefix again.
 func (a *App) PrefixBackups() []types.PrefixBackup {
 	out := []types.PrefixBackup{}
 	root := a.effectivePrefixesFolder()
-	entries, err := os.ReadDir(root)
-	if err != nil {
+	if _, err := os.Stat(root); err != nil {
 		return out
 	}
 	owners := a.prefixOwners()
-	for _, e := range entries {
+	_ = filepath.WalkDir(root, func(path string, e fs.DirEntry, err error) error {
+		if err != nil || path == root {
+			return nil
+		}
+		if _, live := owners[filepath.Clean(path)]; live {
+			return filepath.SkipDir
+		}
 		if !e.IsDir() {
-			continue
+			return nil
 		}
 		m := prefixBackupName.FindStringSubmatch(e.Name())
 		if m == nil {
-			continue
+			return nil
 		}
 		at, _ := strconv.ParseInt(m[1], 10, 64)
-		path := filepath.Join(root, e.Name())
-		if _, used := owners[filepath.Clean(path)]; used {
-			continue
+		clean := filepath.Clean(path)
+		if _, used := owners[clean]; !used {
+			size, _ := relocate.TreeSize(path) // an unreadable folder still lists, at 0
+			rel, _ := filepath.Rel(root, path)
+			out = append(out, types.PrefixBackup{Name: rel, Path: path, Bytes: size, At: at})
 		}
-		size, _ := relocate.TreeSize(path) // an unreadable folder still lists, at 0
-		out = append(out, types.PrefixBackup{Name: e.Name(), Path: path, Bytes: size, At: at})
-	}
+		return filepath.SkipDir
+	})
 	sort.Slice(out, func(i, j int) bool { return out[i].At < out[j].At })
 	return out
 }
 
 // DeletePrefixBackup deletes one prefix backup and returns the bytes it freed.
 // The path comes from the UI, so it is checked again here: a .bak-* folder
-// directly inside the prefixes folder, never a link and never anything else.
+// inside the prefixes folder, never a link and never anything else.
 // A game using it as its prefix is refused, and so is deleting under a running
 // game: the backup is the folder a wineserver would have open.
 func (a *App) DeletePrefixBackup(path string) (int64, error) {
 	root := filepath.Clean(a.effectivePrefixesFolder())
 	clean := filepath.Clean(path)
-	if !filepath.IsAbs(clean) || filepath.Dir(clean) != root || !prefixBackupName.MatchString(filepath.Base(clean)) {
+	rel, relErr := filepath.Rel(root, clean)
+	if !filepath.IsAbs(clean) || relErr != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || !prefixBackupName.MatchString(filepath.Base(clean)) {
 		return 0, apperr.New("prefix.backup.outsideRoot",
 			"only a prefix backup in the prefixes folder can be deleted",
 			map[string]string{"path": path})
@@ -219,6 +225,26 @@ func (a *App) DeletePrefixBackup(path string) (int64, error) {
 			fmt.Sprintf("%s is not a prefix backup folder", clean),
 			map[string]string{"path": clean})
 	}
+	for owner, game := range a.prefixOwners() {
+		owner = filepath.Clean(owner)
+		if !pathWithin(owner, clean) && !pathWithin(clean, owner) {
+			continue
+		}
+		if a.isRunning(game.ID) {
+			return 0, apperr.New("game.running",
+				fmt.Sprintf("%s is running; delete its old prefix backup after it exits", game.Title),
+				map[string]string{"title": game.Title})
+		}
+		return 0, apperr.New("prefix.backup.inUse",
+			fmt.Sprintf("%s uses this folder as its Wine prefix", game.Title),
+			map[string]string{"title": game.Title, "path": clean})
+	}
+	resolvedRoot, rootErr := filepath.EvalSymlinks(root)
+	resolvedParent, parentErr := filepath.EvalSymlinks(filepath.Dir(clean))
+	parentRel, relErr := filepath.Rel(resolvedRoot, resolvedParent)
+	if rootErr != nil || parentErr != nil || relErr != nil || !filepath.IsLocal(parentRel) {
+		return 0, apperr.New("prefix.backup.outsideRoot", "only a prefix backup in the prefixes folder can be deleted", map[string]string{"path": path})
+	}
 	if game, used := a.prefixOwners()[clean]; used {
 		if a.isRunning(game.ID) {
 			return 0, apperr.New("game.running",
@@ -230,8 +256,18 @@ func (a *App) DeletePrefixBackup(path string) (int64, error) {
 			map[string]string{"title": game.Title, "path": clean})
 	}
 	size, _ := relocate.TreeSize(clean)
-	if err := os.RemoveAll(clean); err != nil {
+	rootHandle, err := os.OpenRoot(root)
+	if err != nil {
+		return 0, apperr.Wrap("prefix.backup.deleteFailed", err, map[string]string{"path": clean})
+	}
+	defer rootHandle.Close()
+	if err := rootHandle.RemoveAll(rel); err != nil {
 		return 0, apperr.Wrap("prefix.backup.deleteFailed", err, map[string]string{"path": clean})
 	}
 	return size, nil
+}
+
+func pathWithin(parent, path string) bool {
+	rel, err := filepath.Rel(parent, path)
+	return err == nil && (rel == "." || filepath.IsLocal(rel))
 }
