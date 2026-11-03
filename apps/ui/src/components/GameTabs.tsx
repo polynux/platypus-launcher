@@ -286,6 +286,7 @@ export function AtlasMainAction({ job, session, sessionStartedAt, launching, onJ
           variant="neutral"
           size="none"
           onClick={onStop}
+          data-nav-primary
           className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-black/30 px-5 pl-5 pr-[26px] text-[15px] font-extrabold text-text ring-[1.5px] ring-inset ring-accent hover:bg-surface-strong light:bg-white/60"
         >
           {starting ? <Loader2 className="h-[15px] w-[15px] animate-spin" aria-hidden /> : <Square className="h-3 w-3 fill-current" aria-hidden />}
@@ -298,7 +299,7 @@ export function AtlasMainAction({ job, session, sessionStartedAt, launching, onJ
   return <>{children}</>;
 }
 
-function StripPlay({ d }: { d: GameTabsData }) {
+export function StripPlay({ d }: { d: GameTabsData }) {
   const { t } = useTranslation('game');
   const { game, launching } = d;
   let idle: React.ReactNode;
@@ -310,6 +311,7 @@ function StripPlay({ d }: { d: GameTabsData }) {
         onClick={d.onPlay}
         disabled={launching || game.outside_folder}
         data-play-anchor
+        data-nav-primary
         className="group inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-accent px-6 pl-5 text-[15px] font-extrabold text-on-accent hover:brightness-110 disabled:opacity-100"
       >
         {launching ? <Loader2 className="h-[15px] w-[15px] animate-spin" aria-hidden /> : <Play className="h-[15px] w-[15px] fill-current" aria-hidden />}
@@ -326,6 +328,7 @@ function StripPlay({ d }: { d: GameTabsData }) {
         size="none"
         onClick={() => d.job?.state === 'failed' ? d.onJobAction('retry', d.job.id) : d.onInstall()}
         data-play-anchor
+        data-nav-primary
         className={cx('inline-flex h-[42px] items-center gap-2 rounded-[9px] px-6 pl-5 text-[15px] font-extrabold hover:brightness-110', d.job?.state === 'failed' ? 'bg-[color-mix(in_srgb,var(--color-danger)_70%,var(--color-surface-strong))] text-white' : 'bg-accent text-on-accent')}
       >
         {d.job?.state === 'failed' ? <RotateCcw className="h-[15px] w-[15px]" aria-hidden /> : <Download className="h-[15px] w-[15px]" aria-hidden />}

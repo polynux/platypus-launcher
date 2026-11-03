@@ -4,12 +4,14 @@
 // jsdom lays out at 0x0.
 import React, { useEffect, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
   activateFocused,
   closeTopmostLayer,
   handleBackAction,
   installControllerKeyboard,
+  nearestInDirection,
+  getFocusableElements,
 } from '../../lib/spatialNav';
 import { dispatchPadArrow } from '../../lib/useGamepad';
 import {
@@ -18,6 +20,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ds/dropdown-menu';
+import { AtlasSSwitch } from '../AtlasSettings';
+import { StripPlay, type GameTabsData } from '../GameTabs';
 
 function rect(el: HTMLElement, x: number, y: number, w = 40, h = 24): void {
   el.getBoundingClientRect = () =>
@@ -283,6 +287,123 @@ describe('composite widgets', () => {
     // No wrap: the selection stays where it was.
     expect(screen.getByTestId('tab-a')).toHaveAttribute('aria-selected', 'true');
   });
+
+  it('keeps the controller ring on a tab moved by its roving handler', async () => {
+    uninstall = installControllerKeyboard();
+    render(<Tabs />);
+    tabLayout();
+    screen.getByTestId('tab-a').focus();
+    dispatchPadArrow('down');
+    await waitFor(() => expect(screen.getByTestId('tab-b')).toHaveAttribute('data-controller-focus', 'true'));
+  });
+});
+
+describe('wide toolbar navigation', () => {
+  it('chooses the nearest diagonal target over a distant column match', () => {
+    uninstall = installControllerKeyboard();
+    render(
+      <div>
+        <button type="button" data-testid="add">Add a store</button>
+        <button type="button" data-testid="filter">Store filter</button>
+        <button type="button" data-testid="tune">Tune</button>
+        <button type="button" data-testid="region">Download region</button>
+      </div>,
+    );
+    rect(screen.getByTestId('add'), 0, 0, 600, 40);
+    rect(screen.getByTestId('filter'), 0, 400, 100, 24);
+    rect(screen.getByTestId('tune'), 0, 600, 100, 24);
+    rect(screen.getByTestId('region'), 610, 60, 130, 24);
+    screen.getByTestId('add').focus();
+    fireEvent.keyDown(screen.getByTestId('add'), { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(screen.getByTestId('region'));
+  });
+});
+
+describe('Atlas directional region entry', () => {
+  it('prefers the stage Play action over nearby toolbar controls from a row', () => {
+    const d = {
+      game: { is_installed: true, outside_folder: false },
+      launching: false,
+      onPlay: vi.fn(),
+      onStop: vi.fn(),
+      onJobAction: vi.fn(),
+    } as unknown as GameTabsData;
+    render(
+      <div>
+        <ul><li><button type="button" data-game-row="game">Game</button></li></ul>
+        <button type="button" data-testid="store">Store filter</button>
+        <button type="button" data-testid="tune">Tune</button>
+        <div data-testid="stage" data-nav-region="stage"><StripPlay d={d} /></div>
+      </div>,
+    );
+    const row = screen.getByText('Game');
+    const store = screen.getByTestId('store');
+    const tune = screen.getByTestId('tune');
+    const stage = screen.getByTestId('stage');
+    const play = stage.querySelector<HTMLElement>('[data-play-anchor]')!;
+    rect(row as HTMLElement, 0, 60, 296, 44);
+    rect(store, 320, 8, 100, 24);
+    rect(tune, 320, 110, 100, 24);
+    rect(stage, 296, 0, 700, 760);
+    rect(play, 328, 330, 120, 42);
+
+    expect(nearestInDirection(row, getFocusableElements(document), 'right')).toBe(play);
+  });
+
+  it('enters the Atlas Plugins list from a detail action left of a short list', () => {
+    const list = document.createElement('ul');
+    list.setAttribute('role', 'listbox');
+    const selected = document.createElement('button');
+    selected.setAttribute('role', 'option');
+    selected.setAttribute('aria-selected', 'true');
+    list.append(selected);
+    document.body.append(list);
+    rect(list, 0, 0, 280, 100);
+    rect(selected, 0, 0, 280, 48);
+    const review = buttonWithRect('Review and approve', 320, 600, 150, 30);
+
+    expect(nearestInDirection(review, getFocusableElements(document), 'left')).toBe(selected);
+  });
+});
+
+function buttonWithRect(label: string, x: number, y: number, w: number, h: number): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.textContent = label;
+  document.body.append(b);
+  rect(b, x, y, w, h);
+  return b;
+}
+
+describe('A preserves switch focus', () => {
+  it('keeps an Atlas switch focused during its asynchronous save', async () => {
+    let finishSave = (): void => {};
+    function BusySwitch() {
+      const [checked, setChecked] = useState(false);
+      const [busy, setBusy] = useState(false);
+      const save = (): void => {
+        setBusy(true);
+        void new Promise<void>((resolve) => {
+          finishSave = () => {
+            setChecked(true);
+            setBusy(false);
+            resolve();
+          };
+        });
+      };
+      return <AtlasSSwitch label="Artwork" checked={checked} disabled={busy} busy={busy} onChange={save} />;
+    }
+    uninstall = installControllerKeyboard();
+    render(<BusySwitch />);
+    const toggle = screen.getByRole('switch', { name: 'Artwork' });
+    toggle.focus();
+    act(() => { activateFocused(); });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-disabled', 'true'));
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveFocus();
+    act(() => { finishSave(); });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+    expect(toggle).toHaveFocus();
+  });
 });
 
 describe('A opens menus like Enter', () => {
@@ -305,6 +426,24 @@ describe('A opens menus like Enter', () => {
 });
 
 describe('segmented controls (SegRow radiogroup)', () => {
+  it('keeps the controller ring on a radio moved by its roving handler', async () => {
+    const { SegRow } = await import('../ui');
+    uninstall = installControllerKeyboard();
+    render(
+      <SegRow
+        label="Scheme"
+        value="dark"
+        onChange={() => {}}
+        options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }]}
+      />,
+    );
+    const segs = screen.getAllByRole('radio');
+    segs.forEach((segment, index) => rect(segment, index * 100, 0));
+    segs[0].focus();
+    dispatchPadArrow('right');
+    await waitFor(() => expect(segs[1]).toHaveAttribute('data-controller-focus', 'true'));
+  });
+
   it('keyboard moves between segments, leaves at the ends and Up/Down', async () => {
     const { SegRow } = await import('../ui');
     uninstall = installControllerKeyboard();
@@ -330,6 +469,7 @@ describe('segmented controls (SegRow radiogroup)', () => {
     const segs = screen.getAllByRole('radio');
     expect(segs).toHaveLength(3);
     layOut({ above: [100, 0] });
+    rect(screen.getByRole('radiogroup'), 100, 100, 300, 24);
     segs.forEach((s, i) => rect(s, 100 + i * 100, 100));
     rect(screen.getByTestId('outside'), 0, 100);
     // Entering from above lands on the selected segment.

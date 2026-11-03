@@ -46,6 +46,7 @@ const POPPER = '[data-radix-popper-content-wrapper]';
 const TRIGGER = '[role="combobox"], [aria-haspopup="menu"], [aria-haspopup="listbox"]';
 /** Single-line text entry: Up/Down are free, Left/Right keep the caret. */
 const TEXT_INPUT_TYPES = new Set(['', 'text', 'search', 'url', 'email', 'password', 'tel']);
+let pendingRovingFocus: Element | null = null;
 
 /** The open popup layer, if any: a menu/listbox/select content with
  *  data-state=open inside a Radix popper wrapper. Tooltips (role=tooltip)
@@ -270,9 +271,7 @@ export function getFocusableElements(scope: Element | Document): HTMLElement[] {
 }
 
 /** A candidate must lie in the pressed direction: its near edge past the
- *  current element's far edge, with a small tolerance for shared borders.
- *  Off-axis candidates only count within a bounded angle (~63°), so a far
- *  diagonal never beats the row/column ahead. */
+ *  current element's far edge, with a small tolerance for shared borders. */
 const EDGE_TOL = 8;
 
 function intervalGap(a1: number, a2: number, b1: number, b2: number): number {
@@ -288,16 +287,26 @@ export function nearestInDirection(
   dir: NavDir,
 ): HTMLElement | null {
   const f = from.getBoundingClientRect();
+  const fromWidget = widgetOf(from);
   const fl = f.left;
   const fr = f.left + f.width;
   const ft = f.top;
   const fb = f.top + f.height;
-  let best: HTMLElement | null = null;
-  let bestScore = Infinity;
-  let bestRow = false;
+  const stagePrimary = dir === 'right' && from.hasAttribute('data-game-row')
+    ? els.find((el) => el.hasAttribute('data-nav-primary') && el.closest('[data-nav-region="stage"]'))
+    : undefined;
+  const stage = stagePrimary?.closest('[data-nav-region="stage"]')?.getBoundingClientRect();
+  if (stagePrimary && stage && stage.left >= fr - EDGE_TOL) return stagePrimary;
+  let bestRow: { el: HTMLElement; gap: number; score: number } | null = null;
+  let bestDiagonal: { el: HTMLElement; gap: number; score: number } | null = null;
   for (const el of els) {
     if (el === from) continue;
-    const r = el.getBoundingClientRect();
+    const widget = widgetOf(el);
+    // A selected widget is one navigation stop when entering from outside.
+    // Items in the current widget keep their own geometry.
+    const r = widget && widget.root !== fromWidget?.root && widgetSelection(widget.root, widget.items) === el
+      ? widget.root.getBoundingClientRect()
+      : el.getBoundingClientRect();
     const l = r.left;
     const rr = r.left + r.width;
     const t = r.top;
@@ -321,24 +330,22 @@ export function nearestInDirection(
       gap = ft - b;
       orth = intervalGap(fl, fr, l, rr);
     }
-    if (orth > Math.max(48, Math.max(0, gap) * 2)) continue;
-    // Row/column neighbours win over nearer off-axis controls: only when
-    // nothing overlaps the current row/column do diagonal candidates count.
+    const entersVerticalList = widget && widget.root !== fromWidget?.root &&
+      widget.root.getAttribute('role') === 'listbox' && widget.axis === 'vertical' &&
+      (dir === 'left' || dir === 'right');
+    const angle = from.hasAttribute('data-game-row') && dir === 'right' ? 4 : 2;
+    if (!entersVerticalList && orth > Math.max(48, Math.max(0, gap) * angle)) continue;
     const inRow = orth === 0;
-    if (bestRow && !inRow) continue;
     const score = Math.max(0, gap) + orth * 3;
-    if (!bestRow && inRow) {
-      best = el;
-      bestScore = score;
-      bestRow = true;
-      continue;
-    }
-    if (score < bestScore) {
-      bestScore = score;
-      best = el;
+    const candidate = { el, gap, score };
+    if (inRow) {
+      if (!bestRow || score < bestRow.score) bestRow = candidate;
+    } else if (!bestDiagonal || score < bestDiagonal.score) {
+      bestDiagonal = candidate;
     }
   }
-  return best;
+  if (bestRow && (!bestDiagonal || Math.max(0, bestRow.gap) <= Math.max(2 * Math.max(0, bestDiagonal.gap), 48))) return bestRow.el;
+  return bestDiagonal?.el ?? bestRow?.el ?? null;
 }
 
 /** Mark the controller's target: programmatic focus() does not match
@@ -420,6 +427,10 @@ export function activateFocused(): boolean {
   const el = document.activeElement;
   if (!(el instanceof HTMLElement)) return false;
   if (el === document.body || el === document.documentElement) return false;
+  const isSwitch = el.getAttribute('role') === 'switch';
+  const switchLabel = isSwitch ? el.getAttribute('aria-label') : null;
+  const switchId = isSwitch ? el.id : '';
+  const switchScope = isSwitch ? getScopeRoot() : null;
   const down = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
   el.dispatchEvent(down);
   if (!el.isConnected) return true;
@@ -429,6 +440,33 @@ export function activateFocused(): boolean {
   if (!el.isConnected) return true;
   if (up.defaultPrevented) return true;
   el.click();
+  if (isSwitch && switchScope) {
+    const findSwitch = (): HTMLElement | null => {
+      const root: ParentNode = switchScope instanceof Document ? switchScope.documentElement : switchScope;
+      const candidates = [
+        ...(root instanceof HTMLElement && root.getAttribute('role') === 'switch' ? [root] : []),
+        ...root.querySelectorAll<HTMLElement>('[role="switch"]'),
+      ];
+      return candidates.find((candidate) =>
+        (switchId && candidate.id === switchId) ||
+        (switchLabel && candidate.getAttribute('aria-label') === switchLabel),
+      ) ?? null;
+    };
+    const restoreSwitchFocus = (frames = 3): void => {
+      window.requestAnimationFrame(() => {
+        if (el.isConnected && document.activeElement === el) {
+          if (frames > 0) restoreSwitchFocus(frames - 1);
+          return;
+        }
+        if (document.activeElement !== document.body && el.isConnected) return;
+        const replacement = findSwitch();
+        if (replacement && !replacement.matches(':disabled') && !isHidden(replacement)) {
+          focusController(replacement);
+        }
+      });
+    };
+    restoreSwitchFocus();
+  }
   return true;
 }
 
@@ -487,6 +525,7 @@ function isAlongAxis(axis: WidgetAxis, dir: NavDir): boolean {
  *  the handler yields to; a preventDefaulted event is left alone. Returns
  *  whether focus moved. */
 export function controllerKeyHandler(e: KeyboardEvent): boolean {
+  pendingRovingFocus = null;
   if (e.defaultPrevented) return false;
   const dir =
     e.key === 'ArrowUp' ? 'up'
@@ -521,6 +560,7 @@ export function controllerKeyHandler(e: KeyboardEvent): boolean {
           e.stopPropagation();
           return moveFocus(dir);
         }
+        if (fromPad) pendingRovingFocus = w.root;
         return false;
       }
       e.preventDefault();
@@ -570,16 +610,28 @@ function controllerKeyBubble(e: KeyboardEvent): void {
 export function installControllerKeyboard(): () => void {
   const onFocusIn = (e: FocusEvent): void => {
     const t = e.target instanceof Element ? e.target : null;
-    if (!t || !t.hasAttribute('data-controller-focus')) clearControllerFocus();
+    if (t && pendingRovingFocus?.contains(t)) {
+      clearControllerFocus();
+      t.setAttribute('data-controller-focus', 'true');
+      pendingRovingFocus = null;
+    } else {
+      pendingRovingFocus = null;
+      if (!t || !t.hasAttribute('data-controller-focus')) clearControllerFocus();
+    }
+  };
+  const onPointerDown = (): void => {
+    pendingRovingFocus = null;
+    clearControllerFocus();
   };
   window.addEventListener('keydown', controllerKeyHandler, true);
   window.addEventListener('keydown', controllerKeyBubble, false);
-  window.addEventListener('pointerdown', clearControllerFocus);
+  window.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('focusin', onFocusIn);
   return () => {
+    pendingRovingFocus = null;
     window.removeEventListener('keydown', controllerKeyHandler, true);
     window.removeEventListener('keydown', controllerKeyBubble, false);
-    window.removeEventListener('pointerdown', clearControllerFocus);
+    window.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('focusin', onFocusIn);
   };
 }

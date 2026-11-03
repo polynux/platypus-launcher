@@ -211,19 +211,22 @@ export function AtlasSRow({ label, desc, hint, children, wide }: {
   );
 }
 
-export function AtlasSSwitch({ label, desc, hint, checked, disabled, onChange, labelId }: {
+export function AtlasSSwitch({ label, desc, hint, checked, disabled, busy, onChange, labelId }: {
   label: React.ReactNode; desc?: React.ReactNode; hint?: React.ReactNode;
-  checked: boolean; disabled?: boolean; onChange: () => void; labelId?: string;
+  checked: boolean; disabled?: boolean; busy?: boolean; onChange: () => void; labelId?: string;
 }) {
+  // The name comes from the row's text (label and hint: runner options put
+  // the field's real name in the hint) unless the caller points at a label.
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-labelledby={labelId}
-      disabled={disabled}
-      onClick={onChange}
-      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[18px] w-full py-[14px] border-b border-hairline text-left last:border-b-0 disabled:opacity-45 disabled:cursor-not-allowed"
+      aria-disabled={disabled || busy || undefined}
+      disabled={disabled && !busy}
+      onClick={() => { if (!disabled && !busy) onChange(); }}
+      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[18px] w-full py-[14px] border-b border-hairline text-left last:border-b-0 disabled:opacity-45 disabled:cursor-not-allowed aria-disabled:opacity-45 aria-disabled:cursor-wait"
     >
       <span className="grid gap-[3px] min-w-0">
         <span className="font-semibold text-text text-[13.5px]">{label}</span>
