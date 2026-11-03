@@ -29,7 +29,10 @@ export interface InstallDialogProps {
  *  A game with install options picks the place in the options dialog instead. */
 export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: InstallDialogProps) {
   const { t } = useTranslation(['gameOps', 'common']);
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  // The install flow belongs to the game structure (issue #168), not the
+  // shell: tabs review the size and the location in the dialog. Other
+  // themes keep the dialog.
+  const tabs = useVariant('game.structure') === 'tabs';
   const size = useInstallSize(game, plugin, true);
   const [folder, setFolder] = useState('');
   const [free, setFree] = useState(-1);
@@ -54,9 +57,9 @@ export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: In
 
   return (
     <Modal label={t('gameOps:install.title', { title: game.title })} onClose={onClose} size="md" dismissable={!busy}>
-      {atlas ? <ModalHead title={t('gameOps:install.title', { title: game.title })} sub={`${plugin.name}${total ? ` · ${formatBytes(total)}` : ''}`} onClose={onClose} /> : <><h2 className="text-[20px] font-extrabold tracking-tight">{t('gameOps:install.title', { title: game.title })}</h2><p className="mt-1 text-[12.5px] text-text-muted">{plugin.name}</p></>}
+      {tabs ? <ModalHead title={t('gameOps:install.title', { title: game.title })} sub={`${plugin.name}${total ? ` · ${formatBytes(total)}` : ''}`} onClose={onClose} /> : <><h2 className="text-[20px] font-extrabold tracking-tight">{t('gameOps:install.title', { title: game.title })}</h2><p className="mt-1 text-[12.5px] text-text-muted">{plugin.name}</p></>}
 
-      <div className={cx('mt-5 rounded-2xl bg-surface px-4 py-3', atlas ? 'font-sans text-[13px]' : 'font-mono text-hint')}>
+      <div className={cx('mt-5 rounded-2xl bg-surface px-4 py-3', tabs ? 'font-sans text-[13px]' : 'font-mono text-hint')}>
         <div className="flex justify-between gap-4">
           <span className="text-text-muted">{t('gameOps:install.sizeLabel')}</span>
           <span className={cx(size.state === 'loading' ? 'text-text-muted' : 'text-text')} data-testid="install-size">
@@ -79,7 +82,7 @@ export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: In
         </p>
       )}
 
-      {atlas ? <ModalFoot>
+      {tabs ? <ModalFoot>
         <Button variant="neutral" size="sm" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button>
         <Button variant="primary" size="sm" disabled={busy || short} onClick={() => void install()}>{t('gameOps:install.toFolder', { folder: folder.split('/').filter(Boolean).at(-1) || t('gameOps:location.choose') })}</Button>
       </ModalFoot> : <div className="mt-6 flex justify-end gap-2.5"><Button variant="neutral" size="sm" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button><Button variant="primary" size="sm" disabled={busy || short} onClick={() => void install()}>{t('gameOps:install.action')}</Button></div>}
