@@ -46,6 +46,7 @@ const POPPER = '[data-radix-popper-content-wrapper]';
 const TRIGGER = '[role="combobox"], [aria-haspopup="menu"], [aria-haspopup="listbox"]';
 /** Single-line text entry: Up/Down are free, Left/Right keep the caret. */
 const TEXT_INPUT_TYPES = new Set(['', 'text', 'search', 'url', 'email', 'password', 'tel']);
+let pendingRovingFocus: Element | null = null;
 
 /** The open popup layer, if any: a menu/listbox/select content with
  *  data-state=open inside a Radix popper wrapper. Tooltips (role=tooltip)
@@ -288,6 +289,7 @@ export function nearestInDirection(
   dir: NavDir,
 ): HTMLElement | null {
   const f = from.getBoundingClientRect();
+  const fromWidget = widgetOf(from);
   const fl = f.left;
   const fr = f.left + f.width;
   const ft = f.top;
@@ -301,7 +303,7 @@ export function nearestInDirection(
     // A widget is one navigation stop. Use its full box to decide whether
     // it lies in the requested direction, while retaining its selected item
     // as the focus target.
-    const r = widget && !el.hasAttribute('data-game-row')
+    const r = widget && widget.root !== fromWidget?.root && !el.hasAttribute('data-game-row')
       ? widget.root.getBoundingClientRect()
       : el.getBoundingClientRect();
     const l = r.left;
@@ -427,6 +429,8 @@ export function activateFocused(): boolean {
   const el = document.activeElement;
   if (!(el instanceof HTMLElement)) return false;
   if (el === document.body || el === document.documentElement) return false;
+  const switchLabel = el.getAttribute('role') === 'switch' ? el.getAttribute('aria-label') : null;
+  const switchId = el.getAttribute('role') === 'switch' ? el.id : '';
   const down = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
   el.dispatchEvent(down);
   if (!el.isConnected) return true;
@@ -436,6 +440,17 @@ export function activateFocused(): boolean {
   if (!el.isConnected) return true;
   if (up.defaultPrevented) return true;
   el.click();
+  if (document.activeElement === document.body || !el.isConnected) {
+    const replacement =
+      (switchId ? document.getElementById(switchId) : null) ??
+      (switchLabel
+        ? [...document.querySelectorAll<HTMLElement>('[role="switch"]')].find(
+            (candidate) => candidate.getAttribute('aria-label') === switchLabel,
+          ) ?? null
+        : null);
+    if (replacement instanceof HTMLElement) focusController(replacement);
+    else if (el.isConnected) focusController(el);
+  }
   return true;
 }
 
@@ -528,6 +543,7 @@ export function controllerKeyHandler(e: KeyboardEvent): boolean {
           e.stopPropagation();
           return moveFocus(dir);
         }
+        if (fromPad) pendingRovingFocus = w.root;
         return false;
       }
       e.preventDefault();
@@ -577,16 +593,27 @@ function controllerKeyBubble(e: KeyboardEvent): void {
 export function installControllerKeyboard(): () => void {
   const onFocusIn = (e: FocusEvent): void => {
     const t = e.target instanceof Element ? e.target : null;
-    if (!t || !t.hasAttribute('data-controller-focus')) clearControllerFocus();
+    if (t && pendingRovingFocus?.contains(t)) {
+      clearControllerFocus();
+      t.setAttribute('data-controller-focus', 'true');
+      pendingRovingFocus = null;
+    } else if (!t || !t.hasAttribute('data-controller-focus')) {
+      clearControllerFocus();
+    }
+  };
+  const onPointerDown = (): void => {
+    pendingRovingFocus = null;
+    clearControllerFocus();
   };
   window.addEventListener('keydown', controllerKeyHandler, true);
   window.addEventListener('keydown', controllerKeyBubble, false);
-  window.addEventListener('pointerdown', clearControllerFocus);
+  window.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('focusin', onFocusIn);
   return () => {
+    pendingRovingFocus = null;
     window.removeEventListener('keydown', controllerKeyHandler, true);
     window.removeEventListener('keydown', controllerKeyBubble, false);
-    window.removeEventListener('pointerdown', clearControllerFocus);
+    window.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('focusin', onFocusIn);
   };
 }

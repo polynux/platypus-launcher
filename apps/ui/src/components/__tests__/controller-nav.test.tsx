@@ -18,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ds/dropdown-menu';
+import { Switch } from '../ds/switch';
 
 function rect(el: HTMLElement, x: number, y: number, w = 40, h = 24): void {
   el.getBoundingClientRect = () =>
@@ -283,6 +284,54 @@ describe('composite widgets', () => {
     // No wrap: the selection stays where it was.
     expect(screen.getByTestId('tab-a')).toHaveAttribute('aria-selected', 'true');
   });
+
+  it('keeps the controller ring on a tab moved by its roving handler', async () => {
+    uninstall = installControllerKeyboard();
+    render(<Tabs />);
+    tabLayout();
+    screen.getByTestId('tab-a').focus();
+    dispatchPadArrow('down');
+    await waitFor(() => expect(screen.getByTestId('tab-b')).toHaveAttribute('data-controller-focus', 'true'));
+  });
+});
+
+describe('wide toolbar navigation', () => {
+  it('moves Down to the nearest item below a wide toolbar button', () => {
+    uninstall = installControllerKeyboard();
+    render(
+      <div role="toolbar" aria-label="tools">
+        <button type="button" data-testid="add">Add a store</button>
+        <button type="button" data-testid="far">Far action</button>
+        <button type="button" data-testid="region">Download region</button>
+      </div>,
+    );
+    rect(screen.getByRole('toolbar'), 0, 0, 800, 360);
+    rect(screen.getByTestId('add'), 0, 0, 400, 40);
+    rect(screen.getByTestId('far'), 0, 300, 120, 24);
+    rect(screen.getByTestId('region'), 300, 60, 120, 24);
+    screen.getByTestId('add').focus();
+    fireEvent.keyDown(screen.getByTestId('add'), { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(screen.getByTestId('region'));
+  });
+});
+
+describe('A preserves switch focus', () => {
+  it('restores focus to a switch replaced by its controlled row update', () => {
+    function ReplacingSwitch() {
+      const [checked, setChecked] = useState(false);
+      return (
+        <div key={checked ? 'on' : 'off'}>
+          <Switch aria-label="Artwork" checked={checked} onCheckedChange={setChecked} />
+        </div>
+      );
+    }
+    uninstall = installControllerKeyboard();
+    render(<ReplacingSwitch />);
+    const toggle = screen.getByRole('switch', { name: 'Artwork' });
+    toggle.focus();
+    activateFocused();
+    expect(screen.getByRole('switch', { name: 'Artwork' })).toHaveFocus();
+  });
 });
 
 describe('A opens menus like Enter', () => {
@@ -305,6 +354,24 @@ describe('A opens menus like Enter', () => {
 });
 
 describe('segmented controls (SegRow radiogroup)', () => {
+  it('keeps the controller ring on a radio moved by its roving handler', async () => {
+    const { SegRow } = await import('../ui');
+    uninstall = installControllerKeyboard();
+    render(
+      <SegRow
+        label="Scheme"
+        value="dark"
+        onChange={() => {}}
+        options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }]}
+      />,
+    );
+    const segs = screen.getAllByRole('radio');
+    segs.forEach((segment, index) => rect(segment, index * 100, 0));
+    segs[0].focus();
+    dispatchPadArrow('right');
+    await waitFor(() => expect(segs[1]).toHaveAttribute('data-controller-focus', 'true'));
+  });
+
   it('keyboard moves between segments, leaves at the ends and Up/Down', async () => {
     const { SegRow } = await import('../ui');
     uninstall = installControllerKeyboard();
