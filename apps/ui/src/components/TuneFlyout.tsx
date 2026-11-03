@@ -180,16 +180,15 @@ export function TuneFlyout({
       let left = r?.left ?? margin;
       left = Math.max(margin, Math.min(left, vw - width - margin));
       let top = r ? r.bottom + 6 : margin;
-      let maxHeight = vh - top - margin;
+      let maxHeight = Math.min(520, Math.max(0, vh - top - margin));
       // Too little room below: open above the anchor when that fits better.
       if (r && maxHeight < 240) {
         const above = r.top - 6 - margin;
         if (above > maxHeight) {
-          maxHeight = Math.min(520, above);
+          maxHeight = Math.min(520, Math.max(0, above));
           top = Math.max(margin, r.top - 6 - maxHeight);
         }
       }
-      maxHeight = Math.max(200, Math.min(520, maxHeight));
       setPos({ left, top, maxHeight });
     };
     // Scroll fires every tick: coalesce the layout work onto one frame.

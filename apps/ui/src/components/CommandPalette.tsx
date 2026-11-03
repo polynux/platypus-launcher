@@ -406,10 +406,7 @@ function paletteItemsAtlas(p: CommandPaletteProps, t: TFunction): PaletteItem[] 
   if (p.onNewCollection) items.push({ id: 'library-new-collection', group: library, label: t('palette:action.newCollection'), kind: 'action', run: () => p.onNewCollection?.() });
   const running = t('palette:group.running');
   const sessions = p.sessions ?? [];
-  if (sessions.length === 0) {
-    // Nothing to stop: running it just closes the palette.
-    items.push({ id: 'running-none', group: running, label: t('palette:action.stopNone'), hint: t('palette:hint.nothingRunning'), kind: 'action', run: () => {} });
-  } else {
+  if (sessions.length > 0) {
     for (const s of sessions) {
       items.push({ id: `running-${s.game_id}`, group: running, label: t('palette:action.stop', { title: s.title }), kind: 'action', run: () => p.onStop(s.game_id) });
     }

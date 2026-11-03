@@ -169,7 +169,7 @@ function AtlasHero({ game, hero, details, backLabel, onBack, hideBack }: { game:
   useEffect(() => setBroken(null), [game.id]);
   const logo = logoMode === 'logo' && game.logo_url && game.logo_url !== broken ? game.logo_url : null;
   return (
-    <div className="relative flex-none overflow-hidden bg-ground" style={{ height: 'clamp(200px, 34vh, 380px)' }}>
+    <div className={cx('relative flex-none overflow-hidden bg-ground', !src && 'bg-gradient-to-br from-accent/15 via-ground to-ground')} style={{ height: 'clamp(200px, 34vh, 380px)' }}>
       {src && (
         <img
           key={src}
@@ -652,7 +652,7 @@ function YouFacts({ d }: { d: GameTabsData }) {
       {cells.map(([k, v]) => (
         <div key={k} className="bg-surface px-3 py-2.5">
           <dt className="text-[11.5px] text-text-faint">{k}</dt>
-          <dd className="truncate font-[650] text-text" title={v}>{v}</dd>
+          <dd className="break-words font-[650] text-text" title={v}>{v}</dd>
         </div>
       ))}
     </dl>
@@ -1509,10 +1509,10 @@ function CompatTab({ d, info, crash }: { d: GameTabsData; info: Compat | null; c
   const suggested = (d.tweaks ?? []).filter((tw) => d.onChangeSettings && !tweakApplied(d.game.settings, tw));
   const hasFacts = d.facts.length > 0;
   if (!hasFacts && (crash?.hints?.length ?? 0) === 0 && suggested.length === 0 && notes.length === 0) {
-    return <div className="grid max-w-[900px] px-6 pt-[18px] pb-9"><TblEmpty text={t('game:storeTab.noCompat')} /></div>;
+    return <div className="grid max-w-[900px] px-6 pt-[18px] pb-20"><TblEmpty text={t('game:storeTab.noCompat')} /></div>;
   }
   return (
-    <div className="grid max-w-[900px] gap-3.5 px-6 pt-[18px] pb-9">
+    <div className="grid max-w-[900px] gap-3.5 px-6 pt-[18px] pb-20">
       {hasFacts && (
         <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-hairline min-[1100px]:grid-cols-3">
           {d.facts.map(([k, v]) => (

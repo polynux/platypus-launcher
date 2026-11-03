@@ -1,6 +1,6 @@
 // The /22 command palette under Atlas (review 4, lane 4A): the Library,
 // Running, Open and Go to game groups, the collection sub-mode, and the
-// empty Running row that just closes the palette. Behaviour only; the other
+// Running group when sessions exist. Behaviour only; the other
 // themes keep the generic palette (command-palette.test.tsx).
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -72,21 +72,17 @@ const opt = (text: string) => screen.getAllByRole('option').find((o) => o.textCo
 const option = (name: string) => screen.getByRole('option', { name });
 
 describe('atlas command palette', () => {
-  it('lists the Library, Running, Open and Go to game groups', async () => {
+  it('lists the Library, Open and Go to game groups when nothing is running', async () => {
     setup({ onRedeem: vi.fn(), onAddGame: vi.fn() });
     await open();
     expect(option('Redeem a code…')).toBeInTheDocument();
     expect(option('Add a game…')).toBeInTheDocument();
     expect(option('New collection…')).toBeInTheDocument();
     expect(option('Show a collection…')).toBeInTheDocument();
-    // Nothing runs: the row says so, and running it just closes the palette.
-    expect(opt('Stop the running gamenothing running')).toBeInTheDocument();
+    expect(screen.queryByText('Running')).toBeNull();
     expect(option('Open the Steam store')).toBeInTheDocument();
     expect(option('Home')).toBeInTheDocument();
     expect(screen.getByText('Go to game')).toBeInTheDocument();
-    const row = opt('Stop the running gamenothing running');
-    fireEvent.click(row);
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('offers Stop for each live session, from any game', async () => {
