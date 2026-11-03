@@ -106,19 +106,29 @@ describe('runner install and remove (issue #142)', () => {
     }
   });
 
-  it('refreshes the list when a runner install job finishes (M7)', async () => {
+  it('ignores runner install jobs that were already finished when the page opened', () => {
     variant.nav = 'page';
     const onRefresh = vi.fn();
     const job = { id: 'j1', kind: 'runner-install', state: 'done', title: 'GE-Proton10-4', game_id: 'runner:GE-Proton10-4' } as unknown as Job;
     render(<SystemView runners={runners} games={[]} onRefresh={onRefresh} scanning={false} jobs={[job]} onNotify={() => {}} />);
+    expect(onRefresh).not.toHaveBeenCalled();
+  });
+
+  it('refreshes when a runner install finishes after the page opened', async () => {
+    variant.nav = 'page';
+    const onRefresh = vi.fn();
+    const queued = { id: 'j1', kind: 'runner-install', state: 'running', title: 'GE-Proton10-4', game_id: 'runner:GE-Proton10-4' } as unknown as Job;
+    const done = { ...queued, state: 'done' } as Job;
+    const { rerender } = render(<SystemView runners={runners} games={[]} onRefresh={onRefresh} scanning={false} jobs={[queued]} onNotify={() => {}} />);
+    rerender(<SystemView runners={runners} games={[]} onRefresh={onRefresh} scanning={false} jobs={[done]} onNotify={() => {}} />);
     await waitFor(() => expect(onRefresh).toHaveBeenCalled());
   });
 
-  it('surfaces a failed runner install job (M7)', async () => {
+  it('ignores failed runner install jobs that were already finished when the page opened', () => {
     variant.nav = 'page';
     const onNotify = vi.fn();
     const job = { id: 'j2', kind: 'runner-install', state: 'failed', error: 'disk full', title: 'GE-Proton10-4', game_id: 'runner:GE-Proton10-4' } as unknown as Job;
     render(<SystemView runners={runners} games={[]} onRefresh={() => {}} scanning={false} jobs={[job]} onNotify={onNotify} />);
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('disk full', 'err'));
+    expect(onNotify).not.toHaveBeenCalled();
   });
 });

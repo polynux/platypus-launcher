@@ -103,9 +103,13 @@ export function SystemView({ runners, onRefresh, scanning, games, onDefaultRunne
   };
   // A finished runner install lands outside this page's own actions (issue
   // #142, M7): refresh the list when one completes, and surface failures.
-  const seenJobs = useRef<Set<string>>(new Set());
+  const seenJobs = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (!jobs) return;
+    if (!seenJobs.current) {
+      seenJobs.current = new Set(jobs.filter((j) => j.kind === 'runner-install' && (j.state === 'done' || j.state === 'failed')).map((j) => j.id));
+      return;
+    }
     for (const j of jobs) {
       if (j.kind !== 'runner-install') continue;
       if (j.state !== 'done' && j.state !== 'failed') continue;

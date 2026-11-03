@@ -1150,7 +1150,7 @@ export function AppContent() {
       case 'activity':
         return <ActivityView events={activity} games={games} onOpenGame={openGame} />;
       case 'fixes':
-        return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onResetPrefix={resetPrefix} onSaveSettings={(game, runner) => saveSettings(game.id, { ...game.settings, runner_id: runner }).catch(() => {})} onOpenRunners={() => setView({ name: 'runners' })} />;
+        return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onResetPrefix={resetPrefix} onSaveSettings={(game, runner) => saveSettings(game.id, { ...game.settings, runner_id: runner })} onOpenRunners={() => setView({ name: 'runners' })} />;
       case 'runners':
         return (
           <SystemView

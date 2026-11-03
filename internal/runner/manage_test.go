@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"platypus/internal/compat"
@@ -125,6 +126,8 @@ func TestUnpackTarGzRefusesUnsafe(t *testing.T) {
 	escape := writeTar(t, map[string]string{"GE-Proton10-4/proton": "x"}, map[string]string{"GE-Proton10-4/link": "/etc/passwd"})
 	if _, err := UnpackTarGz(context.Background(), bytes.NewReader(escape), t.TempDir(), 0); err == nil {
 		t.Fatal("symlink escape must be refused")
+	} else if !strings.Contains(err.Error(), "absolute") {
+		t.Fatalf("absolute symlink target should be refused immediately, got: %v", err)
 	}
 	big := bytes.Repeat([]byte("x"), 100)
 	var bigBuf bytes.Buffer
@@ -140,6 +143,32 @@ func TestUnpackTarGzRefusesUnsafe(t *testing.T) {
 	multi := writeTar(t, map[string]string{"A/f": "x", "B/g": "y"}, nil)
 	if _, err := UnpackTarGz(context.Background(), bytes.NewReader(multi), t.TempDir(), 0); err == nil {
 		t.Fatal("a second top-level folder must be refused")
+	}
+}
+
+func TestUnpackTarGzRefusesSymlinkChainOutsideBuild(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for _, link := range []struct{ name, target string }{
+		{"GE/d/up", ".."},
+		{"GE/d/up/up2", ".."},
+	} {
+		if err := tw.WriteHeader(&tar.Header{Name: link.name, Linkname: link.target, Typeflag: tar.TypeSymlink}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UnpackTarGz(context.Background(), bytes.NewReader(buf.Bytes()), t.TempDir(), 0); err == nil {
+		t.Fatal("a symlink chain ending at the stage must be refused")
+	} else if !strings.Contains(err.Error(), "escapes the runner build") {
+		t.Fatalf("symlink chain should be rejected by the build-root check, got: %v", err)
 	}
 }
 

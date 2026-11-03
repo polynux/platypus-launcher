@@ -7,6 +7,9 @@ import '../../lib/i18n';
 import { TooltipProvider } from '../ds/tooltip';
 import type { Game } from '../../types';
 
+vi.mock('sonner', () => ({ toast: { success: vi.fn() } }));
+import { toast as toastNotify } from 'sonner';
+
 vi.mock('../../lib/theme', async (importOriginal) => {
   const mod = await importOriginal<typeof import('../../lib/theme')>();
   return {
@@ -68,6 +71,29 @@ describe('atlas attention signals', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset prefix' }));
     expect(onResetPrefix).toHaveBeenCalledWith(expect.objectContaining({ id: 'broken' }));
     expect(onOpenGame).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks before allowing a game folder', () => {
+    const onAllowFolder = vi.fn();
+    render(<FixesView games={[mkGame('outside', { title: 'Outside', outside_folder: true })]} onOpenGame={() => {}} onAllowFolder={onAllowFolder} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Allow this folder' }));
+    expect(screen.getByText('Allow this game folder?')).toBeInTheDocument();
+    expect(screen.getByText('Platypus will be allowed to launch games from /g/outside. This changes which folders can launch games.')).toBeInTheDocument();
+    expect(onAllowFolder).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Allow this folder' }).at(-1)!);
+    expect(onAllowFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'outside' }));
+  });
+
+  it('offers an undo toast after choosing the default runner', async () => {
+    const onSaveSettings = vi.fn(() => Promise.resolve());
+    const game = mkGame('runner-game', { title: 'Runner game', settings: { runner_id: 'missing:runner' } as Game['settings'] });
+    const runner = { id: 'system:proton', name: 'Proton', is_default: true } as never;
+    render(<FixesView games={[game]} runners={[runner]} onOpenGame={() => {}} onSaveSettings={onSaveSettings} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Use Proton' }));
+    await vi.waitFor(() => expect(toastNotify.success).toHaveBeenCalledWith('Runner game now uses Proton.', expect.objectContaining({ action: expect.objectContaining({ label: 'Undo' }) })));
+    const options = vi.mocked(toastNotify.success).mock.calls.at(-1)?.[1] as unknown as { action: { onClick: (event: React.MouseEvent<HTMLButtonElement>) => void } };
+    options.action.onClick({} as React.MouseEvent<HTMLButtonElement>);
+    expect(onSaveSettings).toHaveBeenNthCalledWith(2, game, 'missing:runner');
   });
 
   it('counts both signals in the header', () => {
