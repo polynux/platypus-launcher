@@ -112,11 +112,10 @@ export function cleanPosix(path: string): string {
   return `/${out.join('/')}`;
 }
 
-export function isSystemFolder(path: string, home?: string): boolean {
+export function isSystemFolder(path: string): boolean {
   if (!path) return false;
   const clean = cleanPosix(path);
   if (clean === '/') return true;
-  if (home && cleanPosix(home) !== '/' && clean === cleanPosix(home)) return true;
   return SYSTEM_DIRS.some((d) => clean === d || clean.startsWith(`${d}/`));
 }
 

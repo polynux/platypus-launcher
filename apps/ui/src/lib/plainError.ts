@@ -67,9 +67,10 @@ export function errorToastParts(
   t: (key: string, opts?: Record<string, unknown>) => string,
   fallback: string,
 ): { title: string; description?: string } {
-  const friendly = friendlyCoreError(msg, t);
+  const m = msg.trim();
+  const friendly = friendlyCoreError(m, t);
   if (friendly) {
-    const prefix = msg.slice(0, friendly.at).replace(/:\s*$/, '');
+    const prefix = m.slice(0, friendly.at).replace(/:\s*$/, '');
     const title = prefix ? `${prefix}: ${friendly.text}` : friendly.text;
     return { title, description: msg };
   }

@@ -13,12 +13,14 @@ import type { DiskUsage, Game, Job, ProtonVersion } from '../../types';
 import fs from 'node:fs';
 import path from 'node:path';
 
+const toastStyle = vi.hoisted(() => ({ current: 'pill' }));
+
 vi.mock('../../lib/theme', async (importOriginal) => {
   const mod = await importOriginal<typeof import('../../lib/theme')>();
   return {
     ...mod,
     useVariant: (axis: string) => {
-      if (axis === 'toast.style') return 'pill';
+      if (axis === 'toast.style') return toastStyle.current;
       if (axis === 'game.structure') return 'tabs';
       if (axis === 'shell.navigation') return 'sourcebar';
       if (axis === 'fixes.presentation') return 'cards';
@@ -81,6 +83,7 @@ const tEn = (key: string, opts?: Record<string, unknown>): string => i18n.t(key,
 beforeEach(() => {
   vi.useRealTimers();
   __resetNotifyForTests();
+  toastStyle.current = 'pill';
   Object.values(api).forEach((f) => (f as { mockReset: () => void }).mockReset());
   api.getGameFolders.mockReturnValue(Effect.succeed([{ path: '/home/games', is_default: true, exists: true, free_bytes: 30e9 }]) as never);
 });
@@ -212,10 +215,46 @@ describe('F8: error pills differ from success pills', () => {
 });
 
 describe('F9: store toasts sit below the store bar, others stay put', () => {
-  it('offsets only the store-open case to 112, keeping pill bottom and classic top', () => {
-    const sonner = src('components/ds/sonner.tsx');
-    expect(sonner).toContain('storeOpen ? { top: 112, right: 16 }');
-    expect(sonner).toContain('plain ? { bottom: 40 } : { top: 64, right: 16 }');
+  it('renders the right Sonner position and offset per case', async () => {
+    // Store open: top-right, pushed below the 54px store bar.
+    const store = render(<Toaster storeOpen />);
+    act(() => {
+      libNotify.success('store-open-probe-aaa');
+    });
+    await screen.findByText('store-open-probe-aaa');
+    const storeList = document.querySelector('[data-sonner-toaster]')!;
+    expect(storeList.getAttribute('data-x-position')).toBe('right');
+    expect(storeList.getAttribute('data-y-position')).toBe('top');
+    expect(storeList.getAttribute('style') ?? '').toContain('112');
+    store.unmount();
+    cleanup();
+    // Pill without a store: bottom-center, above the footer.
+    toastStyle.current = 'pill';
+    const pill = render(<Toaster storeOpen={false} />);
+    act(() => {
+      libNotify.success('pill-bottom-probe-bbb');
+    });
+    await screen.findByText('pill-bottom-probe-bbb');
+    const pillList = document.querySelector('[data-sonner-toaster]')!;
+    expect(pillList.getAttribute('data-x-position')).toBe('center');
+    expect(pillList.getAttribute('data-y-position')).toBe('bottom');
+    expect(pillList.getAttribute('style') ?? '').toContain('40');
+    pill.unmount();
+    cleanup();
+    // Classic card without a store: top-right, just below the controls.
+    toastStyle.current = 'card';
+    const classic = render(<Toaster storeOpen={false} />);
+    act(() => {
+      libNotify.success('classic-top-probe-ccc');
+    });
+    await screen.findByText('classic-top-probe-ccc');
+    const classicList = document.querySelector('[data-sonner-toaster]')!;
+    expect(classicList.getAttribute('data-x-position')).toBe('right');
+    expect(classicList.getAttribute('data-y-position')).toBe('top');
+    expect(classicList.getAttribute('style') ?? '').toContain('64');
+    classic.unmount();
+    cleanup();
+    toastStyle.current = 'pill';
   });
 });
 
@@ -305,36 +344,33 @@ describe('F16: no Allow for system folders', () => {
     expect(isSystemFolder('/usr/../home/me/Games/x')).toBe(false);
     expect(isSystemFolder('/tmp/out')).toBe(false);
     expect(isSystemFolder('/home/u/Games/Echo')).toBe(false);
-    expect(isSystemFolder('/home/u', '/home/u')).toBe(true);
+    expect(isSystemFolder('')).toBe(false);
     expect(cleanPosix('/opt/../usr/bin')).toBe('/usr/bin');
   });
 
-  it('game banner offers Move to Games for /usr/bin and says why', async () => {
+  it('game banner shows the reinstall note with no action for /usr/bin', () => {
     const plugin = { id: 'echo', name: 'Echo', install_folder: '/g/echo' } as never;
     const game = mkGame('esc', { title: 'Echo Escape', install_dir: '/usr/bin', outside_folder: true });
     render(<GameOutsideAlert game={game} plugin={plugin} onAllowFolder={() => {}} />);
     expect(screen.queryByRole('button', { name: 'Allow this folder' })).toBeNull();
-    expect(screen.getByText(/can't be allowed/)).toHaveTextContent('/usr/bin');
-    const moveBtn = screen.getByRole('button', { name: 'Move to Games' });
-    fireEvent.click(moveBtn);
-    await waitFor(() => expect(screen.getByText('Move Echo Escape')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Move to Games' })).toBeNull();
+    expect(screen.getByText(/Reinstall it from Echo into your Games folder/)).toHaveTextContent('/usr/bin');
     cleanup();
     const okGame = mkGame('out', { title: 'Outside', install_dir: '/tmp/out', outside_folder: true });
     render(<GameOutsideAlert game={okGame} plugin={plugin} onAllowFolder={() => {}} />);
     expect(screen.getByRole('button', { name: 'Allow this folder' })).toBeInTheDocument();
   });
 
-  it('attention card moves instead of allowing a system folder', async () => {
+  it('attention card keeps Open game as the only action for a system folder', () => {
     const onOpenGame = vi.fn();
     const game = mkGame('esc', { title: 'Echo Escape', install_dir: '/usr/bin', outside_folder: true });
     render(<AtlasAttention games={[game]} onOpenGame={onOpenGame} />);
-    expect(screen.getByText(/system folder Platypus can't allow/)).toBeInTheDocument();
+    expect(screen.getByText(/Reinstall it into your Games folder/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Allow this folder' })).toBeNull();
-    // Ghost action still opens the game.
-    fireEvent.click(screen.getByRole('button', { name: 'Open game' }));
+    expect(screen.queryByRole('button', { name: 'Move to Games' })).toBeNull();
+    const openBtns = screen.getAllByRole('button', { name: 'Open game' });
+    expect(openBtns).toHaveLength(1);
+    fireEvent.click(openBtns[0]!);
     expect(onOpenGame).toHaveBeenCalledWith('esc');
-    // Primary moves via the Storage dialog.
-    fireEvent.click(screen.getByRole('button', { name: 'Move to Games' }));
-    await waitFor(() => expect(screen.getByText('Move Echo Escape')).toBeInTheDocument());
   });
 });

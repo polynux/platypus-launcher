@@ -20,7 +20,7 @@
     "prefix": "The Wine prefix looks damaged. Repair it or the game may not start."
   },
   "atlas": {
-    "reason": { "install": "The last attempt failed.", "outside": "{{title}} lives in {{dir}}. Platypus only launches games from your game folders.", "outsideSystem": "{{title}} lives in {{dir}}, a system folder Platypus can't allow. Move it to your Games folder instead.", "runner": "{{title}} is set to {{runner}}, which was removed.", "update": "An update is available.", "conflict": "Saves changed on this device and in the cloud.", "prefix": "The Wine prefix has no Windows side. The game may not start." },
+    "reason": { "install": "The last attempt failed.", "outside": "{{title}} lives in {{dir}}. Platypus only launches games from your game folders.", "outsideSystem": "{{title}} is in {{dir}}, a system folder Platypus can't launch from. Reinstall it into your Games folder.", "runner": "{{title}} is set to {{runner}}, which was removed.", "update": "An update is available.", "conflict": "Saves changed on this device and in the cloud.", "prefix": "The Wine prefix has no Windows side. The game may not start." },
     "title": "Needs attention",
     "sub_one": "{{count}} game can't start or needs a decision.",
     "sub_other": "{{count}} games can't start or need a decision.",
@@ -39,7 +39,7 @@
     "allowBody": "Platypus will be allowed to launch games from {{folder}}. This changes which folders can launch games.",
     "unknownFolder": "this folder",
     "issue": { "install": "Install failed", "updateFailed": "Update failed", "outside": "Outside your game folders", "runner": "Runner missing", "update": "Update ready", "conflict": "Save conflict", "prefix": "Wine prefix damaged", "rating": "Runs badly on Linux" },
-    "fix": { "install": "Retry install", "outside": "Allow this folder", "outsideMove": "Move to Games", "runner": "Use default runner", "update": "Update now", "conflict": "Compare saves", "prefix": "Reset prefix", "rating": "Open game" },
+    "fix": { "install": "Retry install", "outside": "Allow this folder", "runner": "Use default runner", "update": "Update now", "conflict": "Compare saves", "prefix": "Reset prefix", "rating": "Open game" },
     "resetTitle": "Reset the Wine prefix?",
     "resetBody": "This moves the broken prefix aside and creates a fresh one. Your saves stay where they are.",
     "resetBackup": "The old prefix is kept as a backup next to the new one.",

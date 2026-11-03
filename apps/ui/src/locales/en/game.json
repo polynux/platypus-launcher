@@ -247,8 +247,7 @@
     "title": "Installed outside {{name}}'s folder",
     "body": "Platypus only launches {{name}} games from <folder>{{folder}}</folder> or folders you allow. This one is in <dir>{{dir}}</dir>, probably from before Platypus managed it.",
     "allow": "Allow this folder",
-    "move": "Move to Games",
-    "systemNote": "System folders like {{dir}} can't be allowed. Move the game to your Games folder instead."
+    "systemNote": "Platypus can't launch games from system folders like {{dir}}. Reinstall it from {{name}} into your Games folder."
   },
   "installation": {
     "heading": "Installation",

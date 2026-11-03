@@ -4,7 +4,6 @@
 // compat facts and the activity. Props only: the page owns the data.
 import React, { useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { Effect } from 'effect';
 import { AlertTriangle, ArrowLeft, Download, FolderCheck, FolderInput, RefreshCw, Settings2, Store as StoreIcon } from 'lucide-react';
 import type { ActivityEvent, Game, GameJobKind, Job, SessionEvent, StorePlugin } from '../../types';
 import { ActivityFeed } from '../ActivityFeed';
@@ -24,10 +23,6 @@ import { formatDecimal1 } from '../../lib/gameLocale';
 import { useVariant } from '../../lib/theme';
 import type { InstallSize } from '../../lib/installSize';
 import { ErrorNotice } from '../ErrorNotice';
-import { MoveDialog } from '../MoveDialog';
-import { parentFolder } from '../MaintenanceTab';
-import { LauncherApi } from '../../effect/runtime';
-import { notify } from '../../lib/notify';
 
 /** The back link (catalog game.back): where the game was opened from. Required. */
 export function GameBackLink({ backLabel, onBack }: { backLabel: string; onBack: () => void }) {
@@ -47,101 +42,58 @@ export function GameOutsideAlert({ game, plugin, onAllowFolder }: {
   plugin: StorePlugin;
   onAllowFolder: (folder: string) => void;
 }) {
-  const { t } = useTranslation(['game', 'gameSettings']);
+  const { t } = useTranslation('game');
   const tabs = useVariant('game.structure') === 'tabs';
   if (!game.is_installed || !game.outside_folder) return null;
-  // System folders will never allow (audit F16, CORE-6): the core refuses
-  // them, so Move to Games is the primary action instead.
+  // System folders will never allow (audit F16, CORE-6, R2-1): the core also
+  // refuses to move out of them, so show the reinstall note with no action.
   const system = isSystemFolder(game.install_dir);
-  return (
-    <>
-      {tabs ? (
-        <div role="alert" className="flex items-center gap-3 bg-danger/10 px-6 py-2.5 text-[13px] shadow-[inset_2px_0_0_var(--color-danger)]">
-          <AlertTriangle className="h-4 w-4 flex-none text-danger" aria-hidden />
-          <p className="min-w-0 flex-1 leading-relaxed text-text">
-            <span className="font-bold">{t('game:outside.title', { name: plugin.name })} </span>
-            <Trans
-              i18nKey="game:outside.body"
-              values={{ name: plugin.name, folder: plugin.install_folder, dir: game.install_dir }}
-              components={{
-                folder: <span className="font-mono text-[12px]" />,
-                dir: <span className="font-mono text-[12px] text-text" />,
-              }}
-            />
-            {system && <span className="block text-text-muted">{t('game:outside.systemNote', { dir: game.install_dir })}</span>}
-          </p>
-          {system ? (
-            <SystemMoveButton game={game} />
-          ) : (
-            <Button onClick={() => onAllowFolder(game.install_dir)} className="flex-none">
-              <FolderCheck className="h-4 w-4" /> {t('game:outside.allow')}
-            </Button>
-          )}
-        </div>
-      ) : (
-        <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-accent-strong/[0.07] px-5 py-4 ring-1 ring-accent-strong/25">
-          <div className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
-            <p className="font-bold text-amber-200">{t('game:outside.title', { name: plugin.name })}</p>
-            <p>
-              <Trans
-                i18nKey="game:outside.body"
-                values={{ name: plugin.name, folder: plugin.install_folder, dir: game.install_dir }}
-                components={{
-                  folder: <span className="font-mono text-[12px]" />,
-                  dir: <span className="font-mono text-[12px] text-text" />,
-                }}
-              />
-            </p>
-            {system && <p className="mt-1 text-text-muted">{t('game:outside.systemNote', { dir: game.install_dir })}</p>}
-          </div>
-          {system ? (
-            <SystemMoveButton game={game} />
-          ) : (
-            <Button onClick={() => onAllowFolder(game.install_dir)} className="flex-none">
-              <FolderCheck className="h-4 w-4" /> {t('game:outside.allow')}
-            </Button>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-/** Move to Games for a system-folder game (audit F16): the Storage Move
- *  dialog opening at the default Games folder. */
-function SystemMoveButton({ game }: { game: Game }) {
-  const { t } = useTranslation(['game', 'gameSettings']);
-  const [open, setOpen] = useState(false);
-  const [start, setStart] = useState('');
-  const openMove = () => {
-    Effect.runPromise(LauncherApi.getGameFolders()).then(
-      (folders) => {
-        setStart(folders.find((f) => f.is_default)?.path ?? parentFolder(game.install_dir));
-        setOpen(true);
-      },
-      () => {
-        setStart(parentFolder(game.install_dir));
-        setOpen(true);
-      },
+  if (tabs) {
+    return (
+      <div role="alert" className="flex items-center gap-3 bg-danger/10 px-6 py-2.5 text-[13px] shadow-[inset_2px_0_0_var(--color-danger)]">
+        <AlertTriangle className="h-4 w-4 flex-none text-danger" aria-hidden />
+        <p className="min-w-0 flex-1 leading-relaxed text-text">
+          <span className="font-bold">{t('game:outside.title', { name: plugin.name })} </span>
+          <Trans
+            i18nKey="game:outside.body"
+            values={{ name: plugin.name, folder: plugin.install_folder, dir: game.install_dir }}
+            components={{
+              folder: <span className="font-mono text-[12px]" />,
+              dir: <span className="font-mono text-[12px] text-text" />,
+            }}
+          />
+          {system && <span className="block text-text-muted">{t('game:outside.systemNote', { dir: game.install_dir, name: plugin.name })}</span>}
+        </p>
+        {!system && (
+          <Button onClick={() => onAllowFolder(game.install_dir)} className="flex-none">
+            <FolderCheck className="h-4 w-4" /> {t('game:outside.allow')}
+          </Button>
+        )}
+      </div>
     );
-  };
+  }
   return (
-    <>
-      <Button onClick={openMove} className="flex-none">
-        <FolderInput className="h-4 w-4" /> {t('game:outside.move')}
-      </Button>
-      {open && (
-        <MoveDialog
-          game={game}
-          startFolder={start || parentFolder(game.install_dir)}
-          onClose={() => setOpen(false)}
-          onQueued={() => {
-            setOpen(false);
-            notify.info(t('gameSettings:maintenance.moving', { title: game.title }));
-          }}
-        />
+    <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-accent-strong/[0.07] px-5 py-4 ring-1 ring-accent-strong/25">
+      <div className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
+        <p className="font-bold text-amber-200">{t('game:outside.title', { name: plugin.name })}</p>
+        <p>
+          <Trans
+            i18nKey="game:outside.body"
+            values={{ name: plugin.name, folder: plugin.install_folder, dir: game.install_dir }}
+            components={{
+              folder: <span className="font-mono text-[12px]" />,
+              dir: <span className="font-mono text-[12px] text-text" />,
+            }}
+          />
+        </p>
+        {system && <p className="mt-1 text-text-muted">{t('game:outside.systemNote', { dir: game.install_dir, name: plugin.name })}</p>}
+      </div>
+      {!system && (
+        <Button onClick={() => onAllowFolder(game.install_dir)} className="flex-none">
+          <FolderCheck className="h-4 w-4" /> {t('game:outside.allow')}
+        </Button>
       )}
-    </>
+    </div>
   );
 }
 
