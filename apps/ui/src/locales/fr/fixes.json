@@ -20,7 +20,7 @@
     "prefix": "Le préfixe Wine semble endommagé. Réparez-le ou le jeu risque de ne pas démarrer."
   },
   "atlas": {
-    "reason": { "install": "La dernière tentative a échoué.", "outside": "{{title}} se trouve dans {{dir}}. Platypus ne lance que les jeux de vos dossiers de jeux.", "outsideSystem": "« {{title}} » se trouve dans {{dir}}, un dossier système que Platypus ne peut pas autoriser. Déplacez-le plutôt vers votre dossier de jeux.", "runner": "{{title}} utilise {{runner}}, qui a été supprimé.", "update": "Une mise à jour est disponible.", "conflict": "Les sauvegardes ont changé sur cet appareil et dans le cloud.", "prefix": "Le préfixe Wine n'a plus de partie Windows. Le jeu risque de ne pas démarrer." },
+    "reason": { "install": "La dernière tentative a échoué.", "outside": "{{title}} se trouve dans {{dir}}. Platypus ne lance que les jeux de vos dossiers de jeux.", "outsideSystem": "{{title}} se trouve dans {{dir}}, un dossier système que Platypus ne peut pas autoriser. Déplacez-le plutôt vers votre dossier de jeux.", "runner": "{{title}} utilise {{runner}}, qui a été supprimé.", "update": "Une mise à jour est disponible.", "conflict": "Les sauvegardes ont changé sur cet appareil et dans le cloud.", "prefix": "Le préfixe Wine n'a plus de partie Windows. Le jeu risque de ne pas démarrer." },
     "title": "À surveiller",
     "sub_one": "{{count}} jeu ne démarre pas ou attend une décision.",
     "sub_other": "{{count}} jeux ne démarrent pas ou attendent une décision.",
@@ -39,7 +39,7 @@
     "allowBody": "Platypus pourra lancer des jeux depuis {{folder}}. Cela modifie les dossiers autorisés à lancer des jeux.",
     "unknownFolder": "ce dossier",
     "issue": { "install": "Échec de l'installation", "updateFailed": "Échec de la mise à jour", "outside": "En dehors de vos dossiers de jeux", "runner": "Runner manquant", "update": "Mise à jour disponible", "conflict": "Conflit de sauvegardes", "prefix": "Préfixe Wine endommagé", "rating": "Fonctionne mal sous Linux" },
-    "fix": { "install": "Réessayer l'installation", "outside": "Autoriser ce dossier", "runner": "Utiliser le runner par défaut", "update": "Mettre à jour", "conflict": "Comparer les sauvegardes", "prefix": "Réinitialiser le préfixe", "rating": "Ouvrir le jeu" },
+    "fix": { "install": "Réessayer l'installation", "outside": "Autoriser ce dossier", "outsideMove": "Déplacer vers les jeux", "runner": "Utiliser le runner par défaut", "update": "Mettre à jour", "conflict": "Comparer les sauvegardes", "prefix": "Réinitialiser le préfixe", "rating": "Ouvrir le jeu" },
     "resetTitle": "Réinitialiser le préfixe Wine ?",
     "resetBody": "Le préfixe cassé est mis de côté et un préfixe neuf est créé. Vos sauvegardes restent où elles sont.",
     "resetBackup": "L'ancien préfixe est gardé en sauvegarde à côté du nouveau.",

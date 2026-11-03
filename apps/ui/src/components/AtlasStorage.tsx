@@ -33,15 +33,9 @@ export function AtlasStorage({ data }: { data: StorageData }) {
         return d.mount !== '/' && isWithinFolder(dir, d.mount) && !data.drives.some((o) => o !== d && o.folders.some((f) => isWithinFolder(dir, f)));
       });
       for (const m of mine) rest.splice(rest.indexOf(m), 1);
-      // Biggest first by the shown total (audit F12): the global sort already
-      // orders this way, but grouping must not lose it.
-      mine.sort((a, b) => b.size_bytes + b.prefix_bytes - (a.size_bytes + a.prefix_bytes));
       return { drive: d, rows: mine };
     });
     if (rest.length > 0 && groups.length > 0) groups[0].rows.push(...rest);
-    if (groups.length > 0) {
-      groups[0].rows.sort((a, b) => b.size_bytes + b.prefix_bytes - (a.size_bytes + a.prefix_bytes));
-    }
     return groups;
   }, [data.drives, data.sorted, data.byId]);
   const defaultFolder = data.folders?.find((f) => f.is_default)?.path;

@@ -39,7 +39,7 @@
     "allowBody": "Platypus will be allowed to launch games from {{folder}}. This changes which folders can launch games.",
     "unknownFolder": "this folder",
     "issue": { "install": "Install failed", "updateFailed": "Update failed", "outside": "Outside your game folders", "runner": "Runner missing", "update": "Update ready", "conflict": "Save conflict", "prefix": "Wine prefix damaged", "rating": "Runs badly on Linux" },
-    "fix": { "install": "Retry install", "outside": "Allow this folder", "runner": "Use default runner", "update": "Update now", "conflict": "Compare saves", "prefix": "Reset prefix", "rating": "Open game" },
+    "fix": { "install": "Retry install", "outside": "Allow this folder", "outsideMove": "Move to Games", "runner": "Use default runner", "update": "Update now", "conflict": "Compare saves", "prefix": "Reset prefix", "rating": "Open game" },
     "resetTitle": "Reset the Wine prefix?",
     "resetBody": "This moves the broken prefix aside and creates a fresh one. Your saves stay where they are.",
     "resetBackup": "The old prefix is kept as a backup next to the new one.",

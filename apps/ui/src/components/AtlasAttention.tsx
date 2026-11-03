@@ -4,11 +4,15 @@
 // presentation; FixesView branches on fixes.presentation.
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
+import { Effect } from 'effect';
 import type { Game, Job, ProtonVersion } from '../types';
 import { AlertTriangle, ArrowDownToLine, Check, Cloud, Download, FolderOpen, Wrench } from 'lucide-react';
 import { ATLAS_PAGE, Cover, EmptyState } from './ui';
 import { Button } from './ds/button';
 import { Modal } from './Modal';
+import { MoveDialog } from './MoveDialog';
+import { parentFolder } from './MaintenanceTab';
+import { LauncherApi } from '../effect/runtime';
 import { attentionIssues, attentionReason, heroImages, isSystemFolder, type AttentionIssue } from '../lib/games';
 import { RawDetails } from './ErrorNotice';
 import { notify } from '../lib/notify';
@@ -29,10 +33,26 @@ export function useAttentionFix({ jobs = [], runners = [], onOpenGame, onOpenRun
   ghostAction: (issue: AttentionIssue) => { label: string; run: () => void } | null;
   fixDialogs: React.ReactNode;
 } {
-  const { t } = useTranslation(['fixes', 'common']);
+  const { t } = useTranslation(['fixes', 'common', 'gameSettings']);
   // Resetting a prefix asks first: the game confirmed is the one reset.
   const [resetTarget, setResetTarget] = useState<Game | null>(null);
   const [allowTarget, setAllowTarget] = useState<Game | null>(null);
+  // Moving out of a system folder (audit F16): the dialog the Storage page
+  // uses, opening at the default Games folder.
+  const [moveTarget, setMoveTarget] = useState<Game | null>(null);
+  const [moveStart, setMoveStart] = useState<string>('');
+  const openMove = (g: Game) => {
+    Effect.runPromise(LauncherApi.getGameFolders()).then(
+      (folders) => {
+        setMoveStart(folders.find((f) => f.is_default)?.path ?? parentFolder(g.install_dir));
+        setMoveTarget(g);
+      },
+      () => {
+        setMoveStart(parentFolder(g.install_dir));
+        setMoveTarget(g);
+      },
+    );
+  };
   const issueText = (issue: AttentionIssue): string => {
     const g = issue.game;
     switch (issue.kind) {
@@ -51,7 +71,7 @@ export function useAttentionFix({ jobs = [], runners = [], onOpenGame, onOpenRun
   };
   const primaryLabel = (issue: AttentionIssue): string => {
     if (issue.kind === 'outside' && isSystemFolder(issue.game.install_dir)) {
-      return t('fixes:atlas.openGame');
+      return t('fixes:atlas.fix.outsideMove');
     }
     return issue.kind === 'runner'
     ? t('fixes:atlas.useDefaultRunner', { runner: runners.find((r) => r.is_default)?.name ?? t('fixes:atlas.defaultRunner') })
@@ -66,9 +86,9 @@ export function useAttentionFix({ jobs = [], runners = [], onOpenGame, onOpenRun
       const job = jobs.filter((j) => j.game_id === g.id && j.state === 'failed' && (j.kind === 'install' || j.kind === 'update')).sort((a, b) => b.updated_at - a.updated_at)[0];
       if (job && onRetryJob) { onRetryJob(job.id); return; }
     } else if (issue.kind === 'outside') {
-      // System folders never allow (audit F16): open the game instead of
-      // offering a dialog the core will refuse.
-      if (isSystemFolder(g.install_dir)) { onOpenGame(g.id); return; }
+      // System folders never allow (audit F16): move to the Games folder
+      // instead of offering a dialog the core will refuse.
+      if (isSystemFolder(g.install_dir)) { openMove(g); return; }
       setAllowTarget(g); return;
     } else if (issue.kind === 'runner') {
       const fallback = runners.find((r) => r.is_default);
@@ -93,7 +113,6 @@ export function useAttentionFix({ jobs = [], runners = [], onOpenGame, onOpenRun
   const ghostAction = (issue: AttentionIssue): { label: string; run: () => void } | null => {
     const g = issue.game;
     if (issue.kind === 'runner') return { label: t('fixes:atlas.openRunners'), run: () => onOpenRunners?.() };
-    if (issue.kind === 'outside' && isSystemFolder(g.install_dir)) return null;
     if (issue.kind === 'prefix' || issue.kind === 'install' || issue.kind === 'outside' || issue.kind === 'update') {
       return { label: t('fixes:atlas.openGame'), run: () => onOpenGame(g.id) };
     }
@@ -125,6 +144,18 @@ export function useAttentionFix({ jobs = [], runners = [], onOpenGame, onOpenRun
             </div>
           </div>
         </Modal>
+      )}
+      {moveTarget && (
+        <MoveDialog
+          game={moveTarget}
+          startFolder={moveStart || parentFolder(moveTarget.install_dir)}
+          onClose={() => setMoveTarget(null)}
+          onQueued={() => {
+            const title = moveTarget.title;
+            setMoveTarget(null);
+            notify.info(t('gameSettings:maintenance.moving', { title }));
+          }}
+        />
       )}
     </>
   );

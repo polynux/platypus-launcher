@@ -480,7 +480,7 @@ function ActionStrip({ d }: { d: GameTabsData }) {
   // The live transfer figures sit under the strip while a job runs (R4-12):
   // "1.3 MB of 41.9 MB · 140 KB/s · about 4 min left".
   const jobNote = (() => {
-    if (failedInstall && d.job) return friendlyCoreError(d.job.error, t) ?? plainError(d.job.error, t('game:install.lastAttempt'));
+    if (failedInstall && d.job) return friendlyCoreError(d.job.error, t)?.text ?? plainError(d.job.error, t('game:install.lastAttempt'));
     const job = active ? d.job : undefined;
     if (!job) return null;
     const parts: string[] = [];

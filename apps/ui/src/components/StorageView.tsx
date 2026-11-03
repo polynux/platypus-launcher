@@ -218,8 +218,7 @@ export function StorageGames({ sorted, scanning, byId, measuring, moveId, setMov
                     )}
                   </div>
                   <div className="flex flex-none flex-col items-end gap-1.5">
-                    {/* The same total the list is sorted on (audit F12): files + prefix, like Atlas. */}
-                    <span className="text-[13px] font-bold tabular-nums">{figure(row.size_bytes + row.prefix_bytes)}</span>
+                    <span className="text-[13px] font-bold tabular-nums">{figure(row.size_bytes)}</span>
                     {game && (
                       <div className="flex gap-1">
                         <Button

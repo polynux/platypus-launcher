@@ -49,7 +49,7 @@ import { applyLanguage, loadSessionInfo } from './lib/i18n';
 import { loadTheme } from './lib/theme';
 import { LibrarySkeleton } from './components/LibrarySkeleton';
 import { useNetState } from './components/useNetState';
-import { hasDetails, plainError, friendlyCoreError } from './lib/plainError';
+import { errorToastParts } from './lib/plainError';
 import { coreErrMsg } from './lib/coreError';
 import { Toaster } from './components/ds/sonner';
 import { Modal } from './components/Modal';
@@ -291,27 +291,8 @@ export function AppContent() {
     // Known engine strings become sentences (audit F4), with the raw behind.
     const fallback = t('errors:fallback');
     if (kind === 'err') {
-      // A "Title: engine error" keeps its title and swaps only the error part
-      // for the friendly sentence (job failures); a bare engine string swaps
-      // wholly. Plugin-written sentences have no friendly mapping and pass
-      // through plainError as before.
-      const colon = msg.lastIndexOf(': ');
-      if (colon > 0) {
-        const prefix = msg.slice(0, colon);
-        const suffix = msg.slice(colon + 2);
-        const friendlySuffix = friendlyCoreError(suffix, t);
-        if (friendlySuffix && friendlySuffix !== suffix) {
-          toastNotify.error(`${prefix}: ${friendlySuffix}`, { description: suffix });
-          return;
-        }
-      }
-      const friendly = friendlyCoreError(msg, t);
-      if (friendly && friendly !== msg) {
-        toastNotify.error(friendly, { description: msg });
-        return;
-      }
-      const raw = hasDetails(msg, fallback) ? msg : undefined;
-      toastNotify.error(plainError(msg, fallback), raw ? { description: raw } : undefined);
+      const parts = errorToastParts(msg, t, fallback);
+      toastNotify.error(parts.title, parts.description ? { description: parts.description } : undefined);
       return;
     }
     if (kind === 'busy') {

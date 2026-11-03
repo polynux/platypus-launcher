@@ -182,14 +182,13 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
                   const fallback = t('downloads:state.failed');
                   const plain = plainError(j.error, fallback);
                   // Audit F4: known engine strings become sentences, with the
-                  // raw behind the tooltip; every failure reads "Failed: …".
+                  // raw behind the tooltip; every failure reads "Failed" or
+                  // "Failed: …" (never "Failed: failed").
                   const failedLabel = (() => {
                     if (j.state !== 'failed') return '';
-                    if (friendly) return t('downloads:atlas.failedPrefix', { error: friendly });
-                    if (plain !== raw && raw !== '') {
-                      const short = plain.charAt(0).toUpperCase() + plain.slice(1);
-                      return short;
-                    }
+                    if (raw === '') return t('downloads:atlas.failed');
+                    if (friendly) return t('downloads:atlas.failedPrefix', { error: friendly.text });
+                    if (plain !== raw) return t('downloads:atlas.failed');
                     return t('downloads:atlas.failedPrefix', { error: plain });
                   })();
                   return (

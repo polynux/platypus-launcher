@@ -232,20 +232,25 @@
   animation: toast-in 150ms ease-out;
 }
 /* The /22 bottom-center pill (audit F5): Sonner centres its fixed-width list
-   (--width, 356px), and the w-auto pill left-aligns inside its li. Centre the
-   toast in its slot instead. `translate` stays free for the slide-in above;
-   the X shift lives in `transform` with Sonner's own Y. Mobile toasts are
-   full-width (Sonner's 600px rule), so only centre on wider screens. */
+   (--width, 356px), and the w-auto pill left-aligns inside its li. Widen the
+   list to the pill's max and centre the toast with margins, leaving Sonner's
+   own transform, swipe and reduced-motion paths alone. Mobile toasts are
+   full-width (Sonner's 600px rule), so only widen on wider screens. */
 @media (min-width: 601px) {
-  [data-sonner-toaster][data-x-position='center'] [data-sonner-toast]:not([data-swiping='true']) {
-    left: 50%;
-    transform: translateX(-50%) var(--y);
+  [data-sonner-toaster][data-x-position='center'] {
+    --width: min(560px, calc(100vw - 2rem)) !important;
+  }
+  [data-sonner-toaster][data-x-position='center'] [data-sonner-toast] {
+    left: 0;
+    right: 0;
+    margin-inline: auto;
+    width: fit-content;
   }
 }
-/* Error pills read as failures (audit F8): a 3px danger edge inside the same
-   ring, with the pill's outer shadow kept. Theme token, not a raw colour. */
-.platypus-toast[data-type='error'] {
-  box-shadow: inset 3px 0 0 var(--color-danger), 0 10px 30px rgba(0, 0, 0, 0.45);
+/* Error pills read as failures (audit F8): a 3px danger edge composed with
+   the ring and shadow (Tailwind v4 layers), not over them. Theme token. */
+.platypus-toast-pill[data-type='error'] {
+  --tw-inset-shadow: inset 3px 0 0 var(--color-danger);
 }
 @keyframes toast-in {
   from {
@@ -317,6 +322,9 @@
     opacity 120ms,
     background-color 120ms,
     color 120ms;
+}
+.platypus-toast-close:hover {
+  color: var(--color-text) !important;
 }
 .platypus-toast:hover .platypus-toast-close,
 .platypus-toast:focus-within .platypus-toast-close,
