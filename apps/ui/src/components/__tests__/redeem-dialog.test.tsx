@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Effect } from 'effect';
 import type { StorePlugin } from '../../types';
 
@@ -107,9 +108,10 @@ describe('redeem dialog store choice', () => {
   it('lists only the stores it is given, and sends the code to the one picked', async () => {
     mocks.redeemCode.mockReturnValue(Effect.succeed({ message: 'Redeemed.', titles: [] } as never));
     render(<RedeemDialog stores={[echo, other]} onClose={() => {}} />);
-    const select = screen.getByLabelText('Store') as HTMLSelectElement;
-    expect([...select.options].map((o) => o.textContent)).toEqual(['Echo', 'Echo B']);
-    fireEvent.change(select, { target: { value: 'echo-b' } });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: 'Store' }));
+    expect(await screen.findByRole('option', { name: 'Echo' })).toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: 'Echo B' }));
     fireEvent.change(screen.getByLabelText(/Code/), { target: { value: 'ECHO-OK' } });
     fireEvent.click(screen.getByRole('button', { name: 'Redeem' }));
     await waitFor(() => expect(mocks.redeemCode).toHaveBeenCalledWith('echo-b', 'ECHO-OK'));

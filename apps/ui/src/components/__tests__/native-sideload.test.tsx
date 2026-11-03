@@ -95,21 +95,24 @@ describe('AddGameModal run with (issue #47)', () => {
   }
 
   it('shows the detected value as the default and hides the prefix for native games', async () => {
+    const user = userEvent.setup();
     open();
     fireEvent.change(screen.getByLabelText('Program'), { target: { value: '/games/gem/gem' } });
     await waitFor(() => expect(api.detectGameExecutable).toHaveBeenCalledWith('/games/gem/gem'));
     fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
-    expect(await screen.findByText('Automatic (detected: native)')).toBeTruthy();
+    expect(await screen.findByRole('combobox', { name: 'Run with' })).toHaveTextContent('Automatic (detected: native)');
     expect(screen.queryByLabelText('wine prefix')).toBeNull();
   });
 
   it('overrides detection and passes the run mode on', async () => {
+    const user = userEvent.setup();
     const onAdd = vi.fn();
     open(onAdd);
     fireEvent.change(screen.getByPlaceholderText('Found from the file name'), { target: { value: 'Gem' } });
     fireEvent.change(screen.getByLabelText('Program'), { target: { value: '/games/gem/gem' } });
     fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
-    fireEvent.change(screen.getByLabelText('Run with'), { target: { value: 'wine' } });
+    await user.click(screen.getByRole('combobox', { name: 'Run with' }));
+    await user.click(await screen.findByRole('option', { name: 'Wine / Proton' }));
     // Overridden to Wine: the prefix comes back.
     expect(screen.getByLabelText('wine prefix')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Add to library' }));

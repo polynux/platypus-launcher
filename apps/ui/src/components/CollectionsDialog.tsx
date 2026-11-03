@@ -6,6 +6,7 @@ import type { Collection, Game, SmartFilter } from '../types';
 import { Modal, ModalHead, ModalFoot } from './Modal';
 import { Button } from './ds/button';
 import { Input } from './ds/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { Switch } from './ds/switch';
 import { MonoLabel, cx } from './ui';
 import { ErrorNotice } from './ErrorNotice';
@@ -193,11 +194,9 @@ export function CollectionsDialog({ collections, games, gameId, mode, onChanged,
   const title = mode === 'new' ? t('collections:newHeading') : game ? t('collections:pickLabel', { title: game.title }) : t('collections:title');
 
   return (
-    <Modal label={title} onClose={onClose} size="md" innerClassName={mode === 'new' ? 'p-0' : undefined}>
-      {mode === 'new' && <ModalHead title={title} onClose={onClose} />}
-      <div className={mode === 'new' ? 'p-5' : 'p-6'}>
-        {mode !== 'new' && <MonoLabel className="mb-2">{t('collections:title')}</MonoLabel>}
-        {mode !== 'new' && <h2 className="mb-4 text-[18px] font-bold">{title}</h2>}
+    <Modal label={title} onClose={onClose} size="md" innerClassName="p-0">
+      <ModalHead title={title} onClose={onClose} />
+      <div className="p-5">
 
         {gameId ? (
           <ul className="mb-5 space-y-1.5" aria-label={t('collections:pickLabel', { title: game?.title ?? gameId })}>
@@ -286,18 +285,13 @@ export function CollectionsDialog({ collections, games, gameId, mode, onChanged,
               <Input autoFocus={mode === 'new'} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder={t('collections:newNamePlaceholder')} disabled={busy} className="mt-1.5" />
             </label>
             {!gameId && mode !== 'new' && (
-              <label className="text-[13px] text-text-muted">
-                {t('collections:kind')}
-                <select
-                  value={smart ? 'smart' : 'manual'}
-                  onChange={(e) => setSmart(e.target.value === 'smart')}
-                  disabled={busy}
-                  className="mt-1.5 block rounded-xl border border-hairline bg-surface px-3 py-2 text-[14px] text-text outline-none focus-visible:ring-2 focus-visible:ring-focus/50"
-                >
-                  <option value="manual">{t('collections:kindManual')}</option>
-                  <option value="smart">{t('collections:kindSmart')}</option>
-                </select>
-              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] text-text-muted">{t('collections:kind')}</span>
+                <div className="flex rounded-[9px] bg-surface p-[3px]">
+                  <button type="button" disabled={busy} onClick={() => setSmart(false)} className={cx('rounded-[7px] px-3 py-1.5 text-[13px] font-semibold', !smart ? 'bg-accent text-on-accent' : 'text-text-muted')}>{t('collections:kindManual')}</button>
+                  <button type="button" disabled={busy} onClick={() => setSmart(true)} className={cx('rounded-[7px] px-3 py-1.5 text-[13px] font-semibold', smart ? 'bg-accent text-on-accent' : 'text-text-muted')}>{t('collections:kindSmart')}</button>
+                </div>
+              </div>
             )}
             {mode !== 'new' && <Button type="submit" variant="primary" disabled={busy || !name.trim()}>
               {t('collections:create')}
@@ -308,16 +302,14 @@ export function CollectionsDialog({ collections, games, gameId, mode, onChanged,
           {error && <ErrorNotice className="text-[13px]" message={error} fallback={t('collections:error')} />}
         </form>
 
-        <div className="mt-6 flex justify-end gap-2">
-          {mode !== 'new' && <Button variant="neutral" onClick={onClose}>{t('common:done')}</Button>}
-        </div>
       </div>
-      {mode === 'new' && <ModalFoot><Button variant="ghost" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button><Button type="submit" form="atlas-new-collection" variant="primary" disabled={busy || !name.trim()}>{t('collections:create')}</Button></ModalFoot>}
+      <ModalFoot>
+        <Button variant="ghost" disabled={busy} onClick={onClose}>{mode === 'new' ? t('common:cancel') : t('common:done')}</Button>
+        {mode === 'new' && <Button type="submit" form="atlas-new-collection" variant="primary" disabled={busy || !name.trim()}>{t('collections:create')}</Button>}
+      </ModalFoot>
     </Modal>
   );
 }
-
-const selectClass = 'mt-1.5 block w-full rounded-xl border border-hairline bg-surface px-3 py-2 text-[14px] text-text outline-none focus-visible:ring-2 focus-visible:ring-focus/50 disabled:opacity-60';
 
 /** The smart filter's fields: each one is "any" until the user picks a value. */
 function SmartFields({ draft, setDraft, games, collections, disabled }: { draft: SmartDraft; setDraft: (d: SmartDraft) => void; games: Game[]; collections: Collection[]; disabled: boolean }) {
@@ -327,12 +319,12 @@ function SmartFields({ draft, setDraft, games, collections, disabled }: { draft:
   const select = (k: keyof SmartDraft, label: string, options: { value: string; label: string }[]) => (
     <label className="text-[13px] text-text-muted" key={k}>
       {label}
-      <select value={draft[k]} onChange={set(k)} disabled={disabled} className={selectClass}>
-        <option value="">{t('collections:smart.any')}</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+      <Select value={draft[k]} onValueChange={(value) => setDraft({ ...draft, [k]: value })} disabled={disabled}>
+        <SelectTrigger aria-label={label} className="mt-1.5 w-full"><SelectValue placeholder={t('collections:smart.any')} /></SelectTrigger>
+        <SelectContent>
+          {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
     </label>
   );
   const yesNo = [{ value: 'yes', label: t('collections:smart.yes') }, { value: 'no', label: t('collections:smart.no') }];
