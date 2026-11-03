@@ -101,6 +101,11 @@
     "pauseAll": "Pause all",
     "recent": "Recent",
     "emptyTitle": "Nothing downloading",
-    "emptyBody": "Installs, updates, moves and file checks show up here."
+    "emptyBody": "Installs, updates, moves and file checks show up here.",
+    "failed": "Failed",
+    "failedPrefix": "Failed: {{error}}",
+    "failedNoSpace": "Not enough space on {{dir}}",
+    "failedSystemFolder": "Platypus can't launch games from system folders like {{path}}",
+    "failedSafetyCheck": "The download failed a safety check"
   }
 }

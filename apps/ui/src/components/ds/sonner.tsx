@@ -48,8 +48,8 @@ export function Toaster({ storeOpen = false }: { storeOpen?: boolean }) {
       theme="dark"
       richColors={false}
       gap={8}
-      offset={plain && !storeOpen ? { bottom: 40 } : { top: 64, right: 16 }}
-      mobileOffset={plain && !storeOpen ? { bottom: 40 } : { top: 64, right: 16 }}
+      offset={storeOpen ? { top: 112, right: 16 } : plain ? { bottom: 40 } : { top: 64, right: 16 }}
+      mobileOffset={storeOpen ? { top: 112, right: 16 } : plain ? { bottom: 40 } : { top: 64, right: 16 }}
       containerAriaLabel={t('toast.region', 'Notifications')}
       className={cn('platypus-toaster')}
       icons={{
@@ -63,8 +63,8 @@ export function Toaster({ storeOpen = false }: { storeOpen?: boolean }) {
         unstyled: true,
         closeButtonAriaLabel: t('toast.close', 'Close notification'),
         classNames: {
-          toast: plain ? 'platypus-toast group pointer-events-auto relative flex w-auto max-w-[min(560px,calc(100vw-2rem))] items-center gap-2 whitespace-nowrap rounded-[6px] bg-surface-strong px-3.5 py-2 font-sans text-[13.5px] text-text shadow-[0_10px_30px_rgba(0,0,0,.45)] ring-1 ring-hairline-strong' : TOAST_BASE,
-          title: plain ? 'platypus-toast-title-wrap [&_[data-title]]:truncate' : 'platypus-toast-title-wrap',
+          toast: plain ? 'platypus-toast platypus-toast-pill group pointer-events-auto relative flex w-auto max-w-[min(560px,calc(100vw-2rem))] items-center gap-2 whitespace-normal rounded-[10px] bg-surface-strong px-3.5 py-2 font-sans text-[13.5px] text-text shadow-[0_10px_30px_rgba(0,0,0,.45)] ring-1 ring-hairline-strong' : TOAST_BASE,
+          title: plain ? 'platypus-toast-title-wrap [&_[data-title]]:line-clamp-3' : 'platypus-toast-title-wrap',
           description: 'platypus-toast-description mt-0.5 text-[13px] leading-snug',
           actionButton:
             'platypus-toast-action col-start-2 inline-flex h-8 justify-self-start items-center rounded-xl bg-accent-strong px-3 text-[12px] font-extrabold text-on-accent transition hover:brightness-110',

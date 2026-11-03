@@ -246,7 +246,8 @@
   "outside": {
     "title": "Installé hors du dossier de {{name}}",
     "body": "Platypus ne lance les jeux {{name}} que depuis <folder>{{folder}}</folder> ou les dossiers autorisés. Celui-ci est dans <dir>{{dir}}</dir>, probablement depuis avant que Platypus ne le gère.",
-    "allow": "Autoriser ce dossier"
+    "allow": "Autoriser ce dossier",
+    "systemNote": "Platypus ne peut pas lancer de jeux depuis les dossiers système comme {{dir}}. Réinstallez-le depuis {{name}} dans votre dossier de jeux."
   },
   "installation": {
     "heading": "Installation",

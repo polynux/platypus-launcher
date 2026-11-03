@@ -47,17 +47,27 @@ function countLabel(count: number): string {
 /** The toast title: a live region per type (errors assertive, the rest polite)
  *  with an optional repeat-count badge. Sonner's own container is a single
  *  <section aria-live="polite">; the per-toast role is what makes errors
- *  assertive. */
+ *  assertive. The full text rides in `title` (audit F1): the pill wraps up to
+ *  3 lines, and the rest still reads on hover. */
 function titleNode(message: string, type: NotifyType, count: number): React.ReactNode {
   const role = type === 'error' ? 'alert' : 'status';
   return React.createElement(
     'div',
     { role, className: 'platypus-toast-title' },
-    React.createElement('span', { className: 'platypus-toast-message' }, message),
+    React.createElement('span', { className: 'platypus-toast-message', title: message }, message),
     count > 1
       ? React.createElement('span', { className: 'platypus-toast-count', 'aria-hidden': true }, countLabel(count))
       : null,
   );
+}
+
+/** A string description keeps its full text in `title` (audit F1), so a
+ *  3-line clamp still reads on hover. Elements pass through untouched. */
+function descriptionNode(desc: React.ReactNode): React.ReactNode {
+  if (typeof desc === 'string') {
+    return React.createElement('span', { title: desc }, desc);
+  }
+  return desc;
 }
 
 function durationFor(type: NotifyType, options: NotifyOptions): number {
@@ -83,7 +93,7 @@ function show(type: NotifyType, message: string, options: NotifyOptions = {}): s
     const duration = durationFor(type, { ...existing.options, ...options });
     const id = toast[type](titleNode(message, type, existing.count), {
       id: existing.toastId,
-      description: options.description ?? existing.options.description,
+      description: descriptionNode(options.description ?? existing.options.description),
       action: options.action ?? existing.options.action,
       duration,
     });
@@ -99,7 +109,7 @@ function show(type: NotifyType, message: string, options: NotifyOptions = {}): s
   const fn = type === 'success' ? toast.success : type === 'info' ? toast.info : toast.error;
   const id = fn(titleNode(message, type, 1), {
     id: options.id,
-    description: options.description,
+    description: descriptionNode(options.description),
     action: options.action,
     duration,
   });

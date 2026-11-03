@@ -9,7 +9,7 @@ import { AlertTriangle, ArrowDownToLine, Check, Cloud, Download, FolderOpen, Wre
 import { ATLAS_PAGE, Cover, EmptyState } from './ui';
 import { Button } from './ds/button';
 import { Modal, ModalFoot, ModalHead } from './Modal';
-import { attentionIssues, attentionReason, heroImages, type AttentionIssue } from '../lib/games';
+import { attentionIssues, attentionReason, heroImages, isSystemFolder, type AttentionIssue } from '../lib/games';
 import { RawDetails } from './ErrorNotice';
 import { notify } from '../lib/notify';
 import type { FixesProps } from './FixesView';
@@ -37,7 +37,11 @@ export function useAttentionFix({ jobs = [], runners = [], onOpenGame, onOpenRun
     const g = issue.game;
     switch (issue.kind) {
       case 'install': return t('fixes:atlas.reason.install');
-      case 'outside': return t('fixes:atlas.reason.outside', { title: g.title, dir: g.install_dir });
+      case 'outside':
+        if (isSystemFolder(g.install_dir)) {
+          return t('fixes:atlas.reason.outsideSystem', { title: g.title, dir: g.install_dir });
+        }
+        return t('fixes:atlas.reason.outside', { title: g.title, dir: g.install_dir });
       case 'runner': return t('fixes:atlas.reason.runner', { title: g.title, runner: issue.runnerId });
       case 'update': return t('fixes:atlas.reason.update');
       case 'conflict': return t('fixes:atlas.reason.conflict');
@@ -45,19 +49,29 @@ export function useAttentionFix({ jobs = [], runners = [], onOpenGame, onOpenRun
       default: return attentionReason(g, 'rating');
     }
   };
-  const primaryLabel = (issue: AttentionIssue): string => issue.kind === 'runner'
+  const primaryLabel = (issue: AttentionIssue): string => {
+    if (issue.kind === 'outside' && isSystemFolder(issue.game.install_dir)) {
+      return t('fixes:atlas.openGame');
+    }
+    return issue.kind === 'runner'
     ? t('fixes:atlas.useDefaultRunner', { runner: runners.find((r) => r.is_default)?.name ?? t('fixes:atlas.defaultRunner') })
     : ({
       install: t('fixes:atlas.fix.install'), outside: t('fixes:atlas.fix.outside'), runner: t('fixes:atlas.fix.runner'),
       update: t('fixes:atlas.fix.update'), conflict: t('fixes:atlas.fix.conflict'), prefix: t('fixes:atlas.fix.prefix'), rating: t('fixes:atlas.fix.rating'),
     })[issue.kind];
+  };
   const runIssueFix = (issue: AttentionIssue) => {
     const g = issue.game;
     if (issue.kind === 'install') {
       const job = jobs.filter((j) => j.game_id === g.id && j.state === 'failed' && (j.kind === 'install' || j.kind === 'update')).sort((a, b) => b.updated_at - a.updated_at)[0];
       if (job && onRetryJob) { onRetryJob(job.id); return; }
-    } else if (issue.kind === 'outside') { setAllowTarget(g); return; }
-    else if (issue.kind === 'runner') {
+    } else if (issue.kind === 'outside') {
+      // System folders never allow (audit F16, R2-1): the core also refuses
+      // to move out of them, so open the game instead of offering a dialog
+      // the core will refuse. The card text suggests reinstalling.
+      if (isSystemFolder(g.install_dir)) { onOpenGame(g.id); return; }
+      setAllowTarget(g); return;
+    } else if (issue.kind === 'runner') {
       const fallback = runners.find((r) => r.is_default);
       if (fallback && onSaveSettings) {
         const previous = g.settings.runner_id || '';
@@ -80,6 +94,8 @@ export function useAttentionFix({ jobs = [], runners = [], onOpenGame, onOpenRun
   const ghostAction = (issue: AttentionIssue): { label: string; run: () => void } | null => {
     const g = issue.game;
     if (issue.kind === 'runner') return { label: t('fixes:atlas.openRunners'), run: () => onOpenRunners?.() };
+    // A system-folder card has Open game as its only action (R2-1).
+    if (issue.kind === 'outside' && isSystemFolder(g.install_dir)) return null;
     if (issue.kind === 'prefix' || issue.kind === 'install' || issue.kind === 'outside' || issue.kind === 'update') {
       return { label: t('fixes:atlas.openGame'), run: () => onOpenGame(g.id) };
     }

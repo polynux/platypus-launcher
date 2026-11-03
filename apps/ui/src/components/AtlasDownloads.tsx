@@ -8,7 +8,7 @@ import type { Game, Job } from '../types';
 import { ATLAS_PAGE, Cover, EmptyState, cx, relTime } from './ui';
 import { Button } from './ds/button';
 import { formatBytes, heroImages } from '../lib/games';
-import { hasDetails, plainError } from '../lib/plainError';
+import { plainError, friendlyCoreError } from '../lib/plainError';
 
 const VERB_KEY: Record<Job['kind'], string> = {
   install: 'downloads:action.install',
@@ -129,7 +129,7 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
                     <li key={j.id} className={paused ? 'opacity-70' : undefined}>
                       <div className={cx('flex items-center gap-3.5 rounded-xl bg-surface py-2.5 pl-2.5 pr-3', i === 0 && 'ring-1 ring-inset ring-accent/35')}>
                         <button type="button" onClick={() => onOpenGame(j.game_id)} aria-label={name} className="flex-none rounded-[7px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-                          <Cover src={artOf(j.game_id)} title={name} className="h-14 w-[120px] rounded-[7px]" />
+                          <Cover src={artOf(j.game_id)} title={name} compact className="h-14 w-[120px] rounded-[7px]" />
                         </button>
                         <div className="grid min-w-0 flex-1 gap-1.5">
                           <div className="flex flex-wrap items-baseline gap-x-2">
@@ -175,8 +175,23 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
           {finished.length > 0 && (
             <section aria-label={t('downloads:atlas.recent')}>
               <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.recent')}</h2>
-              <ul className="grid grid-cols-[minmax(0,1fr)_140px_80px_90px_auto] divide-y divide-hairline">
-                {finished.map((j) => (
+              <ul className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_80px_90px_auto] divide-y divide-hairline">
+                {finished.map((j) => {
+                  const raw = (j.error ?? '').trim();
+                  const friendly = friendlyCoreError(j.error, t);
+                  const fallback = t('downloads:state.failed');
+                  const plain = plainError(j.error, fallback);
+                  // Audit F4: known engine strings become sentences, with the
+                  // raw behind the tooltip; every failure reads "Failed" or
+                  // "Failed: …" (never "Failed: failed").
+                  const failedLabel = (() => {
+                    if (j.state !== 'failed') return '';
+                    if (raw === '') return t('downloads:atlas.failed');
+                    if (friendly) return t('downloads:atlas.failedPrefix', { error: friendly.text });
+                    if (plain !== raw) return t('downloads:atlas.failed');
+                    return t('downloads:atlas.failedPrefix', { error: plain });
+                  })();
+                  return (
                   <li key={j.id} className="col-span-full grid grid-cols-subgrid items-center gap-3 py-1.5">
                     <button onClick={() => onOpenGame(j.game_id)} className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                       <Cover src={artOf(j.game_id)} title={byId.get(j.game_id)?.title ?? j.title} compact className="h-5 w-11 flex-none rounded ring-1 ring-hairline" />
@@ -184,9 +199,9 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
                     </button>
                     <span
                       className={cx('truncate text-[12.5px]', j.state === 'failed' ? 'text-danger' : 'text-text-muted')}
-                      title={j.state === 'failed' && hasDetails(j.error, t('downloads:state.failed')) ? j.error ?? undefined : undefined}
+                      title={j.state === 'failed' && raw !== '' ? raw : undefined}
                     >
-                      {j.state === 'failed' ? plainError(j.error, t('downloads:state.failed')) : j.state === 'done' ? t(FINISHED_KEY[j.kind]) : t(STATE_KEY[j.state])}
+                      {j.state === 'failed' ? failedLabel : j.state === 'done' ? t(FINISHED_KEY[j.kind]) : t(STATE_KEY[j.state])}
                     </span>
                     <span className="text-[12px] tabular-nums text-text-muted">{j.total > 0 ? formatBytes(j.total) : ''}</span>
                     <span className="text-[12px] text-text-muted">{relTime(j.updated_at)}</span>
@@ -203,7 +218,8 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
                       )}
                     </span>
                   </li>
-                ))}
+                  );
+                  })}
               </ul>
             </section>
           )}

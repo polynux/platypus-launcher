@@ -20,7 +20,7 @@
     "prefix": "The Wine prefix looks damaged. Repair it or the game may not start."
   },
   "atlas": {
-    "reason": { "install": "The last attempt failed.", "outside": "{{title}} lives in {{dir}}. Platypus only launches games from your game folders.", "runner": "{{title}} is set to {{runner}}, which was removed.", "update": "An update is available.", "conflict": "Saves changed on this device and in the cloud.", "prefix": "The Wine prefix has no Windows side. The game may not start." },
+    "reason": { "install": "The last attempt failed.", "outside": "{{title}} lives in {{dir}}. Platypus only launches games from your game folders.", "outsideSystem": "{{title}} is in {{dir}}, a system folder Platypus can't launch from. Reinstall it into your Games folder.", "runner": "{{title}} is set to {{runner}}, which was removed.", "update": "An update is available.", "conflict": "Saves changed on this device and in the cloud.", "prefix": "The Wine prefix has no Windows side. The game may not start." },
     "title": "Needs attention",
     "sub_one": "{{count}} game can't start or needs a decision.",
     "sub_other": "{{count}} games can't start or need a decision.",

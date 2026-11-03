@@ -42,7 +42,7 @@ export function AtlasStorage({ data }: { data: StorageData }) {
   const outside = data.library.filter((g) => g.is_installed && g.outside_folder).map((game) => {
     const row = data.sorted.find((r) => r.game_id === game.id);
     return { game, size: row ? row.size_bytes + row.prefix_bytes : game.size_bytes ?? 0 };
-  });
+  }).sort((a, b) => b.size - a.size);
   const leftovers = data.jobs.filter((j) => j.state === 'canceled' && !j.cleaned_at && (j.kind === 'install' || j.kind === 'update') && j.bytes > 0);
   const otherLeftovers = data.jobs.filter((j) => j.leftover && !j.cleaned_at && !leftovers.includes(j));
   return (
@@ -84,9 +84,11 @@ export function AtlasDriveCard({ drive: d, rows, data, defaultFolder }: { drive:
   // all" line, not every game in tall rows. The rows show the same total the
   // list is sorted on (files + prefix), so the order matches the column.
   // Rows past the sixth keep their actions behind the toggle: Storage is
-  // where space is freed and games are moved.
+  // where space is freed and games are moved. Biggest first here too (audit
+  // F12): callers pass sorted rows, but the card must not depend on it.
   const [expanded, setExpanded] = useState(false);
-  const shown = expanded ? rows : rows.slice(0, 6);
+  const ordered = [...rows].sort((a, b) => b.size_bytes + b.prefix_bytes - (a.size_bytes + a.prefix_bytes));
+  const shown = expanded ? ordered : ordered.slice(0, 6);
   const total = rows.reduce((a, r) => a + r.size_bytes + r.prefix_bytes, 0);
   const isDefaultDrive = !!defaultFolder && d.folders.some((f) => isWithinFolder(defaultFolder, f));
   // The design's drive head: the label when the filesystem has one, then

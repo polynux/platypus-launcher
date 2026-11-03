@@ -101,6 +101,11 @@
     "pauseAll": "Tout mettre en pause",
     "recent": "Récents",
     "emptyTitle": "Rien à télécharger",
-    "emptyBody": "Les installations, mises à jour, déplacements et vérifications de fichiers apparaissent ici."
+    "emptyBody": "Les installations, mises à jour, déplacements et vérifications de fichiers apparaissent ici.",
+    "failed": "Échec",
+    "failedPrefix": "Échec : {{error}}",
+    "failedNoSpace": "Pas assez de place sur {{dir}}",
+    "failedSystemFolder": "Platypus ne peut pas lancer de jeux depuis les dossiers système comme {{path}}",
+    "failedSafetyCheck": "Le téléchargement a échoué à un contrôle de sécurité"
   }
 }

@@ -94,6 +94,31 @@ export function isPluginGame(g: Game): boolean {
   return g.source !== 'steam' && g.source !== 'custom' && g.source !== '';
 }
 
+/** System folders the core will never allow (audit F16, CORE-6): launching
+ *  "games" from there would let a plugin run any system binary. Mirrors
+ *  `systemDirs` in internal/plugins/manager.go (plus the filesystem root). */
+export const SYSTEM_DIRS = ['/bin', '/boot', '/dev', '/etc', '/lib', '/lib32', '/lib64', '/proc', '/run', '/sbin', '/sys', '/usr', '/var'];
+
+/** POSIX clean (like the core's filepath.Clean): drop empty and "." segments,
+ *  pop on "..", rejoin with a leading "/". */
+export function cleanPosix(path: string): string {
+  const parts = path.split('/');
+  const out: string[] = [];
+  for (const p of parts) {
+    if (p === '' || p === '.') continue;
+    if (p === '..') out.pop();
+    else out.push(p);
+  }
+  return `/${out.join('/')}`;
+}
+
+export function isSystemFolder(path: string): boolean {
+  if (!path) return false;
+  const clean = cleanPosix(path);
+  if (clean === '/') return true;
+  return SYSTEM_DIRS.some((d) => clean === d || clean.startsWith(`${d}/`));
+}
+
 export function greeting(d = new Date()): string {
   const h = d.getHours();
   if (h < 5) return 'Up late';

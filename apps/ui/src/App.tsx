@@ -49,7 +49,7 @@ import { applyLanguage, loadSessionInfo } from './lib/i18n';
 import { loadTheme } from './lib/theme';
 import { LibrarySkeleton } from './components/LibrarySkeleton';
 import { useNetState } from './components/useNetState';
-import { hasDetails, plainError } from './lib/plainError';
+import { errorToastParts } from './lib/plainError';
 import { coreErrMsg } from './lib/coreError';
 import { Toaster } from './components/ds/sonner';
 import { Modal } from './components/Modal';
@@ -288,10 +288,11 @@ export function AppContent() {
   const notify = useCallback((msg: string, kind: NoticeKind = 'ok') => {
     // An error toast says a plain sentence; the raw text rides as the
     // toast description, and the toast stays long enough to read it.
+    // Known engine strings become sentences (audit F4), with the raw behind.
     const fallback = t('errors:fallback');
     if (kind === 'err') {
-      const raw = hasDetails(msg, fallback) ? msg : undefined;
-      toastNotify.error(plainError(msg, fallback), raw ? { description: raw } : undefined);
+      const parts = errorToastParts(msg, t, fallback);
+      toastNotify.error(parts.title, parts.description ? { description: parts.description } : undefined);
       return;
     }
     if (kind === 'busy') {
