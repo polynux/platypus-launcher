@@ -12,6 +12,11 @@ import { currentThemeVariables, TOKEN_VARS, onThemeApplied, useVariant, getEffec
 /** A sampled colour: sRGB channels, 0..255. */
 export type Tone = [number, number, number];
 
+export function toneFromHex(color: string): Tone | null {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  return match ? [parseInt(match[1].slice(0, 2), 16), parseInt(match[1].slice(2, 4), 16), parseInt(match[1].slice(4, 6), 16)] : null;
+}
+
 /** What the theme's color.game-tone axis allows. */
 export type GameToneSupport = 'off' | 'accent' | 'whole';
 
@@ -352,6 +357,35 @@ function choiceOf(settings: { game_tone?: string } | null): GameToneChoice {
  *  choice, and every setChoice updates them all. */
 let sharedChoice: GameToneChoice = 'accent';
 const choiceListeners = new Set<() => void>();
+let sharedDefaultAccent = '';
+let defaultAccentRevision = 0;
+const defaultAccentListeners = new Set<() => void>();
+
+export function useDefaultAccent(): [string, (color: string) => void] {
+  const color = useSyncExternalStore(
+    (listener) => { defaultAccentListeners.add(listener); return () => defaultAccentListeners.delete(listener); },
+    () => sharedDefaultAccent,
+    () => '',
+  );
+  useEffect(() => {
+    let live = true;
+    const revision = defaultAccentRevision;
+    try {
+      void Effect.runPromise(LauncherApi.getLauncherSettings()).then((s) => {
+        if (!live || revision !== defaultAccentRevision) return;
+        sharedDefaultAccent = s.default_accent ?? '';
+        for (const listener of defaultAccentListeners) listener();
+      }).catch(() => {});
+    } catch { /* Keep the theme accent if the core is unavailable. */ }
+    return () => { live = false; };
+  }, []);
+  return [color, (next) => {
+    defaultAccentRevision += 1;
+    sharedDefaultAccent = next;
+    for (const listener of defaultAccentListeners) listener();
+    try { void Effect.runPromise(LauncherApi.setDefaultAccent(next)).catch(() => {}); } catch { /* Keep the on-screen choice. */ }
+  }];
+}
 
 function notifyChoice(): void {
   for (const listener of choiceListeners) listener();
@@ -364,12 +398,17 @@ export function getGameToneChoice(): GameToneChoice {
 
 /** Reads the launcher setting; a failed read keeps accent. */
 export function loadGameToneChoice(): Promise<GameToneChoice> {
+  const accentRevision = defaultAccentRevision;
   try {
     return Effect.runPromise(LauncherApi.getLauncherSettings())
       .then((settings) => {
         const next = choiceOf(settings);
         sharedChoice = next;
         notifyChoice();
+        if (accentRevision === defaultAccentRevision) {
+          sharedDefaultAccent = settings?.default_accent ?? '';
+          for (const listener of defaultAccentListeners) listener();
+        }
         return next;
       })
       .catch(() => sharedChoice);
@@ -406,7 +445,7 @@ export interface GameTone {
   setChoice(next: GameToneChoice): void;
 }
 
-export function useGameTone(heroUrl?: string | null): GameTone {
+export function useGameTone(heroUrl?: string | null, active = true): GameTone {
   const supported = useVariant('color.game-tone');
   const choice = useSyncExternalStore(
     (listener) => { choiceListeners.add(listener); return () => choiceListeners.delete(listener); },
@@ -422,7 +461,15 @@ export function useGameTone(heroUrl?: string | null): GameTone {
     return () => { live = false; };
   }, []);
 
-  useEffect(() => { applyGameTone(mode, tone, getEffectiveScheme()); }, [mode, tone]);
+  const defaultAccent = useSyncExternalStore(
+    (listener) => { defaultAccentListeners.add(listener); return () => defaultAccentListeners.delete(listener); },
+    () => sharedDefaultAccent,
+    () => '',
+  );
+  useEffect(() => {
+    const gameTone = toneFromHex(defaultAccent);
+    applyGameTone(active && mode !== 'off' && tone ? mode : gameTone ? 'accent' : 'off', active && mode !== 'off' && tone ? tone : gameTone, getEffectiveScheme());
+  }, [active, mode, tone, defaultAccent]);
 
   // A theme or scheme change rewrites its tokens; the game's colour goes back
   // on top. The scheme repaint reads the last mode and tone, so an Appearance

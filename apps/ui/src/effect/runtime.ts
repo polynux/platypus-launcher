@@ -260,6 +260,7 @@ export const LauncherApi = {
   // The colour scheme (issue #134): "dark", "light" or "black", "" for dark.
   // Only themes that declare the scheme offer it; the rest stay dark.
   setColorScheme: (scheme: string) => call<LauncherSettings>('SetColorScheme', () => App.SetColorScheme(scheme)),
+  setDefaultAccent: (color: string) => call<LauncherSettings>('SetDefaultAccent', () => App.SetDefaultAccent(color)),
   // Layouts (issue #96): one view's validated layout, or null when the theme
   // ships none. Go marshals the nil layout as null, like MigrationNotice.
   getThemeLayout: (view: string) =>

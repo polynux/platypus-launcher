@@ -566,6 +566,7 @@ export namespace types {
     default_runner_id: string;
     game_tone: string;
     color_scheme: string;
+    default_accent: string;
   }
 
   export interface LedgerEntry {

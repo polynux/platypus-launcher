@@ -164,6 +164,7 @@ export const APP_PAGE_METHODS: readonly string[] = [
   'SetCustomArt',
   'SetCustomGameYear',
   'SetCustomTitle',
+  'SetDefaultAccent',
   'SetDefaultRunner',
   'SetGameInfoOnline',
   'SetGameNotes',

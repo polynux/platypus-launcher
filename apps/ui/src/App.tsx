@@ -924,7 +924,8 @@ export function AppContent() {
   // #134; the shell takes no tone prop).
   // The game's colour is applied as a side effect; the /22 switch for it
   // lives in Settings > Appearance (#134).
-  useGameTone(currentGame ? (heroArt ?? heroImages(currentGame)[0]) : undefined);
+  const gameToneActive = view.name === 'game' || (isListDetail && atlasView === 'list' && view.name === 'library');
+  useGameTone(gameToneActive && currentGame ? (heroArt ?? heroImages(currentGame)[0]) : undefined, gameToneActive);
 
   // One game page for the game view and the list-detail stage (issues #126,
   // #127): the same props, so the stage renders the game page for the

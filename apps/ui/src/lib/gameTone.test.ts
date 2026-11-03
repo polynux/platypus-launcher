@@ -15,6 +15,7 @@ import {
   readable,
   sampleTone,
   toneAt,
+  toneFromHex,
   toneVariables,
   vivid,
   type Tone,
@@ -100,6 +101,17 @@ describe('the mode a theme allows', () => {
 
 describe('tone variables', () => {
   const tone: Tone = [60, 120, 200];
+
+  it('derives readable default accent tokens from a custom colour in every scheme', () => {
+    const custom = toneFromHex('#2878D0')!;
+    expect(custom).toEqual([40, 120, 208]);
+    for (const scheme of ['dark', 'light', 'black'] as const) {
+      const vars = toneVariables('accent', custom, scheme);
+      expect(contrastRatio(rgb(vars['--color-on-accent']), rgb(vars['--color-accent'])), `${scheme} on-accent`).toBeGreaterThanOrEqual(4.5);
+      const ground: Tone = scheme === 'light' ? [255, 255, 255] : [0, 0, 0];
+      expect(contrastRatio(rgb(vars['--color-focus']), ground), `${scheme} focus`).toBeGreaterThanOrEqual(3);
+    }
+  });
 
   it('moves nothing when the axis is off or the art named no colour', () => {
     expect(toneVariables('off', tone)).toEqual({});

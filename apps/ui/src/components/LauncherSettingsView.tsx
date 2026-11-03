@@ -16,7 +16,7 @@ import { BackupsSetting } from './BackupsSetting';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
 import { DEFAULT_THEME_ID, loadTheme, useColorScheme, useThemeSchemes, useVariant, saveColorSchemeChoice, type ColorScheme } from '../lib/theme';
-import { useGameToneChoice, type GameToneChoice } from '../lib/gameTone';
+import { useDefaultAccent, useGameToneChoice, type GameToneChoice } from '../lib/gameTone';
 import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
 import { ViewHeader, cx } from './ui';
 import { AtlasSettingsPage } from './AtlasLauncherSettings';
@@ -387,17 +387,31 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
   const schemes = useThemeSchemes();
   const scheme = useColorScheme();
   const tone = useGameToneChoice();
+  const [defaultAccent, setDefaultAccent] = useDefaultAccent();
   const [busy, setBusy] = useState(false);
   const showScheme = schemes.length > 1;
   const showTone = tone.supported !== 'off';
-  if (!showScheme && !showTone) {
-    return (
-      <section className={SECTION} id="settings-section-appearance">
-        <h2 className="text-[14px] font-bold">{t('appearance.heading')}</h2>
-        <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">{t('appearance.none')}</p>
-      </section>
-    );
-  }
+  const accentPickerContent = (
+      <div className="flex flex-wrap items-center gap-2" aria-label={t('appearance.accentLabel')}>
+        {[
+          ['#2878D0', t('appearance.accent.atlasBlue')],
+          ['#7656D6', t('appearance.accent.violet')],
+          ['#168A78', t('appearance.accent.teal')],
+          ['#D34F68', t('appearance.accent.rose')],
+        ].map(([color, label]) => (
+          <button key={color} type="button" aria-label={label} aria-pressed={defaultAccent.toLowerCase() === color.toLowerCase()} onClick={() => setDefaultAccent(color)} className="size-7 rounded-full ring-2 ring-offset-2 ring-offset-ground aria-pressed:ring-focus" style={{ backgroundColor: color }} />
+        ))}
+        <label className="flex items-center gap-2 text-[12px] text-text-body">
+          {t('appearance.accent.custom')}
+          <input type="color" aria-label={t('appearance.accent.custom')} value={defaultAccent || '#2878D0'} onChange={(e) => setDefaultAccent(e.target.value.toUpperCase())} className="size-8 cursor-pointer rounded border-0 bg-transparent p-0" />
+        </label>
+        <button type="button" onClick={() => setDefaultAccent('')} aria-pressed={!defaultAccent} className="text-[12px] font-semibold text-accent hover:underline">{t('appearance.accent.theme')}</button>
+      </div>
+  );
+  const atlasRows = useVariant('settings-row.style') === 'srow';
+  const accentPicker = atlasRows
+    ? <AtlasSRow label={t('appearance.accentLabel')}>{accentPickerContent}</AtlasSRow>
+    : <div><div className="mb-1.5 text-[13px] font-semibold">{t('appearance.accentLabel')}</div>{accentPickerContent}</div>;
   const segWrap = 'gap-0.5 rounded-[9px] bg-surface p-[3px]';
   const segItem =
     'gap-1.5 rounded-md bg-transparent px-2.5 py-0 font-sans text-[12.5px] font-semibold text-text-muted transition hover:bg-transparent hover:text-text ' +
@@ -421,9 +435,10 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
   // Atlas renders the lab's two .srows (issue #138): Theme is its own
   // section above; here Colour scheme and Game colour sit right-aligned and
   // sized to their content, with no inner heading or description sentence.
-  if (useVariant('settings-row.style') === 'srow') {
+  if (atlasRows) {
     return (
       <section id="settings-section-appearance">
+        {accentPicker}
         {showScheme && (
           <AtlasSRow label={t('appearance.schemeLabel')}>
             <ToggleGroup
@@ -473,6 +488,7 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
       <h2 className="text-[14px] font-bold">{t('appearance.heading')}</h2>
       <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">{t('appearance.description')}</p>
       <div className="grid gap-5">
+        {accentPicker}
         {showScheme && (
           <div>
             <div className="mb-1.5 text-[13px] font-semibold">{t('appearance.schemeLabel')}</div>

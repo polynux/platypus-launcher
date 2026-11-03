@@ -20,6 +20,7 @@ import i18n from '../../lib/i18n';
 import type { Game } from '../../types';
 
 const shellState = vi.hoisted(() => ({ navigation: 'sourcebar' }));
+const toneSpy = vi.hoisted(() => vi.fn());
 vi.mock('../../lib/theme', async (importOriginal) => {
   const mod = await importOriginal<typeof import('../../lib/theme')>();
   return {
@@ -45,8 +46,19 @@ vi.mock('../../lib/theme', async (importOriginal) => {
   };
 });
 
+vi.mock('../../lib/gameTone', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../../lib/gameTone')>();
+  return {
+    ...mod,
+    useGameTone: (url?: string | null, active?: boolean) => {
+      toneSpy(url, active);
+      return { supported: 'whole', mode: 'off', choice: 'accent', tone: null, setChoice: vi.fn() };
+    },
+  };
+});
+
 expect.extend(matchers);
-afterEach(() => { cleanup(); shellState.navigation = 'sourcebar'; });
+afterEach(() => { cleanup(); shellState.navigation = 'sourcebar'; toneSpy.mockClear(); window.localStorage.setItem('platypus.atlas.view', 'list'); });
 
 const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: TooltipProvider });
 
@@ -254,6 +266,17 @@ function mockApp(games: Game[] = []) {
 // `import('../../App')` that used to be billed to this budget is gone; what is
 // left is the App's own render cost, so the budget matches it.
 describe('/22 friends panel and banners in App (issue #135)', { timeout: 15_000 }, () => {
+  it('limits game colour to the game page and Library list stage', async () => {
+    const user = userEvent.setup();
+    mockApp([mkGame('alpha', { title: 'Alpha' })]);
+    render(<App />);
+    await waitFor(() => expect(toneSpy).toHaveBeenLastCalledWith(undefined, false));
+    await user.click(await screen.findByRole('button', { name: 'Library' }));
+    await waitFor(() => expect(toneSpy).toHaveBeenLastCalledWith(undefined, true));
+    await user.click(screen.getByRole('button', { name: 'Table' }));
+    await waitFor(() => expect(toneSpy).toHaveBeenLastCalledWith(undefined, false));
+  });
+
   it('toggles the side panel from the avatar and closes it with Escape', async () => {
     const user = userEvent.setup();
     mockApp([mkGame('alpha', { title: 'Alpha' })]);

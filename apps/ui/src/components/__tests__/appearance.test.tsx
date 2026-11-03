@@ -5,6 +5,7 @@ import { afterEach } from 'vitest';
 
 const themeState = vi.hoisted(() => ({ schemes: ['dark', 'light', 'black'] as string[], scheme: 'dark' as string, saveScheme: vi.fn() }));
 const toneState = vi.hoisted(() => ({ supported: 'whole' as string, choice: 'accent' as string, setChoice: vi.fn() }));
+const accentState = vi.hoisted(() => ({ value: '', set: vi.fn() }));
 
 vi.mock('../../lib/theme', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/theme')>();
@@ -33,6 +34,7 @@ vi.mock('../../lib/gameTone', async (importOriginal) => {
         toneState.choice = next;
       },
     }),
+    useDefaultAccent: () => [accentState.value, (next: string) => { accentState.value = next; accentState.set(next); }],
   };
 });
 
@@ -51,9 +53,18 @@ beforeEach(() => {
   toneState.supported = 'whole';
   toneState.choice = 'accent';
   toneState.setChoice.mockReset();
+  accentState.value = '';
+  accentState.set.mockReset();
 });
 
 describe('Appearance settings (issue #134)', () => {
+  it('offers presets and a custom default accent colour', () => {
+    render(<AppearanceSetting onNotify={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'appearance.accent.atlasBlue' }));
+    expect(accentState.set).toHaveBeenCalledWith('#2878D0');
+    fireEvent.change(screen.getByLabelText('appearance.accent.custom'), { target: { value: '#9944CC' } });
+    expect(accentState.set).toHaveBeenCalledWith('#9944CC');
+  });
   it('renders both pickers when the theme declares schemes and takes the game colour', () => {
     render(<AppearanceSetting onNotify={() => {}} />);
     expect(screen.getByLabelText('appearance.schemeLabel')).toBeInTheDocument();
