@@ -271,9 +271,7 @@ export function getFocusableElements(scope: Element | Document): HTMLElement[] {
 }
 
 /** A candidate must lie in the pressed direction: its near edge past the
- *  current element's far edge, with a small tolerance for shared borders.
- *  Off-axis candidates only count within a bounded angle (~63°), so a far
- *  diagonal never beats the row/column ahead. */
+ *  current element's far edge, with a small tolerance for shared borders. */
 const EDGE_TOL = 8;
 
 function intervalGap(a1: number, a2: number, b1: number, b2: number): number {
@@ -294,16 +292,19 @@ export function nearestInDirection(
   const fr = f.left + f.width;
   const ft = f.top;
   const fb = f.top + f.height;
-  let best: HTMLElement | null = null;
-  let bestScore = Infinity;
-  let bestRow = false;
+  const stagePrimary = dir === 'right' && from.hasAttribute('data-game-row')
+    ? els.find((el) => el.hasAttribute('data-nav-primary') && el.closest('[data-nav-region="stage"]'))
+    : undefined;
+  const stage = stagePrimary?.closest('[data-nav-region="stage"]')?.getBoundingClientRect();
+  if (stagePrimary && stage && stage.left >= fr - EDGE_TOL) return stagePrimary;
+  let bestRow: { el: HTMLElement; gap: number; score: number } | null = null;
+  let bestDiagonal: { el: HTMLElement; gap: number; score: number } | null = null;
   for (const el of els) {
     if (el === from) continue;
     const widget = widgetOf(el);
-    // A widget is one navigation stop. Use its full box to decide whether
-    // it lies in the requested direction, while retaining its selected item
-    // as the focus target.
-    const r = widget && widget.root !== fromWidget?.root && !el.hasAttribute('data-game-row')
+    // A selected widget is one navigation stop when entering from outside.
+    // Items in the current widget keep their own geometry.
+    const r = widget && widget.root !== fromWidget?.root && widgetSelection(widget.root, widget.items) === el
       ? widget.root.getBoundingClientRect()
       : el.getBoundingClientRect();
     const l = r.left;
@@ -329,25 +330,22 @@ export function nearestInDirection(
       gap = ft - b;
       orth = intervalGap(fl, fr, l, rr);
     }
+    const entersVerticalList = widget && widget.root !== fromWidget?.root &&
+      widget.root.getAttribute('role') === 'listbox' && widget.axis === 'vertical' &&
+      (dir === 'left' || dir === 'right');
     const angle = from.hasAttribute('data-game-row') && dir === 'right' ? 4 : 2;
-    if (orth > Math.max(48, Math.max(0, gap) * angle)) continue;
-    // Row/column neighbours win over nearer off-axis controls: only when
-    // nothing overlaps the current row/column do diagonal candidates count.
+    if (!entersVerticalList && orth > Math.max(48, Math.max(0, gap) * angle)) continue;
     const inRow = orth === 0;
-    if (bestRow && !inRow) continue;
     const score = Math.max(0, gap) + orth * 3;
-    if (!bestRow && inRow) {
-      best = el;
-      bestScore = score;
-      bestRow = true;
-      continue;
-    }
-    if (score < bestScore) {
-      bestScore = score;
-      best = el;
+    const candidate = { el, gap, score };
+    if (inRow) {
+      if (!bestRow || score < bestRow.score) bestRow = candidate;
+    } else if (!bestDiagonal || score < bestDiagonal.score) {
+      bestDiagonal = candidate;
     }
   }
-  return best;
+  if (bestRow && (!bestDiagonal || bestRow.gap <= bestDiagonal.gap * 2)) return bestRow.el;
+  return bestDiagonal?.el ?? bestRow?.el ?? null;
 }
 
 /** Mark the controller's target: programmatic focus() does not match
@@ -429,8 +427,10 @@ export function activateFocused(): boolean {
   const el = document.activeElement;
   if (!(el instanceof HTMLElement)) return false;
   if (el === document.body || el === document.documentElement) return false;
-  const switchLabel = el.getAttribute('role') === 'switch' ? el.getAttribute('aria-label') : null;
-  const switchId = el.getAttribute('role') === 'switch' ? el.id : '';
+  const isSwitch = el.getAttribute('role') === 'switch';
+  const switchLabel = isSwitch ? el.getAttribute('aria-label') : null;
+  const switchId = isSwitch ? el.id : '';
+  const switchScope = isSwitch ? getScopeRoot() : null;
   const down = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
   el.dispatchEvent(down);
   if (!el.isConnected) return true;
@@ -440,16 +440,32 @@ export function activateFocused(): boolean {
   if (!el.isConnected) return true;
   if (up.defaultPrevented) return true;
   el.click();
-  if (document.activeElement === document.body || !el.isConnected) {
-    const replacement =
-      (switchId ? document.getElementById(switchId) : null) ??
-      (switchLabel
-        ? [...document.querySelectorAll<HTMLElement>('[role="switch"]')].find(
-            (candidate) => candidate.getAttribute('aria-label') === switchLabel,
-          ) ?? null
-        : null);
-    if (replacement instanceof HTMLElement) focusController(replacement);
-    else if (el.isConnected) focusController(el);
+  if (isSwitch && switchScope) {
+    const findSwitch = (): HTMLElement | null => {
+      const root: ParentNode = switchScope instanceof Document ? switchScope.documentElement : switchScope;
+      const candidates = [
+        ...(root instanceof HTMLElement && root.getAttribute('role') === 'switch' ? [root] : []),
+        ...root.querySelectorAll<HTMLElement>('[role="switch"]'),
+      ];
+      return candidates.find((candidate) =>
+        (switchId && candidate.id === switchId) ||
+        (switchLabel && candidate.getAttribute('aria-label') === switchLabel),
+      ) ?? null;
+    };
+    const restoreSwitchFocus = (frames = 3): void => {
+      window.requestAnimationFrame(() => {
+        if (el.isConnected && document.activeElement === el) {
+          if (frames > 0) restoreSwitchFocus(frames - 1);
+          return;
+        }
+        if (document.activeElement !== document.body && el.isConnected) return;
+        const replacement = findSwitch();
+        if (replacement && !replacement.matches(':disabled') && !isHidden(replacement)) {
+          focusController(replacement);
+        }
+      });
+    };
+    restoreSwitchFocus();
   }
   return true;
 }
@@ -509,6 +525,7 @@ function isAlongAxis(axis: WidgetAxis, dir: NavDir): boolean {
  *  the handler yields to; a preventDefaulted event is left alone. Returns
  *  whether focus moved. */
 export function controllerKeyHandler(e: KeyboardEvent): boolean {
+  pendingRovingFocus = null;
   if (e.defaultPrevented) return false;
   const dir =
     e.key === 'ArrowUp' ? 'up'
@@ -597,8 +614,9 @@ export function installControllerKeyboard(): () => void {
       clearControllerFocus();
       t.setAttribute('data-controller-focus', 'true');
       pendingRovingFocus = null;
-    } else if (!t || !t.hasAttribute('data-controller-focus')) {
-      clearControllerFocus();
+    } else {
+      pendingRovingFocus = null;
+      if (!t || !t.hasAttribute('data-controller-focus')) clearControllerFocus();
     }
   };
   const onPointerDown = (): void => {

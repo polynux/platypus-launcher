@@ -88,6 +88,7 @@ export function PlayButton(p: PlayButtonProps) {
     <Button
       variant="primary"
       size="none"
+      data-nav-primary
       onClick={p.onPlay}
       disabled={p.launching || p.disabled}
       className="gap-2 rounded-2xl px-8 py-3.5 text-[15px] shadow-[0_12px_30px_rgba(252,211,77,.25)] disabled:pointer-events-auto disabled:cursor-default disabled:opacity-80"

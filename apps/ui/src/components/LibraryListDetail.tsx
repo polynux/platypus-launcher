@@ -542,7 +542,7 @@ export function LibraryListDetail(p: ListDetailProps) {
       {/* The stage is its own scroll container (like the list): it scrolls back
           to the top when the game changes. No stable gutter: it left a
           permanent 10px gap beside the full-bleed hero on short content. */}
-      <div ref={stageRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-raised">
+      <div ref={stageRef} data-nav-region="stage" className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-raised">
         {selected ? p.renderStage(selected) : null}
       </div>
     </div>

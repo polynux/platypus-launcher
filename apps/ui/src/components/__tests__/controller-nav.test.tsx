@@ -10,6 +10,8 @@ import {
   closeTopmostLayer,
   handleBackAction,
   installControllerKeyboard,
+  nearestInDirection,
+  getFocusableElements,
 } from '../../lib/spatialNav';
 import { dispatchPadArrow } from '../../lib/useGamepad';
 import {
@@ -296,32 +298,84 @@ describe('composite widgets', () => {
 });
 
 describe('wide toolbar navigation', () => {
-  it('moves Down to the nearest item below a wide toolbar button', () => {
+  it('chooses the nearest diagonal target over a distant column match', () => {
     uninstall = installControllerKeyboard();
     render(
-      <div role="toolbar" aria-label="tools">
+      <div>
         <button type="button" data-testid="add">Add a store</button>
-        <button type="button" data-testid="far">Far action</button>
+        <button type="button" data-testid="filter">Store filter</button>
+        <button type="button" data-testid="tune">Tune</button>
         <button type="button" data-testid="region">Download region</button>
       </div>,
     );
-    rect(screen.getByRole('toolbar'), 0, 0, 800, 360);
-    rect(screen.getByTestId('add'), 0, 0, 400, 40);
-    rect(screen.getByTestId('far'), 0, 300, 120, 24);
-    rect(screen.getByTestId('region'), 300, 60, 120, 24);
+    rect(screen.getByTestId('add'), 0, 0, 600, 40);
+    rect(screen.getByTestId('filter'), 0, 400, 100, 24);
+    rect(screen.getByTestId('tune'), 0, 600, 100, 24);
+    rect(screen.getByTestId('region'), 610, 60, 130, 24);
     screen.getByTestId('add').focus();
     fireEvent.keyDown(screen.getByTestId('add'), { key: 'ArrowDown' });
     expect(document.activeElement).toBe(screen.getByTestId('region'));
   });
 });
 
+describe('Atlas directional region entry', () => {
+  it('prefers the stage Play action over nearby toolbar controls from a row', () => {
+    const list = document.createElement('ul');
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.setAttribute('data-game-row', 'game');
+    list.append(row);
+    document.body.append(list);
+    rect(list, 0, 0, 260, 800);
+    rect(row, 0, 0, 260, 40);
+
+    const store = buttonWithRect('Store filter', 280, 30, 100, 24);
+    const tune = buttonWithRect('Tune', 280, 100, 100, 24);
+    const stage = document.createElement('div');
+    stage.setAttribute('data-nav-region', 'stage');
+    const play = document.createElement('button');
+    play.setAttribute('data-nav-primary', '');
+    stage.append(play);
+    document.body.append(stage);
+    rect(stage, 280, 0, 700, 760);
+    rect(play, 420, 500, 120, 40);
+
+    expect(nearestInDirection(row, getFocusableElements(document), 'right')).toBe(play);
+    expect(store).toBeTruthy();
+    expect(tune).toBeTruthy();
+  });
+
+  it('enters the Atlas Plugins list from a detail action left of a short list', () => {
+    const list = document.createElement('ul');
+    list.setAttribute('role', 'listbox');
+    const selected = document.createElement('button');
+    selected.setAttribute('role', 'option');
+    selected.setAttribute('aria-selected', 'true');
+    list.append(selected);
+    document.body.append(list);
+    rect(list, 0, 0, 280, 100);
+    rect(selected, 0, 0, 280, 48);
+    const review = buttonWithRect('Review and approve', 320, 600, 150, 30);
+
+    expect(nearestInDirection(review, getFocusableElements(document), 'left')).toBe(selected);
+  });
+});
+
+function buttonWithRect(label: string, x: number, y: number, w: number, h: number): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.textContent = label;
+  document.body.append(b);
+  rect(b, x, y, w, h);
+  return b;
+}
+
 describe('A preserves switch focus', () => {
-  it('restores focus to a switch replaced by its controlled row update', () => {
+  it('restores focus after an asynchronous controlled row replacement', async () => {
     function ReplacingSwitch() {
       const [checked, setChecked] = useState(false);
       return (
         <div key={checked ? 'on' : 'off'}>
-          <Switch aria-label="Artwork" checked={checked} onCheckedChange={setChecked} />
+          <Switch aria-label="Artwork" checked={checked} onCheckedChange={(next) => setTimeout(() => setChecked(next), 0)} />
         </div>
       );
     }
@@ -330,7 +384,9 @@ describe('A preserves switch focus', () => {
     const toggle = screen.getByRole('switch', { name: 'Artwork' });
     toggle.focus();
     activateFocused();
-    expect(screen.getByRole('switch', { name: 'Artwork' })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Artwork' })).toHaveAttribute('aria-checked', 'true'));
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Artwork' })).toHaveFocus());
+    expect(toggle).not.toBeInTheDocument();
   });
 });
 

@@ -648,13 +648,6 @@ describe('bounded angle (finding 5)', () => {
     expect(nearestInDirection(from, getFocusableElements(document), 'right')).toBe(selected);
   });
 
-  it('lets an Atlas library row reach a diagonally placed stage action', () => {
-    const row = button('game', 0, 0);
-    row.setAttribute('data-game-row', 'game');
-    const play = button('play', 100, 200);
-
-    expect(nearestInDirection(row, getFocusableElements(document), 'right')).toBe(play);
-  });
 });
 
 describe('native controls (finding 6)', () => {
