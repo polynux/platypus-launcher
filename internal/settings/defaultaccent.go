@@ -12,6 +12,9 @@ var accentHex = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 func (s *Store) DefaultAccent() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !accentHex.MatchString(s.data.DefaultAccent) {
+		return ""
+	}
 	return s.data.DefaultAccent
 }
 

@@ -59,6 +59,17 @@ func TestDefaultAccentPersistsAndDefaultsToTheme(t *testing.T) {
 	if got := old.DefaultAccent(); got != "" {
 		t.Fatalf("old settings DefaultAccent = %q, want empty", got)
 	}
+	invalidPath := filepath.Join(t.TempDir(), "invalid-settings.json")
+	if err := os.WriteFile(invalidPath, []byte(`{"version":2,"default_accent":"red;--x:1"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	invalid, err := Open(invalidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := invalid.DefaultAccent(); got != "" {
+		t.Fatalf("invalid stored DefaultAccent = %q, want empty", got)
+	}
 	s, err := Open(path)
 	if err != nil {
 		t.Fatal(err)

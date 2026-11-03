@@ -185,15 +185,14 @@
   "gameDescription": "Take colour from the selected game’s art.",
   "gameSaved": "Game colour saved",
   "accentLabel": "Default accent colour",
+  "accentSaved": "Default accent colour saved",
   "accent": {
-   "atlasBlue": "Atlas blue",
+   "themeDefault": "Theme default",
    "violet": "Violet",
    "teal": "Teal",
    "rose": "Rose",
-   "custom": "Custom colour",
-   "theme": "Theme default"
-  },
-  "none": "This theme has no appearance options."
+   "custom": "Custom colour"
+  }
  },
  "atlas": {
   "cats": {

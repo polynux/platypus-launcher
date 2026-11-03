@@ -387,25 +387,56 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
   const schemes = useThemeSchemes();
   const scheme = useColorScheme();
   const tone = useGameToneChoice();
-  const [defaultAccent, setDefaultAccent] = useDefaultAccent();
+  const [defaultAccent, setDefaultAccent, saveDefaultAccent] = useDefaultAccent();
   const [busy, setBusy] = useState(false);
+  const accentSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accentRollback = useRef(defaultAccent);
+  useEffect(() => () => { if (accentSaveTimer.current) clearTimeout(accentSaveTimer.current); }, []);
   const showScheme = schemes.length > 1;
   const showTone = tone.supported !== 'off';
+  const saveAccent = (color: string, rollback: string) => {
+    persistedSettingsSection = 'appearance';
+    void saveDefaultAccent(color, rollback)
+      .then(() => onNotify(t('appearance.accentSaved')))
+      .catch((e) => onNotify(coreErrMsg(e), 'err'));
+  };
+  const pickAccent = (color: string) => {
+    const rollback = accentSaveTimer.current ? accentRollback.current : defaultAccent;
+    if (accentSaveTimer.current) clearTimeout(accentSaveTimer.current);
+    accentSaveTimer.current = null;
+    setDefaultAccent(color);
+    saveAccent(color, rollback);
+  };
+  const changeAccent = (color: string) => {
+    persistedSettingsSection = 'appearance';
+    if (!accentSaveTimer.current) accentRollback.current = defaultAccent;
+    setDefaultAccent(color);
+    if (accentSaveTimer.current) clearTimeout(accentSaveTimer.current);
+    accentSaveTimer.current = setTimeout(() => {
+      accentSaveTimer.current = null;
+      saveAccent(color, accentRollback.current);
+    }, 300);
+  };
   const accentPickerContent = (
-      <div className="flex flex-wrap items-center gap-2" aria-label={t('appearance.accentLabel')}>
+      <div role="group" aria-label={t('appearance.accentLabel')} className="flex flex-wrap items-center gap-2">
         {[
-          ['#2878D0', t('appearance.accent.atlasBlue')],
+          ['', t('appearance.accent.themeDefault')],
           ['#7656D6', t('appearance.accent.violet')],
           ['#168A78', t('appearance.accent.teal')],
           ['#D34F68', t('appearance.accent.rose')],
         ].map(([color, label]) => (
-          <button key={color} type="button" aria-label={label} aria-pressed={defaultAccent.toLowerCase() === color.toLowerCase()} onClick={() => setDefaultAccent(color)} className="size-7 rounded-full ring-2 ring-offset-2 ring-offset-ground aria-pressed:ring-focus" style={{ backgroundColor: color }} />
+          <button key={label} type="button" aria-label={label} aria-pressed={defaultAccent.toLowerCase() === color.toLowerCase()} onClick={() => pickAccent(color)} className="size-7 rounded-full ring-2 ring-transparent ring-offset-2 ring-offset-ground focus-visible:outline-none focus-visible:ring-focus aria-pressed:ring-focus" style={{ backgroundColor: color || 'var(--color-accent)' }} />
         ))}
         <label className="flex items-center gap-2 text-[12px] text-text-body">
           {t('appearance.accent.custom')}
-          <input type="color" aria-label={t('appearance.accent.custom')} value={defaultAccent || '#2878D0'} onChange={(e) => setDefaultAccent(e.target.value.toUpperCase())} className="size-8 cursor-pointer rounded border-0 bg-transparent p-0" />
+          <input type="color" aria-label={t('appearance.accent.custom')} value={defaultAccent || '#3B5BDB'} onChange={(e) => changeAccent(e.target.value.toUpperCase())} onBlur={() => {
+            if (accentSaveTimer.current) {
+              clearTimeout(accentSaveTimer.current);
+              accentSaveTimer.current = null;
+              saveAccent(defaultAccent, accentRollback.current);
+            }
+          }} className="size-8 cursor-pointer rounded border-0 bg-transparent p-0" />
         </label>
-        <button type="button" onClick={() => setDefaultAccent('')} aria-pressed={!defaultAccent} className="text-[12px] font-semibold text-accent hover:underline">{t('appearance.accent.theme')}</button>
       </div>
   );
   const atlasRows = useVariant('settings-row.style') === 'srow';

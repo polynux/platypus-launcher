@@ -73,6 +73,11 @@ export const TOKEN_VARS: Record<string, string[]> = {
 export type ColorScheme = 'dark' | 'light' | 'black';
 
 const SCHEME_CACHE_KEY = 'platypus.scheme';
+const DEFAULT_ACCENT_CACHE_KEY = 'platypus.defaultAccent';
+let paintCachedDefaultAccent: ((color: string, scheme: ColorScheme) => void) | undefined;
+export function registerCachedDefaultAccentPainter(painter: (color: string, scheme: ColorScheme) => void): void {
+  paintCachedDefaultAccent = painter;
+}
 let schemeChoice: ColorScheme = 'dark';
 let effectiveScheme: ColorScheme = 'dark';
 let currentThemeTokens: ThemeTokens | null = null;
@@ -310,6 +315,12 @@ export function applyCachedTheme(): void {
       const stale = vars['shell.navigation'] === 'sourcebar' && STALE_AXES.some((k) => !(k in vars));
       if (!stale) {
         applyTheme(cached);
+        try {
+          const accent = window.localStorage.getItem(DEFAULT_ACCENT_CACHE_KEY);
+          if (accent) paintCachedDefaultAccent?.(accent, effectiveScheme);
+        } catch {
+          // The theme accent remains in place when storage is unavailable.
+        }
         return;
       }
       // Stale: fall through to the defaults so the first paint is coherent.
@@ -320,6 +331,12 @@ export function applyCachedTheme(): void {
       }
     }
     applyTheme(DEFAULT_THEME);
+    try {
+      const accent = window.localStorage.getItem(DEFAULT_ACCENT_CACHE_KEY);
+      if (accent) paintCachedDefaultAccent?.(accent, effectiveScheme);
+    } catch {
+      // The theme accent remains in place when storage is unavailable.
+    }
   } catch {
     // A missing or broken entry leaves the defaults in place.
   }

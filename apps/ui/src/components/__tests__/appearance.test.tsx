@@ -1,11 +1,11 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
 const themeState = vi.hoisted(() => ({ schemes: ['dark', 'light', 'black'] as string[], scheme: 'dark' as string, saveScheme: vi.fn() }));
 const toneState = vi.hoisted(() => ({ supported: 'whole' as string, choice: 'accent' as string, setChoice: vi.fn() }));
-const accentState = vi.hoisted(() => ({ value: '', set: vi.fn() }));
+const accentState = vi.hoisted(() => ({ value: '', set: vi.fn(), save: vi.fn(async () => {}) }));
 
 vi.mock('../../lib/theme', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/theme')>();
@@ -34,7 +34,7 @@ vi.mock('../../lib/gameTone', async (importOriginal) => {
         toneState.choice = next;
       },
     }),
-    useDefaultAccent: () => [accentState.value, (next: string) => { accentState.value = next; accentState.set(next); }],
+    useDefaultAccent: () => [accentState.value, (next: string) => { accentState.value = next; accentState.set(next); }, accentState.save],
   };
 });
 
@@ -44,7 +44,7 @@ vi.mock('react-i18next', () => ({
 
 import { AppearanceSetting } from '../LauncherSettingsView';
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 beforeEach(() => {
   themeState.schemes = ['dark', 'light', 'black'];
@@ -55,15 +55,39 @@ beforeEach(() => {
   toneState.setChoice.mockReset();
   accentState.value = '';
   accentState.set.mockReset();
+  accentState.save.mockReset();
 });
 
 describe('Appearance settings (issue #134)', () => {
-  it('offers presets and a custom default accent colour', () => {
-    render(<AppearanceSetting onNotify={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: 'appearance.accent.atlasBlue' }));
-    expect(accentState.set).toHaveBeenCalledWith('#2878D0');
-    fireEvent.change(screen.getByLabelText('appearance.accent.custom'), { target: { value: '#9944CC' } });
+  it('offers the theme accent first and saves a custom colour when the picker closes', () => {
+    const view = render(<AppearanceSetting onNotify={() => {}} />);
+    expect(screen.getByRole('group', { name: 'appearance.accentLabel' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'appearance.accent.themeDefault' }));
+    expect(accentState.save).toHaveBeenCalledWith('', '');
+    const picker = screen.getByLabelText('appearance.accent.custom');
+    fireEvent.change(picker, { target: { value: '#9944CC' } });
     expect(accentState.set).toHaveBeenCalledWith('#9944CC');
+    expect(accentState.save).toHaveBeenCalledTimes(1);
+    view.rerender(<AppearanceSetting onNotify={() => {}} />);
+    fireEvent.blur(picker);
+    expect(accentState.save).toHaveBeenLastCalledWith('#9944CC', '');
+  });
+  it('debounces custom colour persistence while dragging the picker', async () => {
+    vi.useFakeTimers();
+    render(<AppearanceSetting onNotify={() => {}} />);
+    fireEvent.change(screen.getByLabelText('appearance.accent.custom'), { target: { value: '#9944CC' } });
+    expect(accentState.save).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(299); });
+    expect(accentState.save).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(accentState.save).toHaveBeenCalledWith('#9944CC', '');
+  });
+  it('shows save errors for default accent changes', async () => {
+    const notify = vi.fn();
+    accentState.save.mockRejectedValueOnce(new Error('settings read-only'));
+    render(<AppearanceSetting onNotify={notify} />);
+    fireEvent.click(screen.getByRole('button', { name: 'appearance.accent.rose' }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.any(String), 'err'));
   });
   it('renders both pickers when the theme declares schemes and takes the game colour', () => {
     render(<AppearanceSetting onNotify={() => {}} />);

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Effect } from 'effect';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
-const api = vi.hoisted(() => ({ getLauncherSettings: vi.fn(), setGameTone: vi.fn() }));
+const api = vi.hoisted(() => ({ getLauncherSettings: vi.fn(), setGameTone: vi.fn(), setDefaultAccent: vi.fn() }));
 vi.mock('../effect/runtime', () => ({
   LauncherApi: new Proxy({}, { get: (_t, k: string) => (...a: unknown[]) => (api as Record<string, (...x: unknown[]) => unknown>)[k](...a) }),
 }));
@@ -9,6 +10,7 @@ vi.mock('../effect/runtime', () => ({
 import {
   applyGameTone,
   contrastRatio,
+  defaultAccentVariables,
   effectiveTone,
   hslOf,
   loadArtTone,
@@ -17,10 +19,13 @@ import {
   toneAt,
   toneFromHex,
   toneVariables,
+  useGameTone,
+  useDefaultAccent,
   vivid,
   type Tone,
 } from './gameTone';
 import { applyTheme } from './theme';
+import { DEFAULT_THEME } from '../gen/defaultTheme';
 import type { ThemeTokens } from '../types';
 
 const root = () => document.documentElement;
@@ -32,8 +37,10 @@ const pixels = (colors: Tone[]): Uint8ClampedArray => new Uint8ClampedArray(colo
 beforeEach(() => {
   api.getLauncherSettings.mockReset();
   api.setGameTone.mockReset();
+  api.setDefaultAccent.mockReset();
   api.getLauncherSettings.mockReturnValue(Effect.succeed({ game_tone: '' }));
   api.setGameTone.mockReturnValue(Effect.succeed({ game_tone: 'whole' }));
+  api.setDefaultAccent.mockReturnValue(Effect.succeed({ default_accent: '' }));
   root().style.cssText = '';
   root().className = '';
 });
@@ -103,13 +110,19 @@ describe('tone variables', () => {
   const tone: Tone = [60, 120, 200];
 
   it('derives readable default accent tokens from a custom colour in every scheme', () => {
-    const custom = toneFromHex('#2878D0')!;
-    expect(custom).toEqual([40, 120, 208]);
+    const grounds: Record<'dark' | 'light' | 'black', Tone> = { dark: [19, 22, 27], light: [233, 236, 240], black: [0, 0, 0] };
+    const picks = ['#FFFFFF', '#000000', '#808080', '#FFFF00', '#0000FF', '#2878D0'].map((hex) => toneFromHex(hex)!);
     for (const scheme of ['dark', 'light', 'black'] as const) {
-      const vars = toneVariables('accent', custom, scheme);
-      expect(contrastRatio(rgb(vars['--color-on-accent']), rgb(vars['--color-accent'])), `${scheme} on-accent`).toBeGreaterThanOrEqual(4.5);
-      const ground: Tone = scheme === 'light' ? [255, 255, 255] : [0, 0, 0];
-      expect(contrastRatio(rgb(vars['--color-focus']), ground), `${scheme} focus`).toBeGreaterThanOrEqual(3);
+      for (const pick of picks) {
+        const vars = defaultAccentVariables(pick, scheme);
+        const accent = rgb(vars['--color-accent']);
+        expect(contrastRatio(rgb(vars['--color-on-accent']), accent), `${scheme} on-accent ${pick}`).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(rgb(vars['--color-focus']), grounds[scheme]), `${scheme} focus ${pick}`).toBeGreaterThanOrEqual(3);
+      }
+      for (const neutral of picks.slice(0, 3)) {
+        const accent = rgb(defaultAccentVariables(neutral, scheme)['--color-accent']);
+        expect(Math.max(...accent) - Math.min(...accent), `${scheme} neutral chroma`).toBeLessThanOrEqual(1);
+      }
     }
   });
 
@@ -368,5 +381,62 @@ describe('the theme\'s own colours come back', () => {
     expect(css('--color-ground')).toBe('#0b1220');
     expect(css('--color-accent')).toBe('#38bdf8');
     expect(css('--color-text')).toBe('#f4efe9');
+  });
+});
+
+describe('useGameTone default accent painting', () => {
+  it('reverts the cached pick when saving the custom accent fails', async () => {
+    api.getLauncherSettings.mockReturnValue(Effect.succeed({ game_tone: 'whole', default_accent: '#7656D6' }));
+    api.setDefaultAccent.mockReturnValue(Effect.fail(new Error('settings read-only')));
+    const { result } = renderHook(() => useDefaultAccent());
+    await waitFor(() => expect(result.current[0]).toBe('#7656D6'));
+    act(() => result.current[1]('#D34F68'));
+    await expect(result.current[2]('#D34F68', '#7656D6')).rejects.toThrow('settings read-only');
+    await waitFor(() => expect(result.current[0]).toBe('#7656D6'));
+  });
+
+  it('paints the custom accent while inactive, game colour while active, then restores the custom accent', async () => {
+    const accent = '#D34F68';
+    api.getLauncherSettings.mockReturnValue(Effect.succeed({ game_tone: 'whole', default_accent: accent }));
+    applyTheme(DEFAULT_THEME);
+    applyGameTone('off', null, 'dark', { fade: false });
+
+    class FakeImage {
+      crossOrigin = '';
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_url: string) { queueMicrotask(() => this.onload?.()); }
+    }
+    vi.stubGlobal('Image', FakeImage);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: () => ({ data: pixels([[60, 120, 200]]) }),
+    } as unknown as CanvasRenderingContext2D);
+
+    const { rerender, unmount } = renderHook(({ url, active }) => useGameTone(url, active), {
+      initialProps: { url: null as string | null, active: false },
+    });
+    await waitFor(() => expect(css('--color-accent')).toBe(defaultAccentVariables(toneFromHex(accent)!, 'dark')['--color-accent']));
+    expect(window.localStorage.getItem('platypus.defaultAccent')).toBe(accent);
+
+    rerender({ url: 'art://game-tone-test', active: true });
+    const gameGround = toneVariables('whole', [60, 120, 200], 'dark')['--color-ground'];
+    await waitFor(() => expect(css('--color-ground')).toBe(gameGround));
+
+    rerender({ url: null, active: false });
+    await waitFor(() => {
+      expect(css('--color-ground')).toBe('#13161b');
+      expect(css('--color-accent')).toBe(defaultAccentVariables(toneFromHex(accent)!, 'dark')['--color-accent']);
+    });
+    unmount();
+  });
+
+  it('uses the Atlas theme accent when the saved custom accent is empty', async () => {
+    api.getLauncherSettings.mockReturnValue(Effect.succeed({ game_tone: 'whole', default_accent: '' }));
+    applyTheme(DEFAULT_THEME);
+    applyGameTone('off', null, 'dark', { fade: false });
+    const { unmount } = renderHook(() => useGameTone(undefined, false));
+    await waitFor(() => expect(css('--color-accent')).toBe('#9db0ff'));
+    unmount();
   });
 });
