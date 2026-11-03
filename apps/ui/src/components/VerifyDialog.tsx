@@ -3,9 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
 import type { Game, Job } from '../types';
-import { Modal } from './Modal';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { Button } from '@/components/ds/button';
-import { MonoLabel } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
@@ -51,22 +50,22 @@ export function VerifyDialog({ game, jobs, onClose }: VerifyDialogProps) {
   if (error) {
     body = <ErrorNotice message={error} fallback={t('gameOps:verify.startError')} />;
   } else if (!job) {
-    body = <p className="text-white/60">{t('gameOps:verify.starting')}</p>;
+    body = <p className="text-text-muted">{t('gameOps:verify.starting')}</p>;
   } else if (running) {
     const progress = job.percent >= 0 ? t('gameOps:verify.progress', { percent: Math.round(job.percent) }) : '';
     body = (
-      <p className="text-white/70">
+      <p className="text-text-body">
         {job.repair ? t('gameOps:verify.repairing', { progress }) : t('gameOps:verify.checking', { progress })}
       </p>
     );
   } else if (job.state === 'failed') {
     body = <ErrorNotice message={job.error ?? ''} fallback={t('gameOps:verify.failed')} onRetry={() => start(job.repair)} />;
   } else if (job.state === 'canceled') {
-    body = <p className="text-white/60">{t('gameOps:verify.canceled')}</p>;
+    body = <p className="text-text-muted">{t('gameOps:verify.canceled')}</p>;
   } else if (job.state === 'done' && report) {
     if (job.repair) {
       body = (
-        <p className="text-white/80">
+        <p className="text-text-body">
           {t('gameOps:verify.repaired', { count: report.repaired })}
           {wrong > 0 ? ` ${t('gameOps:verify.stillWrong', { count: wrong })}` : ''}
         </p>
@@ -74,32 +73,33 @@ export function VerifyDialog({ game, jobs, onClose }: VerifyDialogProps) {
     } else if (wrong > 0) {
       body = (
         <>
-          <p className="text-[15px] font-bold text-amber-200">
+          <p className="text-[15px] font-bold text-attention">
             {t('gameOps:verify.damagedTitle', { count: wrong })}
           </p>
-          <p className="mt-1 font-mono text-hint text-white/55">
+          <p className="mt-1 font-mono text-hint text-text-muted">
             {t('gameOps:verify.damageDetail', { damaged: report.damaged, missing: report.missing, checked: report.checked })}
           </p>
         </>
       );
       actions = (
-        <Button onClick={() => start(true)} disabled={busy} className="flex-1 text-sky-100">{t('gameOps:verify.repair')}</Button>
+        <Button variant="primary" onClick={() => start(true)} disabled={busy}>{t('gameOps:verify.repair')}</Button>
       );
     } else {
-      body = <p className="text-white/80">{t('gameOps:verify.allClean', { checked: report.checked })}</p>;
+      body = <p className="text-text-body">{t('gameOps:verify.allClean', { checked: report.checked })}</p>;
     }
   }
 
   return (
     <Modal label={title} onClose={onClose} size="md">
-      <div className="p-6">
-        <MonoLabel className="mb-2">{t('gameOps:verify.kicker')}</MonoLabel>
-        <h2 className="mb-4 text-[18px] font-bold">{title}</h2>
-        <div className="space-y-2 text-[14px]">{body}</div>
-        <div className="mt-6 flex gap-2">
-          {actions}
-          <Button onClick={onClose} className="flex-1 text-white/70">{job?.state === 'done' && wrong > 0 && !job.repair ? t('gameOps:verify.notNow') : t('common:close')}</Button>
+      <div className="-m-7">
+        <ModalHead title={title} onClose={onClose} />
+        <div className="space-y-2 p-5 text-[14px]">
+          {body}
         </div>
+        <ModalFoot>
+          <Button variant="ghost" onClick={onClose}>{job?.state === 'done' && wrong > 0 && !job.repair ? t('gameOps:verify.notNow') : t('common:close')}</Button>
+          {actions}
+        </ModalFoot>
       </div>
     </Modal>
   );

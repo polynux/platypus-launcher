@@ -6,6 +6,7 @@ import { ChevronDown, FolderOpen } from 'lucide-react';
 import { Modal, ModalFoot, ModalHead } from './Modal';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { MonoLabel, cx } from './ui';
 import { useVariant } from '../lib/theme';
 import { LauncherApi } from '../effect/runtime';
@@ -236,16 +237,14 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
               <div hidden={!advancedOpen} className="grid gap-5 pb-2 pt-2">
                 <div>
                   <MonoLabel className="mb-1.5">{t('library:addDialog.runWith')}</MonoLabel>
-                  <select
-                    aria-label={t('library:addDialog.runWith')}
-                    value={runMode}
-                    onChange={(e) => setRunMode(e.target.value)}
-                    className="w-full rounded-lg bg-surface px-3 py-2 text-[13px] text-text outline-none ring-1 ring-hairline focus:ring-focus/40"
-                  >
-                    <option value="auto">{detected == null ? t('library:addDialog.runAutoUnknown') : detected.native ? t('library:addDialog.runAutoNative') : t('library:addDialog.runAutoWine')}</option>
-                    <option value="native">{t('library:addDialog.runNative')}</option>
-                    <option value="wine">{t('library:addDialog.runWine')}</option>
-                  </select>
+                  <Select value={runMode} onValueChange={setRunMode}>
+                    <SelectTrigger aria-label={t('library:addDialog.runWith')} className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">{detected == null ? t('library:addDialog.runAutoUnknown') : detected.native ? t('library:addDialog.runAutoNative') : t('library:addDialog.runAutoWine')}</SelectItem>
+                      <SelectItem value="native">{t('library:addDialog.runNative')}</SelectItem>
+                      <SelectItem value="wine">{t('library:addDialog.runWine')}</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.runHelp')}</p>
                 </div>
                 <div>

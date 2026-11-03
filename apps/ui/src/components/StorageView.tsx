@@ -8,7 +8,7 @@ import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { RemoveConfirmPanel, RemoveFirstRow, parentFolder, useRemoveCheck } from './MaintenanceTab';
 import { MoveDialog } from './MoveDialog';
-import { Modal } from './Modal';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { formatBytes, heroImages, isPluginGame, lastPlayedAgo, storeLabel } from '../lib/games';
 import { ThemeLayout } from '../lib/layout';
 import { useThemeLayout, useVariant } from '../lib/theme';
@@ -381,12 +381,12 @@ export function PrefixBackups({ backups, data }: { backups: PrefixBackup[]; data
       </ul>
       {pending && (
         <Modal label={t('storage:backups.confirmTitle')} onClose={() => setPending(null)} size="sm">
-          <div className="p-6">
-            <h2 className="mb-2 text-[17px] font-bold">{t('storage:backups.confirmTitle')}</h2>
-            <p className="text-[13px] leading-relaxed text-text-muted">
+          <div className="-m-7">
+            <ModalHead title={t('storage:backups.confirmTitle')} onClose={() => setPending(null)} />
+            <p className="p-5 text-[13px] leading-relaxed text-text-muted">
               {t('storage:backups.confirmBody', { title: titleOf(pending), name: pending.name, size: figure(pending.bytes) })}
             </p>
-            <div className="mt-5 flex justify-end gap-2">
+            <ModalFoot>
               <Button variant="ghost" autoFocus onClick={() => setPending(null)}>{t('common:cancel')}</Button>
               <Button
                 variant="danger"
@@ -398,7 +398,7 @@ export function PrefixBackups({ backups, data }: { backups: PrefixBackup[]; data
               >
                 <Trash2 className="h-3.5 w-3.5" /> {t('storage:backups.confirmGo')}
               </Button>
-            </div>
+            </ModalFoot>
           </div>
         </Modal>
       )}

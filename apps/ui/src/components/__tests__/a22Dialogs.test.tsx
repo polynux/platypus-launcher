@@ -195,7 +195,9 @@ describe('a22 dialogs under Atlas (issue #139)', () => {
     const onClose = vi.fn();
     render(<CopyCompareDialog game={game({ copies: [ana, ben], copy_compare: compare })} copies={[ana, ben]} compare={compare} onClose={onClose} />);
     expect(screen.getByRole('table', { name: 'Add-ons by copy' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    // Header × plus the footer Close.
+    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[1]);
     expect(onClose).toHaveBeenCalledOnce();
     expectNoRawPalette();
   });
@@ -236,10 +238,11 @@ describe('a22 dialogs under Atlas (issue #139)', () => {
     const onClose = vi.fn();
     render(<CloudConflictDialog game={game()} status={status} onClose={onClose} onResolved={noop} />);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    // Header × plus the footer Close.
+    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(2);
     // Nothing chosen yet: Apply waits for a choice.
     expect(screen.getByRole('button', { name: 'Apply choices' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[1]);
     expect(onClose).toHaveBeenCalledOnce();
     expectNoRawPalette();
   });

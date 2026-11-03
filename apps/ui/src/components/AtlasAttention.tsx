@@ -8,7 +8,7 @@ import type { Game, Job, ProtonVersion } from '../types';
 import { AlertTriangle, ArrowDownToLine, Check, Cloud, Download, FolderOpen, Wrench } from 'lucide-react';
 import { ATLAS_PAGE, Cover, EmptyState } from './ui';
 import { Button } from './ds/button';
-import { Modal } from './Modal';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { attentionIssues, attentionReason, heroImages, type AttentionIssue } from '../lib/games';
 import { RawDetails } from './ErrorNotice';
 import { notify } from '../lib/notify';
@@ -89,26 +89,28 @@ export function useAttentionFix({ jobs = [], runners = [], onOpenGame, onOpenRun
     <>
       {resetTarget && (
         <Modal label={t('fixes:atlas.resetTitle')} onClose={() => setResetTarget(null)} size="sm">
-          <div className="p-6">
-            <h2 className="mb-2 text-[17px] font-bold">{t('fixes:atlas.resetTitle')}</h2>
-            <p className="text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.resetBody', { title: resetTarget.title })}</p>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.resetBackup')}</p>
-            <div className="mt-5 flex justify-end gap-2">
+          <div className="-m-7">
+            <ModalHead title={t('fixes:atlas.resetTitle')} onClose={() => setResetTarget(null)} />
+            <div className="space-y-1.5 p-5">
+              <p className="text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.resetBody', { title: resetTarget.title })}</p>
+              <p className="text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.resetBackup')}</p>
+            </div>
+            <ModalFoot>
               <Button variant="ghost" autoFocus onClick={() => setResetTarget(null)}>{t('common:cancel')}</Button>
               <Button variant="primary" onClick={() => { onResetPrefix?.(resetTarget); setResetTarget(null); }}>{t('fixes:atlas.fix.prefix')}</Button>
-            </div>
+            </ModalFoot>
           </div>
         </Modal>
       )}
       {allowTarget && (
         <Modal label={t('fixes:atlas.allowTitle')} onClose={() => setAllowTarget(null)} size="sm">
-          <div className="p-6">
-            <h2 className="mb-2 text-[17px] font-bold">{t('fixes:atlas.allowTitle')}</h2>
-            <p className="text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.allowBody', { folder: allowTarget.install_dir || t('fixes:atlas.unknownFolder') })}</p>
-            <div className="mt-5 flex justify-end gap-2">
+          <div className="-m-7">
+            <ModalHead title={t('fixes:atlas.allowTitle')} onClose={() => setAllowTarget(null)} />
+            <p className="p-5 text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.allowBody', { folder: allowTarget.install_dir || t('fixes:atlas.unknownFolder') })}</p>
+            <ModalFoot>
               <Button variant="ghost" autoFocus onClick={() => setAllowTarget(null)}>{t('common:cancel')}</Button>
               <Button variant="primary" onClick={() => { onAllowFolder?.(allowTarget); setAllowTarget(null); }}>{t('fixes:atlas.fix.outside')}</Button>
-            </div>
+            </ModalFoot>
           </div>
         </Modal>
       )}

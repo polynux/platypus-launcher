@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 import type { CloudConflict, CloudInfo, CloudStatus, Game } from '../types';
 import { Badge } from './ds/badge';
 import { Button } from './ds/button';
-import { Modal } from './Modal';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { LauncherApi } from '../effect/runtime';
 import { fileSize, whenLabel } from '../lib/cloud';
 import { MonoLabel, SegRow, cx } from './ui';
@@ -51,8 +51,10 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
   };
 
   return (
-    <Modal label={t('cloud:conflict.label')} onClose={onClose} size="lg">
-      <h2 className="text-[19px] font-extrabold tracking-tight">{t('cloud:conflict.heading')}</h2>
+    <Modal label={t('cloud:conflict.label')} onClose={onClose} size="lg" dismissable={!busy}>
+      <div className="-m-7">
+      <ModalHead title={t('cloud:conflict.heading')} onClose={onClose} disabled={busy} />
+      <div className="p-5">
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-text-muted">
         {t('cloud:conflict.intro', { title: game.title, count: conflicts.length })}{' '}
         {t('cloud:conflict.explanation')}
@@ -94,7 +96,8 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
       {status.backupDir && <p className="mt-3 font-mono text-hint text-text-muted select-text">{t('cloud:conflict.backups', { dir: status.backupDir })}</p>}
       {error && <ErrorNotice className="mt-3" message={error} fallback={t('cloud:conflict.error')} />}
 
-      <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+      </div>
+      <ModalFoot>
         {onLaunchAnyway && (
           <Button variant="neutral" onClick={onLaunchAnyway} disabled={busy} className="mr-auto">
             {t('cloud:conflict.launchAnyway')}
@@ -105,6 +108,7 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           {chosen.length === 0 ? t('cloud:conflict.applyNone') : t('cloud:conflict.apply', { count: chosen.length })}
         </Button>
+      </ModalFoot>
       </div>
     </Modal>
   );

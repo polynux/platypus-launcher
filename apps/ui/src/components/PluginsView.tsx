@@ -2,11 +2,11 @@
 import { useTranslation, Trans } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import type { AuthPrompt, AuthStatus, Game, PluginStatus, SourceWarning, StorePlugin } from '../types';
 import { LauncherApi, onAuth } from '../effect/runtime';
 import { openExternal } from '../lib/external';
-import { Modal } from './Modal';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { ATLAS_PAGE, EmptyState, MonoLabel, Panel, ViewHeader, cx } from './ui';
 import { Button } from './ds/button';
 import { Badge, type badgeVariants } from './ds/badge';
@@ -528,24 +528,26 @@ function ManifestRow({ label, items, empty }: { label: string; items: string[]; 
 
 /** Confirms removing a plugin: lists what goes and what stays (issue #161).
  *  Data/theme plugins have no games, so they hide the checkbox. */
-function UninstallModal({ plugin: p, showGames = true, onClose, onConfirm }: { plugin: StorePlugin; showGames?: boolean; onClose: () => void; onConfirm: (removeGames: boolean) => void }) {
+export function UninstallModal({ plugin: p, showGames = true, onClose, onConfirm }: { plugin: StorePlugin; showGames?: boolean; onClose: () => void; onConfirm: (removeGames: boolean) => void }) {
   const { t } = useTranslation(['plugins', 'common']);
   const [removeGames, setRemoveGames] = useState(false);
   return (
     <Modal label={t('plugins:uninstall.title', { name: p.name })} onClose={onClose} size="md">
-      <div>
-        <h2 className="text-[20px] font-extrabold tracking-tight">{t('plugins:uninstall.title', { name: p.name })}</h2>
-        <p className="mt-1 text-[12px] leading-relaxed text-text-body">{t('plugins:uninstall.detail')}</p>
-        {showGames && (
-          <label className="mt-4 flex items-center gap-2 text-[13px] text-text">
-            <input type="checkbox" checked={removeGames} onChange={(e) => setRemoveGames(e.target.checked)} className="h-4 w-4 accent-attention" />
-            {t('plugins:uninstall.removeGames')}
-          </label>
-        )}
-        <div className="mt-5 flex gap-2.5">
-          <Button variant="neutral" className="flex-1" onClick={onClose}>{t('common:cancel')}</Button>
-          <Button variant="primary" className="flex-1" onClick={() => onConfirm(removeGames)}>{t('plugins:uninstall.confirm')}</Button>
+      <div className="-m-7">
+        <ModalHead title={t('plugins:uninstall.title', { name: p.name })} onClose={onClose} />
+        <div className="p-5">
+          <p className="text-[13px] leading-relaxed text-text-body">{t('plugins:uninstall.detail')}</p>
+          {showGames && (
+            <label className="mt-4 flex items-center gap-2 text-[13px] text-text">
+              <input type="checkbox" checked={removeGames} onChange={(e) => setRemoveGames(e.target.checked)} className="h-4 w-4 accent-attention" />
+              {t('plugins:uninstall.removeGames')}
+            </label>
+          )}
         </div>
+        <ModalFoot>
+          <Button variant="ghost" autoFocus onClick={onClose}>{t('common:cancel')}</Button>
+          <Button variant="danger" onClick={() => onConfirm(removeGames)}><Trash2 className="h-3.5 w-3.5" /> {t('plugins:uninstall.confirm')}</Button>
+        </ModalFoot>
       </div>
     </Modal>
   );
@@ -553,34 +555,35 @@ function UninstallModal({ plugin: p, showGames = true, onClose, onConfirm }: { p
 
 /** Confirms replacing the installed version with the zip's (issue #147): an
  *  unreadable existing folder has no version to show. */
-function ReplaceModal({ name, current, next, onClose, onConfirm }: { name: string; current: string; next: string; onClose: () => void; onConfirm: () => void }) {
+export function ReplaceModal({ name, current, next, onClose, onConfirm }: { name: string; current: string; next: string; onClose: () => void; onConfirm: () => void }) {
   const { t } = useTranslation(['plugins', 'common']);
   return (
     <Modal label={t('plugins:install.replaceTitle', { name })} onClose={onClose} size="md">
-      <div>
-        <h2 className="text-[20px] font-extrabold tracking-tight">{t('plugins:install.replaceTitle', { name })}</h2>
-        <p className="mt-1 text-[12px] leading-relaxed text-text-body">
+      <div className="-m-7">
+        <ModalHead title={t('plugins:install.replaceTitle', { name })} onClose={onClose} />
+        <p className="p-5 text-[13px] leading-relaxed text-text-body">
           {current
             ? t('plugins:install.replaceDetail', { current, new: next })
             : t('plugins:install.replaceDetailUnknown', { name, new: next })}
         </p>
-        <div className="mt-5 flex gap-2.5">
-          <Button variant="neutral" className="flex-1" onClick={onClose}>{t('common:cancel')}</Button>
-          <Button variant="primary" className="flex-1" onClick={onConfirm}>{t('plugins:install.confirmReplace')}</Button>
-        </div>
+        <ModalFoot>
+          <Button variant="ghost" autoFocus onClick={onClose}>{t('common:cancel')}</Button>
+          <Button variant="primary" onClick={onConfirm}>{t('plugins:install.confirmReplace')}</Button>
+        </ModalFoot>
       </div>
     </Modal>
   );
 }
 
 /** Shows what the plugin runs and declares before the user trusts it. */
-function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; onClose: () => void; onApprove: () => void }) {
+export function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; onClose: () => void; onApprove: () => void }) {
   const { t } = useTranslation(['plugins', 'common']);
   return (
     <Modal label={t('plugins:approve.title', { name: p.name })} onClose={onClose} size="md">
-      <div>
-        <h2 className="text-[20px] font-extrabold tracking-tight">{p.status === 'changed' ? t('plugins:approve.titleChanged', { name: p.name }) : t('plugins:approve.title', { name: p.name })}</h2>
-        <p className="mt-1 font-mono text-hint text-text-muted">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
+      <div className="-m-7">
+        <ModalHead title={p.status === 'changed' ? t('plugins:approve.titleChanged', { name: p.name }) : t('plugins:approve.title', { name: p.name })} onClose={onClose} />
+        <div className="p-5">
+        <p className="font-mono text-hint text-text-muted">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
         {p.status === 'changed' && (
           <p className="mt-3 rounded-xl bg-attention/[0.08] px-3.5 py-2.5 text-[12px] text-attention ring-1 ring-attention/25">
             {t('plugins:approve.changedWarning')}
@@ -611,10 +614,11 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
           </p>
         </div>
 
-        <div className="mt-5 flex gap-2.5">
-          <Button variant="neutral" className="flex-1" onClick={onClose}>{t('common:cancel')}</Button>
-          <Button variant="primary" className="flex-1" onClick={onApprove}>{t('plugins:approve.approveAndEnable')}</Button>
         </div>
+        <ModalFoot>
+          <Button variant="ghost" autoFocus onClick={onClose}>{t('common:cancel')}</Button>
+          <Button variant="primary" onClick={onApprove}>{t('plugins:approve.approveAndEnable')}</Button>
+        </ModalFoot>
       </div>
     </Modal>
   );
@@ -777,14 +781,16 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
 
   return (
     <Modal label={t('plugins:auth.loginTo', { name: plugin.name })} onClose={onClose} size="md">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (canSubmit && !submitting) submit();
-        }}
-      >
-        <h2 className="text-[20px] font-extrabold tracking-tight">{t('plugins:auth.loginTo', { name: plugin.name })}</h2>
-        <p className="mt-1 text-[12px] text-text-body">{t('plugins:auth.loginStays', { name: plugin.name })}</p>
+      <div className="-m-7">
+        <ModalHead title={t('plugins:auth.loginTo', { name: plugin.name })} onClose={onClose} />
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (canSubmit && !submitting) submit();
+          }}
+        >
+        <div className="p-5">
+        <p className="text-[13px] text-text-body">{t('plugins:auth.loginStays', { name: plugin.name })}</p>
         {!prompt && !error && (
           <div className="mt-5 flex items-center gap-2 font-mono text-[12px] text-text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('plugins:auth.startingLogin')}</div>
         )}
@@ -828,13 +834,15 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
           </div>
         )}
         {error && <ErrorNotice className="mt-3" message={error} fallback={t('plugins:auth.actionFailed')} />}
-        <div className="mt-5 flex gap-2.5">
-          <Button type="button" variant="neutral" className="flex-1" onClick={onClose}>{t('common:cancel')}</Button>
-          <Button type="submit" variant="primary" className="flex-1" disabled={!canSubmit || submitting}>
+        </div>
+        <ModalFoot>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('common:cancel')}</Button>
+          <Button type="submit" variant="primary" disabled={!canSubmit || submitting}>
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {prompt?.qr && !filled ? t('plugins:auth.scannedIt') : t('plugins:auth.logIn')}
           </Button>
-        </div>
-      </form>
+        </ModalFoot>
+        </form>
+      </div>
     </Modal>
   );
 }

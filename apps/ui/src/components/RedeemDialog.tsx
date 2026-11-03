@@ -6,6 +6,7 @@ import type { RedeemResult, StorePlugin } from '../types';
 import { Modal, ModalFoot, ModalHead } from './Modal';
 import { Button } from '@/components/ds/button';
 import { Input } from './ds/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { LauncherApi } from '../effect/runtime';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
@@ -82,17 +83,12 @@ export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClo
             <div className="grid gap-4 px-5 py-4">
               <div className="flex items-center justify-between gap-[18px]">
                 <span className="text-[13px] font-semibold text-text">{t('common:redeem.store')}</span>
-                <select
-                  value={plugin?.id ?? ''}
-                  onChange={(e) => { setStoreId(e.target.value); setError(null); }}
-                  disabled={busy || stores.length < 2}
-                  aria-label={t('common:redeem.store')}
-                  className="h-8 w-[220px] flex-none rounded-lg bg-surface px-2.5 text-[13px] text-text outline-none ring-1 ring-hairline focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-60"
-                >
-                  {stores.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                <Select value={plugin?.id ?? ''} onValueChange={(value) => { setStoreId(value); setError(null); }} disabled={busy || stores.length < 2}>
+                  <SelectTrigger aria-label={t('common:redeem.store')} className="h-8 w-[220px] flex-none"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {stores.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="grid gap-1.5">
                 <label htmlFor="redeem-code" className="text-[13px] font-semibold text-text">

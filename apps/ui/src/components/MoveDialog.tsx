@@ -3,9 +3,8 @@ import React, { useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
 import type { Game, Job, MoveCheck } from '../types';
-import { Modal } from './Modal';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { Button } from '@/components/ds/button';
-import { MonoLabel } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { formatBytes } from '../lib/games';
 import { ErrorNotice } from './ErrorNotice';
@@ -65,16 +64,21 @@ export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogP
 
   return (
     <Modal label={t('gameOps:move.title', { title: game.title })} onClose={onClose} size="md">
-      <div className="p-6">
-        <MonoLabel className="mb-2">{t('gameOps:move.kicker')}</MonoLabel>
-        <h2 className="mb-2 text-[18px] font-bold">{t('gameOps:move.title', { title: game.title })}</h2>
+      <div className="-m-7">
+        <ModalHead title={t('gameOps:move.title', { title: game.title })} onClose={onClose} />
+        <div className="p-5">
         <p className="mb-4 text-[13px] text-text-muted">
           {t('gameOps:move.description')}
         </p>
         <div className="space-y-2 font-mono text-hint">
           <div className="flex justify-between gap-4 border-t border-hairline pt-2">
             <span className="text-text-muted">{t('gameOps:move.from')}</span>
-            <span className="truncate text-right text-text" title={game.install_dir}>{game.install_dir}</span>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-right text-text" title={game.install_dir}>{game.install_dir}</span>
+              <Button variant="neutral" size="sm" onClick={pick} disabled={busy} autoFocus className="flex-none font-sans">
+                {parent ? t('gameOps:move.pickAnother') : t('gameOps:move.pick')}
+              </Button>
+            </div>
           </div>
           {check && (
             <>
@@ -94,13 +98,11 @@ export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogP
           )}
         </div>
         {error && <ErrorNotice className="mt-3 text-[13px]" message={error} fallback={t('gameOps:move.error')} />}
-        <div className="mt-6 flex gap-2">
-          <Button variant="neutral" onClick={pick} disabled={busy} className="flex-1">
-            {parent ? t('gameOps:move.pickAnother') : t('gameOps:move.pick')}
-          </Button>
-          <Button variant="primary" onClick={move} disabled={busy || !check} className="flex-1">{t('gameOps:move.action')}</Button>
-          <Button variant="neutral" onClick={onClose} className="flex-1">{t('common:cancel')}</Button>
         </div>
+        <ModalFoot>
+          <Button variant="ghost" onClick={onClose}>{t('common:cancel')}</Button>
+          <Button variant="primary" onClick={move} disabled={busy || !check}>{t('gameOps:move.action')}</Button>
+        </ModalFoot>
       </div>
     </Modal>
   );

@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CopyComparison, Game, GameCopy } from '../types';
-import { Modal } from './Modal';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
 import { Switch } from '@/components/ds/switch';
@@ -36,10 +36,9 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
 
   return (
     <Modal label={t('gameOps:compare.dialogLabel', { title: game.title })} onClose={onClose} size="lg">
-      <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameOps:compare.title')}</h2>
-      <p className="mt-1 text-[12.5px] text-text-muted">
-        {t('gameOps:compare.subtitle', { title: game.title, name: baseline.owner_name, why })}
-      </p>
+      <div className="-m-7">
+      <ModalHead title={t('gameOps:compare.title')} sub={t('gameOps:compare.subtitle', { title: game.title, name: baseline.owner_name, why })} onClose={onClose} />
+      <div className="p-5">
 
       <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-hint text-text-body">
         <label className="flex items-center gap-2">
@@ -99,8 +98,8 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
         </ul>
       )}
 
-      <div className="mt-6 flex justify-end">
-        <Button variant="neutral" size="sm" onClick={onClose}>{t('common:close')}</Button>
+      </div>
+      <ModalFoot><Button variant="ghost" onClick={onClose}>{t('common:close')}</Button></ModalFoot>
       </div>
     </Modal>
   );

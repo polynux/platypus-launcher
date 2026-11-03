@@ -4,7 +4,7 @@ import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
 import { ExternalLink } from 'lucide-react';
 import type { Game, GameTerm } from '../types';
-import { Modal } from './Modal';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { Button } from '@/components/ds/button';
 import { LauncherApi } from '../effect/runtime';
 import { openExternal } from '../lib/external';
@@ -47,7 +47,9 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
 
   return (
     <Modal label={t('common:terms.dialogLabel', { title: game.title })} onClose={onCancel} size="md" dismissable={!busy}>
-      <h2 className="text-[20px] font-extrabold tracking-tight">{t('common:terms.heading', { title: game.title })}</h2>
+      <div className="-m-7">
+      <ModalHead title={t('common:terms.heading', { title: game.title })} onClose={onCancel} disabled={busy} />
+      <div className="p-5">
       <p className="mt-1 text-[12.5px] text-text-muted">
         {t('common:terms.intro', { title: game.title })}
       </p>
@@ -79,9 +81,11 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
         <ErrorNotice className="mt-4" message={error} fallback={t('common:terms.error')} />
       )}
 
-      <div className="mt-6 flex justify-end gap-2.5">
-        <Button variant="neutral" size="sm" disabled={busy} onClick={onCancel}>{t('common:cancel')}</Button>
-        <Button variant="primary" size="sm" disabled={busy} onClick={() => void accept()}>{t('common:terms.accept')}</Button>
+      </div>
+      <ModalFoot>
+        <Button variant="ghost" disabled={busy} onClick={onCancel}>{t('common:cancel')}</Button>
+        <Button variant="primary" disabled={busy} onClick={() => void accept()}>{t('common:terms.accept')}</Button>
+      </ModalFoot>
       </div>
     </Modal>
   );

@@ -42,7 +42,7 @@ export function DialogContent({
           aria-label={label}
           aria-describedby={undefined}
           className={cn(
-            'relative flex max-h-[86vh] w-full animate-modal-in flex-col overflow-hidden rounded-3xl bg-raised outline-none ring-1 ring-hairline',
+            'relative flex max-h-[86vh] w-full animate-modal-in flex-col overflow-hidden rounded-3xl bg-raised outline-none ring-1 ring-hairline-strong',
             sheet && 'h-full max-h-full w-[min(42rem,92vw)] animate-sheet-in motion-reduce:animate-none rounded-l-3xl rounded-r-none',
             contentClassName,
             className,

@@ -4,7 +4,7 @@ import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
 import type { ActivityEvent, CloudPrompt, CloudStatus, Game } from '../types';
 import { Button } from './ds/button';
-import { Modal } from './Modal';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { CloudConflictDialog } from './CloudSavesConflict';
 import { LauncherApi, onCloud } from '../effect/runtime';
 import { cloudNotice } from '../lib/cloud';
@@ -76,11 +76,13 @@ export function CloudSavesHost({
   if (!game) {
     return (
       <Modal label={t('cloud:host.decisionLabel')} onClose={close}>
-        <h2 className="text-[19px] font-extrabold tracking-tight">{title}</h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-text-muted">{pending.message}</p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-text-muted">{t('cloud:host.openGame')}</p>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={close}>{t('common:close')}</Button>
+        <div className="-m-7">
+          <ModalHead title={title} onClose={close} />
+          <div className="space-y-2 p-5">
+            <p className="text-[12.5px] leading-relaxed text-text-muted">{pending.message}</p>
+            <p className="text-[12.5px] leading-relaxed text-text-muted">{t('cloud:host.openGame')}</p>
+          </div>
+          <ModalFoot><Button variant="ghost" onClick={close}>{t('common:close')}</Button></ModalFoot>
         </div>
       </Modal>
     );
@@ -109,12 +111,14 @@ export function CloudSavesHost({
     const name = pending.client || 'the store client';
     return (
       <Modal label={t('cloud:host.clientLabel')} onClose={close}>
-        <h2 className="text-[19px] font-extrabold tracking-tight">{t('cloud:host.clientRunning', { name })}</h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-text-muted">{pending.message}</p>
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <Button variant="ghost" onClick={close}>{t('common:cancel')}</Button>
-          <Button variant="neutral" onClick={() => run(LauncherApi.launchGameAnyway(game, 'client-running'))}>{t('cloud:host.launchWithoutSync')}</Button>
-          <Button variant="primary" onClick={() => run(LauncherApi.launchGameViaClient(game))}>{t('cloud:panel.launchVia', { name })}</Button>
+        <div className="-m-7">
+          <ModalHead title={t('cloud:host.clientRunning', { name })} onClose={close} />
+          <p className="p-5 text-[12.5px] leading-relaxed text-text-muted">{pending.message}</p>
+          <ModalFoot>
+            <Button variant="ghost" onClick={close}>{t('common:cancel')}</Button>
+            <Button variant="neutral" onClick={() => run(LauncherApi.launchGameAnyway(game, 'client-running'))}>{t('cloud:host.launchWithoutSync')}</Button>
+            <Button variant="primary" onClick={() => run(LauncherApi.launchGameViaClient(game))}>{t('cloud:panel.launchVia', { name })}</Button>
+          </ModalFoot>
         </div>
       </Modal>
     );
@@ -122,14 +126,16 @@ export function CloudSavesHost({
 
   return (
     <Modal label={t('cloud:host.offlineLabel')} onClose={close}>
-      <h2 className="text-[19px] font-extrabold tracking-tight">{t('cloud:host.offlineLabel')}</h2>
-      <p className="mt-2 text-[12.5px] leading-relaxed text-text-muted">{pending.message}</p>
-      <p className="mt-2 text-[12.5px] leading-relaxed text-text-muted">
-        {t('cloud:host.offlineWhy', { title: game.title })}
-      </p>
-      <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={close}>{t('common:cancel')}</Button>
-        <Button variant="primary" onClick={() => run(LauncherApi.launchGameAnyway(game, 'offline'))}>{t('cloud:host.launchAnyway')}</Button>
+      <div className="-m-7">
+        <ModalHead title={t('cloud:host.offlineLabel')} onClose={close} />
+        <div className="space-y-2 p-5">
+          <p className="text-[12.5px] leading-relaxed text-text-muted">{pending.message}</p>
+          <p className="text-[12.5px] leading-relaxed text-text-muted">{t('cloud:host.offlineWhy', { title: game.title })}</p>
+        </div>
+        <ModalFoot>
+          <Button variant="ghost" onClick={close}>{t('common:cancel')}</Button>
+          <Button variant="primary" onClick={() => run(LauncherApi.launchGameAnyway(game, 'offline'))}>{t('cloud:host.launchAnyway')}</Button>
+        </ModalFoot>
       </div>
     </Modal>
   );

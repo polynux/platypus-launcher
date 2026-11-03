@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Effect } from 'effect';
 import type { Collection, Game } from '../../types';
 import { TooltipProvider } from '../ds/tooltip';
@@ -193,10 +194,10 @@ describe('collections dialog', () => {
     await waitFor(() => expect(h.api.pinCollection).toHaveBeenCalledWith('couch', false));
   });
 
-  it('refuses a smart filter with no condition, before it reaches the core', () => {
+  it('refuses a smart filter with no condition, before it reaches the core', async () => {
     h.api.createCollection = vi.fn(() => Effect.succeed(LIST));
     render(<CollectionsDialog collections={LIST} games={games} onChanged={() => {}} onClose={() => {}} />);
-    fireEvent.change(screen.getByLabelText(/^Kind/), { target: { value: 'smart' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Smart filter' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: 'Nothing' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(screen.getByText('A smart filter needs at least one condition.')).toBeInTheDocument();
@@ -206,9 +207,11 @@ describe('collections dialog', () => {
   it('creates a smart filter from the fields the user set', async () => {
     h.api.createCollection = vi.fn(() => Effect.succeed([...LIST, { id: 'new', name: 'Night', pinned: true, smart: { installed: true } }]));
     render(<CollectionsDialog collections={LIST} games={games} onChanged={() => {}} onClose={() => {}} />);
-    fireEvent.change(screen.getByLabelText(/^Kind/), { target: { value: 'smart' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Smart filter' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: 'Night' } });
-    fireEvent.change(screen.getByLabelText('Installed'), { target: { value: 'yes' } });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: 'Installed' }));
+    await user.click(await screen.findByRole('option', { name: 'Yes' }));
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(h.api.createCollection).toHaveBeenCalledWith('Night', { installed: true }));
   });
@@ -221,7 +224,9 @@ describe('collections dialog', () => {
     render(<CollectionsDialog collections={[INSTALLED, smartCollection, COUCH, HIDDEN]} games={games} onChanged={onChanged} onClose={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: 'Edit conditions for Played' }));
     expect(screen.getByTestId('smart-fields')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Played'), { target: { value: 'no' } });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: 'Played' }));
+    await user.click(await screen.findByRole('option', { name: 'No' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(h.api.updateCollection).toHaveBeenCalledWith('played', 'Played', { played: false }));
     expect(onChanged).toHaveBeenCalledWith(after);
