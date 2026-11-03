@@ -632,6 +632,29 @@ describe('bounded angle (finding 5)', () => {
     rect(play, 0, 600, 120, 24);
     expect(nearestInDirection(from, getFocusableElements(document), 'down')).toBe(play);
   });
+
+  it('enters a widget by its full box and targets its selected item', () => {
+    const from = button('from', 0, 0);
+    const widget = document.createElement('div');
+    widget.setAttribute('role', 'tablist');
+    const selected = document.createElement('button');
+    selected.setAttribute('role', 'tab');
+    selected.setAttribute('aria-selected', 'true');
+    widget.append(selected);
+    document.body.append(widget);
+    rect(widget, 200, 0, 80, 600);
+    rect(selected, 200, 500);
+
+    expect(nearestInDirection(from, getFocusableElements(document), 'right')).toBe(selected);
+  });
+
+  it('lets an Atlas library row reach a diagonally placed stage action', () => {
+    const row = button('game', 0, 0);
+    row.setAttribute('data-game-row', 'game');
+    const play = button('play', 100, 200);
+
+    expect(nearestInDirection(row, getFocusableElements(document), 'right')).toBe(play);
+  });
 });
 
 describe('native controls (finding 6)', () => {

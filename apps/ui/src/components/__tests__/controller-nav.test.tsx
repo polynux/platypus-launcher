@@ -330,6 +330,7 @@ describe('segmented controls (SegRow radiogroup)', () => {
     const segs = screen.getAllByRole('radio');
     expect(segs).toHaveLength(3);
     layOut({ above: [100, 0] });
+    rect(screen.getByRole('radiogroup'), 100, 100, 300, 24);
     segs.forEach((s, i) => rect(s, 100 + i * 100, 100));
     rect(screen.getByTestId('outside'), 0, 100);
     // Entering from above lands on the selected segment.

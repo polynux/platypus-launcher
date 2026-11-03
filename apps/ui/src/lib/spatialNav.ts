@@ -297,7 +297,13 @@ export function nearestInDirection(
   let bestRow = false;
   for (const el of els) {
     if (el === from) continue;
-    const r = el.getBoundingClientRect();
+    const widget = widgetOf(el);
+    // A widget is one navigation stop. Use its full box to decide whether
+    // it lies in the requested direction, while retaining its selected item
+    // as the focus target.
+    const r = widget && !el.hasAttribute('data-game-row')
+      ? widget.root.getBoundingClientRect()
+      : el.getBoundingClientRect();
     const l = r.left;
     const rr = r.left + r.width;
     const t = r.top;
@@ -321,7 +327,8 @@ export function nearestInDirection(
       gap = ft - b;
       orth = intervalGap(fl, fr, l, rr);
     }
-    if (orth > Math.max(48, Math.max(0, gap) * 2)) continue;
+    const angle = from.hasAttribute('data-game-row') && dir === 'right' ? 4 : 2;
+    if (orth > Math.max(48, Math.max(0, gap) * angle)) continue;
     // Row/column neighbours win over nearer off-axis controls: only when
     // nothing overlaps the current row/column do diagonal candidates count.
     const inRow = orth === 0;
