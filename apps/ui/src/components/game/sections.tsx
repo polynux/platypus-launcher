@@ -1,3 +1,4 @@
+// i18n: converted
 // The game page's sections (issue #119): the store description, the media
 // strip, the status notes, the collections, the installation facts, the
 // achievements and the info finder. Props only: the page owns the data.

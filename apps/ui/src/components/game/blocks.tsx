@@ -1,3 +1,4 @@
+// i18n: converted
 // The game page's hero blocks (issue #119): the back link, the
 // outside-folder alert, the install note, the hero heading and actions, the
 // compat facts and the activity. Props only: the page owns the data.

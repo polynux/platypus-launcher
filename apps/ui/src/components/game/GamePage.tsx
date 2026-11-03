@@ -1,3 +1,4 @@
+// i18n: converted
 // The game page (issue #119): the page and the data it owns. Blocks and
 // sections live next to it in ./blocks and ./sections; gameBlocks assembles
 // them into the layout regions.
