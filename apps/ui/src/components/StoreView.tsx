@@ -202,7 +202,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
 
   return (
     <div className="flex h-full min-h-[480px] flex-col">
-      <div className={shopBar ? 'flex h-[55px] flex-none items-center gap-3 border-b border-hairline bg-ground-2 px-4 py-2.5' : 'flex flex-none items-center gap-1.5 px-5 pb-3 pt-5'}>
+      <div className={shopBar ? '@container shop-bar flex h-[55px] flex-none items-center gap-3 border-b border-hairline bg-ground-2 px-4 py-2.5' : 'flex flex-none items-center gap-1.5 px-5 pb-3 pt-5'}>
         {toolbarLead}
       <ToolbarButton shopBar={shopBar} label={t('store:toolbar.back')} disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
           <ChevronLeft className="h-4 w-4" />
@@ -222,7 +222,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
           data-testid="store-address"
           title={state.title ? `${plugin.name} · ${state.url} · ${state.title}` : `${plugin.name} · ${state.url}`}
           className={cx(
-            'mx-1.5 flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-lg bg-surface px-3 text-[12.5px] text-text-faint ring-1',
+            'mx-1.5 flex h-[30px] min-w-[180px] flex-1 items-center gap-2 rounded-lg bg-surface px-3 text-[12.5px] text-text-faint ring-1',
             outside ? 'bg-attention/[0.07] text-attention ring-attention/30' : 'ring-hairline',
           )}
         >

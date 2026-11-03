@@ -301,8 +301,11 @@ function isBadRender(img: HTMLImageElement): boolean {
 
 /** Cover image with a typographic fallback when the CDN has no art. Tries
  *  each source in order; a URL that 404'd recently is skipped without a
- *  request (see lib/coverMisses) instead of refetching on every render. */
-export function Cover({ src, title, className }: { src?: string | string[]; title: string; className?: string }) {
+ *  request (see lib/coverMisses) instead of refetching on every render.
+ *  Pass `compact` for small thumbnails (below about 60px tall): the fallback
+ *  is then a single initial on the tinted tile instead of the full title,
+ *  which would spill out of the box next to the title itself. */
+export function Cover({ src, title, className, compact = false }: { src?: string | string[]; title: string; className?: string; compact?: boolean }) {
   const all = (Array.isArray(src) ? src : [src]).filter(Boolean) as string[];
   const sources = all.filter((s) => !coverMisses.isBad(s));
   const key = sources.join('|');
@@ -332,6 +335,14 @@ export function Cover({ src, title, className }: { src?: string | string[]; titl
     if (el?.complete && isBadRender(el)) fail();
   }, [current, fail]);
   if (!current) {
+    if (compact) {
+      const initial = title.trim().charAt(0).toUpperCase();
+      return (
+        <div aria-hidden className={cx('grid place-items-center bg-gradient-to-br from-surface-strong to-surface', className)}>
+          {initial && <span className="text-[11px] font-extrabold leading-none text-text-faint">{initial}</span>}
+        </div>
+      );
+    }
     return (
       <div className={cx('cover-fallback grid place-items-center bg-gradient-to-br from-surface-strong to-surface p-3 text-center', className)}>
         <span className="line-clamp-3 text-[13px] font-extrabold leading-tight text-text">{title}</span>

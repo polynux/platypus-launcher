@@ -94,7 +94,7 @@ export function AtlasActivity({ events, games, onOpenGame }: { events: ActivityE
         </div>
         {games.length > 0 && (
           <Select value={game} onValueChange={setGame}>
-            <SelectTrigger aria-label={t('activity:atlas.filterGame')} className="w-52">
+            <SelectTrigger aria-label={t('activity:atlas.filterGame')} className="h-[30px] w-52">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

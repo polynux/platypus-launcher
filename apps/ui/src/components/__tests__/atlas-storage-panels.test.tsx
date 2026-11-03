@@ -82,7 +82,8 @@ describe('Atlas Storage panels', () => {
     };
     api.getDiskUsage.mockReturnValue(Effect.succeed(driveUsage));
     render(<StorageView games={[mk('outside', '/home/games-old/Outside')]} onNotify={() => {}} onRemove={() => {}} onUninstall={() => {}} />);
-    expect(within(await screen.findByRole('region', { name: '/home/games-old' })).getAllByText('Outside')).toHaveLength(2);
+    // The row title only: the thumbnail fallback is a compact initial now (audit finding 12), not the full title.
+    expect(within(await screen.findByRole('region', { name: '/home/games-old' })).getByText('Outside')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: '/home/games' })).queryByText('Outside')).toBeNull();
   });
 

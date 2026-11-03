@@ -5,12 +5,12 @@
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import type { Game, Job, ProtonVersion } from '../types';
-import { AlertTriangle, ArrowDownToLine, Check, Cloud, Download, FolderOpen, HardDrive, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, Check, Cloud, Download, FolderOpen, Wrench } from 'lucide-react';
 import { ATLAS_PAGE, Cover, EmptyState } from './ui';
 import { Button } from './ds/button';
 import { Modal } from './Modal';
 import { attentionIssues, attentionReason, heroImages } from '../lib/games';
-import { plainError } from '../lib/plainError';
+import { RawDetails } from './ErrorNotice';
 import { notify } from '../lib/notify';
 import type { FixesProps } from './FixesView';
 
@@ -40,7 +40,7 @@ export function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJ
         <ul className="grid gap-2.5">
           {issues.map((issue, index) => {
             const { game: g } = issue;
-            const KindIcon = { install: Download, outside: FolderOpen, runner: Wrench, update: ArrowDownToLine, conflict: Cloud, prefix: HardDrive, rating: AlertTriangle }[issue.kind];
+            const KindIcon = { install: Download, outside: FolderOpen, runner: Wrench, update: ArrowDownToLine, conflict: Cloud, prefix: Wrench, rating: AlertTriangle }[issue.kind];
             const title = issue.kind === 'install' && issue.failedJobKind === 'update'
               ? t('fixes:atlas.issue.updateFailed')
               : ({
@@ -94,7 +94,10 @@ export function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJ
                   <button type="button" onClick={() => onOpenGame(g.id)} className="truncate justify-self-start text-left text-[15px] font-[750] hover:underline underline-offset-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                     {g.title}
                   </button>
-                  <p className="line-clamp-2 text-[12.5px] leading-[1.45] text-text-muted">{issue.kind === 'install' ? plainError(issue.error, t('fixes:atlas.reason.install')) : issue.kind === 'outside' ? t('fixes:atlas.reason.outside', { title: g.title, dir: g.install_dir }) : issue.kind === 'runner' ? t('fixes:atlas.reason.runner', { title: g.title, runner: issue.runnerId }) : issue.kind === 'update' ? t('fixes:atlas.reason.update') : issue.kind === 'conflict' ? t('fixes:atlas.reason.conflict') : issue.kind === 'prefix' ? t('fixes:atlas.reason.prefix') : attentionReason(g, 'rating')}</p>
+                  <p className="line-clamp-2 text-[13px] leading-[1.45] text-text-muted">{issue.kind === 'install' ? t('fixes:atlas.reason.install') : issue.kind === 'outside' ? t('fixes:atlas.reason.outside', { title: g.title, dir: g.install_dir }) : issue.kind === 'runner' ? t('fixes:atlas.reason.runner', { title: g.title, runner: issue.runnerId }) : issue.kind === 'update' ? t('fixes:atlas.reason.update') : issue.kind === 'conflict' ? t('fixes:atlas.reason.conflict') : issue.kind === 'prefix' ? t('fixes:atlas.reason.prefix') : attentionReason(g, 'rating')}</p>
+                  {issue.kind === 'install' && issue.error?.trim() && (
+                    <RawDetails text={issue.error.trim()} />
+                  )}
                 </div>
                 <div className="grid gap-1">
                   <Button variant="primary" onClick={action}>{fix}</Button>

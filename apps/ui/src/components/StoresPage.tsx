@@ -28,8 +28,9 @@ export function StoresPage({ plugins, selected, onSelect, canRedeem, onRedeem, i
   const { t } = useTranslation(['store', 'nav']);
   // The lab's single shop bar (StorefrontPage .ap-shop-bar): the store switch
   // as segmented buttons, then the browser row, then Redeem. No logo tabs row.
+  // The tabs shrink and scroll first when the bar narrows (audit finding 6).
   const seg = (
-    <div role="tablist" aria-label={t('store:shop.storeLabel')} className="inline-flex min-w-0 flex-none gap-0.5 overflow-x-auto rounded-[9px] bg-surface p-[3px]">
+    <div role="tablist" aria-label={t('store:shop.storeLabel')} className="inline-flex min-w-0 shrink gap-0.5 overflow-x-auto rounded-[9px] bg-surface p-[3px]">
       {plugins.map((p) => {
         const on = p.id === selected.id;
         return (
@@ -67,8 +68,8 @@ export function StoresPage({ plugins, selected, onSelect, canRedeem, onRedeem, i
           shopBar
           toolbarLead={seg}
           toolbarTrail={canRedeem ? (
-              <Button variant="neutral" size="md" onClick={onRedeem} className="flex-none font-medium">
-              <Ticket className="h-3.5 w-3.5" /> {t('store:shop.redeem')}
+              <Button variant="neutral" size="md" onClick={onRedeem} className="flex-none font-medium" title={t('store:shop.redeem')} aria-label={t('store:shop.redeem')}>
+              <Ticket className="h-3.5 w-3.5" /> <span className="shop-redeem-label">{t('store:shop.redeem')}</span>
             </Button>
           ) : undefined}
         />

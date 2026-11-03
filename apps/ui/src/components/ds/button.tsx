@@ -9,6 +9,8 @@ export const buttonVariantClass = {
   neutral: 'rounded-xl bg-surface-strong font-bold text-text-body transition hover:bg-hairline',
   ghost: 'rounded-xl font-bold text-text-muted hover:bg-surface-strong hover:text-text',
   link: 'rounded font-mono uppercase tracking-widest text-text-muted hover:text-text plain:font-sans plain:normal-case plain:tracking-normal plain:text-[13px] plain:font-semibold plain:text-accent',
+  /** Quiet Atlas header links (issue #171 audit): muted, no accent, like /22's btn-quiet. */
+  quiet: 'rounded text-[13px] font-semibold text-text-muted transition hover:text-text',
   danger: 'rounded-xl bg-danger/15 font-bold text-danger hover:bg-danger/25',
 } as const;
 
@@ -26,7 +28,10 @@ export const buttonVariants = cva(
         none: '',
       },
     },
-    compoundVariants: [{ variant: 'link', size: ['sm', 'md', 'lg'], class: 'h-auto px-0 text-hint' }],
+    compoundVariants: [
+      { variant: 'link', size: ['sm', 'md', 'lg'], class: 'h-auto px-0 text-hint' },
+      { variant: 'quiet', size: ['sm', 'md', 'lg'], class: 'h-auto px-0' },
+    ],
     defaultVariants: { variant: 'neutral', size: 'md' },
   },
 );

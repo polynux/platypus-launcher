@@ -1061,6 +1061,11 @@ export function AppContent() {
             onInstall={(g) => { setInstallIntentId(g.id); openGame(g.id); }}
             onStop={(id) => stop(id, false)}
             onJobAction={jobAction}
+            onJob={(kind, game) => runJob(kind, game)}
+            onRetryJob={(id) => jobAction('retry', id)}
+            onAllowFolder={(game) => allowFolder(game, game.install_dir)}
+            onResetPrefix={resetPrefix}
+            onSaveSettings={(game, runner, notifySaved) => saveSettings(game.id, { ...game.settings, runner_id: runner }, undefined, notifySaved)}
           />
         );
       case 'library':
@@ -1381,7 +1386,7 @@ export function AppContent() {
           of the friends branch, so mixed themes show it exactly once. */}
       {isFriendsPanel ? (
         <div className="flex min-h-0 flex-1">
-          <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
+          <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable]', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
             {!isSourcebar && migration && (
               <div className="px-7 pt-7">
                 <MigrationBanner
@@ -1422,7 +1427,7 @@ export function AppContent() {
           )}
         </div>
       ) : (
-        <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
+        <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable]', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
           {!isSourcebar && migration && (
             <div className="px-7 pt-7">
               <MigrationBanner
