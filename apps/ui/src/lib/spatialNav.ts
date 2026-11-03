@@ -344,7 +344,7 @@ export function nearestInDirection(
       bestDiagonal = candidate;
     }
   }
-  if (bestRow && (!bestDiagonal || bestRow.gap <= bestDiagonal.gap * 2)) return bestRow.el;
+  if (bestRow && (!bestDiagonal || Math.max(0, bestRow.gap) <= Math.max(2 * Math.max(0, bestDiagonal.gap), 48))) return bestRow.el;
   return bestDiagonal?.el ?? bestRow?.el ?? null;
 }
 

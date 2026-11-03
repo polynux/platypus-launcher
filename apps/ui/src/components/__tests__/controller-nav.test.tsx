@@ -4,7 +4,7 @@
 // jsdom lays out at 0x0.
 import React, { useEffect, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
   activateFocused,
   closeTopmostLayer,
@@ -20,7 +20,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ds/dropdown-menu';
-import { Switch } from '../ds/switch';
+import { AtlasSSwitch } from '../AtlasSettings';
+import { StripPlay, type GameTabsData } from '../GameTabs';
 
 function rect(el: HTMLElement, x: number, y: number, w = 40, h = 24): void {
   el.getBoundingClientRect = () =>
@@ -320,29 +321,33 @@ describe('wide toolbar navigation', () => {
 
 describe('Atlas directional region entry', () => {
   it('prefers the stage Play action over nearby toolbar controls from a row', () => {
-    const list = document.createElement('ul');
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.setAttribute('data-game-row', 'game');
-    list.append(row);
-    document.body.append(list);
-    rect(list, 0, 0, 260, 800);
-    rect(row, 0, 0, 260, 40);
-
-    const store = buttonWithRect('Store filter', 280, 30, 100, 24);
-    const tune = buttonWithRect('Tune', 280, 100, 100, 24);
-    const stage = document.createElement('div');
-    stage.setAttribute('data-nav-region', 'stage');
-    const play = document.createElement('button');
-    play.setAttribute('data-nav-primary', '');
-    stage.append(play);
-    document.body.append(stage);
-    rect(stage, 280, 0, 700, 760);
-    rect(play, 420, 500, 120, 40);
+    const d = {
+      game: { is_installed: true, outside_folder: false },
+      launching: false,
+      onPlay: vi.fn(),
+      onStop: vi.fn(),
+      onJobAction: vi.fn(),
+    } as unknown as GameTabsData;
+    render(
+      <div>
+        <ul><li><button type="button" data-game-row="game">Game</button></li></ul>
+        <button type="button" data-testid="store">Store filter</button>
+        <button type="button" data-testid="tune">Tune</button>
+        <div data-testid="stage" data-nav-region="stage"><StripPlay d={d} /></div>
+      </div>,
+    );
+    const row = screen.getByText('Game');
+    const store = screen.getByTestId('store');
+    const tune = screen.getByTestId('tune');
+    const stage = screen.getByTestId('stage');
+    const play = stage.querySelector<HTMLElement>('[data-play-anchor]')!;
+    rect(row as HTMLElement, 0, 60, 296, 44);
+    rect(store, 320, 8, 100, 24);
+    rect(tune, 320, 110, 100, 24);
+    rect(stage, 296, 0, 700, 760);
+    rect(play, 328, 330, 120, 42);
 
     expect(nearestInDirection(row, getFocusableElements(document), 'right')).toBe(play);
-    expect(store).toBeTruthy();
-    expect(tune).toBeTruthy();
   });
 
   it('enters the Atlas Plugins list from a detail action left of a short list', () => {
@@ -370,23 +375,34 @@ function buttonWithRect(label: string, x: number, y: number, w: number, h: numbe
 }
 
 describe('A preserves switch focus', () => {
-  it('restores focus after an asynchronous controlled row replacement', async () => {
-    function ReplacingSwitch() {
+  it('keeps an Atlas switch focused during its asynchronous save', async () => {
+    let finishSave = (): void => {};
+    function BusySwitch() {
       const [checked, setChecked] = useState(false);
-      return (
-        <div key={checked ? 'on' : 'off'}>
-          <Switch aria-label="Artwork" checked={checked} onCheckedChange={(next) => setTimeout(() => setChecked(next), 0)} />
-        </div>
-      );
+      const [busy, setBusy] = useState(false);
+      const save = (): void => {
+        setBusy(true);
+        void new Promise<void>((resolve) => {
+          finishSave = () => {
+            setChecked(true);
+            setBusy(false);
+            resolve();
+          };
+        });
+      };
+      return <AtlasSSwitch label="Artwork" checked={checked} disabled={busy} busy={busy} onChange={save} />;
     }
     uninstall = installControllerKeyboard();
-    render(<ReplacingSwitch />);
+    render(<BusySwitch />);
     const toggle = screen.getByRole('switch', { name: 'Artwork' });
     toggle.focus();
-    activateFocused();
-    await waitFor(() => expect(screen.getByRole('switch', { name: 'Artwork' })).toHaveAttribute('aria-checked', 'true'));
-    await waitFor(() => expect(screen.getByRole('switch', { name: 'Artwork' })).toHaveFocus());
-    expect(toggle).not.toBeInTheDocument();
+    act(() => { activateFocused(); });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-disabled', 'true'));
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveFocus();
+    act(() => { finishSave(); });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+    expect(toggle).toHaveFocus();
   });
 });
 

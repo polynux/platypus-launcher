@@ -572,6 +572,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
           desc={t('ratings.description')}
           checked={ratings ?? true}
           disabled={ratings === null || busy}
+          busy={busy}
           onChange={() => toggleRatings(!(ratings ?? true))}
         />
         <AtlasSSwitch
@@ -579,6 +580,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
           desc={t('protection.description')}
           checked={protection ?? true}
           disabled={protection === null || busy}
+          busy={busy}
           onChange={() => toggleProtection(!(protection ?? true))}
         />
         <p className="border-t border-hairline pt-3 text-[12px] font-sans text-text-faint">{credits}</p>
@@ -644,6 +646,7 @@ export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
           desc={t('artwork.description')}
           checked={on ?? true}
           disabled={on === null || busy}
+          busy={busy}
           onChange={() => toggle(!(on ?? true))}
         />
         <p className="border-t border-hairline pt-3 text-[12px] font-sans text-text-faint">{t('artwork.creditArt')}</p>
@@ -697,6 +700,7 @@ export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: '
           desc={t('gameInfo.description')}
           checked={on ?? true}
           disabled={on === null || busy}
+          busy={busy}
           onChange={() => toggle(!(on ?? true))}
         />
         <p className="border-t border-hairline pt-3 text-[12px] font-sans text-text-faint">{t('gameInfo.creditInfo')}</p>
@@ -750,6 +754,7 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
           desc={t('chat.description')}
           checked={on ?? true}
           disabled={on === null || busy}
+          busy={busy}
           onChange={() => toggle(!(on ?? true))}
         />
       </section>
@@ -815,6 +820,7 @@ export function TraySetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' 
           desc={<span title={t('tray.description')}>{t('tray.atlasDescription')}</span>}
           checked={on ?? false}
           disabled={on === null || busy}
+          busy={busy}
           onChange={() => toggle(!(on ?? false))}
         />
       </section>
@@ -866,6 +872,7 @@ export function ClientNoticesSetting({ onNotify }: { onNotify: (msg: string, kin
           desc={t('notices.description')}
           checked={on ?? true}
           disabled={on === null || busy}
+          busy={busy}
           onChange={() => toggle(!(on ?? true))}
         />
       </section>

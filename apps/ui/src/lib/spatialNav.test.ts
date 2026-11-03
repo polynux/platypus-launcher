@@ -648,6 +648,20 @@ describe('bounded angle (finding 5)', () => {
     expect(nearestInDirection(from, getFocusableElements(document), 'right')).toBe(selected);
   });
 
+  it('balances nearby diagonals with column matches and clamps edge gaps', () => {
+    const from = button('from', 0, 0);
+    const below = button('below', 0, 40);
+    const side = button('side', 108, 20);
+    const farBelow = button('far below', 0, 400);
+    rect(from, 0, 0, 100, 24);
+    rect(below, 0, 40, 40, 24);
+    rect(side, 108, 20, 100, 40);
+    rect(farBelow, 0, 400, 100, 24);
+
+    expect(nearestInDirection(from, [farBelow, side], 'down')).toBe(side);
+    expect(nearestInDirection(from, [below, side], 'down')).toBe(below);
+  });
+
 });
 
 describe('native controls (finding 6)', () => {
