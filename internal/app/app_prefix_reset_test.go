@@ -357,6 +357,32 @@ func TestPrefixBackupsListNestedCustomPrefix(t *testing.T) {
 	}
 }
 
+func TestPrefixBackupsSkipFoldersInsideLivePrefix(t *testing.T) {
+	t.Parallel()
+	a, _ := resetTestApp(t, []types.Game{resetWineGame("live", nil)})
+	root := a.effectivePrefixesFolder()
+	inside := filepath.Join(root, "live", "drive_c", "users", "me", "Saves.bak-1700000000")
+	if err := os.MkdirAll(inside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a.sessionRunning = func(id string) bool { return id == "live" }
+	for _, backup := range a.PrefixBackups() {
+		if backup.Path == inside {
+			t.Fatalf("folder inside a live prefix was listed: %+v", backup)
+		}
+	}
+	if _, err := a.DeletePrefixBackup(inside); resetCode(t, err) != "game.running" {
+		t.Fatalf("deleting from a running prefix = %v, want game.running", err)
+	}
+	if _, err := os.Stat(inside); err != nil {
+		t.Fatalf("running prefix folder was deleted: %v", err)
+	}
+	a.sessionRunning = func(string) bool { return false }
+	if _, err := a.DeletePrefixBackup(inside); resetCode(t, err) != "prefix.backup.inUse" {
+		t.Fatalf("deleting from a stopped game's live prefix = %v, want prefix.backup.inUse", err)
+	}
+}
+
 // Only a backup folder in the prefixes folder can be deleted: the path comes
 // from the UI, so core checks it again.
 func TestDeletePrefixBackupRefusesAnythingElse(t *testing.T) {

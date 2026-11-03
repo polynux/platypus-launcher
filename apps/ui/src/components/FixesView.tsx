@@ -16,7 +16,7 @@ export type FixesProps = {
   onJobAction?: (action: 'retry', id: string) => void; onJob?: (kind: 'update', game: Game) => void;
   onAllowFolder?: (game: Game) => void;
   onResetPrefix?: (game: Game) => void;
-  onSaveSettings?: (game: Game, runner: string) => Promise<void>; // i18n:allow: Promise return type
+  onSaveSettings?: (game: Game, runner: string, notifySaved?: boolean) => Promise<void>; // i18n:allow: Promise return type
   onOpenRunners?: () => void;
 };
 

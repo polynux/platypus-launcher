@@ -114,11 +114,22 @@ describe('runner install and remove (issue #142)', () => {
     expect(onRefresh).not.toHaveBeenCalled();
   });
 
+  it('ignores old finished jobs when the list loads after the page opens', () => {
+    variant.nav = 'page';
+    const onRefresh = vi.fn();
+    const onNotify = vi.fn();
+    const old = { id: 'j-old', kind: 'runner-install', state: 'failed', updated_at: Date.now() - 10000, error: 'old failure', title: 'GE-Proton10-4', game_id: 'runner:GE-Proton10-4' } as unknown as Job;
+    const { rerender } = render(<SystemView runners={runners} games={[]} onRefresh={onRefresh} scanning={false} jobs={[]} onNotify={onNotify} />);
+    rerender(<SystemView runners={runners} games={[]} onRefresh={onRefresh} scanning={false} jobs={[old]} onNotify={onNotify} />);
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(onNotify).not.toHaveBeenCalled();
+  });
+
   it('refreshes when a runner install finishes after the page opened', async () => {
     variant.nav = 'page';
     const onRefresh = vi.fn();
     const queued = { id: 'j1', kind: 'runner-install', state: 'running', title: 'GE-Proton10-4', game_id: 'runner:GE-Proton10-4' } as unknown as Job;
-    const done = { ...queued, state: 'done' } as Job;
+    const done = { ...queued, state: 'done', updated_at: Date.now() + 1000 } as Job;
     const { rerender } = render(<SystemView runners={runners} games={[]} onRefresh={onRefresh} scanning={false} jobs={[queued]} onNotify={() => {}} />);
     rerender(<SystemView runners={runners} games={[]} onRefresh={onRefresh} scanning={false} jobs={[done]} onNotify={() => {}} />);
     await waitFor(() => expect(onRefresh).toHaveBeenCalled());
@@ -130,5 +141,15 @@ describe('runner install and remove (issue #142)', () => {
     const job = { id: 'j2', kind: 'runner-install', state: 'failed', error: 'disk full', title: 'GE-Proton10-4', game_id: 'runner:GE-Proton10-4' } as unknown as Job;
     render(<SystemView runners={runners} games={[]} onRefresh={() => {}} scanning={false} jobs={[job]} onNotify={onNotify} />);
     expect(onNotify).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a runner install failure after the page opened', async () => {
+    variant.nav = 'page';
+    const onNotify = vi.fn();
+    const queued = { id: 'j3', kind: 'runner-install', state: 'running', title: 'GE-Proton10-4', game_id: 'runner:GE-Proton10-4' } as unknown as Job;
+    const failed = { ...queued, state: 'failed', updated_at: Date.now() + 1000, error: 'disk full' } as Job;
+    const { rerender } = render(<SystemView runners={runners} games={[]} onRefresh={() => {}} scanning={false} jobs={[queued]} onNotify={onNotify} />);
+    rerender(<SystemView runners={runners} games={[]} onRefresh={() => {}} scanning={false} jobs={[failed]} onNotify={onNotify} />);
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('disk full', 'err'));
   });
 });

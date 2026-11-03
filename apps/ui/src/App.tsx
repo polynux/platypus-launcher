@@ -575,7 +575,7 @@ export function AppContent() {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
-  const saveSettings = (id: string, settings: GameSettings, what = t('activity:log.tweakDefault')) => {
+  const saveSettings = (id: string, settings: GameSettings, what = t('activity:log.tweakDefault'), notifySaved = true) => {
     const g = games.find((x) => x.id === id);
     setGames((prev) => prev.map((x) => (x.id === id ? { ...x, settings } : x)));
     if (!g) return Promise.resolve();
@@ -583,7 +583,7 @@ export function AppContent() {
     // once this resolves, so a failed save keeps its footer.
     return Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
       .then(() => {
-        notify(t('common:settingsSaved'));
+        if (notifySaved) notify(t('common:settingsSaved'));
         log({ type: 'tweak', game: g.id, detail: t('activity:log.tweakDetail', { what, title: g.title }) });
       })
       .catch((err) => {
@@ -1150,7 +1150,7 @@ export function AppContent() {
       case 'activity':
         return <ActivityView events={activity} games={games} onOpenGame={openGame} />;
       case 'fixes':
-        return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onResetPrefix={resetPrefix} onSaveSettings={(game, runner) => saveSettings(game.id, { ...game.settings, runner_id: runner })} onOpenRunners={() => setView({ name: 'runners' })} />;
+        return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onResetPrefix={resetPrefix} onSaveSettings={(game, runner, notifySaved) => saveSettings(game.id, { ...game.settings, runner_id: runner }, undefined, notifySaved)} onOpenRunners={() => setView({ name: 'runners' })} />;
       case 'runners':
         return (
           <SystemView

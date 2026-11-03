@@ -4,7 +4,6 @@
 // presentation; FixesView branches on fixes.presentation.
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
-import { toast as toastNotify } from 'sonner';
 import type { Game, Job, ProtonVersion } from '../types';
 import { AlertTriangle, ArrowDownToLine, Check, Cloud, Download, FolderOpen, HardDrive, Wrench } from 'lucide-react';
 import { ATLAS_PAGE, Cover, EmptyState } from './ui';
@@ -12,6 +11,7 @@ import { Button } from './ds/button';
 import { Modal } from './Modal';
 import { attentionIssues, attentionReason, heroImages } from '../lib/games';
 import { plainError } from '../lib/plainError';
+import { notify } from '../lib/notify';
 import type { FixesProps } from './FixesView';
 
 /** The /22 Needs attention page (issue #138, Atlas only): each game as a
@@ -60,9 +60,13 @@ export function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJ
               else if (issue.kind === 'outside') setAllowTarget(g);
               else if (issue.kind === 'runner' && fallbackRunner) {
                 const previous = g.settings.runner_id || '';
-                void onSaveSettings?.(g, fallbackRunner.id).then(() => toastNotify.success(
+                const save = onSaveSettings?.(g, fallbackRunner.id, false);
+                if (save) void save.then(() => notify.success(
                   t('fixes:atlas.runnerChanged', { runner: fallbackRunner.name, title: g.title }),
-                  { action: { label: t('fixes:atlas.undo'), onClick: () => { void onSaveSettings?.(g, previous); } } },
+                  { action: { label: t('fixes:atlas.undo'), onClick: () => {
+                    const undo = onSaveSettings?.(g, previous, false);
+                    if (undo) void undo.catch(() => {});
+                  } } },
                 )).catch(() => {});
               }
               else if (issue.kind === 'update') onJob?.('update', g);
@@ -118,7 +122,7 @@ export function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJ
         <Modal label={t('fixes:atlas.allowTitle')} onClose={() => setAllowTarget(null)} size="sm">
           <div className="p-6">
             <h2 className="mb-2 text-[17px] font-bold">{t('fixes:atlas.allowTitle')}</h2>
-            <p className="text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.allowBody', { folder: allowTarget.install_dir })}</p>
+            <p className="text-[13px] leading-relaxed text-text-muted">{t('fixes:atlas.allowBody', { folder: allowTarget.install_dir || t('fixes:atlas.unknownFolder') })}</p>
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="ghost" autoFocus onClick={() => setAllowTarget(null)}>{t('common:cancel')}</Button>
               <Button variant="primary" onClick={() => { onAllowFolder?.(allowTarget); setAllowTarget(null); }}>{t('fixes:atlas.fix.outside')}</Button>
