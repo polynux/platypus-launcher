@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
-import type { Game } from '../types';
+import type { Game, StorePlugin } from '../types';
 import type * as ThemeModule from '../lib/theme';
+import { InstallDialog } from './InstallDialog';
 import { Modal } from './Modal';
 import { MoveDialog } from './MoveDialog';
 
@@ -18,6 +19,9 @@ vi.mock('../lib/theme', async (importOriginal) => ({
   useVariant: (axis: string) => state.variants[axis],
 }));
 vi.mock('../effect/runtime', () => ({ LauncherApi: {} }));
+// The install dialog's own data calls are not under test: only its chrome is.
+vi.mock('../lib/installSize', () => ({ useInstallSize: () => ({ state: 'unknown' }) }));
+vi.mock('./InstallLocationPicker', () => ({ InstallLocationPicker: () => null }));
 
 afterEach(() => {
   cleanup();
@@ -34,6 +38,12 @@ describe('dialogs follow the dialog variants (issue #114)', () => {
     const dialog = screen.getByRole('dialog', { name: /Move Echo/i });
     expect(dialog.className).toContain('w-[min(42rem,92vw)]');
     expect(dialog.className).not.toContain('max-w-[560px]');
+  });
+
+  it('turns the install dialog into a sheet too', () => {
+    state.variants['dialog.presentation'] = 'sheet';
+    render(<InstallDialog game={game} plugin={{ name: 'Echo', capabilities: [] } as unknown as StorePlugin} onClose={() => {}} onChanged={() => {}} onNotify={() => {}} />);
+    expect(screen.getByRole('dialog', { name: /Install Echo/i }).className).toContain('w-[min(42rem,92vw)]');
   });
 
   it('keeps each dialog built-in size under dialog.size = auto', () => {
