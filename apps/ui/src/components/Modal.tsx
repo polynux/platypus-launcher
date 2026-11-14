@@ -48,10 +48,16 @@ interface ModalProps {
 /** Centered modal on ds/Dialog (Radix): Esc + click-outside close, focus trapped and restored on close (FE-11).
  *  Narrow by default (`sm`); a dialog that needs more passes a `size`.
  *  Without a presentation, the dialog.presentation axis decides (issue #156):
- *  every generic dialog follows the theme, so the axis has a reader. */
+ *  every generic dialog follows the theme, so the axis has a reader. The
+ *  dialog.size axis overrides the built-in width unless it is `auto`
+ *  (issue #114), so one theme value reaches every dialog. */
 export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation: presentationProp, sheetWidth, onOpenAutoFocus, returnFocus, overlayClassName, contentClassName, innerClassName, contentStyle, onEscapeKeyDown, children }: ModalProps & { presentation?: 'dialog' | 'sheet' }) {
   const catalogPresentation = useVariant('dialog.presentation');
   const presentation = presentationProp ?? (catalogPresentation === 'sheet' ? 'sheet' : 'dialog');
+  // A theme that names a size overrides every dialog's built-in width; auto
+  // keeps the use site's own (issue #114). Sheets keep their own width.
+  const catalogSize = useVariant('dialog.size');
+  const resolvedSize: ModalSize = presentation === 'dialog' && catalogSize !== 'auto' ? catalogSize : size;
   const restoreFocus = useRef<HTMLElement | null>(typeof document === 'undefined' ? null : document.activeElement as HTMLElement);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -63,7 +69,7 @@ export function Modal({ label, onClose, size = 'sm', className, dismissable = tr
         contentClassName={contentClassName}
         innerClassName={innerClassName}
         contentStyle={contentStyle}
-        className={cn(MODAL_SIZES[size], className)}
+        className={cn(presentation === 'dialog' ? MODAL_SIZES[resolvedSize] : undefined, className)}
         onEscapeKeyDown={(e) => { if (!dismissable) e.preventDefault(); else onEscapeKeyDown?.(e); }}
         onInteractOutside={(e) => !dismissable && e.preventDefault()}
         onOpenAutoFocus={onOpenAutoFocus}

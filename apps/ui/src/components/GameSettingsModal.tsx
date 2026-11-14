@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, ArrowLeft } from 'lucide-react';
 import type { Game, GameJobKind, GameSettings, Job, ProtonVersion, RemoveOptions, StorePlugin, Tweak } from '../types';
-import { Modal, type ModalSize } from './Modal';
+import { Modal } from './Modal';
 import { Button } from '@/components/ds/button';
 import { GeneralSettings, useGameSettingsDraft, type GameSettingsDraft } from './SettingsModal';
 import { CustomGameYear } from './CustomGameYear';
@@ -111,10 +111,6 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   const drawerAutoFocus = accordion && presentation === 'sheet'
     ? (e: Event) => { e.preventDefault(); panelRef.current?.focus({ preventScroll: true }); }
     : undefined;
-  // An explicit dialog size wins; auto (and the sheet, whose width is its
-  // own) keeps this dialog's built-in xl.
-  const dialogSize = useVariant('dialog.size');
-  const size: ModalSize = presentation === 'dialog' && dialogSize !== 'auto' ? (dialogSize as ModalSize) : 'xl';
   // The drawer is 520px wide, as in the /21 design; other sheets keep theirs
   // (the width only applies to a sheet, never to a dialog).
   const sheetWidth = accordion && presentation === 'sheet' ? 'min(520px, 92vw)' : undefined;
@@ -214,7 +210,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     }
     return (
       <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!shared.dirty}
-        size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth}
+        size="xl" presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth}
         onOpenAutoFocus={drawerAutoFocus} returnFocus={returnFocusToGame}
         overlayClassName="bg-[rgba(0,0,0,0.38)]"
         contentClassName="rounded-none rounded-l-none rounded-r-none ring-hairline"
@@ -306,7 +302,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     // the shared Modal is untouched, so no other dialog changes size. A
     // sheet spans the full viewport height, so the fixed height is for the
     // dialog presentation only.
-    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth} onOpenAutoFocus={drawerAutoFocus} returnFocus={returnFocusToGame} className={presentation === 'sheet' ? undefined : 'h-[min(43rem,calc(100dvh-6rem))]'}>
+    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size="xl" presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth} onOpenAutoFocus={drawerAutoFocus} returnFocus={returnFocusToGame} className={presentation === 'sheet' ? undefined : 'h-[min(43rem,calc(100dvh-6rem))]'}>
       {content}
     </Modal>
   );

@@ -197,6 +197,31 @@ value always wins. A use-site value with no broader value set keeps its
 built-in default. Inheritance applies only when the theme declares
 `variants`.
 
+Two shared surfaces read one axis each:
+
+- `dialog.presentation` (`dialog` or `sheet`) and `dialog.size` (`auto`,
+  `sm`, `md`, `lg`, `xl`) reach every dialog that renders through
+  `components/Modal.tsx` (all of them except the command palette and the
+  Tune flyout, which keep their own surfaces). `auto` keeps each dialog's built-in width, so the
+  defaults change nothing; an explicit size overrides it, and `sheet`
+  slides dialogs in from the edge. `game-settings.presentation` still
+  overrides only the game settings. The lightbox stays a full-screen
+  overlay and the friends panel is not a dialog.
+- `store.presentation` picks the store page; `store.toolbar` (`full` or
+  `compact`) and `store.address` (`shown` or `hidden`) shape its toolbar.
+  `compact` is the same row at 42px with smaller controls, and `hidden`
+  removes the address strip while keeping the outside-domain warning. Only
+  the toolbar and frame are ours: the storefront is the shell's native view,
+  and its measured rect is reported again after a chrome change.
+
+```toml
+[variants]
+"dialog.presentation" = "sheet"
+"dialog.size" = "lg"
+"store.toolbar" = "compact"
+"store.address" = "hidden"
+```
+
 Source: `internal/themes/themes.go` (`setVariant`, `resolve`), `catalog.go`.
 
 ## `[variants]` game colour
@@ -521,7 +546,7 @@ Source: `docs/plugins/data-plugins.md`, `internal/plugins/manifest.go`,
 
 ## `catalog = "x.y"` versioning
 
-The catalog is versioned `major.minor` (`CatalogVersion = "1.0"`). Minor is
+The catalog is versioned `major.minor` (`CatalogVersion = "1.2"`). Minor is
 additive: new entries, axes, values, blocks and regions. Every entry and
 axis carries `since`. Major is breaking: a removal or rename.
 
@@ -533,8 +558,8 @@ axis carries `since`. Major is breaking: a removal or rename.
 - The guard test refuses breaking changes: `go test ./internal/themes -run
   TestCatalogGuard -update` refreshes the snapshot
   (`internal/themes/testdata/catalog-1.json`) only for compatible changes.
-- Until the themes epic merges the catalog is unreleased: keep
-  `CatalogVersion = "1.0"` and mark additions `since = "1.0"`.
+- Every addition carries `since` = the minor it landed in (`1.2` for the
+  dialog and store chrome axes, for example).
 - `docs/themes/catalog.md` is generated from the catalog. Refresh it with
   `go run ./cmd/gen-ts`. The gents staleness test fails when it is out of
   date.

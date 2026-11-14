@@ -13,7 +13,8 @@
     "loading": "chargement",
     "lockOutside": "hors de la boutique",
     "lockInside": "page de la boutique",
-    "outsideSuffix": "hors de {{name}}"
+    "outsideSuffix": "hors de {{name}}",
+    "outside": "{{host}} est hors de {{name}}"
   },
   "blocked": "{{host}} ne fait pas partie de {{name}}. L'ouvrir dans votre navigateur ?",
   "failed": "Impossible d'ouvrir {{name}} : {{error}}",
