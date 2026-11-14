@@ -1201,6 +1201,7 @@
       "since": "1.2",
       "axes": null,
       "kind": "block",
+      "required": true,
       "region": "main"
     },
     {
@@ -1216,6 +1217,7 @@
       "since": "1.2",
       "axes": null,
       "kind": "block",
+      "required": true,
       "region": "main"
     },
     {
@@ -1235,6 +1237,7 @@
       "since": "1.2",
       "axes": null,
       "kind": "block",
+      "required": true,
       "region": "top"
     },
     {
@@ -1250,6 +1253,7 @@
       "since": "1.2",
       "axes": null,
       "kind": "block",
+      "required": true,
       "region": "main"
     }
   ]

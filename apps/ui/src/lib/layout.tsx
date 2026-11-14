@@ -31,7 +31,8 @@ interface ThemeLayoutProps {
 export function ThemeLayout({ layout, blocks, className, regionClassName, rowClassName }: ThemeLayoutProps) {
   return (
     <div className={className}>
-      {layout.regions.map((region) => (
+      {/* An empty region would still take a gap in the view's grid. */}
+      {layout.regions.filter((region) => region.nodes.length > 0).map((region) => (
         <div key={region.name} data-region={region.name} className={regionClassName?.(region.name)}>
           {region.nodes.map((node, index) => (
             <ThemeLayoutNode key={index} node={node} blocks={blocks} rowClassName={rowClassName} region={region.name} />

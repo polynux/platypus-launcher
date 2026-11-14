@@ -40,9 +40,12 @@ const mkGame = (id: string, o: Partial<Game> = {}): Game =>
 const mkJob = (o: Partial<Job> = {}): Job =>
   ({ id: 'j', game_id: 'g', title: 'Game', kind: 'install', state: 'failed', percent: 0, bytes: 0, total: 0, speed: 0, phase: '', updated_at: 1, attempts: 1, ...o }) as unknown as Job;
 
-// The regions in DOM order.
+// The regions in DOM order. Each region must stack its blocks with the
+// page's gap-6 grid, or multi-block regions lose today's spacing.
 function regions(container: HTMLElement): string[] {
-  return [...container.querySelectorAll('[data-region]')].map((el) => el.getAttribute('data-region')!);
+  const els = [...container.querySelectorAll('[data-region]')];
+  for (const el of els) expect(el.className.split(' ')).toEqual(expect.arrayContaining(['grid', 'gap-6']));
+  return els.map((el) => el.getAttribute('data-region')!);
 }
 
 describe('activity layouts', () => {

@@ -735,6 +735,7 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - since: `1.2`
 - kind: `block`
 - region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
 
 ## `runners.installed`
 
@@ -748,6 +749,7 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - since: `1.2`
 - kind: `block`
 - region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
 
 ## `downloads.top`
 
@@ -764,6 +766,7 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - since: `1.2`
 - kind: `block`
 - region: `top`
+- required: yes (a layout that leaves it out still gets it, with a warning)
 
 ## `downloads.queue`
 
@@ -777,4 +780,5 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - since: `1.2`
 - kind: `block`
 - region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
 

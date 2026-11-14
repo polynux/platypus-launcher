@@ -119,8 +119,9 @@ export function AtlasActivity({ events, games, onOpenGame }: { events: ActivityE
             )}
           </div>
         ),
+        // One root, so a theme row counts the days as one column.
         days: (
-          <>
+          <div className="grid min-w-0 content-start gap-6">
             {items.length === 0 ? (
               <EmptyState
                 icon={Clock}
@@ -156,7 +157,7 @@ export function AtlasActivity({ events, games, onOpenGame }: { events: ActivityE
                 </section>
               ))
             )}
-          </>
+          </div>
         ),
       }}
       className={ATLAS_PAGE}
