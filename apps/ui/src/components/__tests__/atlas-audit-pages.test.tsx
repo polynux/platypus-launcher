@@ -227,8 +227,10 @@ describe('finding 7: downloads recent rows', () => {
 describe('finding 8: downloads empty states', () => {
   it('says something else than the empty title when there is nothing at all', () => {
     render(<AtlasDownloads jobs={[]} games={[]} onAction={() => {}} onClear={() => {}} onOpenGame={() => {}} />);
-    expect(screen.getByText('Installs, updates and moves show up here.')).toBeInTheDocument();
     expect(screen.getAllByText('Nothing downloading')).toHaveLength(1);
+    expect(screen.getByText('Installs, updates, moves and file checks show up here.')).toBeInTheDocument();
+    // With no jobs at all the subtitle would repeat the empty body: it is gone.
+    expect(screen.queryByText('Installs, updates and moves show up here.')).toBeNull();
   });
 
   it('shows a single muted line for an empty queue with history', () => {
@@ -329,6 +331,16 @@ describe('finding 15: storage drive card', () => {
     return { drive, rows, data };
   };
 
+  it('gives the minimum segment width to the first game only, so small games cannot overflow the bar', () => {
+    const { drive, rows, data } = driveCard(12);
+    // A drive of many small games: every segment is well under 0.5% of it.
+    const tiny = rows.map((r) => ({ ...r, size_bytes: 1e6 }));
+    const { container } = render(<AtlasDriveCard drive={drive} rows={tiny} data={data} />);
+    const segments = [...container.querySelectorAll<HTMLElement>('[role="progressbar"] > div')];
+    expect(segments.filter((el) => el.style.minWidth !== '')).toHaveLength(1);
+    expect(segments[0]!.style.minWidth).toBe('3px');
+  });
+
   it('collapses to six rows and expands to reach every row action', () => {
     const { drive, rows, data } = driveCard(8);
     render(<AtlasDriveCard drive={drive} rows={rows} data={data} />);
@@ -371,6 +383,20 @@ describe('finding 17: attention cards', () => {
     expect(screen.getByText('The last attempt failed.')).toBeInTheDocument();
     expect(screen.queryByText('size check: unknown game "bulk-0001"')).toBeInTheDocument();
     expect(screen.getByText('Details')).toBeInTheDocument();
+  });
+
+  it('shows the core sentence for a readable install failure, with no Details disclosure', () => {
+    const g = mkGame('fail', { title: 'Failed game' });
+    const raw = 'refusing to allow system folder /home/u';
+    render(
+      <FixesView
+        games={[g]}
+        jobs={[mkJob({ id: 'j2', game_id: 'fail', kind: 'install', state: 'failed', error: raw })]}
+        onOpenGame={() => {}} />,
+    );
+    expect(screen.getByText(raw)).toBeInTheDocument();
+    expect(screen.queryByText('The last attempt failed.')).toBeNull();
+    expect(screen.queryByText('Details')).toBeNull();
   });
 
   it('uses the wrench for a damaged prefix and 13px muted text', () => {
