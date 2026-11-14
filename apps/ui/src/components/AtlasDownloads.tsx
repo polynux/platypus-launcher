@@ -76,13 +76,16 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.downloads')}</h1>
-          <p className="mt-[3px] text-[13px] text-text-muted">
-            {active.length > 0
-              ? (speed > 0
-                ? t('downloads:atlas.queueSubSpeed', { count: active.length, speed: formatBytes(speed) })
-                : t('downloads:atlas.queueSub', { count: active.length }))
-              : t('downloads:atlas.queueEmptySub')}
-          </p>
+          {/* No jobs at all: the EmptyState below already says it, so no subtitle. */}
+          {jobs.length > 0 && (
+            <p className="mt-[3px] text-[13px] text-text-muted">
+              {active.length > 0
+                ? (speed > 0
+                  ? t('downloads:atlas.queueSubSpeed', { count: active.length, speed: formatBytes(speed) })
+                  : t('downloads:atlas.queueSub', { count: active.length }))
+                : t('downloads:atlas.queueEmptySub')}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {active.some((j) => j.state === 'running' || j.state === 'queued') && (

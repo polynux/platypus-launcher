@@ -120,7 +120,7 @@ export function AtlasDriveCard({ drive: d, rows, data, defaultFolder }: { drive:
           <div
             key={r.game_id}
             className="shrink-0 bg-[color-mix(in_srgb,var(--color-accent)_75%,var(--color-surface-strong))] transition-[width]"
-            style={{ width: `${Math.max(0, ((r.size_bytes + r.prefix_bytes) / d.total_bytes) * 100)}%`, minWidth: 3, backgroundColor: `color-mix(in srgb, var(--color-accent) ${i % 2 ? 55 : 75}%, var(--color-surface-strong))` }}
+            style={{ width: `${Math.max(0, ((r.size_bytes + r.prefix_bytes) / d.total_bytes) * 100)}%`, minWidth: i === 0 ? 3 : undefined, backgroundColor: `color-mix(in srgb, var(--color-accent) ${i % 2 ? 55 : 75}%, var(--color-surface-strong))` }}
             title={`${r.title} · ${figure(r.size_bytes + r.prefix_bytes)}`}
           />
         ))}

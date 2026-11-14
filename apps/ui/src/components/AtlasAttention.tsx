@@ -11,6 +11,7 @@ import { Button } from './ds/button';
 import { Modal, ModalFoot, ModalHead } from './Modal';
 import { attentionIssues, attentionReason, heroImages, isSystemFolder, type AttentionIssue } from '../lib/games';
 import { RawDetails } from './ErrorNotice';
+import { hasDetails, plainError } from '../lib/plainError';
 import { notify } from '../lib/notify';
 import type { FixesProps } from './FixesView';
 
@@ -36,7 +37,7 @@ export function useAttentionFix({ jobs = [], runners = [], onOpenGame, onOpenRun
   const issueText = (issue: AttentionIssue): string => {
     const g = issue.game;
     switch (issue.kind) {
-      case 'install': return t('fixes:atlas.reason.install');
+      case 'install': return plainError(issue.error, t('fixes:atlas.reason.install'));
       case 'outside':
         if (isSystemFolder(g.install_dir)) {
           return t('fixes:atlas.reason.outsideSystem', { title: g.title, dir: g.install_dir });
@@ -191,8 +192,8 @@ export function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJ
                     {g.title}
                   </button>
                   <p className="line-clamp-2 text-[13px] leading-[1.45] text-text-muted">{issueText(issue)}</p>
-                  {issue.kind === 'install' && issue.error?.trim() && (
-                    <RawDetails text={issue.error.trim()} />
+                  {issue.kind === 'install' && hasDetails(issue.error, t('fixes:atlas.reason.install')) && (
+                    <RawDetails text={(issue.error ?? '').trim()} />
                   )}
                 </div>
                 <div className="grid gap-1">
