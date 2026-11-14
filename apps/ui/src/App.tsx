@@ -1101,6 +1101,8 @@ export function AppContent() {
               activity={allActivity}
               sourceLogos={sourceLogos}
               view={atlasView}
+              onViewChange={persistAtlasView}
+              lastScan={lastScan}
               onOpen={openGame}
               onPlay={(id) => {
                 const g = games.find((x) => x.id === id);

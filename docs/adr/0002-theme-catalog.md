@@ -198,6 +198,18 @@ How the accepted decisions landed, without changing them.
   category, `scroll` stacks every section). The Atlas theme declares
   `settings.navigation = "tabs"`: the page now honours the axis, and tabs
   are what it has always shown.
+- Atlas library header (issue #118): the grid/table page header is blocks
+  of a separate `library-header` view (`bar`: title, mode, search, sort,
+  filters; `sub`: warnings, chips), so the classic `library` built-in
+  layout and its composite `library.header` stay untouched. Only `warnings`
+  is required. The classic granular blocks (`library.title`, `.mode`,
+  `.search`, `.chips`, `.filters`) don't transfer: the Atlas header needs
+  the triple list/grid/table switch, App-owned filter state and the
+  in-page sort, so the Atlas blocks reuse only the classic `LibraryTitle`
+  component and the tier/status controls. Rebuilding the composite
+  `library.header` from the same blocks stays out of scope: its two-row
+  flex arrangement needs row-frame control the classic `library` regions
+  don't have.
 - Colour schemes and game colour (issue #134): `[schemes.light]` and
   `[schemes.black]` token overrides in `theme.toml`, validated like
   `[tokens]` and contrast-checked over their own resolved tokens; the UI

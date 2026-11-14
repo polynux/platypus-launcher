@@ -256,17 +256,20 @@ the theme layout when the theme ships one, else the built-in arrangement
 `ThemeLayout`).
 
 The views that take layouts: `dashboard`, `library`, `game`, `storage`,
-`plugins`, `settings`, and `shell`. Shell regions follow `shell.navigation`: `sidebar`
+`plugins`, `settings`, `library-header`, and `shell`. Shell regions follow `shell.navigation`: `sidebar`
 for the sidebar variant, `topbar` for the topbar variant. Shell takes only
 the variant. A `layouts/shell.xml` file validates like any other layout,
 but the shell never loads a layout: `Shell.tsx` reads only
 `shell.navigation` and renders its blocks directly, arranged by the variant.
 
-`settings` is an Atlas presentation with no classic layout: the classic
-settings page keeps its fixed sections. The `settings` layout drives the
-Atlas settings page (sections as blocks, the category navigation following
-the layout's order). It honours `settings.navigation`: `tabs` shows one
-category, `scroll` stacks every section in layout order.
+`settings` and `library-header` are Atlas presentations with no classic
+layout: the classic settings page keeps its fixed sections, and the classic
+library keeps its built-in `library` layout and composite header. The
+`settings` layout drives the Atlas settings page (sections as blocks, the
+category navigation following the layout's order); the `library-header`
+layout drives the Atlas grid/table page header. Both honour
+`settings.navigation`: `tabs` shows one category, `scroll` stacks every
+block in layout order.
 
 Regions per view, from the catalog:
 
@@ -276,6 +279,7 @@ Regions per view, from the catalog:
 - `storage`: `top`, `main`, `side`.
 - `plugins`: `top`, `main`, `side`.
 - `settings`: `main`.
+- `library-header`: `bar`, `sub`.
 - `shell`: `sidebar`, `topbar` (variant only, see above).
 
 Block names are per view; see `catalog.md` for the full list. Required
@@ -291,6 +295,8 @@ blocks per view, from the catalog:
   and approve/enable actions.
 - `settings`: every section block (all in `main`). Each one acts or reports
   state, so a layout can't drop a setting.
+- `library-header`: `warnings` (in `sub`). The search, sort, title, mode,
+  filters and chips blocks stay hideable, like the classic granular blocks.
 - `shell`: none. Both variants keep Settings and Plugins reachable by
   construction.
 
@@ -306,6 +312,21 @@ blocks per view, from the catalog:
   </region>
   <region name="side">
     <block name="activity" limit="6" />
+  </region>
+</layout>
+```
+
+A library header that hides the chips and moves search after a title, with
+the view-mode switch in the sub row (issue #118):
+
+```xml
+<layout view="library-header" catalog="1.2">
+  <region name="bar">
+    <block name="title" />
+    <block name="search" />
+  </region>
+  <region name="sub">
+    <block name="mode" />
   </region>
 </layout>
 ```

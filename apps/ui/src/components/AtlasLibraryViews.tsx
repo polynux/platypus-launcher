@@ -5,17 +5,23 @@
 // list-detail presentation renders these; every colour comes from a token.
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpDown, Download, FolderPlus, Play, Search, Settings2, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpDown, Download, FolderPlus, LayoutGrid, Play, Rows3, Search, Settings2, SlidersHorizontal, Table2, Users, X } from 'lucide-react';
 import type { ActivityEvent, Collection, Game, Job, ProtonVersion, SessionEvent, StoreType } from '../types';
 import { Cover, cx, relTime } from './ui';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { PluginLogo } from './PluginLogo';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from './ds/dropdown-menu';
+import { ThemeLayout } from '../lib/layout';
+import { useThemeLayout } from '../lib/theme';
+import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
+import { missingNames } from '../lib/collections';
+import { useNetState } from './useNetState';
 import { coverImages, formatBytes, heroImages, hoursPlayed, lastPlayedAgo, needsAttention, attentionReason, byRecent, storeLabel } from '../lib/games';
 import { formatCount } from '../lib/format';
 import { TIER_LABEL, tierFilterValue } from '../lib/compat';
 import { isLiveState } from '../lib/sessions';
 import { filterLibrary } from '../lib/libraryFilter';
-import { sortGames, type Sort, type SortKey, type StatusFilter } from './LibraryView';
+import { LibraryTitle, StatusFilterControl, TierFilterControl, sortGames, type Sort, type SortKey, type StatusFilter } from './LibraryView';
 import type { TierFilter } from '../lib/compat';
 
 export type AtlasSortKey = 'recent' | 'title' | 'hours' | 'year' | 'size' | 'tier';
@@ -233,30 +239,152 @@ export function AtlasSortMenu({ sort, dir, onSort, onDir }: {
   );
 }
 
-/** The library filter field + sort for the grid/table `lib-bar` (D22). */
-export function AtlasLibBar({ query, onQuery, sort, dir, onSort, onDir }: {
+/** The Atlas library header's filter field (issue #118): the lib-bar's search
+ *  half as a block, so a theme can move it. Unchanged classes: the built-in
+ *  `library-header` layout keeps it exactly where the lib-bar had it. */
+export function AtlasHeaderSearch({ query, onQuery }: {
   query: string;
   onQuery: (q: string) => void;
-  sort: AtlasSortKey;
-  dir: 'asc' | 'desc';
-  onSort: (s: AtlasSortKey) => void;
-  onDir: (d: 'asc' | 'desc') => void;
 }) {
   const { t } = useTranslation('library');
   return (
-    <div className="flex items-center gap-2">
-      <label className="flex h-[32px] min-w-0 max-w-[360px] flex-1 items-center gap-2 rounded-lg bg-surface px-2.5 text-text-faint">
-        <Search className="h-3.5 w-3.5 flex-none" aria-hidden />
-        <span className="sr-only">{t('library:searchAria')}</span>
-        <input
-          value={query}
-          onChange={(e) => onQuery(e.target.value)}
-          placeholder={t('library:atlasViews.filterPlaceholder')}
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-text outline-none placeholder:text-text-faint"
-        />
-      </label>
-      <AtlasSortMenu sort={sort} dir={dir} onSort={onSort} onDir={onDir} />
+    <label className="flex h-[32px] min-w-0 max-w-[360px] flex-1 items-center gap-2 rounded-lg bg-surface px-2.5 text-text-faint">
+      <Search className="h-3.5 w-3.5 flex-none" aria-hidden />
+      <span className="sr-only">{t('library:searchAria')}</span>
+      <input
+        value={query}
+        onChange={(e) => onQuery(e.target.value)}
+        placeholder={t('library:atlasViews.filterPlaceholder')}
+        className="min-w-0 flex-1 bg-transparent text-[13px] text-text outline-none placeholder:text-text-faint"
+      />
+    </label>
+  );
+}
+
+/** The Atlas header's view-mode switch (issue #118): list, grid or table.
+ *  The shell carries this switch today; the block gives themes a working
+ *  in-page switch. Without the view setter it renders nothing, so the
+ *  built-in layout stays exactly as today. */
+export function AtlasHeaderMode({ view, onViewChange }: {
+  view: AtlasPageView;
+  onViewChange?: (v: 'list' | 'grid' | 'table') => void;
+}) {
+  const { t } = useTranslation('nav');
+  if (!onViewChange) return null;
+  const opts = [
+    { id: 'list', label: t('nav:sourcebar.viewList'), Icon: Rows3 },
+    { id: 'grid', label: t('nav:sourcebar.viewGrid'), Icon: LayoutGrid },
+    { id: 'table', label: t('nav:sourcebar.viewTable'), Icon: Table2 },
+  ] as const;
+  return (
+    <div role="group" aria-label={t('nav:sourcebar.viewSwitch')} className="flex flex-none items-center gap-0.5">
+      {opts.map(({ id, label, Icon }) => {
+        const on = view === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            aria-label={label}
+            title={label}
+            aria-pressed={on}
+            onClick={() => onViewChange(id)}
+            className={cx(
+              'grid size-[34px] flex-none place-items-center rounded-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              on ? 'bg-surface-strong text-text' : 'text-text-muted hover:bg-surface hover:text-text'
+            )}
+          >
+            <Icon className="h-4 w-4" aria-hidden />
+          </button>
+        );
+      })}
     </div>
+  );
+}
+
+/** The Atlas header's filters popover (issue #118): compat tier, status and
+ *  lending, sharing the page's filter state. The shell carries the filters
+ *  popover today; the block gives themes a working in-page one. */
+export function AtlasHeaderFilters({ tier, onTier, status, onStatus, lending, onLending, hasBorrowed }: {
+  tier: TierFilter;
+  onTier: (v: TierFilter) => void;
+  status: StatusFilter;
+  onStatus: (v: StatusFilter) => void;
+  lending: 'all' | 'with-me';
+  onLending: (v: 'all' | 'with-me') => void;
+  hasBorrowed: boolean;
+}) {
+  const { t } = useTranslation('library');
+  const [open, setOpen] = useState(false);
+  const lendingFilter = hasBorrowed ? lending : 'all';
+  const extraCount = [tier !== 'all', status !== 'all', lendingFilter !== 'all'].filter(Boolean).length;
+  const reset = () => { onTier('all'); onStatus('all'); onLending('all'); };
+  const selectClass = 'h-[30px] w-full text-[13px]';
+  const itemClass = 'text-[13px] capitalize';
+  const any = t('library:listDetail.filterAny');
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={t('library:listDetail.filtersAria')}
+          className={cx(
+            'relative grid h-[30px] min-w-[30px] flex-none place-items-center gap-1.5 rounded-[7px] px-1.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+            open || extraCount > 0 ? 'bg-surface-strong text-text' : 'bg-surface text-text-faint hover:text-text-muted'
+          )}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+          {t('library:filters')}
+          {extraCount > 0 && (
+            <span aria-label={t('nav:needsAttention')} className="size-1.5 rounded-full bg-accent-strong" />
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="bottom"
+        align="start"
+        className="w-[260px] p-3"
+        onPointerDownOutside={(e) => {
+          if ((e.target as Element)?.closest?.('[role="listbox"], [data-radix-popper-content-wrapper]')) e.preventDefault();
+        }}
+      >
+        <div className="grid gap-3">
+          <div>
+            <p className="mb-1 text-[13px] text-text-muted">{t('library:listDetail.filterCompat')}</p>
+            <TierFilterControl value={tier} onChange={onTier} triggerClassName={selectClass} itemClassName={itemClass} allLabel={any} />
+          </div>
+          <div>
+            <p className="mb-1 text-[13px] text-text-muted">{t('library:listDetail.filterStatus')}</p>
+            <StatusFilterControl value={status} onChange={onStatus} triggerClassName={selectClass} itemClassName={itemClass} allLabel={any} />
+          </div>
+          {hasBorrowed && (
+            <div>
+              <p className="mb-1 text-[13px] text-text-muted">{t('library:listDetail.filterLending')}</p>
+              <Select value={lendingFilter} onValueChange={(v) => onLending(v as 'all' | 'with-me')}>
+                <SelectTrigger aria-label={t('library:family')} className={selectClass}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className={itemClass}>{any}</SelectItem>
+                  <SelectItem value="with-me" className={itemClass}>{t('library:listDetail.filterLentOnly')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+        {extraCount > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <button
+              type="button"
+              onClick={reset}
+              className="w-full rounded-lg px-2 py-1.5 text-left text-[13px] font-semibold text-accent transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              {t('library:listDetail.filterReset')}
+            </button>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -650,6 +778,112 @@ export function AtlasSkeleton({ view }: { view: 'list' | 'grid' | 'table' }) {
     </ul>
   );
 }
+/** One region's frame in a library-header layout (issue #118): the bar row
+ *  keeps the lib-bar's flex row, so search and sort sit exactly as today;
+ *  the sub region stacks warnings over chips with the page's gap, like the
+ *  built-in page does. */
+function libraryHeaderRegionClass(region: string): string | undefined {
+  switch (region) {
+    case 'bar': return 'flex items-center gap-2';
+    case 'sub': return 'grid gap-4';
+    default: return undefined;
+  }
+}
+
+/** The Atlas grid/table header from granular blocks (issue #118): title,
+ *  view mode (list/grid/table), search, sort, filters, warnings and chips,
+ *  arranged by the `library-header` layout. The built-in layout reproduces
+ *  today's header exactly (search + sort in the bar, warnings + chips
+ *  below); the title, mode and filters blocks exist for themes that want a
+ *  classic-like Atlas header. Every block takes its data as props from the
+ *  page above and renders null when it has nothing to show. */
+export function AtlasLibraryHeader(p: {
+  games: Game[];
+  query: string;
+  onQuery: (q: string) => void;
+  sort: AtlasSortKey;
+  dir: 'asc' | 'desc';
+  onSort: (s: AtlasSortKey) => void;
+  onDir: (d: 'asc' | 'desc') => void;
+  tier: TierFilter;
+  onTier: (v: TierFilter) => void;
+  status: StatusFilter;
+  onStatus: (v: StatusFilter) => void;
+  lending: 'all' | 'with-me';
+  onLending: (v: 'all' | 'with-me') => void;
+  warnings: { source: string; needs_auth?: boolean; message?: string }[];
+  pluginName: (id: string) => string;
+  onOpenPlugins: () => void;
+  collections?: Collection[];
+  collection?: string;
+  onResetFilters?: () => void;
+  view: AtlasPageView;
+  onViewChange?: (v: 'list' | 'grid' | 'table') => void;
+  filteredCount: number;
+  lastScan?: number | null;
+}) {
+  // The built-in arrangement is the initial layout, so the first paint
+  // already shows today's header before the core answers over RPC.
+  const layout = useThemeLayout('library-header') ?? BUILTIN_LAYOUTS['library-header'];
+  const { online } = useNetState();
+  const installedCount = useMemo(() => p.games.filter((g) => g.is_installed).length, [p.games]);
+  const activeCollection = (p.collections ?? []).find((c) => c.id === p.collection);
+  const missing = activeCollection && !activeCollection.smart ? missingNames(activeCollection, p.games) : [];
+  const hasBorrowed = p.games.some((g) => g.shared_by != null);
+  const showChips = activeCollection != null || p.tier !== 'all' || p.status !== 'all' || p.lending !== 'all' || p.query.trim() !== '';
+  return (
+    <ThemeLayout
+      layout={layout}
+      blocks={{
+        title: (
+          <LibraryTitle
+            filteredCount={p.filteredCount}
+            installedCount={installedCount}
+            owned={p.games.length}
+            lastScan={p.lastScan ?? null}
+            collection={activeCollection}
+            missing={missing}
+            online={online}
+            onClearCollection={() => p.onResetFilters?.()}
+          />
+        ),
+        mode: <AtlasHeaderMode view={p.view} onViewChange={p.onViewChange} />,
+        search: <AtlasHeaderSearch query={p.query} onQuery={p.onQuery} />,
+        sort: <AtlasSortMenu sort={p.sort} dir={p.dir} onSort={p.onSort} onDir={p.onDir} />,
+        filters: (
+          <AtlasHeaderFilters
+            tier={p.tier}
+            onTier={p.onTier}
+            status={p.status}
+            onStatus={p.onStatus}
+            lending={p.lending}
+            onLending={p.onLending}
+            hasBorrowed={hasBorrowed}
+          />
+        ),
+        warnings: p.warnings.length > 0 ? (
+          <AtlasWarnings warnings={p.warnings} pluginName={p.pluginName} onOpenPlugins={p.onOpenPlugins} />
+        ) : null,
+        chips: showChips ? (
+          <AtlasActiveChips
+            collection={activeCollection ?? undefined}
+            onClearCollection={p.onResetFilters}
+            tier={p.tier}
+            onTier={p.onTier}
+            status={p.status}
+            onStatus={p.onStatus}
+            lending={p.lending}
+            onLending={p.onLending}
+            query={p.query}
+            onQuery={p.onQuery}
+          />
+        ) : null,
+      }}
+      className="grid gap-4"
+      regionClassName={libraryHeaderRegionClass}
+    />
+  );
+}
 
 export type AtlasPageView = 'grid' | 'table';
 
@@ -682,6 +916,11 @@ export function AtlasLibraryPage(p: {
   activity?: ActivityEvent[];
   sourceLogos?: Record<string, string | undefined>;
   view: AtlasPageView;
+  /** The view switch setter (the shell's switch and the mode block share
+   *  it). Absent, the mode block renders nothing. */
+  onViewChange?: (v: 'list' | 'grid' | 'table') => void;
+  /** The library's last scan, for the title block. Absent, it shows none. */
+  lastScan?: number | null;
   onOpen: (id: string) => void;
   onPlay?: (id: string) => void;
   onInstall?: (game: Game) => void;
@@ -716,7 +955,6 @@ export function AtlasLibraryPage(p: {
   );
   const jobsById = useMemo(() => new Map(p.jobs.map((j) => [j.game_id, j])), [p.jobs]);
   const sessionsById = useMemo(() => new Map(Object.entries(p.sessions ?? {})), [p.sessions]);
-  const activeCollection = (p.collections ?? []).find((c) => c.id === p.collection);
   const hasFilter =
     p.query.trim() !== '' ||
     p.tier !== 'all' ||
@@ -727,24 +965,31 @@ export function AtlasLibraryPage(p: {
   const showBlocks = !hasFilter && p.view === 'grid';
   return (
     <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 p-5">
-      <AtlasLibBar query={p.query} onQuery={p.onQuery} sort={sort} dir={dir} onSort={setSort} onDir={setDir} />
-      {p.warnings.length > 0 && (
-        <AtlasWarnings warnings={p.warnings} pluginName={p.pluginName} onOpenPlugins={p.onOpenPlugins} />
-      )}
-      {(activeCollection || p.tier !== 'all' || p.status !== 'all' || p.lending !== 'all' || p.query.trim() !== '') && (
-        <AtlasActiveChips
-          collection={activeCollection ?? undefined}
-          onClearCollection={p.onResetFilters}
-          tier={p.tier}
-          onTier={p.onTier}
-          status={p.status}
-          onStatus={p.onStatus}
-          lending={p.lending}
-          onLending={p.onLending}
-          query={p.query}
-          onQuery={p.onQuery}
-        />
-      )}
+      <AtlasLibraryHeader
+        games={p.games}
+        query={p.query}
+        onQuery={p.onQuery}
+        sort={sort}
+        dir={dir}
+        onSort={setSort}
+        onDir={setDir}
+        tier={p.tier}
+        onTier={p.onTier}
+        status={p.status}
+        onStatus={p.onStatus}
+        lending={p.lending}
+        onLending={p.onLending}
+        warnings={p.warnings}
+        pluginName={p.pluginName}
+        onOpenPlugins={p.onOpenPlugins}
+        collections={p.collections}
+        collection={p.collection}
+        onResetFilters={p.onResetFilters}
+        view={p.view}
+        onViewChange={p.onViewChange}
+        filteredCount={filtered.length}
+        lastScan={p.lastScan}
+      />
       {filtered.length === 0 ? (
         <p className="rounded-xl bg-surface px-4 py-6 text-center text-[13px] text-text-muted">
           {t('library:listDetail.empty')}{' '}

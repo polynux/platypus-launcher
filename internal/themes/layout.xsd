@@ -22,12 +22,14 @@
             <xs:attribute name="name" use="required">
               <xs:simpleType>
                 <xs:restriction base="xs:string">
+                  <xs:enumeration value="bar" />
                   <xs:enumeration value="bottom" />
                   <xs:enumeration value="hero" />
                   <xs:enumeration value="main" />
                   <xs:enumeration value="side" />
                   <xs:enumeration value="sidebar" />
                   <xs:enumeration value="sourcebar" />
+                  <xs:enumeration value="sub" />
                   <xs:enumeration value="top" />
                   <xs:enumeration value="topbar" />
                 </xs:restriction>
@@ -42,6 +44,7 @@
             <xs:enumeration value="dashboard" />
             <xs:enumeration value="game" />
             <xs:enumeration value="library" />
+            <xs:enumeration value="library-header" />
             <xs:enumeration value="plugins" />
             <xs:enumeration value="settings" />
             <xs:enumeration value="shell" />
@@ -101,6 +104,7 @@
           <xs:enumeration value="ratings" />
           <xs:enumeration value="recent" />
           <xs:enumeration value="search" />
+          <xs:enumeration value="sort" />
           <xs:enumeration value="sources" />
           <xs:enumeration value="status" />
           <xs:enumeration value="store" />

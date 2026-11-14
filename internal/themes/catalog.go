@@ -307,4 +307,25 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "settings.gameinfo", Since: "1.2", Kind: "block", Required: true, Region: "main"},
 	{Entry: "settings.chat", Since: "1.2", Kind: "block", Required: true, Region: "main"},
 	{Entry: "settings.notices", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	// Library header layout entries (issue #118): the Atlas grid/table
+	// page header as blocks of a `library-header` layout view. The Atlas
+	// page renders its header through ThemeLayout; the classic `library`
+	// view keeps its built-in layout and its composite header untouched
+	// (the granular classic blocks stack vertically and can't reproduce
+	// its two-row flex arrangement). `search` and `sort` are the lib-bar
+	// controls, `warnings` the store problems, `chips` the active
+	// collection and filters; `title`, `mode` and `filters` mirror the
+	// classic header parts for themes that want a classic-like Atlas
+	// header. Only `warnings` is required: they tell the truth about the
+	// stores (ADR §5), like `library.warnings`. The rest stays hideable,
+	// like the classic granular blocks.
+	{Entry: "library-header.bar", Since: "1.2", Kind: "region"},
+	{Entry: "library-header.sub", Since: "1.2", Kind: "region"},
+	{Entry: "library-header.title", Since: "1.2", Kind: "block", Region: "bar"},
+	{Entry: "library-header.mode", Since: "1.2", Kind: "block", Region: "bar"},
+	{Entry: "library-header.search", Since: "1.2", Kind: "block", Region: "bar"},
+	{Entry: "library-header.sort", Since: "1.2", Kind: "block", Region: "bar"},
+	{Entry: "library-header.filters", Since: "1.2", Kind: "block", Region: "bar"},
+	{Entry: "library-header.warnings", Since: "1.2", Kind: "block", Required: true, Region: "sub"},
+	{Entry: "library-header.chips", Since: "1.2", Kind: "block", Region: "sub"},
 }

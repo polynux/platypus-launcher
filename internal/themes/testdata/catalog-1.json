@@ -1234,6 +1234,68 @@
       "kind": "block",
       "required": true,
       "region": "main"
+    },
+    {
+      "entry": "library-header.bar",
+      "since": "1.2",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "library-header.sub",
+      "since": "1.2",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "library-header.title",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "bar"
+    },
+    {
+      "entry": "library-header.mode",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "bar"
+    },
+    {
+      "entry": "library-header.search",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "bar"
+    },
+    {
+      "entry": "library-header.sort",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "bar"
+    },
+    {
+      "entry": "library-header.filters",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "bar"
+    },
+    {
+      "entry": "library-header.warnings",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "sub"
+    },
+    {
+      "entry": "library-header.chips",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "sub"
     }
   ]
 }

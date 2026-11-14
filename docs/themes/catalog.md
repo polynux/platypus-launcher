@@ -766,3 +766,56 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - region: `main`
 - required: yes (a layout that leaves it out still gets it, with a warning)
 
+## `library-header.bar`
+
+- since: `1.2`
+- kind: `region`
+
+## `library-header.sub`
+
+- since: `1.2`
+- kind: `region`
+
+## `library-header.title`
+
+- since: `1.2`
+- kind: `block`
+- region: `bar`
+
+## `library-header.mode`
+
+- since: `1.2`
+- kind: `block`
+- region: `bar`
+
+## `library-header.search`
+
+- since: `1.2`
+- kind: `block`
+- region: `bar`
+
+## `library-header.sort`
+
+- since: `1.2`
+- kind: `block`
+- region: `bar`
+
+## `library-header.filters`
+
+- since: `1.2`
+- kind: `block`
+- region: `bar`
+
+## `library-header.warnings`
+
+- since: `1.2`
+- kind: `block`
+- region: `sub`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `library-header.chips`
+
+- since: `1.2`
+- kind: `block`
+- region: `sub`
+
