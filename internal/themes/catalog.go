@@ -2,8 +2,8 @@ package themes
 
 import "platypus/internal/types"
 
-// Catalog v1.1 is the frontend contract for the Settings testbed.
-const CatalogVersion = "1.1"
+// Catalog v1.2 is the frontend contract for the Atlas layout views.
+const CatalogVersion = "1.2"
 
 var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "settings", Since: "1.0", Axes: []types.ThemeCatalogAxis{
@@ -284,4 +284,30 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "toast", Since: "1.1", Axes: []types.ThemeCatalogAxis{
 		{Name: "style", Values: []string{"card", "pill"}, Default: "card", Since: "1.1"},
 	}},
+	// Activity, Fixes, Runners and Downloads layout entries (issue #116):
+	// the Atlas presentations' regions, then their blocks in built-in order.
+	// Only the queue, the cards and the installed table are required (ADR
+	// §5): the queue holds pause/resume/cancel, the cards the fix actions,
+	// the table the remove action with the per-game usage truth. Headers,
+	// filters and the finished/available lists stay hideable.
+	{Entry: "activity.top", Since: "1.2", Kind: "region"},
+	{Entry: "activity.main", Since: "1.2", Kind: "region"},
+	{Entry: "activity.header", Since: "1.2", Kind: "block", Region: "top"},
+	{Entry: "activity.filter", Since: "1.2", Kind: "block", Region: "main"},
+	{Entry: "activity.days", Since: "1.2", Kind: "block", Region: "main"},
+	{Entry: "fixes.top", Since: "1.2", Kind: "region"},
+	{Entry: "fixes.main", Since: "1.2", Kind: "region"},
+	{Entry: "fixes.header", Since: "1.2", Kind: "block", Region: "top"},
+	{Entry: "fixes.cards", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "runners.top", Since: "1.2", Kind: "region"},
+	{Entry: "runners.main", Since: "1.2", Kind: "region"},
+	{Entry: "runners.header", Since: "1.2", Kind: "block", Region: "top"},
+	{Entry: "runners.default", Since: "1.2", Kind: "block", Region: "main"},
+	{Entry: "runners.installed", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "runners.available", Since: "1.2", Kind: "block", Region: "main"},
+	{Entry: "downloads.top", Since: "1.2", Kind: "region"},
+	{Entry: "downloads.main", Since: "1.2", Kind: "region"},
+	{Entry: "downloads.header", Since: "1.2", Kind: "block", Region: "top"},
+	{Entry: "downloads.queue", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "downloads.finished", Since: "1.2", Kind: "block", Region: "main"},
 }

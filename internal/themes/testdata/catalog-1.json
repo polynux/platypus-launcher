@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "entries": [
     {
       "entry": "settings",
@@ -1116,6 +1116,141 @@
           "since": "1.1"
         }
       ]
+    },
+    {
+      "entry": "activity.top",
+      "since": "1.2",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "activity.main",
+      "since": "1.2",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "activity.header",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "activity.filter",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "activity.days",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "fixes.top",
+      "since": "1.2",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "fixes.main",
+      "since": "1.2",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "fixes.header",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "fixes.cards",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "runners.top",
+      "since": "1.2",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "runners.main",
+      "since": "1.2",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "runners.header",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "runners.default",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "runners.installed",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "runners.available",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "downloads.top",
+      "since": "1.2",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "downloads.main",
+      "since": "1.2",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "downloads.header",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "downloads.queue",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "downloads.finished",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
     }
   ]
 }

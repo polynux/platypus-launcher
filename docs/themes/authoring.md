@@ -256,7 +256,11 @@ the theme layout when the theme ships one, else the built-in arrangement
 `ThemeLayout`).
 
 The views that take layouts: `dashboard`, `library`, `game`, `storage`,
-`plugins`, and `shell`. Shell regions follow `shell.navigation`: `sidebar`
+`plugins`, `activity`, `fixes`, `runners`, `downloads`, and `shell`.
+`activity`, `fixes`, `runners` and `downloads` (issue #116) had no layout
+before: their layouts describe the Atlas presentation only, and the classic
+presentations (`feed`, `rows`, `groups`) keep their fixed rendering. Shell
+regions follow `shell.navigation`: `sidebar`
 for the sidebar variant, `topbar` for the topbar variant. Shell takes only
 the variant. A `layouts/shell.xml` file validates like any other layout,
 but the shell never loads a layout: `Shell.tsx` reads only
@@ -269,6 +273,10 @@ Regions per view, from the catalog:
 - `game`: `hero`, `main`, `side`.
 - `storage`: `top`, `main`, `side`.
 - `plugins`: `top`, `main`, `side`.
+- `activity`: `top`, `main`.
+- `fixes`: `top`, `main`.
+- `runners`: `top`, `main`.
+- `downloads`: `top`, `main`.
 - `shell`: `sidebar`, `topbar` (variant only, see above).
 
 Block names are per view; see `catalog.md` for the full list. Required
@@ -282,6 +290,12 @@ blocks per view, from the catalog:
 - `storage`: none. Every block is hideable.
 - `plugins`: `store` (in `main`). Each store card renders its own login row
   and approve/enable actions.
+- `activity`: none. Every block is hideable.
+- `fixes`: `cards` (in `main`). The cards hold the fix actions.
+- `runners`: `installed` (in `main`). The table holds the remove action
+  with the per-game usage truth.
+- `downloads`: `queue` (in `main`). The queue holds pause, resume and
+  cancel per job.
 - `shell`: none. Both variants keep Settings and Plugins reachable by
   construction.
 

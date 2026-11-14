@@ -10,7 +10,7 @@ import type { Job } from '../../types';
 import { SystemView } from '../SystemView';
 
 const variant = vi.hoisted(() => ({ nav: 'sourcebar' }));
-vi.mock('../../lib/theme', () => ({ useVariant: (axis: string) => { if (axis === 'runners.presentation') return variant.nav === 'sourcebar' ? 'table' : 'rows'; if (axis === 'shell.navigation') return variant.nav; return 'page'; } }));
+vi.mock('../../lib/theme', () => ({ useVariant: (axis: string) => { if (axis === 'runners.presentation') return variant.nav === 'sourcebar' ? 'table' : 'rows'; if (axis === 'shell.navigation') return variant.nav; return 'page'; }, useThemeLayout: () => null }));
 
 const core = vi.hoisted(() => ({
   settings: { default_runner_id: '' },

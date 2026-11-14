@@ -12,6 +12,9 @@ import { heroImages } from '../lib/games';
 import { formatBytes } from '../lib/games';
 import type { SystemViewProps } from './SystemView';
 
+import { useThemeLayout } from '../lib/theme';
+import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
+import { ThemeLayout } from '../lib/layout';
 const AUTOMATIC = 'automatic';
 
 /** The /22 Runners page (issue #138, Atlas only): the default picker row is
@@ -28,22 +31,29 @@ export function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDe
     games.filter((g) => !g.native && (g.settings.runner_id === id || g.settings.runner_id === name || ((!g.settings.runner_id || g.settings.runner_id === 'auto') && fallback?.id === id)));
   const installedTags = new Set(runners.map((r) => (r.id.startsWith('compat:') ? r.id.slice('compat:'.length) : '')));
   const pending = available.filter((a) => !installedTags.has(a.tag));
+  // The Atlas arrangement is itself a layout (issue #116): the regions,
+  // rows and blocks the picked theme rearranges, rendered through
+  // ThemeLayout. The first paint already shows the built-in arrangement.
+  const layout = useThemeLayout('runners') ?? BUILTIN_LAYOUTS['runners'];
+  // Each block renders null when it has nothing to show, so a layout
+  // orders blocks without conditionals of its own.
   return (
-    <div className={ATLAS_PAGE}>
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.runners')}</h1>
-          <p className="mt-[3px] text-[13px] text-text-muted">{t('runners:atlas.sub')}</p>
-        </div>
-        <Button variant="neutral" onClick={onRefresh} disabled={scanning}>
-          {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          {scanning ? t('runners:scanning') : t('runners:rescan')}
-        </Button>
-      </header>
-      {runners.length === 0 ? (
-        <EmptyState label={t('runners:emptyTitle')}>{t('runners:emptyBody')}</EmptyState>
-      ) : (
-        <>
+    <ThemeLayout
+      layout={layout}
+      blocks={{
+        header: (
+          <header className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.runners')}</h1>
+              <p className="mt-[3px] text-[13px] text-text-muted">{t('runners:atlas.sub')}</p>
+            </div>
+            <Button variant="neutral" onClick={onRefresh} disabled={scanning}>
+              {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              {scanning ? t('runners:scanning') : t('runners:rescan')}
+            </Button>
+          </header>
+        ),
+        default: runners.length === 0 ? null : (
           <section aria-label={t('runners:atlas.defaultLabel')} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[18px] border-b border-hairline py-3.5">
             <div className="grid min-w-0 gap-[3px]">
               <h2 className="text-[13px] font-semibold text-text">{t('runners:atlas.defaultLabel')}</h2>
@@ -67,6 +77,10 @@ export function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDe
               </SelectContent>
             </Select>
           </section>
+        ),
+        installed: runners.length === 0 ? (
+          <EmptyState label={t('runners:emptyTitle')}>{t('runners:emptyBody')}</EmptyState>
+        ) : (
           <section aria-label={t('runners:atlas.installed')}>
             <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('runners:atlas.installed')}</h2>
             <ul className="divide-y divide-hairline">
@@ -115,29 +129,33 @@ export function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDe
               })}
             </ul>
           </section>
-          {pending.length > 0 && (
-            <section aria-label={t('runners:atlas.available')}>
-              <h2 className="mb-2.5 mt-6 text-[13px] font-bold text-text-muted">{t('runners:atlas.available')}</h2>
-              <ul className="divide-y divide-hairline">
-                {pending.map((a) => (
-                  <li key={a.tag} className="grid min-h-14 grid-cols-[minmax(200px,1.3fr)_minmax(160px,1fr)_70px_130px] items-center gap-3.5 border-b border-hairline transition hover:bg-surface">
-                    <div className="grid min-w-0 gap-[3px]">
-                      <div className="flex items-center gap-2"><span className="basis-auto text-[13px] font-bold text-text">{a.name}</span></div>
-                      <div className="truncate text-[12.5px] text-text-faint select-text">{a.tag}</div>
-                    </div>
-                    <span />
-                    <span className="text-right tabular-nums text-text-faint">{sizeLabel(a.size_bytes)}</span>
-                    <Button variant="neutral" size="sm" onClick={() => onInstall(a.tag)} disabled={installing === a.tag}>
-                      {installing === a.tag ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                      {installing === a.tag ? t('runners:installing') : t('runners:install')}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </>
-      )}
-    </div>
+        ),
+        available: runners.length === 0 || pending.length === 0 ? null : (
+          <section aria-label={t('runners:atlas.available')}>
+            <h2 className="mb-2.5 mt-6 text-[13px] font-bold text-text-muted">{t('runners:atlas.available')}</h2>
+            <ul className="divide-y divide-hairline">
+              {pending.map((a) => (
+                <li key={a.tag} className="grid min-h-14 grid-cols-[minmax(200px,1.3fr)_minmax(160px,1fr)_70px_130px] items-center gap-3.5 border-b border-hairline transition hover:bg-surface">
+                  <div className="grid min-w-0 gap-[3px]">
+                    <div className="flex items-center gap-2"><span className="basis-auto text-[13px] font-bold text-text">{a.name}</span></div>
+                    <div className="truncate text-[12.5px] text-text-faint select-text">{a.tag}</div>
+                  </div>
+                  <span />
+                  <span className="text-right tabular-nums text-text-faint">{sizeLabel(a.size_bytes)}</span>
+                  <Button variant="neutral" size="sm" onClick={() => onInstall(a.tag)} disabled={installing === a.tag}>
+                    {installing === a.tag ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    {installing === a.tag ? t('runners:installing') : t('runners:install')}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ),
+      }}
+      className={ATLAS_PAGE}
+      // The page is a grid with gap-6: each region stacks its blocks with
+      // the same gap, so the built-in arrangement keeps today's spacing.
+      regionClassName={() => 'grid min-w-0 content-start gap-6'}
+    />
   );
 }
