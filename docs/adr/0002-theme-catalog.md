@@ -188,7 +188,7 @@ How the accepted decisions landed, without changing them.
   (#103), shell navigation (#104), plugin theme assets (#105), authoring
   docs and example theme (#106), one render path with built-in layouts
   (#108), tile polish and row spans (#109), validator gaps (#110). Still
-- open: the store view and the native renderer (§9).
+  open: the native renderer (§9).
 - Atlas layout views (issue #116): `activity`, `fixes`, `runners` and
   `downloads` had no layout, so each gets one used by its Atlas
   presentation (`days`, `cards`, `table`, `cards`); the classic
@@ -198,6 +198,26 @@ How the accepted decisions landed, without changing them.
   (pause/resume/cancel), `fixes.cards` (fix actions), `runners.installed`
   (remove, with the per-game usage truth); the empty states live inside
   the content blocks, so hiding a content block hides its empty state.
+- Settings sections as layout blocks (issue #117): the fourteen launcher
+  settings sections are blocks of a `settings` view (`settings.main`, all
+  `Required`), used by the Atlas settings page only; the classic page
+  keeps its fixed sections. The Atlas category navigation follows the
+  layout's order under both `settings.navigation` values (`tabs` shows one
+  category, `scroll` stacks every section). The Atlas theme declares
+  `settings.navigation = "tabs"`: the page now honours the axis, and tabs
+  are what it has always shown.
+- Atlas library header (issue #118): the grid/table page header is blocks
+  of a separate `library-header` view (`bar`: title, mode, search, sort,
+  filters; `sub`: warnings, chips), so the classic `library` built-in
+  layout and its composite `library.header` stay untouched. Only `warnings`
+  is required. The classic granular blocks (`library.title`, `.mode`,
+  `.search`, `.chips`, `.filters`) don't transfer: the Atlas header needs
+  the triple list/grid/table switch, App-owned filter state and the
+  in-page sort, so the Atlas blocks reuse only the classic `LibraryTitle`
+  component and the tier/status controls. Rebuilding the composite
+  `library.header` from the same blocks stays out of scope: its two-row
+  flex arrangement needs row-frame control the classic `library` regions
+  don't have.
 - Colour schemes and game colour (issue #134): `[schemes.light]` and
   `[schemes.black]` token overrides in `theme.toml`, validated like
   `[tokens]` and contrast-checked over their own resolved tokens; the UI

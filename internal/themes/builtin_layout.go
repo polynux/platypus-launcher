@@ -162,6 +162,45 @@ var builtinLayoutXML = map[string]string{
     <block name="finished" />
   </region>
 </layout>`,
+	// Today's Atlas settings (issue #117): the fourteen sections in the
+	// Atlas category order (general, appearance, folders, saves, data,
+	// social, stores), one region. The Atlas page groups them under its
+	// category navigation; the classic presentation keeps its fixed
+	// rendering and never reads this layout.
+	"settings": `<layout view="settings" catalog="1.2">
+  <region name="main">
+    <block name="language" />
+    <block name="tray" />
+    <block name="theme" />
+    <block name="appearance" />
+    <block name="folders" />
+    <block name="prefixes" />
+    <block name="cleanup" />
+    <block name="backups" />
+    <block name="cloud" />
+    <block name="ratings" />
+    <block name="artwork" />
+    <block name="gameinfo" />
+    <block name="chat" />
+    <block name="notices" />
+  </region>
+</layout>`,
+	// Today's Atlas grid/table header (issue #118): the filter field and
+	// the sort control in one bar row, then the store warnings and the
+	// active filter chips below. The title, view-mode and filters blocks
+	// exist for themes that want a classic-like Atlas header; the built-in
+	// layout leaves them out, like today. Region frames carry the rows, so
+	// the built-in arrangement matches today's header exactly.
+	"library-header": `<layout view="library-header" catalog="1.2">
+  <region name="bar">
+    <block name="search" />
+    <block name="sort" />
+  </region>
+  <region name="sub">
+    <block name="warnings" />
+    <block name="chips" />
+  </region>
+</layout>`,
 }
 
 // builtinLayouts holds the parsed built-ins, in layout order.

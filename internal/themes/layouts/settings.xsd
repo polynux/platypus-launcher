@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated from the theme catalog: do not edit. Refresh with
+     go test ./internal/themes -run TestLayoutXSDCurrent -update. -->
+<!-- Strict schema for layouts/settings.xml: only this view's regions and blocks. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="layout">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="region" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:choice maxOccurs="unbounded">
+              <xs:element name="block" type="blockType" />
+              <xs:element name="row">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="block" type="blockType" maxOccurs="unbounded" />
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:choice>
+            <xs:attribute name="name" use="required">
+              <xs:simpleType>
+                <xs:restriction base="xs:string">
+                  <xs:enumeration value="main" />
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:attribute>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="view" use="required">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:enumeration value="settings" />
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="catalog" type="xs:string" />
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="blockType">
+    <xs:attribute name="name" use="required">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="appearance" />
+          <xs:enumeration value="artwork" />
+          <xs:enumeration value="backups" />
+          <xs:enumeration value="chat" />
+          <xs:enumeration value="cleanup" />
+          <xs:enumeration value="cloud" />
+          <xs:enumeration value="folders" />
+          <xs:enumeration value="gameinfo" />
+          <xs:enumeration value="language" />
+          <xs:enumeration value="notices" />
+          <xs:enumeration value="prefixes" />
+          <xs:enumeration value="ratings" />
+          <xs:enumeration value="theme" />
+          <xs:enumeration value="tray" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="span">
+      <xs:simpleType>
+        <xs:restriction base="xs:integer">
+          <xs:minInclusive value="1" />
+          <xs:maxInclusive value="12" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+</xs:schema>

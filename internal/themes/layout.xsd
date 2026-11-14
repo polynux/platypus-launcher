@@ -22,12 +22,14 @@
             <xs:attribute name="name" use="required">
               <xs:simpleType>
                 <xs:restriction base="xs:string">
+                  <xs:enumeration value="bar" />
                   <xs:enumeration value="bottom" />
                   <xs:enumeration value="hero" />
                   <xs:enumeration value="main" />
                   <xs:enumeration value="side" />
                   <xs:enumeration value="sidebar" />
                   <xs:enumeration value="sourcebar" />
+                  <xs:enumeration value="sub" />
                   <xs:enumeration value="top" />
                   <xs:enumeration value="topbar" />
                 </xs:restriction>
@@ -45,8 +47,10 @@
             <xs:enumeration value="fixes" />
             <xs:enumeration value="game" />
             <xs:enumeration value="library" />
+            <xs:enumeration value="library-header" />
             <xs:enumeration value="plugins" />
             <xs:enumeration value="runners" />
+            <xs:enumeration value="settings" />
             <xs:enumeration value="shell" />
             <xs:enumeration value="storage" />
           </xs:restriction>
@@ -65,12 +69,18 @@
           <xs:enumeration value="actions" />
           <xs:enumeration value="activity" />
           <xs:enumeration value="all-titles" />
+          <xs:enumeration value="appearance" />
+          <xs:enumeration value="artwork" />
           <xs:enumeration value="attention" />
           <xs:enumeration value="available" />
           <xs:enumeration value="back" />
+          <xs:enumeration value="backups" />
           <xs:enumeration value="builtin" />
           <xs:enumeration value="cards" />
+          <xs:enumeration value="chat" />
           <xs:enumeration value="chips" />
+          <xs:enumeration value="cleanup" />
+          <xs:enumeration value="cloud" />
           <xs:enumeration value="collections" />
           <xs:enumeration value="compat" />
           <xs:enumeration value="continue" />
@@ -84,28 +94,37 @@
           <xs:enumeration value="filter" />
           <xs:enumeration value="filters" />
           <xs:enumeration value="finished" />
+          <xs:enumeration value="folders" />
           <xs:enumeration value="footer" />
+          <xs:enumeration value="gameinfo" />
           <xs:enumeration value="games" />
           <xs:enumeration value="header" />
           <xs:enumeration value="heading" />
           <xs:enumeration value="hero" />
           <xs:enumeration value="installation" />
           <xs:enumeration value="installed" />
+          <xs:enumeration value="language" />
           <xs:enumeration value="last-played" />
           <xs:enumeration value="media" />
           <xs:enumeration value="mode" />
           <xs:enumeration value="nav" />
           <xs:enumeration value="note" />
+          <xs:enumeration value="notices" />
           <xs:enumeration value="outside" />
+          <xs:enumeration value="prefixes" />
           <xs:enumeration value="queue" />
+          <xs:enumeration value="ratings" />
           <xs:enumeration value="recent" />
           <xs:enumeration value="search" />
+          <xs:enumeration value="sort" />
           <xs:enumeration value="sources" />
           <xs:enumeration value="status" />
           <xs:enumeration value="store" />
           <xs:enumeration value="table" />
+          <xs:enumeration value="theme" />
           <xs:enumeration value="title" />
           <xs:enumeration value="tools" />
+          <xs:enumeration value="tray" />
           <xs:enumeration value="waiting" />
           <xs:enumeration value="warnings" />
           <xs:enumeration value="welcome" />

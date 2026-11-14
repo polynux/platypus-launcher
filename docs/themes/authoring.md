@@ -281,7 +281,8 @@ the theme layout when the theme ships one, else the built-in arrangement
 `ThemeLayout`).
 
 The views that take layouts: `dashboard`, `library`, `game`, `storage`,
-`plugins`, `activity`, `fixes`, `runners`, `downloads`, and `shell`.
+`plugins`, `activity`, `fixes`, `runners`, `downloads`, `settings`,
+`library-header`, and `shell`.
 `activity`, `fixes`, `runners` and `downloads` (issue #116) had no layout
 before: their layouts describe the Atlas presentation only, and the classic
 presentations (`feed`, `rows`, `groups`) keep their fixed rendering. A
@@ -291,6 +292,15 @@ for the sidebar variant, `topbar` for the topbar variant. Shell takes only
 the variant. A `layouts/shell.xml` file validates like any other layout,
 but the shell never loads a layout: `Shell.tsx` reads only
 `shell.navigation` and renders its blocks directly, arranged by the variant.
+
+`settings` and `library-header` are Atlas presentations with no classic
+layout: the classic settings page keeps its fixed sections, and the classic
+library keeps its built-in `library` layout and composite header. The
+`settings` layout drives the Atlas settings page (sections as blocks, the
+category navigation following the layout's order); the `library-header`
+layout drives the Atlas grid/table page header. The settings page honours
+`settings.navigation`: `tabs` shows one category, `scroll` stacks every
+block in layout order.
 
 Regions per view, from the catalog:
 
@@ -303,6 +313,8 @@ Regions per view, from the catalog:
 - `fixes`: `top`, `main`.
 - `runners`: `top`, `main`.
 - `downloads`: `top`, `main`.
+- `settings`: `main`.
+- `library-header`: `bar`, `sub`.
 - `shell`: `sidebar`, `topbar` (variant only, see above).
 
 Block names are per view; see `catalog.md` for the full list. Required
@@ -325,6 +337,10 @@ blocks per view, from the catalog:
   others in `main`). The header holds pause-all, resume-all and clear; the
   queue holds pause, resume and cancel per job; finished holds retry and
   discard.
+- `settings`: every section block (all in `main`). Each one acts or reports
+  state, so a layout can't drop a setting.
+- `library-header`: `warnings` (in `sub`). The search, sort, title, mode,
+  filters and chips blocks stay hideable, like the classic granular blocks.
 
 A layout for one of these four views, e.g. `layouts/downloads.xml`, only
 changes their Atlas presentations (`activity.presentation = days`,
@@ -342,6 +358,7 @@ changes their Atlas presentations (`activity.presentation = days`,
 - `shell`: none. Both variants keep Settings and Plugins reachable by
   construction.
 
+
 ```xml
 <layout view="dashboard" catalog="1.0">
   <region name="main">
@@ -356,6 +373,23 @@ changes their Atlas presentations (`activity.presentation = days`,
   </region>
 </layout>
 ```
+
+A library header that hides the chips and moves search after a title, with
+the view-mode switch in the sub row (issue #118):
+
+```xml
+<layout view="library-header" catalog="1.2">
+  <region name="bar">
+    <block name="title" />
+    <block name="search" />
+  </region>
+  <region name="sub">
+    <block name="mode" />
+    <block name="warnings" />
+  </region>
+</layout>
+```
+
 
 - The root is `<layout>`. Anything else discards the file with a warning.
 - `view` should match the file name. A mismatch warns and reads the file as

@@ -784,3 +784,159 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - region: `main`
 - required: yes (a layout that leaves it out still gets it, with a warning)
 
+## `settings.main`
+
+- since: `1.2`
+- kind: `region`
+
+## `settings.language`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.tray`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.theme`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.appearance`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.folders`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.prefixes`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.cleanup`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.backups`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.cloud`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.ratings`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.artwork`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.gameinfo`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.chat`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `settings.notices`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `library-header.bar`
+
+- since: `1.2`
+- kind: `region`
+
+## `library-header.sub`
+
+- since: `1.2`
+- kind: `region`
+
+## `library-header.title`
+
+- since: `1.2`
+- kind: `block`
+- region: `bar`
+
+## `library-header.mode`
+
+- since: `1.2`
+- kind: `block`
+- region: `bar`
+
+## `library-header.search`
+
+- since: `1.2`
+- kind: `block`
+- region: `bar`
+
+## `library-header.sort`
+
+- since: `1.2`
+- kind: `block`
+- region: `bar`
+
+## `library-header.filters`
+
+- since: `1.2`
+- kind: `block`
+- region: `bar`
+
+## `library-header.warnings`
+
+- since: `1.2`
+- kind: `block`
+- region: `sub`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `library-header.chips`
+
+- since: `1.2`
+- kind: `block`
+- region: `sub`
+
