@@ -188,8 +188,16 @@ How the accepted decisions landed, without changing them.
   (#103), shell navigation (#104), plugin theme assets (#105), authoring
   docs and example theme (#106), one render path with built-in layouts
   (#108), tile polish and row spans (#109), validator gaps (#110). Still
-  open: the store view, the smaller views as layout views, and the native
-  renderer (§9).
+- open: the store view and the native renderer (§9).
+- Atlas layout views (issue #116): `activity`, `fixes`, `runners` and
+  `downloads` had no layout, so each gets one used by its Atlas
+  presentation (`days`, `cards`, `table`, `cards`); the classic
+  presentations keep their fixed rendering and read no layout. No separate
+  view id or presentation-keyed lookup was needed: the layout id is the
+  view id, and only the Atlas path loads it. Required: `downloads.queue`
+  (pause/resume/cancel), `fixes.cards` (fix actions), `runners.installed`
+  (remove, with the per-game usage truth); the empty states live inside
+  the content blocks, so hiding a content block hides its empty state.
 - Colour schemes and game colour (issue #134): `[schemes.light]` and
   `[schemes.black]` token overrides in `theme.toml`, validated like
   `[tokens]` and contrast-checked over their own resolved tokens; the UI

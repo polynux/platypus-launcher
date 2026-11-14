@@ -4,9 +4,13 @@ import type { ThemeLayout } from '../types';
 
 /** The built-in arrangement per view: what renders with no theme layout. */
 export const BUILTIN_LAYOUTS: Record<string, ThemeLayout> = {
+  "activity": {"view":"activity","regions":[{"name":"top","nodes":[{"block":"header"}]},{"name":"main","nodes":[{"block":"filter"},{"block":"days"}]}]},
   "dashboard": {"view":"dashboard","regions":[{"name":"top","nodes":[{"block":"hero"},{"block":"welcome"},{"block":"empty"}]},{"name":"main","nodes":[{"block":"continue"}]},{"name":"side","nodes":[{"block":"waiting"},{"block":"recent"}]},{"name":"bottom","nodes":[{"block":"activity","attrs":{"limit":"8"}}]}]},
+  "downloads": {"view":"downloads","regions":[{"name":"top","nodes":[{"block":"header"}]},{"name":"main","nodes":[{"block":"queue"},{"block":"finished"}]}]},
+  "fixes": {"view":"fixes","regions":[{"name":"top","nodes":[{"block":"header"}]},{"name":"main","nodes":[{"block":"cards"}]}]},
   "game": {"view":"game","regions":[{"name":"hero","nodes":[{"block":"back"},{"block":"heading"},{"block":"actions"},{"block":"outside"},{"block":"note"}]},{"name":"main","nodes":[{"block":"media"},{"block":"about"}]},{"name":"side","nodes":[{"block":"compat"},{"block":"crash"},{"block":"status"},{"block":"collections"},{"block":"installation"},{"block":"copies"}]},{"name":"bottom","nodes":[{"block":"achievements-progress"},{"block":"achievements"},{"block":"activity"}]}]},
   "library": {"view":"library","regions":[{"name":"top","nodes":[{"block":"header"},{"block":"warnings"},{"block":"empty"}]},{"name":"bottom","nodes":[{"block":"last-played"},{"block":"all-titles"},{"block":"table"},{"row":[{"block":"activity","attrs":{"limit":"6"}},{"block":"recent"}]}]}]},
   "plugins": {"view":"plugins","regions":[{"name":"top","nodes":[{"block":"header"}]},{"name":"main","nodes":[{"block":"store"},{"block":"data"},{"block":"builtin"}]}]},
+  "runners": {"view":"runners","regions":[{"name":"top","nodes":[{"block":"header"}]},{"name":"main","nodes":[{"block":"default"},{"block":"installed"},{"block":"available"}]}]},
   "storage": {"view":"storage","regions":[{"name":"top","nodes":[{"block":"header"}]},{"name":"main","nodes":[{"block":"drives"},{"block":"games"}]}]},
 };

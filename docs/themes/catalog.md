@@ -665,3 +665,122 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 | --- | --- | --- | --- | --- |
 | `style` | `card`, `pill` | `card` | `1.1` | — |
 
+## `activity.top`
+
+- since: `1.2`
+- kind: `region`
+
+## `activity.main`
+
+- since: `1.2`
+- kind: `region`
+
+## `activity.header`
+
+- since: `1.2`
+- kind: `block`
+- region: `top`
+
+## `activity.filter`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+
+## `activity.days`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+
+## `fixes.top`
+
+- since: `1.2`
+- kind: `region`
+
+## `fixes.main`
+
+- since: `1.2`
+- kind: `region`
+
+## `fixes.header`
+
+- since: `1.2`
+- kind: `block`
+- region: `top`
+
+## `fixes.cards`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `runners.top`
+
+- since: `1.2`
+- kind: `region`
+
+## `runners.main`
+
+- since: `1.2`
+- kind: `region`
+
+## `runners.header`
+
+- since: `1.2`
+- kind: `block`
+- region: `top`
+
+## `runners.default`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `runners.installed`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `runners.available`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `downloads.top`
+
+- since: `1.2`
+- kind: `region`
+
+## `downloads.main`
+
+- since: `1.2`
+- kind: `region`
+
+## `downloads.header`
+
+- since: `1.2`
+- kind: `block`
+- region: `top`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `downloads.queue`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `downloads.finished`
+
+- since: `1.2`
+- kind: `block`
+- region: `main`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+

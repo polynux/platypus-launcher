@@ -122,6 +122,46 @@ var builtinLayoutXML = map[string]string{
     <block name="activity" />
   </region>
 </layout>`,
+	// Today's Atlas pages (issue #116): each header full width, the page
+	// content below. The empty states live inside the content blocks (days,
+	// cards, installed, queue), so hiding a content block hides its empty
+	// state with it; the headers carry only titles and page actions.
+	"activity": `<layout view="activity" catalog="1.2">
+  <region name="top">
+    <block name="header" />
+  </region>
+  <region name="main">
+    <block name="filter" />
+    <block name="days" />
+  </region>
+</layout>`,
+	"fixes": `<layout view="fixes" catalog="1.2">
+  <region name="top">
+    <block name="header" />
+  </region>
+  <region name="main">
+    <block name="cards" />
+  </region>
+</layout>`,
+	"runners": `<layout view="runners" catalog="1.2">
+  <region name="top">
+    <block name="header" />
+  </region>
+  <region name="main">
+    <block name="default" />
+    <block name="installed" />
+    <block name="available" />
+  </region>
+</layout>`,
+	"downloads": `<layout view="downloads" catalog="1.2">
+  <region name="top">
+    <block name="header" />
+  </region>
+  <region name="main">
+    <block name="queue" />
+    <block name="finished" />
+  </region>
+</layout>`,
 }
 
 // builtinLayouts holds the parsed built-ins, in layout order.

@@ -281,7 +281,12 @@ the theme layout when the theme ships one, else the built-in arrangement
 `ThemeLayout`).
 
 The views that take layouts: `dashboard`, `library`, `game`, `storage`,
-`plugins`, and `shell`. Shell regions follow `shell.navigation`: `sidebar`
+`plugins`, `activity`, `fixes`, `runners`, `downloads`, and `shell`.
+`activity`, `fixes`, `runners` and `downloads` (issue #116) had no layout
+before: their layouts describe the Atlas presentation only, and the classic
+presentations (`feed`, `rows`, `groups`) keep their fixed rendering. A
+region with no block takes no space. Shell
+regions follow `shell.navigation`: `sidebar`
 for the sidebar variant, `topbar` for the topbar variant. Shell takes only
 the variant. A `layouts/shell.xml` file validates like any other layout,
 but the shell never loads a layout: `Shell.tsx` reads only
@@ -294,6 +299,10 @@ Regions per view, from the catalog:
 - `game`: `hero`, `main`, `side`.
 - `storage`: `top`, `main`, `side`.
 - `plugins`: `top`, `main`, `side`.
+- `activity`: `top`, `main`.
+- `fixes`: `top`, `main`.
+- `runners`: `top`, `main`.
+- `downloads`: `top`, `main`.
 - `shell`: `sidebar`, `topbar` (variant only, see above).
 
 Block names are per view; see `catalog.md` for the full list. Required
@@ -307,6 +316,29 @@ blocks per view, from the catalog:
 - `storage`: none. Every block is hideable.
 - `plugins`: `store` (in `main`). Each store card renders its own login row
   and approve/enable actions.
+- `activity`: none. Every block is hideable.
+- `fixes`: `cards` (in `main`). The cards hold the fix actions.
+- `runners`: `default`, `installed` and `available` (all in `main`). They
+  hold the default-runner pick, the remove action with the per-game usage
+  truth, and the only runner install in the app.
+- `downloads`: `header`, `queue` and `finished` (`header` in `top`, the
+  others in `main`). The header holds pause-all, resume-all and clear; the
+  queue holds pause, resume and cancel per job; finished holds retry and
+  discard.
+
+A layout for one of these four views, e.g. `layouts/downloads.xml`, only
+changes their Atlas presentations (`activity.presentation = days`,
+`fixes = cards`, `runners = table`, `downloads = cards`):
+
+```xml
+<layout view="downloads" catalog="1.2">
+  <region name="main">
+    <block name="header" />
+    <block name="finished" />
+    <block name="queue" />
+  </region>
+</layout>
+```
 - `shell`: none. Both variants keep Settings and Plugins reachable by
   construction.
 

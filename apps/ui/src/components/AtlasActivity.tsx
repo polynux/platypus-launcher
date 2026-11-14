@@ -10,6 +10,9 @@ import { ATLAS_PAGE, EmptyState, clock, cx } from './ui';
 import { Button } from './ds/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { currentLocale } from '../lib/format';
+import { useThemeLayout } from '../lib/theme';
+import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
+import { ThemeLayout } from '../lib/layout';
 
 /** The lab's kind chips, mapped onto the app's real event types. Installs
  *  cover downloads and adds; the fix, remove and tweak types show only when
@@ -68,79 +71,99 @@ export function AtlasActivity({ events, games, onOpenGame }: { events: ActivityE
     return groups;
   }, [items, t]);
   const kindIds = Object.keys(KIND_TYPES);
+  // The Atlas arrangement is itself a layout (issue #116): the regions,
+  // rows and blocks the picked theme rearranges, rendered through
+  // ThemeLayout. The first paint already shows the built-in arrangement.
+  const layout = useThemeLayout('activity') ?? BUILTIN_LAYOUTS['activity'];
   return (
-    <div className={ATLAS_PAGE}>
-      <header>
-        <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.activity')}</h1>
-        <p className="mt-[3px] text-[13px] text-text-muted">{t('activity:atlas.sub')}</p>
-      </header>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('activity:atlas.filterKinds')}>
-          {kindIds.map((k) => {
-            const on = kinds.includes(k);
-            return (
-                <button
-                key={k}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setKinds((x) => (x.includes(k) ? x.filter((y) => y !== k) : [...x, k]))}
-                className={cx('h-[26px] rounded-[13px] px-[9px] text-[12px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                  on ? 'bg-[color-mix(in_srgb,var(--color-accent)_24%,var(--color-surface-strong))] text-text ring-1 ring-inset ring-accent/45' : 'bg-surface-strong text-text hover:bg-surface')}
-              >
-                {t(`activity:atlas.kinds.${k}`)}
-              </button>
-            );
-          })}
-        </div>
-        {games.length > 0 && (
-          <Select value={game} onValueChange={setGame}>
-            <SelectTrigger aria-label={t('activity:atlas.filterGame')} className="h-[30px] w-52">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('activity:atlas.everyGame')}</SelectItem>
-              {games.map((g) => (
-                <SelectItem key={g.id} value={g.id}>{g.title}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-      {items.length === 0 ? (
-        <EmptyState
-          icon={Clock}
-          label={t('activity:atlas.noMatch')}
-          action={
-            (kinds.length > 0 || game !== 'all') ? (
-              <Button variant="neutral" size="sm" onClick={() => { setKinds([]); setGame('all'); }}>
-                {t('activity:atlas.clearFilters')}
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        days.map((d) => (
-          <section key={d.key} aria-label={d.label}>
-            <h2 className="mb-1.5 text-[13px] font-bold text-text-muted">{d.label}</h2>
-            <ul>
-              {d.items.map((e) => {
-                const Icon = KIND_ICON[e.type] ?? CircleDot;
-                const title = (e.game && byId.get(e.game)?.title) || e.game || '';
+    <ThemeLayout
+      layout={layout}
+      blocks={{
+        header: (
+          <header>
+            <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.activity')}</h1>
+            <p className="mt-[3px] text-[13px] text-text-muted">{t('activity:atlas.sub')}</p>
+          </header>
+        ),
+        filter: (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('activity:atlas.filterKinds')}>
+              {kindIds.map((k) => {
+                const on = kinds.includes(k);
                 return (
-                  <li key={e.id} className="grid min-h-[38px] grid-cols-[28px_52px_minmax(140px,220px)_minmax(0,1fr)] items-center gap-2.5 rounded-[7px] px-2 transition hover:bg-surface">
-                    <span className={cx('grid size-[26px] place-items-center rounded-[7px] bg-surface-strong', e.type === 'session' ? 'text-accent' : e.type === 'cloud' ? 'text-info' : e.type === 'unlock' ? 'text-attention' : 'text-text-muted')}>
-                      <Icon className="size-3.5" />
-                    </span>
-                    <time className="text-[12px] tabular-nums text-text-faint">{clock(e.ts)}</time>
-                    {title ? <button type="button" onClick={() => onOpenGame?.(e.game)} className="truncate text-left text-[13px] font-bold hover:underline">{title}</button> : <span className="col-span-2 truncate text-[13px] text-text-muted">{e.detail}{e.meta ? ` · ${e.meta}` : ''}</span>}
-                    {title && <span className="truncate text-[13px] text-text-muted">{e.detail}{e.meta ? ` · ${e.meta}` : ''}</span>}
-                  </li>
+                    <button
+                    key={k}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setKinds((x) => (x.includes(k) ? x.filter((y) => y !== k) : [...x, k]))}
+                    className={cx('h-[26px] rounded-[13px] px-[9px] text-[12px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                      on ? 'bg-[color-mix(in_srgb,var(--color-accent)_24%,var(--color-surface-strong))] text-text ring-1 ring-inset ring-accent/45' : 'bg-surface-strong text-text hover:bg-surface')}
+                  >
+                    {t(`activity:atlas.kinds.${k}`)}
+                  </button>
                 );
               })}
-            </ul>
-          </section>
-        ))
-      )}
-    </div>
+            </div>
+            {games.length > 0 && (
+              <Select value={game} onValueChange={setGame}>
+                <SelectTrigger aria-label={t('activity:atlas.filterGame')} className="h-[30px] w-52">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('activity:atlas.everyGame')}</SelectItem>
+                  {games.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>{g.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        ),
+        // One root, so a theme row counts the days as one column.
+        days: (
+          <div className="grid min-w-0 content-start gap-6">
+            {items.length === 0 ? (
+              <EmptyState
+                icon={Clock}
+                label={t('activity:atlas.noMatch')}
+                action={
+                  (kinds.length > 0 || game !== 'all') ? (
+                    <Button variant="neutral" size="sm" onClick={() => { setKinds([]); setGame('all'); }}>
+                      {t('activity:atlas.clearFilters')}
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              days.map((d) => (
+                <section key={d.key} aria-label={d.label}>
+                  <h2 className="mb-1.5 text-[13px] font-bold text-text-muted">{d.label}</h2>
+                  <ul>
+                    {d.items.map((e) => {
+                      const Icon = KIND_ICON[e.type] ?? CircleDot;
+                      const title = (e.game && byId.get(e.game)?.title) || e.game || '';
+                      return (
+                        <li key={e.id} className="grid min-h-[38px] grid-cols-[28px_52px_minmax(140px,220px)_minmax(0,1fr)] items-center gap-2.5 rounded-[7px] px-2 transition hover:bg-surface">
+                          <span className={cx('grid size-[26px] place-items-center rounded-[7px] bg-surface-strong', e.type === 'session' ? 'text-accent' : e.type === 'cloud' ? 'text-info' : e.type === 'unlock' ? 'text-attention' : 'text-text-muted')}>
+                            <Icon className="size-3.5" />
+                          </span>
+                          <time className="text-[12px] tabular-nums text-text-faint">{clock(e.ts)}</time>
+                          {title ? <button type="button" onClick={() => onOpenGame?.(e.game)} className="truncate text-left text-[13px] font-bold hover:underline">{title}</button> : <span className="col-span-2 truncate text-[13px] text-text-muted">{e.detail}{e.meta ? ` · ${e.meta}` : ''}</span>}
+                          {title && <span className="truncate text-[13px] text-text-muted">{e.detail}{e.meta ? ` · ${e.meta}` : ''}</span>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ))
+            )}
+          </div>
+        ),
+      }}
+      className={ATLAS_PAGE}
+      // The page is a grid with gap-6: each region stacks its blocks with
+      // the same gap, so the built-in arrangement keeps today's spacing.
+      regionClassName={() => 'grid min-w-0 content-start gap-6'}
+    />
   );
 }

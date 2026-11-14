@@ -14,6 +14,9 @@ import { RawDetails } from './ErrorNotice';
 import { hasDetails, plainError } from '../lib/plainError';
 import { notify } from '../lib/notify';
 import type { FixesProps } from './FixesView';
+import { useThemeLayout } from '../lib/theme';
+import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
+import { ThemeLayout } from '../lib/layout';
 
 /** One issue's fix behaviour, shared by the Needs attention page and the Home
  *  card (audit finding P8): the same sentence and primary action per kind,
@@ -155,57 +158,78 @@ export function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJ
     onRetryJob: (id) => onJobAction?.('retry', id),
     onJob, onAllowFolder, onResetPrefix, onSaveSettings,
   });
+  // The Atlas arrangement is itself a layout (issue #116): the regions,
+  // rows and blocks the picked theme rearranges, rendered through
+  // ThemeLayout. The first paint already shows the built-in arrangement.
+  // The fix behaviour and its dialogs stay shared with Home
+  // (useAttentionFix); the dialogs mount outside the layout.
+  const layout = useThemeLayout('fixes') ?? BUILTIN_LAYOUTS['fixes'];
   return (
-    <div className={ATLAS_PAGE}>
-      <header>
-        <h1 className="text-[24px] font-extrabold tracking-tight">{t('fixes:atlas.title')}</h1>
-        <p className="mt-[3px] text-[13px] text-text-muted">
-          {gameCount > 0 ? t('fixes:atlas.sub', { count: gameCount }) : t('fixes:atlas.emptySub')}
-        </p>
-      </header>
-      {issues.length === 0 ? (
-        <EmptyState icon={Check} label={t('fixes:atlas.emptyTitle')}>{t('fixes:atlas.emptyBody')}</EmptyState>
-      ) : (
-        <ul className="grid gap-2.5">
-          {issues.map((issue, index) => {
-            const { game: g } = issue;
-            const KindIcon = { install: Download, outside: FolderOpen, runner: Wrench, update: ArrowDownToLine, conflict: Cloud, prefix: Wrench, rating: AlertTriangle }[issue.kind];
-            const title = issue.kind === 'install' && issue.failedJobKind === 'update'
-              ? t('fixes:atlas.issue.updateFailed')
-              : ({
-              install: t('fixes:atlas.issue.install'), outside: t('fixes:atlas.issue.outside'), runner: t('fixes:atlas.issue.runner'),
-              update: t('fixes:atlas.issue.update'), conflict: t('fixes:atlas.issue.conflict'), prefix: t('fixes:atlas.issue.prefix'), rating: t('fixes:atlas.issue.rating'),
-              })[issue.kind];
-            const primary = primaryAction(issue);
-            const ghost = ghostAction(issue);
-            return (
-              <li key={`${g.id}-${issue.kind}-${index}`} className="grid grid-cols-[150px_minmax(0,1fr)_auto] items-center gap-4 rounded-xl bg-surface p-3">
-                <button type="button" onClick={() => onOpenGame(g.id)} className="block overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label={g.title}>
-                  <Cover src={heroImages(g)} title={g.title} className="h-[70px] w-[150px] object-cover" />
-                </button>
-                <div className="grid min-w-0 gap-[3px]">
-                  <div className={`inline-flex items-center gap-1.5 text-[12px] font-bold ${issue.kind === 'install' ? 'text-danger' : 'text-attention'}`}>
-                    <KindIcon className="h-[13px] w-[13px] flex-none" aria-hidden />
-                    <span className="truncate">{title}</span>
-                  </div>
-                  <button type="button" onClick={() => onOpenGame(g.id)} className="truncate justify-self-start text-left text-[15px] font-[750] hover:underline underline-offset-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-                    {g.title}
-                  </button>
-                  <p className="line-clamp-2 text-[13px] leading-[1.45] text-text-muted">{issueText(issue)}</p>
-                  {issue.kind === 'install' && hasDetails(issue.error, t('fixes:atlas.reason.install')) && (
-                    <RawDetails text={(issue.error ?? '').trim()} />
-                  )}
-                </div>
-                <div className="grid gap-1">
-                  <Button variant="primary" onClick={primary.run}>{primary.label}</Button>
-                  {ghost && <Button variant="ghost" onClick={ghost.run}>{ghost.label}</Button>}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+    <>
+      <ThemeLayout
+        layout={layout}
+        blocks={{
+          header: (
+            <header>
+              <h1 className="text-[24px] font-extrabold tracking-tight">{t('fixes:atlas.title')}</h1>
+              <p className="mt-[3px] text-[13px] text-text-muted">
+                {gameCount > 0 ? t('fixes:atlas.sub', { count: gameCount }) : t('fixes:atlas.emptySub')}
+              </p>
+            </header>
+          ),
+          cards: (
+            <>
+              {issues.length === 0 ? (
+                <EmptyState icon={Check} label={t('fixes:atlas.emptyTitle')}>{t('fixes:atlas.emptyBody')}</EmptyState>
+              ) : (
+                <ul className="grid gap-2.5">
+                  {issues.map((issue, index) => {
+                    const { game: g } = issue;
+                    const KindIcon = { install: Download, outside: FolderOpen, runner: Wrench, update: ArrowDownToLine, conflict: Cloud, prefix: Wrench, rating: AlertTriangle }[issue.kind];
+                    const title = issue.kind === 'install' && issue.failedJobKind === 'update'
+                      ? t('fixes:atlas.issue.updateFailed')
+                      : ({
+                      install: t('fixes:atlas.issue.install'), outside: t('fixes:atlas.issue.outside'), runner: t('fixes:atlas.issue.runner'),
+                      update: t('fixes:atlas.issue.update'), conflict: t('fixes:atlas.issue.conflict'), prefix: t('fixes:atlas.issue.prefix'), rating: t('fixes:atlas.issue.rating'),
+                      })[issue.kind];
+                    const primary = primaryAction(issue);
+                    const ghost = ghostAction(issue);
+                    return (
+                      <li key={`${g.id}-${issue.kind}-${index}`} className="grid grid-cols-[150px_minmax(0,1fr)_auto] items-center gap-4 rounded-xl bg-surface p-3">
+                        <button type="button" onClick={() => onOpenGame(g.id)} className="block overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label={g.title}>
+                          <Cover src={heroImages(g)} title={g.title} className="h-[70px] w-[150px] object-cover" />
+                        </button>
+                        <div className="grid min-w-0 gap-[3px]">
+                          <div className={`inline-flex items-center gap-1.5 text-[12px] font-bold ${issue.kind === 'install' ? 'text-danger' : 'text-attention'}`}>
+                            <KindIcon className="h-[13px] w-[13px] flex-none" aria-hidden />
+                            <span className="truncate">{title}</span>
+                          </div>
+                          <button type="button" onClick={() => onOpenGame(g.id)} className="truncate justify-self-start text-left text-[15px] font-[750] hover:underline underline-offset-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                            {g.title}
+                          </button>
+                          <p className="line-clamp-2 text-[13px] leading-[1.45] text-text-muted">{issueText(issue)}</p>
+                          {issue.kind === 'install' && hasDetails(issue.error, t('fixes:atlas.reason.install')) && (
+                            <RawDetails text={(issue.error ?? '').trim()} />
+                          )}
+                        </div>
+                        <div className="grid gap-1">
+                          <Button variant="primary" onClick={primary.run}>{primary.label}</Button>
+                          {ghost && <Button variant="ghost" onClick={ghost.run}>{ghost.label}</Button>}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
+          ),
+        }}
+        className={ATLAS_PAGE}
+        // The page is a grid with gap-6: each region stacks its blocks with
+        // the same gap, so the built-in arrangement keeps today's spacing.
+        regionClassName={() => 'grid min-w-0 content-start gap-6'}
+      />
       {fixDialogs}
-    </div>
+    </>
   );
 }

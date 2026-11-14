@@ -39,10 +39,14 @@
       <xs:attribute name="view" use="required">
         <xs:simpleType>
           <xs:restriction base="xs:string">
+            <xs:enumeration value="activity" />
             <xs:enumeration value="dashboard" />
+            <xs:enumeration value="downloads" />
+            <xs:enumeration value="fixes" />
             <xs:enumeration value="game" />
             <xs:enumeration value="library" />
             <xs:enumeration value="plugins" />
+            <xs:enumeration value="runners" />
             <xs:enumeration value="shell" />
             <xs:enumeration value="storage" />
           </xs:restriction>
@@ -62,8 +66,10 @@
           <xs:enumeration value="activity" />
           <xs:enumeration value="all-titles" />
           <xs:enumeration value="attention" />
+          <xs:enumeration value="available" />
           <xs:enumeration value="back" />
           <xs:enumeration value="builtin" />
+          <xs:enumeration value="cards" />
           <xs:enumeration value="chips" />
           <xs:enumeration value="collections" />
           <xs:enumeration value="compat" />
@@ -71,21 +77,27 @@
           <xs:enumeration value="copies" />
           <xs:enumeration value="crash" />
           <xs:enumeration value="data" />
+          <xs:enumeration value="days" />
+          <xs:enumeration value="default" />
           <xs:enumeration value="drives" />
           <xs:enumeration value="empty" />
+          <xs:enumeration value="filter" />
           <xs:enumeration value="filters" />
+          <xs:enumeration value="finished" />
           <xs:enumeration value="footer" />
           <xs:enumeration value="games" />
           <xs:enumeration value="header" />
           <xs:enumeration value="heading" />
           <xs:enumeration value="hero" />
           <xs:enumeration value="installation" />
+          <xs:enumeration value="installed" />
           <xs:enumeration value="last-played" />
           <xs:enumeration value="media" />
           <xs:enumeration value="mode" />
           <xs:enumeration value="nav" />
           <xs:enumeration value="note" />
           <xs:enumeration value="outside" />
+          <xs:enumeration value="queue" />
           <xs:enumeration value="recent" />
           <xs:enumeration value="search" />
           <xs:enumeration value="sources" />

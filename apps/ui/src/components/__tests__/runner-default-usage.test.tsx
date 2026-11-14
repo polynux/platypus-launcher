@@ -10,6 +10,7 @@ vi.mock('../../lib/theme', () => ({
     if (axis === 'shell.navigation') return 'sourcebar';
     return 'sourcebar';
   },
+  useThemeLayout: () => null,
 }));
 
 it('counts Auto games against the default runner', () => {
