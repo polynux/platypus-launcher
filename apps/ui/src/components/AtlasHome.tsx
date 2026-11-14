@@ -133,7 +133,7 @@ export function AtlasHome({ games, allGames, activity, dismissedHero, onDismissH
             <div className="mt-1 flex gap-2.5">
               {mainAction(suggested, (
                 <Button variant="primary" onClick={() => { if (suggested.is_installed) { if (onPlay) onPlay(suggested.id); else onOpenGame(suggested.id); } else if (onInstall) onInstall(suggested); else onOpenGame(suggested.id); }} className="h-[38px] bg-accent px-4">
-                  {suggested.is_installed ? t('game:play.play') : (<><Download className="size-3.5" aria-hidden />{t('game:install.install')}{installSize && <span className="font-mono text-[12px]">{installSize}</span>}</>)}
+                  {suggested.is_installed ? t('game:play.play') : (<><Download className="size-3.5" aria-hidden />{t('game:install.install')}{installSize && <span className="text-[12px]">{installSize}</span>}</>)}
                 </Button>
               ))}
               <Button variant="ghost" onClick={() => onOpenGame(suggested.id)} className="h-[38px] bg-transparent px-4 text-white hover:bg-white/10 hover:text-white">

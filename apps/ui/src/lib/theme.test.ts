@@ -10,6 +10,7 @@ const getThemeLayout = vi.hoisted(() => vi.fn());
 vi.mock('../effect/runtime', () => ({ LauncherApi: { getTheme: (id: string) => getTheme(id), getThemeLayout: (view: string) => getThemeLayout(view) } }));
 
 import { applyAndRemember, applyCachedTheme, applyTheme, loadTheme, loadThemeFonts, loadThemeLayout, themeVariables, washImage } from './theme';
+import { defaultAccentVariables, toneFromHex } from './gameTone';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
 import { DEFAULT_THEME } from '../gen/defaultTheme';
 
@@ -189,6 +190,13 @@ describe('applying a theme', () => {
     expect(root().getPropertyValue('--color-accent')).toBe('#7dd3fc');
     window.localStorage.setItem('platypus.theme', '{not json');
     expect(() => applyCachedTheme()).not.toThrow();
+  });
+
+  it('paints the cached custom accent before first paint without the game-tone fade', () => {
+    window.localStorage.setItem('platypus.defaultAccent', '#D34F68');
+    applyCachedTheme();
+    expect(root().getPropertyValue('--color-accent')).toBe(defaultAccentVariables(toneFromHex('#D34F68')!, 'dark')['--color-accent']);
+    expect(document.documentElement.classList.contains('game-tone')).toBe(false);
   });
 
   it('paints the default theme with nothing cached, so the first paint is Atlas (issue #130)', () => {

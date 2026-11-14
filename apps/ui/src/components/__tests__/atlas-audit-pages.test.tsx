@@ -61,6 +61,16 @@ const homeProps = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('finding 1: hero art fallback', () => {
+  it('keeps the home Install size in the normal font', () => {
+    const suggestion = mkGame('backlog', { title: 'Backlog game', is_installed: false, size_bytes: 3_100_000 });
+    const installed = mkGame('inst', { title: 'Installed', last_played_at: 10 });
+    const { container } = render(<AtlasHome {...homeProps({ games: [installed], allGames: [installed, suggestion] })} />);
+    const hero = container.querySelector('section[aria-label="Backlog game"]')!;
+    const size = [...hero.querySelectorAll('button span')].find((span) => /MB/.test(span.textContent ?? ''))!;
+    expect(size).toBeTruthy();
+    expect(size.className).not.toMatch(/font-mono/);
+  });
+
   it('hides the hero image and keeps a dark backdrop when the game has no art', () => {
     const installed = mkGame('inst', { title: 'Installed', last_played_at: 10 });
     const suggestion = mkGame('backlog', { title: 'Backlog game', is_installed: false });

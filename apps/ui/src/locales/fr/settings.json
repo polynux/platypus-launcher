@@ -184,7 +184,15 @@
   "gameLabel": "Couleur du jeu",
   "gameDescription": "Prend la couleur de l’illustration du jeu sélectionné.",
   "gameSaved": "Couleur du jeu enregistrée",
-  "none": "Ce thème n’a aucune option d’apparence."
+  "accentLabel": "Couleur d’accent par défaut",
+  "accentSaved": "Couleur d’accent par défaut enregistrée",
+  "accent": {
+   "themeDefault": "Couleur du thème",
+   "violet": "Violet",
+   "teal": "Sarcelle",
+   "rose": "Rose",
+   "custom": "Couleur personnalisée"
+  }
  },
  "atlas": {
   "cats": {

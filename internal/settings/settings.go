@@ -141,6 +141,8 @@ type file struct {
 	// ColorScheme is the colour scheme choice (issue #134): "" or "dark" for
 	// dark, "light" or "black". Themes without schemes are dark only.
 	ColorScheme string `json:"color_scheme,omitempty"`
+	// DefaultAccent is the user's default accent colour as #RRGGBB; empty uses the theme.
+	DefaultAccent string `json:"default_accent,omitempty"`
 	// MigrationNoticeDismissed remembers that the user dismissed the one-time
 	// Hydra→Platypus migration notice (issue #14), so it never returns.
 	MigrationNoticeDismissed bool `json:"migration_notice_dismissed,omitempty"`

@@ -80,6 +80,20 @@ func TestSetColorSchemeSavesTheChoice(t *testing.T) {
 	}
 }
 
+func TestSetDefaultAccentSavesTheChoice(t *testing.T) {
+	a := newLocaleApp(t)
+	if got := a.GetLauncherSettings().DefaultAccent; got != "" {
+		t.Fatalf("DefaultAccent = %q, want empty", got)
+	}
+	s, err := a.SetDefaultAccent("#2878D0")
+	if err != nil || s.DefaultAccent != "#2878D0" {
+		t.Fatalf("SetDefaultAccent = %q, %v", s.DefaultAccent, err)
+	}
+	if _, err := a.SetDefaultAccent("blue"); err == nil {
+		t.Fatal("SetDefaultAccent accepted invalid colour")
+	}
+}
+
 func TestListThemesOffersBuiltIns(t *testing.T) {
 	a := newLocaleApp(t)
 	list := a.ListThemes()

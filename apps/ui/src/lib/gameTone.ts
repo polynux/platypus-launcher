@@ -7,10 +7,23 @@
 import { Effect } from 'effect';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { LauncherApi } from '../effect/runtime';
-import { currentThemeVariables, TOKEN_VARS, onThemeApplied, useVariant, getEffectiveScheme, type ColorScheme } from './theme';
+import { currentThemeVariables, TOKEN_VARS, onThemeApplied, useVariant, getEffectiveScheme, registerCachedDefaultAccentPainter, type ColorScheme } from './theme';
 
 /** A sampled colour: sRGB channels, 0..255. */
 export type Tone = [number, number, number];
+
+export function toneFromHex(color: string): Tone | null {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  return match ? [parseInt(match[1].slice(0, 2), 16), parseInt(match[1].slice(2, 4), 16), parseInt(match[1].slice(4, 6), 16)] : null;
+}
+
+function toneFromCSS(color: string | undefined): Tone | null {
+  if (!color) return null;
+  const hex = /^#([0-9a-f]{6})$/i.exec(color);
+  if (hex) return toneFromHex(`#${hex[1]}`);
+  const rgb = /^rgba?\(\s*(\d+(?:\.\d+)?)\s*,?\s+(\d+(?:\.\d+)?)\s*,?\s+(\d+(?:\.\d+)?)/i.exec(color);
+  return rgb ? [Math.round(Number(rgb[1])), Math.round(Number(rgb[2])), Math.round(Number(rgb[3]))] : null;
+}
 
 /** What the theme's color.game-tone axis allows. */
 export type GameToneSupport = 'off' | 'accent' | 'whole';
@@ -222,6 +235,68 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: Col
   return vars;
 }
 
+/** Default accents keep the chosen hue and saturation. Only lightness moves
+ *  when needed to keep the focus ring and its text readable. */
+export function defaultAccentVariables(tone: Tone, scheme: ColorScheme = 'dark'): Record<string, string> {
+  const fallbacks: Record<ColorScheme, { ground: Tone; raised: Tone }> = {
+    dark: { ground: [19, 22, 27], raised: [24, 27, 33] },
+    light: { ground: [233, 236, 240], raised: [247, 248, 250] },
+    black: { ground: [0, 0, 0], raised: [8, 9, 12] },
+  };
+  const themeVars = scheme === getEffectiveScheme() ? currentThemeVariables() : {};
+  const ground = toneFromCSS(themeVars['--color-ground']) ?? fallbacks[scheme].ground;
+  const raised = toneFromCSS(themeVars['--color-raised']) ?? fallbacks[scheme].raised;
+  const backgrounds = [ground, raised];
+  const [h, s, l] = hslOf(tone);
+  const accent = backgrounds.every((background) => contrastRatio(tone, background) >= 4.5)
+    ? tone
+    : readableHSL(tone, l, backgrounds, 4.5);
+  const [accentH, accentS, accentL] = hslOf(accent);
+  const strongL = Math.min(0.95, Math.max(0.05, accentL + (accentL < 0.5 ? 0.1 : -0.05)));
+  const strongSeed = fromHSL(accentH, accentS, strongL);
+  const accentStrong = scheme === 'light'
+    ? accent
+    : readableHSL(strongSeed, strongL, backgrounds, 4.5);
+  const onAccent = readableHSL(accent, accentL, [accent, accentStrong], 4.5);
+  const dimL = scheme === 'light' ? 0.84 : scheme === 'black' ? 0.09 : 0.17;
+  const derived: Record<string, Tone> = {
+    accent,
+    focus: accent,
+    'accent-strong': accentStrong,
+    'accent-dim': fromHSL(accentH, accentS, dimL),
+    'on-accent': onAccent,
+  };
+  const vars: Record<string, string> = {};
+  for (const [token, value] of Object.entries(derived)) {
+    const color = cssColor(value);
+    for (const name of TOKEN_VARS[token] ?? []) vars[name] = color;
+  }
+  return vars;
+}
+
+function readableHSL(tone: Tone, startL: number, against: Tone[], min: number): Tone {
+  const [h, s] = hslOf(tone);
+  let best = fromHSL(h, s, startL);
+  const minContrast = (candidate: Tone): number => Math.min(...against.map((background) => contrastRatio(candidate, background)));
+  let bestContrast = minContrast(best);
+  if (bestContrast >= min) return best;
+  for (let step = 1; step <= 100; step += 1) {
+    const candidates = [startL - step * 0.01, startL + step * 0.01]
+      .filter((lightness) => lightness >= 0 && lightness <= 1)
+      .map((lightness) => fromHSL(h, s, lightness));
+    const readableTone = candidates.find((candidate) => minContrast(candidate) >= min);
+    if (readableTone) return readableTone;
+    for (const candidate of candidates) {
+      const candidateContrast = minContrast(candidate);
+      if (candidateContrast > bestContrast) {
+        best = candidate;
+        bestContrast = candidateContrast;
+      }
+    }
+  }
+  return best;
+}
+
 /** What the theme's axis allows, capped by the user's pick (issue #134 adds
  *  off: no game colour, whatever the theme allows). */
 export function effectiveTone(supported: GameToneSupport, choice: GameToneChoice): GameToneMode {
@@ -232,7 +307,7 @@ export function effectiveTone(supported: GameToneSupport, choice: GameToneChoice
 }
 
 /** The tone painted on :root last, for a repaint after a theme change. */
-let paintedTone: { mode: GameToneMode; tone: Tone | null } = { mode: 'off', tone: null };
+let paintedTone: { mode: GameToneMode; tone: Tone | null; defaultAccent: boolean } = { mode: 'off', tone: null, defaultAccent: false };
 let painted: string[] = [];
 /** How long the painted colours take to reach the new ones (style.css). */
 const FADE_MS = 600;
@@ -243,9 +318,10 @@ let fadeTimer: ReturnType<typeof setTimeout> | undefined;
  *  theme's own value, so the theme shows again. The scheme decides which
  *  formulas paint (issue #134): light halves nothing, black halves the dark
  *  lightness. */
-export function applyGameTone(mode: GameToneMode, tone: Tone | null, scheme?: ColorScheme): void {
-  paintedTone = { mode, tone };
-  const vars = toneVariables(mode, tone, scheme ?? getEffectiveScheme());
+export function applyGameTone(mode: GameToneMode, tone: Tone | null, scheme?: ColorScheme, options: { defaultAccent?: boolean; fade?: boolean } = {}): void {
+  paintedTone = { mode, tone, defaultAccent: !!options.defaultAccent };
+  const effectiveScheme = scheme ?? getEffectiveScheme();
+  const vars = options.defaultAccent && tone ? defaultAccentVariables(tone, effectiveScheme) : toneVariables(mode, tone, effectiveScheme);
   const names = Object.keys(vars);
   // Nothing to paint and nothing painted: leave the stylesheet alone (no
   // transition class on a theme that never took the game's colour).
@@ -254,12 +330,17 @@ export function applyGameTone(mode: GameToneMode, tone: Tone | null, scheme?: Co
   const style = root.style;
   // The 0.6s fade is on only while a tone paints, so a theme switch (which
   // rewrites the same variables) stays instant.
-  root.classList.add('game-tone');
   if (fadeTimer) clearTimeout(fadeTimer);
-  fadeTimer = setTimeout(() => {
+  if (options.fade === false) {
     root.classList.remove('game-tone');
     fadeTimer = undefined;
-  }, FADE_MS + 50);
+  } else {
+    root.classList.add('game-tone');
+    fadeTimer = setTimeout(() => {
+      root.classList.remove('game-tone');
+      fadeTimer = undefined;
+    }, FADE_MS + 50);
+  }
   for (const name of painted) {
     if (name in vars) continue;
     // Back to the theme's own value, never removed: removing an inline
@@ -276,8 +357,13 @@ export function applyGameTone(mode: GameToneMode, tone: Tone | null, scheme?: Co
 /** Applies the last tone again: a theme change rewrites its tokens, and the
  *  game's colour goes back on top of them. */
 export function repaintGameTone(): void {
-  applyGameTone(paintedTone.mode, paintedTone.tone);
+  applyGameTone(paintedTone.mode, paintedTone.tone, undefined, { defaultAccent: paintedTone.defaultAccent });
 }
+
+registerCachedDefaultAccentPainter((color, scheme) => {
+  const tone = toneFromHex(color);
+  if (tone) applyGameTone('accent', tone, scheme, { defaultAccent: true, fade: false });
+});
 
 /** Samples one picture: loaded off the render path, drawn into a small canvas
  *  and averaged. Null when the picture fails, or when the canvas is tainted
@@ -352,6 +438,66 @@ function choiceOf(settings: { game_tone?: string } | null): GameToneChoice {
  *  choice, and every setChoice updates them all. */
 let sharedChoice: GameToneChoice = 'accent';
 const choiceListeners = new Set<() => void>();
+const DEFAULT_ACCENT_CACHE_KEY = 'platypus.defaultAccent';
+function cachedDefaultAccent(): string {
+  try {
+    const cached = window.localStorage.getItem(DEFAULT_ACCENT_CACHE_KEY) ?? '';
+    return toneFromHex(cached) ? cached.toUpperCase() : '';
+  } catch { return ''; }
+}
+let sharedDefaultAccent = cachedDefaultAccent();
+let defaultAccentRevision = 0;
+const defaultAccentListeners = new Set<() => void>();
+
+function updateDefaultAccent(color: string): void {
+  sharedDefaultAccent = toneFromHex(color) ? color.toUpperCase() : '';
+  try {
+    if (sharedDefaultAccent) window.localStorage.setItem(DEFAULT_ACCENT_CACHE_KEY, sharedDefaultAccent);
+    else window.localStorage.removeItem(DEFAULT_ACCENT_CACHE_KEY);
+  } catch { /* The setting still works for this session. */ }
+  for (const listener of defaultAccentListeners) listener();
+}
+
+export function useDefaultAccent(): [string, (color: string) => void, (color: string, rollback: string) => Promise<void>] {
+  const color = useSyncExternalStore(
+    (listener) => { defaultAccentListeners.add(listener); return () => defaultAccentListeners.delete(listener); },
+    () => sharedDefaultAccent,
+    () => '',
+  );
+  useEffect(() => {
+    let live = true;
+    const revision = defaultAccentRevision;
+    try {
+      void Effect.runPromise(LauncherApi.getLauncherSettings()).then((s) => {
+        if (!live || revision !== defaultAccentRevision) return;
+        updateDefaultAccent(s.default_accent ?? '');
+      }).catch(() => {});
+    } catch { /* Keep the theme accent if the core is unavailable. */ }
+    return () => { live = false; };
+  }, []);
+  const setColor = (next: string) => {
+    defaultAccentRevision += 1;
+    updateDefaultAccent(next);
+  };
+  const saveColor = (next: string, rollback: string): Promise<void> => {
+    try {
+      return Effect.runPromise(LauncherApi.setDefaultAccent(next)).then(() => {}).catch((error) => {
+        if (sharedDefaultAccent === next) {
+          defaultAccentRevision += 1;
+          updateDefaultAccent(rollback);
+        }
+        throw error;
+      });
+    } catch (error) {
+      if (sharedDefaultAccent === next) {
+        defaultAccentRevision += 1;
+        updateDefaultAccent(rollback);
+      }
+      return Promise.reject(error);
+    }
+  };
+  return [color, setColor, saveColor];
+}
 
 function notifyChoice(): void {
   for (const listener of choiceListeners) listener();
@@ -364,12 +510,16 @@ export function getGameToneChoice(): GameToneChoice {
 
 /** Reads the launcher setting; a failed read keeps accent. */
 export function loadGameToneChoice(): Promise<GameToneChoice> {
+  const accentRevision = defaultAccentRevision;
   try {
     return Effect.runPromise(LauncherApi.getLauncherSettings())
       .then((settings) => {
         const next = choiceOf(settings);
         sharedChoice = next;
         notifyChoice();
+        if (accentRevision === defaultAccentRevision) {
+          updateDefaultAccent(settings?.default_accent ?? '');
+        }
         return next;
       })
       .catch(() => sharedChoice);
@@ -406,7 +556,7 @@ export interface GameTone {
   setChoice(next: GameToneChoice): void;
 }
 
-export function useGameTone(heroUrl?: string | null): GameTone {
+export function useGameTone(heroUrl?: string | null, active = true): GameTone {
   const supported = useVariant('color.game-tone');
   const choice = useSyncExternalStore(
     (listener) => { choiceListeners.add(listener); return () => choiceListeners.delete(listener); },
@@ -422,7 +572,18 @@ export function useGameTone(heroUrl?: string | null): GameTone {
     return () => { live = false; };
   }, []);
 
-  useEffect(() => { applyGameTone(mode, tone, getEffectiveScheme()); }, [mode, tone]);
+  const defaultAccent = useSyncExternalStore(
+    (listener) => { defaultAccentListeners.add(listener); return () => defaultAccentListeners.delete(listener); },
+    () => sharedDefaultAccent,
+    () => '',
+  );
+  useEffect(() => {
+    if (active && mode !== 'off' && tone) applyGameTone(mode, tone, getEffectiveScheme());
+    else {
+      const defaultTone = toneFromHex(defaultAccent);
+      applyGameTone(defaultTone ? 'accent' : 'off', defaultTone, getEffectiveScheme(), { defaultAccent: !!defaultTone });
+    }
+  }, [active, mode, tone, defaultAccent]);
 
   // A theme or scheme change rewrites its tokens; the game's colour goes back
   // on top. The scheme repaint reads the last mode and tone, so an Appearance

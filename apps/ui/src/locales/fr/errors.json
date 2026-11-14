@@ -222,6 +222,9 @@
       "clientLaunch": "Les préréglages ne s'appliquent pas à {{title}} : son client le lance et possède son préfixe."
     },
     "unavailable": "Les réglages ne sont pas prêts.",
+    "defaultAccent": {
+      "invalid": "La couleur d’accent doit être un code hexadécimal à six chiffres ou être vide."
+    },
     "colorScheme": {
       "invalid": "Le schéma de couleurs doit être dark, light, black ou vide, pas « {{scheme}} »."
     }

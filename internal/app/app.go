@@ -1355,6 +1355,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		DefaultRunnerID:       a.settings.DefaultRunnerID(),
 		GameTone:              a.settings.GameTone(),
 		ColorScheme:           a.settings.ColorScheme(),
+		DefaultAccent:         a.settings.DefaultAccent(),
 	}
 }
 

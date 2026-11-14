@@ -440,6 +440,8 @@ type LauncherSettings struct {
 	// "black". "" means dark. Only themes that declare [schemes.light] or
 	// [schemes.black] offer another; the rest are dark only.
 	ColorScheme string `json:"color_scheme"`
+	// DefaultAccent is the custom default accent; empty follows the theme.
+	DefaultAccent string `json:"default_accent"`
 }
 
 // ThemeInfo is one theme in the Settings picker (issue #93). Status is "ok"

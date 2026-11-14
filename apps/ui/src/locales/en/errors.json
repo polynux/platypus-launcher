@@ -222,6 +222,9 @@
       "clientLaunch": "Presets don't apply to {{title}}: its store client launches it and owns its prefix."
     },
     "unavailable": "Settings are not ready.",
+    "defaultAccent": {
+      "invalid": "Default accent must be a six-digit hex colour or empty."
+    },
     "colorScheme": {
       "invalid": "Colour scheme must be dark, light, black or empty, got {{scheme}}."
     }

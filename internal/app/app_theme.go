@@ -229,3 +229,11 @@ func (a *App) SetColorScheme(scheme string) (types.LauncherSettings, error) {
 	}
 	return a.launcherSettings(), nil
 }
+
+// SetDefaultAccent saves the default accent colour; empty follows the theme.
+func (a *App) SetDefaultAccent(color string) (types.LauncherSettings, error) {
+	if err := a.settings.SetDefaultAccent(color); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
+}
