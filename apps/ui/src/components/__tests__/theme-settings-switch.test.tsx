@@ -13,6 +13,8 @@ vi.mock('../../lib/theme', () => ({
   useVariant: (axis: string) => state.variants[axis] ?? (axis === 'color.game-tone' ? 'off' : 'page'),
   useThemeSchemes: () => ['dark'],
   useColorScheme: () => 'dark',
+  currentThemeVariables: () => ({ '--color-accent': '#9db0ff' }),
+  onThemeApplied: () => () => {},
   saveColorSchemeChoice: vi.fn(async () => {}),
 }));
 vi.mock('../../lib/gameTone', () => ({ useGameToneChoice: () => ({ supported: 'off', choice: 'accent', setChoice: vi.fn() }), useDefaultAccent: () => ['', vi.fn()] }));

@@ -17,6 +17,14 @@ export function toneFromHex(color: string): Tone | null {
   return match ? [parseInt(match[1].slice(0, 2), 16), parseInt(match[1].slice(2, 4), 16), parseInt(match[1].slice(4, 6), 16)] : null;
 }
 
+function toneFromCSS(color: string | undefined): Tone | null {
+  if (!color) return null;
+  const hex = /^#([0-9a-f]{6})$/i.exec(color);
+  if (hex) return toneFromHex(`#${hex[1]}`);
+  const rgb = /^rgba?\(\s*(\d+(?:\.\d+)?)\s*,?\s+(\d+(?:\.\d+)?)\s*,?\s+(\d+(?:\.\d+)?)/i.exec(color);
+  return rgb ? [Math.round(Number(rgb[1])), Math.round(Number(rgb[2])), Math.round(Number(rgb[3]))] : null;
+}
+
 /** What the theme's color.game-tone axis allows. */
 export type GameToneSupport = 'off' | 'accent' | 'whole';
 
@@ -230,19 +238,32 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: Col
 /** Default accents keep the chosen hue and saturation. Only lightness moves
  *  when needed to keep the focus ring and its text readable. */
 export function defaultAccentVariables(tone: Tone, scheme: ColorScheme = 'dark'): Record<string, string> {
-  const grounds: Record<ColorScheme, Tone> = { dark: [19, 22, 27], light: [233, 236, 240], black: [0, 0, 0] };
-  const ground = grounds[scheme];
+  const fallbacks: Record<ColorScheme, { ground: Tone; raised: Tone }> = {
+    dark: { ground: [19, 22, 27], raised: [24, 27, 33] },
+    light: { ground: [233, 236, 240], raised: [247, 248, 250] },
+    black: { ground: [0, 0, 0], raised: [8, 9, 12] },
+  };
+  const themeVars = scheme === getEffectiveScheme() ? currentThemeVariables() : {};
+  const ground = toneFromCSS(themeVars['--color-ground']) ?? fallbacks[scheme].ground;
+  const raised = toneFromCSS(themeVars['--color-raised']) ?? fallbacks[scheme].raised;
+  const backgrounds = [ground, raised];
   const [h, s, l] = hslOf(tone);
-  const accent = contrastRatio(tone, ground) >= 3 ? tone : readableHSL(tone, l, ground, 3);
-  const accentL = hslOf(accent)[2];
-  const onAccent = readableHSL(accent, accentL, accent, 4.5);
+  const accent = backgrounds.every((background) => contrastRatio(tone, background) >= 4.5)
+    ? tone
+    : readableHSL(tone, l, backgrounds, 4.5);
+  const [accentH, accentS, accentL] = hslOf(accent);
   const strongL = Math.min(0.95, Math.max(0.05, accentL + (accentL < 0.5 ? 0.1 : -0.05)));
+  const strongSeed = fromHSL(accentH, accentS, strongL);
+  const accentStrong = scheme === 'light'
+    ? accent
+    : readableHSL(strongSeed, strongL, backgrounds, 4.5);
+  const onAccent = readableHSL(accent, accentL, [accent, accentStrong], 4.5);
   const dimL = scheme === 'light' ? 0.84 : scheme === 'black' ? 0.09 : 0.17;
   const derived: Record<string, Tone> = {
     accent,
     focus: accent,
-    'accent-strong': fromHSL(h, s, strongL),
-    'accent-dim': fromHSL(h, s, dimL),
+    'accent-strong': accentStrong,
+    'accent-dim': fromHSL(accentH, accentS, dimL),
     'on-accent': onAccent,
   };
   const vars: Record<string, string> = {};
@@ -253,17 +274,25 @@ export function defaultAccentVariables(tone: Tone, scheme: ColorScheme = 'dark')
   return vars;
 }
 
-function readableHSL(tone: Tone, startL: number, against: Tone, min: number): Tone {
+function readableHSL(tone: Tone, startL: number, against: Tone[], min: number): Tone {
   const [h, s] = hslOf(tone);
   let best = fromHSL(h, s, startL);
-  if (contrastRatio(best, against) >= min) return best;
-  for (let step = 1; step <= 96; step += 1) {
+  const minContrast = (candidate: Tone): number => Math.min(...against.map((background) => contrastRatio(candidate, background)));
+  let bestContrast = minContrast(best);
+  if (bestContrast >= min) return best;
+  for (let step = 1; step <= 100; step += 1) {
     const candidates = [startL - step * 0.01, startL + step * 0.01]
       .filter((lightness) => lightness >= 0 && lightness <= 1)
       .map((lightness) => fromHSL(h, s, lightness));
-    const readableTone = candidates.find((candidate) => contrastRatio(candidate, against) >= min);
+    const readableTone = candidates.find((candidate) => minContrast(candidate) >= min);
     if (readableTone) return readableTone;
-    if (candidates.length) best = candidates[0];
+    for (const candidate of candidates) {
+      const candidateContrast = minContrast(candidate);
+      if (candidateContrast > bestContrast) {
+        best = candidate;
+        bestContrast = candidateContrast;
+      }
+    }
   }
   return best;
 }

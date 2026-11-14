@@ -1,6 +1,6 @@
 // i18n: converted
 import { useTranslation } from 'react-i18next';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
 import type { LauncherSettings, StorePlugin, ThemeInfo } from '../types';
@@ -15,7 +15,7 @@ import { GameFoldersSettings } from './GameFoldersSettings';
 import { BackupsSetting } from './BackupsSetting';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
-import { DEFAULT_THEME_ID, loadTheme, useColorScheme, useThemeSchemes, useVariant, saveColorSchemeChoice, type ColorScheme } from '../lib/theme';
+import { DEFAULT_THEME_ID, currentThemeVariables, loadTheme, onThemeApplied, useColorScheme, useThemeSchemes, useVariant, saveColorSchemeChoice, type ColorScheme } from '../lib/theme';
 import { useDefaultAccent, useGameToneChoice, type GameToneChoice } from '../lib/gameTone';
 import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
 import { ViewHeader, cx } from './ui';
@@ -386,12 +386,14 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
   const { t: tTone } = useTranslation('gameTone');
   const schemes = useThemeSchemes();
   const scheme = useColorScheme();
+  const themeAccent = useSyncExternalStore(onThemeApplied, () => currentThemeVariables()['--color-accent'] ?? '', () => '');
   const tone = useGameToneChoice();
   const [defaultAccent, setDefaultAccent, saveDefaultAccent] = useDefaultAccent();
   const [busy, setBusy] = useState(false);
   const accentSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const accentRollback = useRef(defaultAccent);
-  useEffect(() => () => { if (accentSaveTimer.current) clearTimeout(accentSaveTimer.current); }, []);
+  const accentLatest = useRef(defaultAccent);
+  accentLatest.current = defaultAccent;
   const showScheme = schemes.length > 1;
   const showTone = tone.supported !== 'off';
   const saveAccent = (color: string, rollback: string) => {
@@ -404,12 +406,14 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
     const rollback = accentSaveTimer.current ? accentRollback.current : defaultAccent;
     if (accentSaveTimer.current) clearTimeout(accentSaveTimer.current);
     accentSaveTimer.current = null;
+    accentLatest.current = color;
     setDefaultAccent(color);
     saveAccent(color, rollback);
   };
   const changeAccent = (color: string) => {
     persistedSettingsSection = 'appearance';
     if (!accentSaveTimer.current) accentRollback.current = defaultAccent;
+    accentLatest.current = color;
     setDefaultAccent(color);
     if (accentSaveTimer.current) clearTimeout(accentSaveTimer.current);
     accentSaveTimer.current = setTimeout(() => {
@@ -417,6 +421,12 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
       saveAccent(color, accentRollback.current);
     }, 300);
   };
+  useEffect(() => () => {
+    if (accentSaveTimer.current) {
+      clearTimeout(accentSaveTimer.current);
+      void saveDefaultAccent(accentLatest.current, accentRollback.current).catch(() => {});
+    }
+  }, []);
   const accentPickerContent = (
       <div role="group" aria-label={t('appearance.accentLabel')} className="flex flex-wrap items-center gap-2">
         {[
@@ -425,7 +435,7 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
           ['#168A78', t('appearance.accent.teal')],
           ['#D34F68', t('appearance.accent.rose')],
         ].map(([color, label]) => (
-          <button key={label} type="button" aria-label={label} aria-pressed={defaultAccent.toLowerCase() === color.toLowerCase()} onClick={() => pickAccent(color)} className="size-7 rounded-full ring-2 ring-transparent ring-offset-2 ring-offset-ground focus-visible:outline-none focus-visible:ring-focus aria-pressed:ring-focus" style={{ backgroundColor: color || 'var(--color-accent)' }} />
+          <button key={label} type="button" aria-label={label} aria-pressed={defaultAccent.toLowerCase() === color.toLowerCase()} onClick={() => pickAccent(color)} className="size-7 rounded-full ring-2 ring-transparent ring-offset-2 ring-offset-ground focus-visible:outline-none focus-visible:ring-focus aria-pressed:ring-focus" style={{ backgroundColor: color || themeAccent || 'var(--color-accent)' }} />
         ))}
         <label className="flex items-center gap-2 text-[12px] text-text-body">
           {t('appearance.accent.custom')}
@@ -433,7 +443,7 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
             if (accentSaveTimer.current) {
               clearTimeout(accentSaveTimer.current);
               accentSaveTimer.current = null;
-              saveAccent(defaultAccent, accentRollback.current);
+              saveAccent(accentLatest.current, accentRollback.current);
             }
           }} className="size-8 cursor-pointer rounded border-0 bg-transparent p-0" />
         </label>

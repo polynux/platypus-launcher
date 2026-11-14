@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
-const themeState = vi.hoisted(() => ({ schemes: ['dark', 'light', 'black'] as string[], scheme: 'dark' as string, saveScheme: vi.fn() }));
+const themeState = vi.hoisted(() => ({ schemes: ['dark', 'light', 'black'] as string[], scheme: 'dark' as string, saveScheme: vi.fn(), accent: '#9db0ff' }));
 const toneState = vi.hoisted(() => ({ supported: 'whole' as string, choice: 'accent' as string, setChoice: vi.fn() }));
 const accentState = vi.hoisted(() => ({ value: '', set: vi.fn(), save: vi.fn(async () => {}) }));
 
@@ -13,6 +13,7 @@ vi.mock('../../lib/theme', async (importOriginal) => {
     ...actual,
     useThemeSchemes: () => themeState.schemes,
     useColorScheme: () => themeState.scheme,
+    currentThemeVariables: () => ({ '--color-accent': themeState.accent }),
     saveColorSchemeChoice: (s: string) => {
       themeState.saveScheme(s);
       themeState.scheme = s;
@@ -49,6 +50,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 beforeEach(() => {
   themeState.schemes = ['dark', 'light', 'black'];
   themeState.scheme = 'dark';
+  themeState.accent = '#9db0ff';
   themeState.saveScheme.mockReset();
   toneState.supported = 'whole';
   toneState.choice = 'accent';
@@ -59,6 +61,12 @@ beforeEach(() => {
 });
 
 describe('Appearance settings (issue #134)', () => {
+  it('shows the theme accent in the default swatch while a custom accent is active', () => {
+    accentState.value = '#D34F68';
+    render(<AppearanceSetting onNotify={() => {}} />);
+    expect(screen.getByRole('button', { name: 'appearance.accent.themeDefault' }).style.backgroundColor).toBe('rgb(157, 176, 255)');
+  });
+
   it('offers the theme accent first and saves a custom colour when the picker closes', () => {
     const view = render(<AppearanceSetting onNotify={() => {}} />);
     expect(screen.getByRole('group', { name: 'appearance.accentLabel' })).toBeInTheDocument();
@@ -80,6 +88,13 @@ describe('Appearance settings (issue #134)', () => {
     await act(async () => { vi.advanceTimersByTime(299); });
     expect(accentState.save).not.toHaveBeenCalled();
     await act(async () => { vi.advanceTimersByTime(1); });
+    expect(accentState.save).toHaveBeenCalledWith('#9944CC', '');
+  });
+  it('flushes a pending custom colour save when Appearance unmounts', () => {
+    const view = render(<AppearanceSetting onNotify={() => {}} />);
+    fireEvent.change(screen.getByLabelText('appearance.accent.custom'), { target: { value: '#9944CC' } });
+    expect(accentState.save).not.toHaveBeenCalled();
+    view.unmount();
     expect(accentState.save).toHaveBeenCalledWith('#9944CC', '');
   });
   it('shows save errors for default accent changes', async () => {
