@@ -252,13 +252,17 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
               </span>
             )}
           </div>
-        ) : outside && (
+        ) : !outside ? (
+          // The strip was the only growing child: keep the trailing buttons
+          // at the right edge without it.
+          <span aria-hidden className="min-w-0 flex-1" />
+        ) : (
           // Without the strip the outside-domain warning still shows: the
           // toolbar never stops telling the truth about the loaded address.
           <span
             data-testid="store-outside"
             title={t('store:address.outside', { host, name: plugin.name })}
-            className="flex min-w-0 items-center gap-1 text-attention/90"
+            className="flex min-w-0 flex-1 items-center gap-1 text-attention/90"
           >
             <TriangleAlert className="h-4 w-4 flex-none" />
             <span className="truncate">{host}</span>

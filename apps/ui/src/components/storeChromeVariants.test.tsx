@@ -92,4 +92,15 @@ describe('store toolbar chrome (issue #115)', () => {
     expect(bridge.setBounds).toHaveBeenLastCalledWith({ x: 10, y: 55, width: 300, height: 400 });
     rect.mockRestore();
   });
+
+  it('keeps the trailing buttons at the right edge when the strip is hidden', () => {
+    const bridge = storeBridgeStub();
+    window.platypus = { ...window.platypus!, store: bridge } as typeof window.platypus;
+    state.variants['store.address'] = 'hidden';
+    render(<TooltipProvider><StoreView plugin={plugin as never} onClose={() => {}} onNotify={() => {}} shopBar /></TooltipProvider>);
+    const external = screen.getByTestId('store-external');
+    const spacer = external.parentElement!.querySelector(':scope > span.flex-1');
+    expect(spacer).not.toBeNull();
+    expect(spacer!.compareDocumentPosition(external) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

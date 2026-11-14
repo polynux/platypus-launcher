@@ -59,6 +59,17 @@ describe('dialogs follow the dialog variants (issue #114)', () => {
     expect(dialog.className).not.toContain('max-w-[560px]');
   });
 
+  it('widens a dialog that names no size at all (default sm) under dialog.size = lg', () => {
+    render(<Modal label="Plain" onClose={() => {}}><p>Body</p></Modal>);
+    expect(screen.getByRole('dialog', { name: 'Plain' }).className).toContain('max-w-[440px]');
+    cleanup();
+    state.variants['dialog.size'] = 'lg';
+    render(<Modal label="Plain" onClose={() => {}}><p>Body</p></Modal>);
+    const dialog = screen.getByRole('dialog', { name: 'Plain' });
+    expect(dialog.className).toContain('max-w-[720px]');
+    expect(dialog.className).not.toContain('max-w-[440px]');
+  });
+
   it('applies a use-site size when the theme leaves the global one auto', () => {
     render(<Modal label="Collection" size="xl" onClose={() => {}}><p>Body</p></Modal>);
     expect(screen.getByRole('dialog', { name: 'Collection' }).className).toContain('max-w-[920px]');

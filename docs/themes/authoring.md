@@ -200,8 +200,9 @@ built-in default. Inheritance applies only when the theme declares
 Two shared surfaces read one axis each:
 
 - `dialog.presentation` (`dialog` or `sheet`) and `dialog.size` (`auto`,
-  `sm`, `md`, `lg`, `xl`) reach every dialog: they all render through
-  `components/Modal.tsx`. `auto` keeps each dialog's built-in width, so the
+  `sm`, `md`, `lg`, `xl`) reach every dialog that renders through
+  `components/Modal.tsx` (all of them except the command palette and the
+  Tune flyout, which keep their own surfaces). `auto` keeps each dialog's built-in width, so the
   defaults change nothing; an explicit size overrides it, and `sheet`
   slides dialogs in from the edge. `game-settings.presentation` still
   overrides only the game settings. The lightbox stays a full-screen

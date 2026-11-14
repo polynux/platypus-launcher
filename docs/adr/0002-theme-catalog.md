@@ -199,8 +199,8 @@ How the accepted decisions landed, without changing them.
   light and black `d=0.5` formulas from `tintVars`). The scheme pick
   (`dark|light|black`, default dark) and the game colour pick
   (`off|accent|whole`, default accent) are persisted launcher settings.
-- Dialogs and store chrome (issues #114, #115): every dialog renders through
-  `components/Modal.tsx`, which reads `dialog.presentation` and
+- Dialogs and store chrome (issues #114, #115): every dialog except the command
+  palette and the Tune flyout renders through `components/Modal.tsx`, which reads `dialog.presentation` and
   `dialog.size`. `size = auto` is the use site's built-in width, so Atlas is
   unchanged; an explicit value overrides it for every dialog, while a
   use-site entry (e.g. `game-settings`) still owns its own presentation.
