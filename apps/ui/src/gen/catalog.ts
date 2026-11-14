@@ -47,6 +47,8 @@ export interface VariantValues {
   "plugins.presentation": "cards" | "directory";
   "friends.presentation": "modal" | "panel";
   "store.presentation": "embedded" | "storefronts";
+  "store.toolbar": "full" | "compact";
+  "store.address": "shown" | "hidden";
   "settings-row.style": "section" | "srow";
   "toast.style": "card" | "pill";
 }
@@ -100,6 +102,8 @@ export const VARIANT_DEFAULTS: VariantValues = {
   "plugins.presentation": "cards",
   "friends.presentation": "modal",
   "store.presentation": "embedded",
+  "store.toolbar": "full",
+  "store.address": "shown",
   "settings-row.style": "section",
   "toast.style": "card",
 };

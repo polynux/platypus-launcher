@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, ExternalLink, Globe, Home, RefreshCw, Rotate
 import { EmptyState, cx } from './ui';
 import { Button } from './ds/button';
 import { browserOpen, onStoreEvent, storeBridge, type StoreEvent } from '../effect/bridge';
+import { useVariant } from '../lib/theme';
 import type { StorePlugin } from '../types';
 
 /** The host of an address, lowercased, or '' when it has none. Exported for tests. */
@@ -56,6 +57,11 @@ interface StoreViewProps {
  */
 export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, toolbarTrail, shopBar }: StoreViewProps) {
   const { t } = useTranslation(['store', 'common']);
+  // The toolbar's catalog chrome (issue #115): full is today's row, compact
+  // the same controls at a shorter height; the address strip can be hidden.
+  // Defaults keep Atlas (and every other theme) looking as before.
+  const compact = useVariant('store.toolbar') === 'compact';
+  const addressShown = useVariant('store.address') === 'shown';
   const store = storeBridge();
   const [state, setState] = useState<Pick<StoreEvent, 'url' | 'canGoBack' | 'canGoForward' | 'title' | 'loading'>>({
     url: initialUrl ?? plugin.storefront_url ?? '',
@@ -202,49 +208,68 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
 
   return (
     <div className="flex h-full min-h-[480px] flex-col">
-      <div className={shopBar ? '@container shop-bar flex h-[55px] flex-none items-center gap-3 border-b border-hairline bg-ground-2 px-4 py-2.5' : 'flex flex-none items-center gap-1.5 px-5 pb-3 pt-5'}>
+      <div className={cx(
+        shopBar ? '@container shop-bar flex flex-none items-center border-b border-hairline bg-ground-2' : 'flex flex-none items-center',
+        compact
+          ? (shopBar ? 'h-[42px] gap-2 px-3 py-1.5' : 'gap-1 px-4 pb-2 pt-3')
+          : (shopBar ? 'h-[55px] gap-3 px-4 py-2.5' : 'gap-1.5 px-5 pb-3 pt-5'),
+      )}>
         {toolbarLead}
-      <ToolbarButton shopBar={shopBar} label={t('store:toolbar.back')} disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
+      <ToolbarButton shopBar={shopBar} compact={compact} label={t('store:toolbar.back')} disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
           <ChevronLeft className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton shopBar={shopBar} label={t('store:toolbar.forward')} disabled={!state.canGoForward} onClick={() => store?.forward()} data-testid="store-forward">
+        <ToolbarButton shopBar={shopBar} compact={compact} label={t('store:toolbar.forward')} disabled={!state.canGoForward} onClick={() => store?.forward()} data-testid="store-forward">
           <ChevronRight className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton shopBar={shopBar} label={t('store:toolbar.reload')} onClick={() => store?.reload()} data-testid="store-reload">
+        <ToolbarButton shopBar={shopBar} compact={compact} label={t('store:toolbar.reload')} onClick={() => store?.reload()} data-testid="store-reload">
           <RefreshCw className={cx('h-3.5 w-3.5', state.loading && 'animate-spin')} />
         </ToolbarButton>
         {!shopBar && (
-          <ToolbarButton shopBar={shopBar} label={t('store:toolbar.home')} onClick={goHome} data-testid="store-home">
+          <ToolbarButton shopBar={shopBar} compact={compact} label={t('store:toolbar.home')} onClick={goHome} data-testid="store-home">
             <Home className="h-4 w-4" />
           </ToolbarButton>
         )}
-        <div
-          data-testid="store-address"
-          title={state.title ? `${plugin.name} · ${state.url} · ${state.title}` : `${plugin.name} · ${state.url}`}
-          className={cx(
-            'mx-1.5 flex h-[30px] min-w-[180px] flex-1 items-center gap-2 rounded-lg bg-surface px-3 text-[12.5px] text-text-faint ring-1',
-            outside ? 'bg-attention/[0.07] text-attention ring-attention/30' : 'ring-hairline',
-          )}
-        >
-          {state.loading ? (
-            <span data-testid="store-loading" aria-label={t('store:address.loading')} className="h-3 w-3 flex-none animate-spin rounded-full border border-hairline-strong border-t-transparent" />
-          ) : (
-            <Globe className="h-3 w-3 flex-none" aria-label={outside ? t('store:address.lockOutside') : t('store:address.lockInside')} />
-          )}
-          <span className="truncate">{storeAddress(state.url) || host || '…'}</span>
-          {outside && (
-            <span className="flex flex-none items-center gap-1 text-attention/90">
-              <TriangleAlert className="h-3 w-3" />
-              <span className="hidden sm:inline">{t('store:address.outsideSuffix', { name: plugin.name })}</span>
-            </span>
-          )}
-        </div>
+        {addressShown ? (
+          <div
+            data-testid="store-address"
+            title={state.title ? `${plugin.name} · ${state.url} · ${state.title}` : `${plugin.name} · ${state.url}`}
+            className={cx(
+              'flex flex-1 items-center gap-2 rounded-lg bg-surface text-text-faint ring-1',
+              compact ? 'mx-1 h-[26px] min-w-[120px] px-2.5 text-[12px]' : 'mx-1.5 h-[30px] min-w-[180px] px-3 text-[12.5px]',
+              outside ? 'bg-attention/[0.07] text-attention ring-attention/30' : 'ring-hairline',
+            )}
+          >
+            {state.loading ? (
+              <span data-testid="store-loading" aria-label={t('store:address.loading')} className="h-3 w-3 flex-none animate-spin rounded-full border border-hairline-strong border-t-transparent" />
+            ) : (
+              <Globe className="h-3 w-3 flex-none" aria-label={outside ? t('store:address.lockOutside') : t('store:address.lockInside')} />
+            )}
+            <span className="truncate">{storeAddress(state.url) || host || '…'}</span>
+            {outside && (
+              <span className="flex flex-none items-center gap-1 text-attention/90">
+                <TriangleAlert className="h-3 w-3" />
+                <span className="hidden sm:inline">{t('store:address.outsideSuffix', { name: plugin.name })}</span>
+              </span>
+            )}
+          </div>
+        ) : outside && (
+          // Without the strip the outside-domain warning still shows: the
+          // toolbar never stops telling the truth about the loaded address.
+          <span
+            data-testid="store-outside"
+            title={t('store:address.outside', { host, name: plugin.name })}
+            className="flex min-w-0 items-center gap-1 text-attention/90"
+          >
+            <TriangleAlert className="h-4 w-4 flex-none" />
+            <span className="truncate">{host}</span>
+          </span>
+        )}
         {toolbarTrail}
-          <ToolbarButton shopBar={shopBar} label={t('store:toolbar.openExternal')} onClick={openInBrowser} data-testid="store-external">
+          <ToolbarButton shopBar={shopBar} compact={compact} label={t('store:toolbar.openExternal')} onClick={openInBrowser} data-testid="store-external">
           <ExternalLink className="h-4 w-4" />
         </ToolbarButton>
         {!shopBar && (
-          <ToolbarButton shopBar={shopBar} label={t('store:toolbar.close', { name: plugin.name })} onClick={onClose} data-testid="store-close">
+          <ToolbarButton shopBar={shopBar} compact={compact} label={t('store:toolbar.close', { name: plugin.name })} onClick={onClose} data-testid="store-close">
             <X className="h-4 w-4" />
           </ToolbarButton>
         )}
@@ -314,21 +339,29 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
   );
 }
 
-function ToolbarButton({ label, children, shopBar, ...rest }: {
+function ToolbarButton({ label, children, shopBar, compact, ...rest }: {
   label: string;
   children: React.ReactNode;
   shopBar?: boolean;
+  compact?: boolean;
   disabled?: boolean;
   onClick?: () => void;
   'data-testid'?: string;
 }) {
+  const sizeClass = shopBar
+    ? (compact
+      ? 'grid size-7 flex-none place-items-center rounded-md bg-transparent text-text-muted transition hover:bg-surface hover:text-text disabled:opacity-35'
+      : 'grid size-8 flex-none place-items-center rounded-lg bg-transparent text-text-muted transition hover:bg-surface hover:text-text disabled:opacity-35')
+    : (compact
+      ? 'grid h-8 w-8 flex-none place-items-center rounded-lg bg-surface text-text-muted ring-1 ring-hairline transition hover:text-text disabled:opacity-35'
+      : 'grid h-9 w-9 flex-none place-items-center rounded-xl bg-surface text-text-muted ring-1 ring-hairline transition hover:text-text disabled:opacity-35');
   return (
     <Button
       variant="neutral"
       size="none"
       title={label}
       aria-label={label}
-      className={shopBar ? "grid size-8 flex-none place-items-center rounded-lg bg-transparent text-text-muted transition hover:bg-surface hover:text-text disabled:opacity-35" : "grid h-9 w-9 flex-none place-items-center rounded-xl bg-surface text-text-muted ring-1 ring-hairline transition hover:text-text disabled:opacity-35"}
+      className={sizeClass}
       {...rest}
     >
       {children}

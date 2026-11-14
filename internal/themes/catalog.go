@@ -2,8 +2,8 @@ package themes
 
 import "platypus/internal/types"
 
-// Catalog v1.1 is the frontend contract for the Settings testbed.
-const CatalogVersion = "1.1"
+// Catalog v1.2 is the frontend contract for the Settings testbed.
+const CatalogVersion = "1.2"
 
 var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "settings", Since: "1.0", Axes: []types.ThemeCatalogAxis{
@@ -271,8 +271,15 @@ var Catalog = []types.ThemeCatalogEntry{
 	}},
 	// Store (issue #156): embedded is today's single-plugin view, storefronts
 	// is the /22 page listing every storefront above it.
+	// Store chrome (issue #115): only the toolbar and frame are ours, the
+	// storefront itself is the shell's native view. toolbar full is the /22
+	// shop bar (55px, roomy controls), compact the same row at 42px with
+	// smaller controls and an address strip that may be hidden. The defaults
+	// are today's Atlas bar, so a theme that names nothing looks unchanged.
 	{Entry: "store", Since: "1.1", Axes: []types.ThemeCatalogAxis{
 		{Name: "presentation", Values: []string{"embedded", "storefronts"}, Default: "embedded", Since: "1.1"},
+		{Name: "toolbar", Values: []string{"full", "compact"}, Default: "full", Since: "1.2"},
+		{Name: "address", Values: []string{"shown", "hidden"}, Default: "shown", Since: "1.2"},
 	}},
 	// Settings rows (issue #156): section is today's titled section, srow is
 	// the /22 settings row.

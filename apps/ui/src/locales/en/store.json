@@ -13,7 +13,8 @@
     "loading": "loading",
     "lockOutside": "outside the store",
     "lockInside": "store page",
-    "outsideSuffix": "outside {{name}}"
+    "outsideSuffix": "outside {{name}}",
+    "outside": "{{host}} is outside {{name}}"
   },
   "blocked": "{{host}} isn't part of {{name}}. Open in your browser?",
   "failed": "Couldn't open {{name}}: {{error}}",

@@ -199,6 +199,15 @@ How the accepted decisions landed, without changing them.
   light and black `d=0.5` formulas from `tintVars`). The scheme pick
   (`dark|light|black`, default dark) and the game colour pick
   (`off|accent|whole`, default accent) are persisted launcher settings.
+- Dialogs and store chrome (issues #114, #115): every dialog renders through
+  `components/Modal.tsx`, which reads `dialog.presentation` and
+  `dialog.size`. `size = auto` is the use site's built-in width, so Atlas is
+  unchanged; an explicit value overrides it for every dialog, while a
+  use-site entry (e.g. `game-settings`) still owns its own presentation.
+  `StoreView` reads `store.toolbar` (`full|compact`) and `store.address`
+  (`shown|hidden`); the native storefront is the shell's view, so the
+  toolbar only reports its rect again on every render and through the
+  area's ResizeObserver, keeping the overlay in step after a chrome change.
 
 Source: `internal/themes/catalog.go`, `internal/themes/builtin_layout.go`,
 `apps/ui/src/gen/catalog.ts`, `apps/ui/src/lib/theme.ts`,
