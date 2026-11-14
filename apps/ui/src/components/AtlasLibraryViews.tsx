@@ -327,8 +327,9 @@ export function AtlasHeaderFilters({ tier, onTier, status, onStatus, lending, on
         <button
           type="button"
           aria-label={t('library:listDetail.filtersAria')}
+          aria-expanded={open}
           className={cx(
-            'relative grid h-[30px] min-w-[30px] flex-none place-items-center gap-1.5 rounded-[7px] px-1.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+            'relative flex h-[30px] min-w-[30px] flex-none items-center justify-center gap-1.5 rounded-[7px] px-1.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
             open || extraCount > 0 ? 'bg-surface-strong text-text' : 'bg-surface text-text-faint hover:text-text-muted'
           )}
         >
@@ -785,7 +786,8 @@ export function AtlasSkeleton({ view }: { view: 'list' | 'grid' | 'table' }) {
 function libraryHeaderRegionClass(region: string): string | undefined {
   switch (region) {
     case 'bar': return 'flex items-center gap-2';
-    case 'sub': return 'grid gap-4';
+    // No warning and no chip: the empty region must not add a grid gap.
+    case 'sub': return 'grid gap-4 empty:hidden';
     default: return undefined;
   }
 }

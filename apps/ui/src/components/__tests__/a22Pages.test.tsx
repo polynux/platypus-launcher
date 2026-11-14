@@ -26,7 +26,7 @@ vi.mock('../../lib/theme', async (importOriginal) => {
       if (axis === 'store.presentation') return 'storefronts';
       if (axis === 'settings-row.style') return 'srow';
       if (axis === 'toast.style') return 'pill';
-      if (axis === 'settings.navigation') return 'scroll';
+      if (axis === 'settings.navigation') return 'tabs'; // Atlas declares tabs (issue #117)
       if (axis === 'label.style') return 'plain';
       if (axis === 'section.chrome') return 'hairline';
       return 'page';

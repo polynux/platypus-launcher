@@ -267,7 +267,7 @@ layout: the classic settings page keeps its fixed sections, and the classic
 library keeps its built-in `library` layout and composite header. The
 `settings` layout drives the Atlas settings page (sections as blocks, the
 category navigation following the layout's order); the `library-header`
-layout drives the Atlas grid/table page header. Both honour
+layout drives the Atlas grid/table page header. The settings page honours
 `settings.navigation`: `tabs` shows one category, `scroll` stacks every
 block in layout order.
 
@@ -327,6 +327,7 @@ the view-mode switch in the sub row (issue #118):
   </region>
   <region name="sub">
     <block name="mode" />
+    <block name="warnings" />
   </region>
 </layout>
 ```

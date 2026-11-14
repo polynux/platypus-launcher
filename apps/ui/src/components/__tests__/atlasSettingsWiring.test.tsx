@@ -60,5 +60,8 @@ describe('atlas settings wiring (issue #117)', () => {
     const switches = within(data).getAllByRole('switch');
     const names = switches.map((s) => s.getAttribute('aria-label') ?? s.textContent ?? '');
     expect(names.some((n) => n.startsWith('Compatibility ratings'))).toBe(true);
+    // The game info section is block settings.gameinfo (lowercase): it must
+    // reach the page, not drop out on a key mismatch.
+    expect(names.some((n) => n.startsWith('Sideloaded game info lookup'))).toBe(true);
   });
 });

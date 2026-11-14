@@ -133,7 +133,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   // by section name in the same order; the page orders them by the settings
   // layout and derives its category navigation from it.
   if (atlas) {
-    const settingsBlocks: Record<string, React.ReactNode> = Object.fromEntries(sectionNames.map((name, i) => [name, sections[i]]));
+    const settingsBlocks: Record<string, React.ReactNode> = Object.fromEntries(sectionNames.map((name, i) => [name.toLowerCase(), sections[i]]));
     return <AtlasSettingsPage blocks={settingsBlocks} loadError={error} />;
   }
 
