@@ -158,28 +158,54 @@ type process struct {
 // call sends a request exactly once, starting the plugin first if needed.
 // If the run died before anything was sent (its dead channel is already
 // closed — the reaped process cannot have read the request), it resolves a
-// fresh connection and sends there. A death during or after the send is
-// reported as ErrExited without resending: plugin methods are not
-// idempotent (install/update/uninstall, auth.complete, job.cancel), so a
-// request the dead process may already have acted on is never replayed.
+// fresh connection and sends there. The handoff can also race the death:
+// when the send itself reports the request never reached the peer
+// (jsonrpc.ErrNotSent), call waits until the death is recorded, resolves a
+// fresh connection and sends there once — still exactly once, since the dead
+// process never saw the bytes. A death during or after the send is reported
+// as ErrExited without resending: plugin methods are not idempotent
+// (install/update/uninstall, auth.complete, job.cancel), so a request the
+// dead process may already have acted on is never replayed.
 func (p *process) call(ctx context.Context, method string, params, result any) error {
 	conn, dead, err := p.ensure(ctx)
 	if err != nil {
 		return err
 	}
-	select {
-	case <-dead:
-		conn, _, err = p.ensure(ctx)
+	var optional bool
+	for attempt := 0; ; attempt++ {
+		select {
+		case <-dead:
+			conn, dead, err = p.ensure(ctx)
+			if err != nil {
+				return err
+			}
+		default:
+		}
+		optional, err = p.gate(method)
 		if err != nil {
 			return err
 		}
-	default:
+		err = conn.Call(ctx, method, params, result)
+		if !errors.Is(err, jsonrpc.ErrNotSent) || attempt > 0 {
+			break
+		}
+		// The run died before our request reached it: wait until the
+		// reaper records the death, then resolve a fresh connection and
+		// send there. Waiting first guarantees progress: the next ensure
+		// sees the recorded death and restarts instead of handing out
+		// the same dead conn again.
+		failedConn, failedDead := conn, dead
+		select {
+		case <-failedDead:
+		case <-failedConn.Done():
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		conn, dead, err = p.ensure(ctx)
+		if err != nil {
+			return err
+		}
 	}
-	optional, err := p.gate(method)
-	if err != nil {
-		return err
-	}
-	err = conn.Call(ctx, method, params, result)
 	if errors.Is(err, jsonrpc.ErrClosed) {
 		return fmt.Errorf("plugin %s %w during %s", p.id, ErrExited, method)
 	}

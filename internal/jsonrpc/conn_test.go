@@ -117,3 +117,42 @@ func TestPendingFailOnClose(t *testing.T) {
 		t.Fatalf("call after close: %v", err)
 	}
 }
+
+// A call that never reached the peer is marked ErrNotSent: after the
+// connection closed, and when the write itself fails. The after-close case
+// still matches ErrClosed.
+func TestCallNotSent(t *testing.T) {
+	c, stop := pipe(t, nil)
+	stop() // the other side goes away: EOF on our reader
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		select {
+		case <-c.Done():
+			goto closed
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("connection never closed")
+		}
+		time.Sleep(time.Millisecond)
+	}
+closed:
+	err := c.Call(context.Background(), "add", [2]int{1, 2}, nil)
+	if !errors.Is(err, ErrNotSent) {
+		t.Fatalf("call after close: want ErrNotSent, got %v", err)
+	}
+	if !errors.Is(err, ErrClosed) {
+		t.Fatalf("call after close: want ErrClosed too, got %v", err)
+	}
+
+	// A write to a pipe nobody reads fails: nothing was sent either.
+	r, w := io.Pipe()
+	r.Close() // no readers left: the peer is gone
+	dead := NewConn(r, w, nil)
+	defer dead.Close()
+	err = dead.Call(context.Background(), "add", [2]int{1, 2}, nil)
+	w.Close()
+	if !errors.Is(err, ErrNotSent) {
+		t.Fatalf("call on broken pipe: want ErrNotSent, got %v", err)
+	}
+}
