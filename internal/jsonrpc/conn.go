@@ -30,6 +30,14 @@ const (
 // pending when the connection closes.
 var ErrClosed = errors.New("jsonrpc: connection closed")
 
+// ErrNotSent marks a Call whose request provably never reached the other
+// side: the connection was already closed before anything was written
+// (which also still matches ErrClosed), or the write itself failed.
+// Callers that must not replay a request the peer may have acted on
+// (plugin methods are not idempotent) can retry on ErrNotSent without
+// risking double execution.
+var ErrNotSent = errors.New("jsonrpc: request not sent")
+
 // Error is an error response from the other side.
 type Error struct {
 	Code    int             `json:"code"`
@@ -88,7 +96,7 @@ func (c *Conn) Call(ctx context.Context, method string, params, result any) erro
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
-		return ErrClosed
+		return fmt.Errorf("%w: %w", ErrClosed, ErrNotSent)
 	}
 	c.nextID++
 	id := c.nextID
@@ -155,7 +163,9 @@ func (c *Conn) send(m message, params any) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	if _, err := c.w.Write(append(data, '\n')); err != nil {
-		return fmt.Errorf("jsonrpc: write: %w", err)
+		// The transport rejected the bytes (a dead pipe takes nothing):
+		// the peer cannot have read a request we never managed to write.
+		return fmt.Errorf("jsonrpc: write: %w: %w", err, ErrNotSent)
 	}
 	return nil
 }
