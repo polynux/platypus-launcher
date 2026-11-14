@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "entries": [
     {
       "entry": "settings",
@@ -1116,6 +1116,124 @@
           "since": "1.1"
         }
       ]
+    },
+    {
+      "entry": "settings.main",
+      "since": "1.2",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "settings.language",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.tray",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.theme",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.appearance",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.folders",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.prefixes",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.cleanup",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.backups",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.cloud",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.ratings",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.artwork",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.gameinfo",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.chat",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "settings.notices",
+      "since": "1.2",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
     }
   ]
 }

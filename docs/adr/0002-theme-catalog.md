@@ -190,6 +190,14 @@ How the accepted decisions landed, without changing them.
   (#108), tile polish and row spans (#109), validator gaps (#110). Still
   open: the store view, the smaller views as layout views, and the native
   renderer (§9).
+- Settings sections as layout blocks (issue #117): the fourteen launcher
+  settings sections are blocks of a `settings` view (`settings.main`, all
+  `Required`), used by the Atlas settings page only; the classic page
+  keeps its fixed sections. The Atlas category navigation follows the
+  layout's order under both `settings.navigation` values (`tabs` shows one
+  category, `scroll` stacks every section). The Atlas theme declares
+  `settings.navigation = "tabs"`: the page now honours the axis, and tabs
+  are what it has always shown.
 - Colour schemes and game colour (issue #134): `[schemes.light]` and
   `[schemes.black]` token overrides in `theme.toml`, validated like
   `[tokens]` and contrast-checked over their own resolved tokens; the UI

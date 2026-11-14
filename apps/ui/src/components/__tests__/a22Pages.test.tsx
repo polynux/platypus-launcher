@@ -52,6 +52,7 @@ const mock = vi.hoisted(() => ({
   authStatus: vi.fn(),
   approvePlugin: vi.fn(),
   getLauncherSettings: vi.fn(),
+  getBackupSettings: vi.fn(),
   listThemes: vi.fn(),
   socialViews: vi.fn(),
   subs: [] as ((d: unknown) => void)[],
@@ -70,6 +71,7 @@ vi.mock('../../effect/runtime', () => ({
     authStatus: (...a: unknown[]) => mock.authStatus(...a),
     approvePlugin: (...a: unknown[]) => mock.approvePlugin(...a),
     getLauncherSettings: (...a: unknown[]) => mock.getLauncherSettings(...a),
+    getBackupSettings: (...a: unknown[]) => mock.getBackupSettings(...a),
     listThemes: (...a: unknown[]) => mock.listThemes(...a),
     socialViews: (...a: unknown[]) => mock.socialViews(...a),
     prefixBackups: () => Effect.succeed([] as never),
@@ -108,6 +110,7 @@ beforeEach(() => {
   mock.subs.length = 0;
   Object.values(mock).forEach((v) => { if (typeof v === 'function' && 'mockReset' in v) (v as unknown as { mockReset(): void }).mockReset(); });
   mock.getLauncherSettings.mockReturnValue(Effect.succeed({} as never));
+  mock.getBackupSettings.mockReturnValue(Effect.succeed({ folder: '', default_folder: '', keep: 5, mode: 'destructive', after_session: false } as never));
   mock.listThemes.mockReturnValue(Effect.succeed([] as never));
   mock.getGameFolders.mockReturnValue(Effect.succeed([] as never));
   mock.listJobs.mockReturnValue(Effect.succeed([] as never));

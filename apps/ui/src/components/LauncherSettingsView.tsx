@@ -129,9 +129,12 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   const chromeClass = chrome === 'framed' ? '[&>section]:rounded-2xl [&>section]:border [&>section]:border-hairline-strong [&>section]:bg-surface [&>section]:px-5' : chrome === 'plain' ? '[&>section]:border-t-0' : '';
 
   // Atlas renders the /22 Settings page (issue #138): the lab's categories in
-  // the left nav. "Store clients" holds the client notices switch (issue #149).
+  // the left nav. The sections reach it as layout blocks (issue #117), keyed
+  // by section name in the same order; the page orders them by the settings
+  // layout and derives its category navigation from it.
   if (atlas) {
-    return <AtlasSettingsPage sections={sections} loadError={error} />;
+    const settingsBlocks: Record<string, React.ReactNode> = Object.fromEntries(sectionNames.map((name, i) => [name, sections[i]]));
+    return <AtlasSettingsPage blocks={settingsBlocks} loadError={error} />;
   }
 
   return (

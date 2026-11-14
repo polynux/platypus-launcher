@@ -2,8 +2,8 @@ package themes
 
 import "platypus/internal/types"
 
-// Catalog v1.1 is the frontend contract for the Settings testbed.
-const CatalogVersion = "1.1"
+// Catalog v1.2 adds the settings sections and the Atlas library header.
+const CatalogVersion = "1.2"
 
 var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "settings", Since: "1.0", Axes: []types.ThemeCatalogAxis{
@@ -284,4 +284,27 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "toast", Since: "1.1", Axes: []types.ThemeCatalogAxis{
 		{Name: "style", Values: []string{"card", "pill"}, Default: "card", Since: "1.1"},
 	}},
+	// Settings layout entries (issue #117): the launcher settings sections
+	// as blocks of a `settings` layout view, in the Atlas category order
+	// (general, appearance, folders, saves, data, social, stores). The Atlas
+	// presentation renders them through ThemeLayout; the classic
+	// presentation keeps its fixed rendering. Every section is required
+	// (ADR §5): each one acts (saving a setting) or reports state, so a
+	// layout that leaves one out still gets it back, in the main region,
+	// with a warning.
+	{Entry: "settings.main", Since: "1.2", Kind: "region"},
+	{Entry: "settings.language", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.tray", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.theme", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.appearance", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.folders", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.prefixes", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.cleanup", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.backups", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.cloud", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.ratings", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.artwork", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.gameinfo", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.chat", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.notices", Since: "1.2", Kind: "block", Required: true, Region: "main"},
 }

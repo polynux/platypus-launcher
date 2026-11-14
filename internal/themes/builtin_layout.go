@@ -122,6 +122,29 @@ var builtinLayoutXML = map[string]string{
     <block name="activity" />
   </region>
 </layout>`,
+	// Today's Atlas settings (issue #117): the fourteen sections in the
+	// Atlas category order (general, appearance, folders, saves, data,
+	// social, stores), one region. The Atlas page groups them under its
+	// category navigation; the classic presentation keeps its fixed
+	// rendering and never reads this layout.
+	"settings": `<layout view="settings" catalog="1.2">
+  <region name="main">
+    <block name="language" />
+    <block name="tray" />
+    <block name="theme" />
+    <block name="appearance" />
+    <block name="folders" />
+    <block name="prefixes" />
+    <block name="cleanup" />
+    <block name="backups" />
+    <block name="cloud" />
+    <block name="ratings" />
+    <block name="artwork" />
+    <block name="gameinfo" />
+    <block name="chat" />
+    <block name="notices" />
+  </region>
+</layout>`,
 }
 
 // builtinLayouts holds the parsed built-ins, in layout order.

@@ -256,11 +256,17 @@ the theme layout when the theme ships one, else the built-in arrangement
 `ThemeLayout`).
 
 The views that take layouts: `dashboard`, `library`, `game`, `storage`,
-`plugins`, and `shell`. Shell regions follow `shell.navigation`: `sidebar`
+`plugins`, `settings`, and `shell`. Shell regions follow `shell.navigation`: `sidebar`
 for the sidebar variant, `topbar` for the topbar variant. Shell takes only
 the variant. A `layouts/shell.xml` file validates like any other layout,
 but the shell never loads a layout: `Shell.tsx` reads only
 `shell.navigation` and renders its blocks directly, arranged by the variant.
+
+`settings` is an Atlas presentation with no classic layout: the classic
+settings page keeps its fixed sections. The `settings` layout drives the
+Atlas settings page (sections as blocks, the category navigation following
+the layout's order). It honours `settings.navigation`: `tabs` shows one
+category, `scroll` stacks every section in layout order.
 
 Regions per view, from the catalog:
 
@@ -269,6 +275,7 @@ Regions per view, from the catalog:
 - `game`: `hero`, `main`, `side`.
 - `storage`: `top`, `main`, `side`.
 - `plugins`: `top`, `main`, `side`.
+- `settings`: `main`.
 - `shell`: `sidebar`, `topbar` (variant only, see above).
 
 Block names are per view; see `catalog.md` for the full list. Required
@@ -282,8 +289,11 @@ blocks per view, from the catalog:
 - `storage`: none. Every block is hideable.
 - `plugins`: `store` (in `main`). Each store card renders its own login row
   and approve/enable actions.
+- `settings`: every section block (all in `main`). Each one acts or reports
+  state, so a layout can't drop a setting.
 - `shell`: none. Both variants keep Settings and Plugins reachable by
   construction.
+
 
 ```xml
 <layout view="dashboard" catalog="1.0">
@@ -299,6 +309,7 @@ blocks per view, from the catalog:
   </region>
 </layout>
 ```
+
 
 - The root is `<layout>`. Anything else discards the file with a warning.
 - `view` should match the file name. A mismatch warns and reads the file as
