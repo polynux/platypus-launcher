@@ -603,6 +603,35 @@ def api_get(url, token=None):
         return json.loads(r.read().decode())
 
 
+def api_post(url, params, token=None):
+    """POST form params to the Steam Web API (state-changing calls like
+    SetPreferredLender refuse GET). Same test hook as api_get: tests point
+    it at a file whose `_routes` answer per endpoint, so nothing reaches
+    the network. Raises on HTTP errors; the caller maps them."""
+    hook = os.environ.get("PLATYPUS_STEAM_API_FILE")
+    if hook:
+        with open(hook) as f:
+            data = json.load(f)
+        # Test-only record of state-changing calls, so tests can assert the
+        # request shape (endpoint + params) without touching Valve.
+        try:
+            with open(hook + ".posted", "a") as f:
+                f.write(json.dumps({"url": url, "params": params}) + "\n")
+        except OSError:
+            pass
+        for frag, resp in (data.get("_routes") or {}).items():
+            if frag in url:
+                return resp
+        return data
+    body = urllib.parse.urlencode(params).encode()
+    if token:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}access_token={token}"
+    req = urllib.request.Request(url, data=body)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode())
+
+
 STORE_TTL = 30 * 86400  # names and types of released apps rarely change
 STORE_BUDGET = 20  # seconds of Store lookups per library.list; the rest waits for the next rescan
 store_lock = threading.Lock()
@@ -1307,6 +1336,15 @@ def library_list(_params):
             entry["note"] = f"This entry is a {app_type}, not a game."
         out.append(entry)
     save_store_cache()
+    try:
+        fam = family_snapshot(token, str(steamid))
+    except Exception:
+        # Supplementary: when the family calls fail, library.list still
+        # returns the user's own games. The warning names no ids or tokens.
+        log("warning", "Steam family lookup failed; listing owned games only")
+        fam = None
+    if fam:
+        merge_family_games(out, fam, installed, deadline)
     for app, ig in installed.items():  # installed but missing from the owned list
         if not any(e["id"] == app for e in out):
             missing = {
@@ -1333,6 +1371,371 @@ def library_list(_params):
         if entry["id"] in overrides:
             entry.update(overrides[entry["id"]])
     return {"games": out}
+
+
+# --- family (protocol 1.8) -----------------------------------------------------
+# Steam Families: the user's family group, the games members lend, and the
+# lender pick Steam stores server-side. Reads go through the FamilyGroups Web
+# API (IFamilyGroupsService); member names come from the CM
+# (Player.GetPlayerLinkDetails#1), one session for all misses, persisted in
+# family-names.json. No new round trips happen in game.details or other
+# game-page calls: library.list makes the family lookup, and family.members
+# reuses the cached snapshot. The snapshot is supplementary: when its calls
+# fail, library.list still returns the user's own games and logs a warning.
+FAMILY_GROUP_URL = "https://api.steampowered.com/IFamilyGroupsService/"
+FAMILY_TTL = 300  # seconds; one snapshot serves library.list + family.members
+family_lock = threading.Lock()
+family_cache = None  # [steamid, fetched_at, snapshot], or None
+names_lock = threading.Lock()
+
+# EFamilyGroupRole (steammessages_familygroups.steamclient.proto): the only
+# roles the protocol's member `role` knows are adult and child.
+FAMILY_ROLES = {1: "adult", 2: "child"}
+
+# ESharedLibraryExcludeReason, in the store's words. GetSharedLibraryApps
+# reports one reason per app (exclude_reason, 0 = included); there is no
+# per-copy DLC or in-use signal in it, so copies carry no dlc and
+# inUse: False (unknown, not "free").
+FAMILY_EXCLUDE = {
+    1: "Excluded from sharing by the owner",
+    2: "Not eligible for family sharing",
+    3: "Free to play",
+    4: "The owner's copy is private",
+    6: "Not a type Steam lends",
+    7: "DLC excluded from sharing",
+    8: "Not released yet",
+    9: "The base game isn't shared",
+    10: "Excluded from sharing by the owner",
+}
+
+# EProtoAppType (steammessages_appoverview.proto) is flags: Game = 1,
+# Application = 2, Tool = 4, Demo = 8, Music = 8192, …; Invalid = 0.
+# The Web API omits the field when it is the default (a game), so a
+# missing app_type is a game too. Demo and application install like the
+# owned path's store types do; anything else is not a game Platypus runs.
+FAMILY_GAME_TYPES = frozenset((1, 2, 8))
+
+
+def family_is_game(app):
+    atype = (app or {}).get("app_type")
+    if atype is None:
+        return True
+    try:
+        atype = int(atype)
+    except (TypeError, ValueError):
+        return False
+    return atype in FAMILY_GAME_TYPES or bool(atype & 1)
+
+
+def family_error(e):
+    """An RPCError for a failed family read: -32001 when Steam says the
+    login is no good, else -32002 (the family can't be read right now). The
+    message names no tokens or ids: Web API URLs carry the access token."""
+    if isinstance(e, RPCError):
+        return e
+    code = getattr(e, "code", None)
+    if code in (401, 403):
+        return RPCError(tr("need_login_expired"), CODE_AUTH_REQUIRED)
+    detail = f"HTTP {code}" if isinstance(code, int) else type(e).__name__
+    return RPCError(f"couldn't read the Steam family group ({detail})", -32002)
+
+
+def family_fetch_group(token, steamid):
+    """The user's family group: id, name and raw members, or None when the
+    user is in no group. Raises when the lookup itself fails."""
+    data = api_get(FAMILY_GROUP_URL + "GetFamilyGroupForUser/v1/"
+                   f"?steamid={steamid}&include_family_group_response=true", token)
+    resp = data.get("response") or {}
+    if resp.get("is_not_member_of_any_group"):
+        return None
+    group_id = resp.get("family_groupid") or 0
+    if not group_id:
+        return None
+    group = resp.get("family_group") or {}
+    members = group.get("members") or []
+    if not members:
+        # The group response wasn't included: read it directly.
+        data = api_get(FAMILY_GROUP_URL + "GetFamilyGroup/v1/"
+                       f"?family_groupid={group_id}", token)
+        members = (data.get("response") or {}).get("members") or []
+        group = data.get("response") or group
+    return {"id": str(group_id), "name": group.get("name") or "",
+            "members": members if isinstance(members, list) else []}
+
+
+def family_fetch_apps(token, group_id):
+    """Apps the family lends (include_own=false: the user's own games come
+    from GetOwnedGames; include_excluded=true: withheld apps stay visible
+    with their reason). Raises when the lookup fails."""
+    data = api_get(FAMILY_GROUP_URL + "GetSharedLibraryApps/v1/"
+                   f"?family_groupid={group_id}&include_own=false&include_excluded=true"
+                   "&include_free=false&include_non_games=true&max_apps=5000&language=english",
+                   token)
+    apps = (data.get("response") or {}).get("apps") or []
+    return apps if isinstance(apps, list) else []
+
+
+def family_fetch_preferred(token, group_id):
+    """{appid: lender_steamid} from GetPreferredLenders: the response is an
+    inverted index (each member lists the apps they are someone's preferred
+    lender for), so the member naming an app IS its lender. First listing
+    wins when several members name the same app. Supplementary within
+    supplementary: {} on any failure."""
+    try:
+        data = api_get(FAMILY_GROUP_URL + "GetPreferredLenders/v1/"
+                       f"?family_groupid={group_id}", token)
+    except Exception:
+        return {}
+    out = {}
+    members = (data.get("response") or {}).get("members") or []
+    for m in members:
+        if not isinstance(m, dict):
+            continue
+        lender = str(m.get("steamid") or "")
+        if not lender:
+            continue
+        for appid in m.get("preferred_appids") or []:
+            out.setdefault(str(appid), lender)
+    return out
+
+
+def family_member_names(ids, token, steamid):
+    """Display names for member steamids: the persisted map first, one CM
+    session for the misses (a single GetPlayerLinkDetails#1 with
+    `repeated uint64 steamids = 1`, best effort). Unknown ids stay absent;
+    the caller omits the name then."""
+    want = []
+    for i in ids:
+        i = str(i or "")
+        if i and i not in want:
+            want.append(i)
+    if not want:
+        return {}
+    with names_lock:
+        known = load_state("family-names.json", {})
+    missing = {i for i in want if not known.get(i)}
+    if missing:
+        found = {}
+        try:
+            rt = refresh_token()
+            if rt:
+                session = steam_cm.CMSession(int(steamid), rt)
+                try:
+                    req = b"".join(steam_cm.pb_int(1, int(mid)) for mid in missing)
+                    body = session.call("Player.GetPlayerLinkDetails#1", req)
+                finally:
+                    session.logoff()
+                for raw in steam_cm.pb_parse(body).get(1, []):
+                    try:
+                        pub = steam_cm.pb_parse(
+                            steam_cm.pb_parse(raw).get(1, [b""])[0])
+                        sid = str(pub.get(1, [0])[0])
+                        name = pub.get(10, [b""])[0].decode("utf-8", "replace")
+                    except Exception:
+                        continue
+                    if sid in missing and name:
+                        found[sid] = name
+        except Exception:
+            pass
+        if found:
+            with names_lock:
+                known = load_state("family-names.json", {})
+                known.update(found)
+                save_state("family-names.json", known)
+    with names_lock:
+        known = load_state("family-names.json", {})
+    return {i: known[i] for i in want if known.get(i)}
+
+
+def family_snapshot(token, steamid):
+    """The family's members, shared apps and lender picks, cached FAMILY_TTL
+    seconds and shared by library.list and family.members. Raises on failure:
+    family data is supplementary, so library.list catches it and lists the
+    user's own games instead."""
+    global family_cache
+    now = time.time()
+    with family_lock:
+        if (family_cache and family_cache[0] == str(steamid)
+                and now - family_cache[1] < FAMILY_TTL):
+            return family_cache[2]
+    group = family_fetch_group(token, steamid)
+    if group is None:
+        snap = {"group_id": "", "members": [], "apps": [], "preferred": {}}
+    else:
+        members = []
+        for m in group["members"]:
+            if not isinstance(m, dict):
+                continue
+            mid = str(m.get("steamid") or "")
+            if not mid:
+                continue
+            entry = {"id": mid}
+            role = FAMILY_ROLES.get(m.get("role"))
+            if role:
+                entry["role"] = role
+            members.append(entry)
+        names = family_member_names([m["id"] for m in members], token, steamid)
+        for m in members:
+            if names.get(m["id"]):
+                m["name"] = names[m["id"]]
+        apps = family_fetch_apps(token, group["id"])
+        snap = {"group_id": group["id"], "members": members, "apps": apps,
+                "preferred": family_fetch_preferred(token, group["id"])}
+    with family_lock:
+        family_cache = [str(steamid), time.time(), snap]
+    return snap
+
+
+def family_invalidate():
+    """Drop the cached snapshot, so the next listing reads a stored pick."""
+    global family_cache
+    with family_lock:
+        family_cache = None
+
+
+def merge_family_games(out, fam, installed, deadline):
+    """Fold the snapshot's shared apps into the library entries. Owned games
+    carry no sharedBy (protocol 1.8): an app the user also owns stays a
+    plain entry. A shared app with several owners carries copies (one per
+    owner; the store reports one availability per app, so all copies share
+    it) and the stored preferredCopy; an excluded app does too, so the
+    withheld state shows instead of silently vanishing."""
+    names = {m["id"]: m.get("name") or "" for m in fam.get("members") or []}
+    owned_ids = {e["id"] for e in out}
+    preferred = fam.get("preferred") or {}
+    for app in fam.get("apps") or []:
+        if not isinstance(app, dict):
+            continue
+        appid = str(app.get("appid") or "")
+        if not appid or appid in owned_ids:
+            continue
+        owners = []
+        for o in app.get("owner_steamids") or []:
+            o = str(o or "")
+            if o and o not in owners:
+                owners.append(o)
+        if not owners:
+            continue
+        store = store_app(appid, fetch=time.time() < deadline)
+        entry = {
+            "id": appid,
+            "title": app.get("name") or store.get("name") or f"App {appid}",
+            "installed": appid in installed,
+            "installable": True,
+        }
+        if appid in installed:
+            ig = installed[appid]
+            entry["installPath"] = ig.get("path", "")
+            entry["version"] = ig.get("version", "")
+            if ig.get("native"):
+                entry["native"] = True
+            entry["note"] = mode_note(ig.get("mode") or "none")
+            if ig.get("mode") == "client":
+                entry["clientLaunch"] = True
+        entry.update(art_urls(appid))
+        app_type = (store.get("type") or "").lower()
+        if app_type and app_type not in ("game", "demo", "beta", "application"):
+            entry["installable"] = False
+            entry["note"] = f"This entry is a {app_type}, not a game."
+        elif not app_type and not family_is_game(app):
+            entry["installable"] = False
+            entry["note"] = "This entry is not a game."
+        reason = app.get("exclude_reason", 0)
+        try:
+            reason = int(reason)
+        except (TypeError, ValueError):
+            reason = 0
+        lender = preferred.get(appid) if preferred.get(appid) in owners else owners[0]
+        shared = {"id": lender}
+        if names.get(lender):
+            shared["name"] = names[lender]
+        entry["sharedBy"] = shared
+        if len(owners) > 1 or reason != 0:
+            copies = []
+            for o in owners:
+                copy = {"ownerId": o, "available": reason == 0, "inUse": False}
+                if names.get(o):
+                    copy["ownerName"] = names[o]
+                if reason != 0:
+                    copy["exclude"] = FAMILY_EXCLUDE.get(
+                        reason, "Not available for family sharing")
+                copies.append(copy)
+            entry["copies"] = copies
+            if preferred.get(appid) in owners:
+                entry["preferredCopy"] = preferred[appid]
+        out.append(entry)
+
+
+def family_members(_params):
+    """The family group's members (protocol 1.8). Like the library, it needs
+    a login; -32002 when the family can't be read right now."""
+    if not logged_in():
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
+    token = access_token()
+    steamid = steam_cm.jwt_payload(token).get("sub")
+    try:
+        snap = family_snapshot(token, str(steamid))
+    except Exception as e:
+        raise family_error(e)
+    return snap["members"]
+
+
+def family_set_preferred_copy(params):
+    """The copy of a borrowed game the user picks (protocol 1.8, optional).
+    Checked against the current listing: an unknown app or owner is -32602,
+    a withheld copy is -32002. The pick is stored server-side through
+    SetPreferredLender; the snapshot is dropped so the next library.list
+    reads it back."""
+    app = str((params or {}).get("id") or "")
+    owner = str((params or {}).get("ownerId") or "")
+    if not app or not owner:
+        raise RPCError("invalid params: id and ownerId are required", -32602)
+    if not logged_in():
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
+    token = access_token()
+    steamid = str(steam_cm.jwt_payload(token).get("sub"))
+    try:
+        snap = family_snapshot(token, steamid)
+    except Exception as e:
+        raise family_error(e)
+    if not snap.get("group_id"):
+        raise RPCError("no Steam family group to pick a copy from", -32002)
+    # Owned games carry no sharedBy and no picker (protocol 1.8): an app in
+    # the user's own library is rejected even when a member also lends it.
+    # One explicit user action, so one extra lookup outside game-page calls
+    # is fine; when it fails, core's own library gate still refuses the pick.
+    try:
+        data = api_get("https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"
+                       f"?include_appinfo=0&include_played_free_games=0&steamid={steamid}", token)
+        owned = {str(g.get("appid") or "")
+                 for g in (data.get("response") or {}).get("games") or []}
+    except Exception:
+        owned = set()
+    if app in owned:
+        raise RPCError("this game is in your own library; there is no shared copy to pick", -32602)
+    owners = []
+    reason = 0
+    for a in snap.get("apps") or []:
+        if isinstance(a, dict) and str(a.get("appid") or "") == app:
+            owners = [str(o or "") for o in a.get("owner_steamids") or []]
+            reason = a.get("exclude_reason", 0)
+            break
+    if not owners or owner not in owners:
+        raise RPCError("this game has no shared copy from that member", -32602)
+    try:
+        reason = int(reason)
+    except (TypeError, ValueError):
+        reason = 0
+    if reason != 0:
+        raise RPCError("that copy isn't available right now", -32002)
+    try:
+        api_post(FAMILY_GROUP_URL + "SetPreferredLender/v1/",
+                 {"family_groupid": snap["group_id"], "appid": app,
+                  "lender_steamid": owner}, token)
+    except Exception as e:
+        raise family_error(e)
+    family_invalidate()
+    return {}
 
 
 def mode_note(mode):
@@ -2301,9 +2704,9 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.6.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.7.0", "api": API,
             "protocol": protocol,
-            "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions"],
+            "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family"],
             # Password branches are unverified against live Steam (no
             # encryptedmanifests decryption yet): listed locked, unlock
             # kept but unadvertised.
@@ -2401,6 +2804,8 @@ METHODS = {
     "job.cancel": job_cancel,
     "job.discard": job_discard,
     "game.launchSpec": launch_spec,
+    "family.members": family_members,
+    "family.setPreferredCopy": family_set_preferred_copy,
     "game.saveContext": game_save_context,
     "game.clientStatus": game_client_status,
 }

@@ -14,6 +14,7 @@ re-read on every auth poll so tests can approve mid-login):
                     (gzip) envelope, like the real CM sometimes sends
   token_ttl         access-token lifetime in seconds (default 3600)
   persona           persona name Player.GetPlayerLinkDetails answers with
+  personas          {steamid: name} per-id override for the same call
   send_heartbeat    when true, one ClientHeartBeat arrives between the logon
                     response and the first service response
   heartbeat_seconds heartbeat_seconds of the logon response (default 5);
@@ -413,12 +414,24 @@ def serve_logged_in(conn, hdr, body, st):
         # for (jobid_target matching must not lose them).
         send_pushes(service_calls)
         if target.startswith("Player.GetPlayerLinkDetails"):
-            # AccountPublicData: steamid, …, persona_name (field 10).
+            # AccountPublicData: steamid, …, persona_name (field 10). The
+            # real request is `repeated uint64 steamids = 1` and the reply
+            # carries one account per id; the legacy self-lookup shape (a
+            # nested message in field 1) parses as bytes, not ints, and
+            # falls back to the session user.
             resp_hdr = (pb_int(1, steamid) + pb_int(2, sessionid)
                         + pb_fixed64(11, jobid) + pb_int(13, 1))
-            pub = pb_fixed64(1, steamid_req) + pb_str(10, st.get("persona", "TestPersona"))
+            personas = st.get("personas") or {}
+            ids = [v for v in pb_parse(body).get(1, []) if isinstance(v, int)]
+            if not ids:
+                ids = [steamid]
+            accounts = b""
+            for want in ids:
+                name = personas.get(str(want)) or st.get("persona", "TestPersona")
+                pub = pb_fixed64(1, want) + pb_str(10, name)
+                accounts += pb_msg(1, pb_msg(1, pub))
             conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
-                                    resp_hdr, pb_msg(1, pb_msg(1, pub))))
+                                    resp_hdr, accounts))
             continue
         if st.get("send_heartbeat") and not replied_heartbeat:
             replied_heartbeat = True
