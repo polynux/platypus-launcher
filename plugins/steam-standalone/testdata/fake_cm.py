@@ -413,6 +413,12 @@ def serve_logged_in(conn, hdr, body, st):
         # they land between the client's request and the reply it waits
         # for (jobid_target matching must not lose them).
         send_pushes(service_calls)
+        if target.startswith("Player.GetPlayerLinkDetails") and st.get("hang_link_details"):
+            # Test hook: accept the names lookup and never answer, so the
+            # plugin's family fetch must ride out a silent CM. Longer than
+            # any test budget; the harness kills the server on cleanup.
+            time.sleep(60)
+            continue
         if target.startswith("Player.GetPlayerLinkDetails"):
             # AccountPublicData: steamid, …, persona_name (field 10). The
             # real request is `repeated uint64 steamids = 1` and the reply

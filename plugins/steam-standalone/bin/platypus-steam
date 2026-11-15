@@ -1380,39 +1380,48 @@ def library_list(_params):
 # (Player.GetPlayerLinkDetails#1), one session for all misses, persisted in
 # family-names.json. No new round trips happen in game.details or other
 # game-page calls: library.list makes the family lookup, and family.members
-# reuses the cached snapshot. The snapshot is supplementary: when its calls
-# fail, library.list still returns the user's own games and logs a warning.
+# reuses the cached snapshot. The snapshot is supplementary: a slow or failed
+# fetch serves the last good one, and only when no fetch ever succeeded does
+# library.list return the user's own games (with a warning).
 FAMILY_GROUP_URL = "https://api.steampowered.com/IFamilyGroupsService/"
 FAMILY_TTL = 300  # seconds; one snapshot serves library.list + family.members
+FAMILY_BUDGET = 8  # seconds for one family fetch; a slow fetch serves the last good snapshot
+NAMES_NEGATIVE_TTL = 6 * 3600  # a member name that never resolved isn't re-asked for 6 h
 family_lock = threading.Lock()
 family_cache = None  # [steamid, fetched_at, snapshot], or None
+family_last_good = {}  # steamid -> snapshot: served when a fetch fails or times out
+family_worker = None  # [steamid, generation, thread, box]: the fetch in progress, shared by concurrent callers
+family_generation = 0  # bumped by family_invalidate; an older fetch doesn't write
 names_lock = threading.Lock()
+names_negative = {}  # steamid -> epoch of the attempt that resolved nothing
 
 # EFamilyGroupRole (steammessages_familygroups.steamclient.proto): the only
 # roles the protocol's member `role` knows are adult and child.
 FAMILY_ROLES = {1: "adult", 2: "child"}
 
-# ESharedLibraryExcludeReason, in the store's words. GetSharedLibraryApps
-# reports one reason per app (exclude_reason, 0 = included); there is no
-# per-copy DLC or in-use signal in it, so copies carry no dlc and
-# inUse: False (unknown, not "free").
+# ESharedLibraryExcludeReason: GetSharedLibraryApps reports one reason per
+# app (exclude_reason, 0 = included); there is no per-copy DLC or in-use
+# signal in it, so copies carry no dlc and inUse: False (unknown, not "free").
+# Reasons without an entry here (5, 11-15, …) use the generic fallback.
 FAMILY_EXCLUDE = {
-    1: "Excluded from sharing by the owner",
-    2: "Not eligible for family sharing",
+    1: "The publisher doesn't allow family sharing",
+    2: "This licence can't be shared",
     3: "Free to play",
     4: "The owner's copy is private",
     6: "Not a type Steam lends",
     7: "DLC excluded from sharing",
     8: "Not released yet",
     9: "The base game isn't shared",
-    10: "Excluded from sharing by the owner",
+    10: "The publisher doesn't allow family sharing",
 }
 
 # EProtoAppType (steammessages_appoverview.proto) is flags: Game = 1,
 # Application = 2, Tool = 4, Demo = 8, Music = 8192, …; Invalid = 0.
-# The Web API omits the field when it is the default (a game), so a
-# missing app_type is a game too. Demo and application install like the
-# owned path's store types do; anything else is not a game Platypus runs.
+# The field is omitted when 0, so a missing app_type means Invalid, not a
+# game — but live data shows 1 for games, and the check stays lenient: a
+# missing app_type still counts as a game. Demo and application install
+# like the owned path's store types do; anything else is not a game
+# Platypus runs.
 FAMILY_GAME_TYPES = frozenset((1, 2, 8))
 
 
@@ -1427,8 +1436,8 @@ def family_is_game(app):
     return atype in FAMILY_GAME_TYPES or bool(atype & 1)
 
 
-def family_error(e):
-    """An RPCError for a failed family read: -32001 when Steam says the
+def family_error(e, action="read the Steam family group"):
+    """An RPCError for a failed family call: -32001 when Steam says the
     login is no good, else -32002 (the family can't be read right now). The
     message names no tokens or ids: Web API URLs carry the access token."""
     if isinstance(e, RPCError):
@@ -1437,7 +1446,7 @@ def family_error(e):
     if code in (401, 403):
         return RPCError(tr("need_login_expired"), CODE_AUTH_REQUIRED)
     detail = f"HTTP {code}" if isinstance(code, int) else type(e).__name__
-    return RPCError(f"couldn't read the Steam family group ({detail})", -32002)
+    return RPCError(f"couldn't {action} ({detail})", -32002)
 
 
 def family_fetch_group(token, steamid):
@@ -1469,7 +1478,7 @@ def family_fetch_apps(token, group_id):
     with their reason). Raises when the lookup fails."""
     data = api_get(FAMILY_GROUP_URL + "GetSharedLibraryApps/v1/"
                    f"?family_groupid={group_id}&include_own=false&include_excluded=true"
-                   "&include_free=false&include_non_games=true&max_apps=5000&language=english",
+                   "&include_non_games=true&max_apps=5000&language=english",
                    token)
     apps = (data.get("response") or {}).get("apps") or []
     return apps if isinstance(apps, list) else []
@@ -1499,11 +1508,13 @@ def family_fetch_preferred(token, group_id):
     return out
 
 
-def family_member_names(ids, token, steamid):
+def family_member_names(ids, token, steamid, timeout=30):
     """Display names for member steamids: the persisted map first, one CM
     session for the misses (a single GetPlayerLinkDetails#1 with
     `repeated uint64 steamids = 1`, best effort). Unknown ids stay absent;
-    the caller omits the name then."""
+    the caller omits the name then. The CM session runs in a thread bounded
+    by timeout, so a silent CM can't stall the fetch; ids an answered lookup
+    left nameless aren't re-asked for NAMES_NEGATIVE_TTL."""
     want = []
     for i in ids:
         i = str(i or "")
@@ -1513,84 +1524,164 @@ def family_member_names(ids, token, steamid):
         return {}
     with names_lock:
         known = load_state("family-names.json", {})
-    missing = {i for i in want if not known.get(i)}
+        now = time.time()
+        missing = [i for i in want if not known.get(i)
+                   and now - names_negative.get(i, 0) >= NAMES_NEGATIVE_TTL]
     if missing:
-        found = {}
-        try:
-            rt = refresh_token()
-            if rt:
-                session = steam_cm.CMSession(int(steamid), rt)
-                try:
-                    req = b"".join(steam_cm.pb_int(1, int(mid)) for mid in missing)
-                    body = session.call("Player.GetPlayerLinkDetails#1", req)
-                finally:
-                    session.logoff()
-                for raw in steam_cm.pb_parse(body).get(1, []):
-                    try:
-                        pub = steam_cm.pb_parse(
-                            steam_cm.pb_parse(raw).get(1, [b""])[0])
-                        sid = str(pub.get(1, [0])[0])
-                        name = pub.get(10, [b""])[0].decode("utf-8", "replace")
-                    except Exception:
-                        continue
-                    if sid in missing and name:
-                        found[sid] = name
-        except Exception:
-            pass
+        box = {}
+        t = threading.Thread(target=_family_names_lookup,
+                             args=(missing, steamid, box), daemon=True)
+        t.start()
+        t.join(timeout)
+        found = box.get("found") or {}
+        if found or box.get("answered"):
+            with names_lock:
+                moment = time.time()
+                for i in missing:
+                    if not found.get(i):
+                        names_negative[i] = moment
         if found:
             with names_lock:
                 known = load_state("family-names.json", {})
                 known.update(found)
-                save_state("family-names.json", known)
+                save_secret("family-names.json", known)
     with names_lock:
         known = load_state("family-names.json", {})
     return {i: known[i] for i in want if known.get(i)}
 
 
-def family_snapshot(token, steamid):
-    """The family's members, shared apps and lender picks, cached FAMILY_TTL
-    seconds and shared by library.list and family.members. Raises on failure:
-    family data is supplementary, so library.list catches it and lists the
-    user's own games instead."""
-    global family_cache
-    now = time.time()
-    with family_lock:
-        if (family_cache and family_cache[0] == str(steamid)
-                and now - family_cache[1] < FAMILY_TTL):
-            return family_cache[2]
+def _family_names_lookup(ids, steamid, box):
+    """One CM session resolving member names into box["found"]; box gets
+    "answered" when the CM replied, even if some ids stayed nameless.
+    Exceptions stay silent: names are supplementary."""
+    try:
+        rt = refresh_token()
+        if not rt:
+            return
+        session = steam_cm.CMSession(int(steamid), rt)
+        try:
+            req = b"".join(steam_cm.pb_int(1, int(mid)) for mid in ids)
+            body = session.call("Player.GetPlayerLinkDetails#1", req)
+        finally:
+            session.logoff()
+    except Exception:
+        return
+    box["answered"] = True
+    found = {}
+    for raw in steam_cm.pb_parse(body).get(1, []):
+        try:
+            pub = steam_cm.pb_parse(
+                steam_cm.pb_parse(raw).get(1, [b""])[0])
+            sid = str(pub.get(1, [0])[0])
+            name = pub.get(10, [b""])[0].decode("utf-8", "replace")
+        except Exception:
+            continue
+        if sid in ids and name:
+            found[sid] = name
+    box["found"] = found
+
+
+def _family_fetch(token, steamid, deadline):
+    """The whole fetch — group, apps, preferred, names — for one worker
+    thread. Raises on failure; the worker decides what the failure means."""
     group = family_fetch_group(token, steamid)
     if group is None:
-        snap = {"group_id": "", "members": [], "apps": [], "preferred": {}}
+        return {"group_id": "", "members": [], "apps": [], "preferred": {}}
+    members = []
+    for m in group["members"]:
+        if not isinstance(m, dict):
+            continue
+        mid = str(m.get("steamid") or "")
+        if not mid:
+            continue
+        entry = {"id": mid}
+        role = FAMILY_ROLES.get(m.get("role"))
+        if role:
+            entry["role"] = role
+        members.append(entry)
+    apps = family_fetch_apps(token, group["id"])
+    preferred = family_fetch_preferred(token, group["id"])
+    names = family_member_names([m["id"] for m in members], token, steamid,
+                                timeout=max(1.0, deadline - time.time() - 1.0))
+    for m in members:
+        if names.get(m["id"]):
+            m["name"] = names[m["id"]]
+    return {"group_id": group["id"], "members": members, "apps": apps,
+            "preferred": preferred}
+
+
+def _family_fetch_worker(token, steamid, gen, box, deadline):
+    """Run _family_fetch off the caller's thread; on timeout the caller serves
+    the last good snapshot while this still writes the cache when it
+    finishes. A fetch started under an older generation (a pick stored since)
+    writes nothing."""
+    try:
+        snap = _family_fetch(token, steamid, deadline)
+    except Exception as e:
+        box["error"] = e
     else:
-        members = []
-        for m in group["members"]:
-            if not isinstance(m, dict):
-                continue
-            mid = str(m.get("steamid") or "")
-            if not mid:
-                continue
-            entry = {"id": mid}
-            role = FAMILY_ROLES.get(m.get("role"))
-            if role:
-                entry["role"] = role
-            members.append(entry)
-        names = family_member_names([m["id"] for m in members], token, steamid)
-        for m in members:
-            if names.get(m["id"]):
-                m["name"] = names[m["id"]]
-        apps = family_fetch_apps(token, group["id"])
-        snap = {"group_id": group["id"], "members": members, "apps": apps,
-                "preferred": family_fetch_preferred(token, group["id"])}
+        box["snap"] = snap
+    finally:
+        box["done"] = True
+        with family_lock:
+            global family_cache, family_worker
+            if gen == family_generation and "snap" in box:
+                family_cache = [str(steamid), time.time(), box["snap"]]
+                family_last_good[str(steamid)] = box["snap"]
+                box["written"] = True
+            if family_worker is not None and family_worker[3] is box:
+                family_worker = None
+
+
+def family_snapshot(token, steamid):
+    """The family's members, shared apps and lender picks, cached FAMILY_TTL
+    seconds and shared by library.list and family.members. The fetch runs in
+    one worker thread joined after FAMILY_BUDGET seconds, so a silent Steam
+    never stalls a listing; concurrent callers share the running worker
+    (single-flight). On failure or timeout the last good snapshot for this
+    user is served — a listing that succeeds without the shared games would
+    make core prune the per-game settings of every uninstalled borrowed
+    game — and only when no fetch ever succeeded does it raise, so the
+    caller lists the owned games instead."""
+    global family_worker
+    steamid = str(steamid)
     with family_lock:
-        family_cache = [str(steamid), time.time(), snap]
-    return snap
+        if (family_cache and family_cache[0] == steamid
+                and time.time() - family_cache[1] < FAMILY_TTL):
+            return family_cache[2]
+        w = family_worker
+        if (w is not None and w[0] == steamid and w[1] == family_generation
+                and not w[3].get("done")):
+            t, box = w[2], w[3]
+        else:
+            box = {}
+            deadline = time.time() + FAMILY_BUDGET
+            t = threading.Thread(target=_family_fetch_worker,
+                                 args=(token, steamid, family_generation,
+                                       box, deadline), daemon=True)
+            family_worker = [steamid, family_generation, t, box]
+            t.start()
+    t.join(FAMILY_BUDGET)
+    with family_lock:
+        if box.get("written"):
+            return box["snap"]
+        last = family_last_good.get(steamid)
+        if last is not None:
+            return last
+    if box.get("done"):
+        raise box.get("error") or RuntimeError("the Steam family lookup failed")
+    raise TimeoutError("the Steam family lookup timed out")
 
 
 def family_invalidate():
-    """Drop the cached snapshot, so the next listing reads a stored pick."""
-    global family_cache
+    """Drop the cached snapshot, so the next listing reads a stored pick.
+    Bumps the generation: a fetch started before the pick doesn't write the
+    cache. The last good snapshot stays: a failed refetch still lists the
+    shared games."""
+    global family_cache, family_generation
     with family_lock:
         family_cache = None
+        family_generation += 1
 
 
 def merge_family_games(out, fam, installed, deadline):
@@ -1645,6 +1736,12 @@ def merge_family_games(out, fam, installed, deadline):
             reason = int(reason)
         except (TypeError, ValueError):
             reason = 0
+        if reason != 0:
+            # Withheld from sharing: core's install gate refuses these before
+            # the downloader, so they list installable: False with the reason.
+            entry["installable"] = False
+            entry["note"] = FAMILY_EXCLUDE.get(
+                reason, "Not available for family sharing")
         lender = preferred.get(appid) if preferred.get(appid) in owners else owners[0]
         shared = {"id": lender}
         if names.get(lender):
@@ -1733,7 +1830,7 @@ def family_set_preferred_copy(params):
                  {"family_groupid": snap["group_id"], "appid": app,
                   "lender_steamid": owner}, token)
     except Exception as e:
-        raise family_error(e)
+        raise family_error(e, "save the family pick")
     family_invalidate()
     return {}
 

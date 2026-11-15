@@ -236,6 +236,12 @@ func TestSteamFamilyLibraryEntries(t *testing.T) {
 	if withheld == nil {
 		t.Fatal("no shared game 5003 in the library")
 	}
+	if withheld["installable"] != false {
+		t.Fatalf("excluded 5003 installable = %v, want false", withheld["installable"])
+	}
+	if withheld["note"] != "The publisher doesn't allow family sharing" {
+		t.Fatalf("5003 note = %q, want the publisher exclusion text", withheld["note"])
+	}
 	wcopies, _ := withheld["copies"].([]any)
 	if len(wcopies) != 1 {
 		t.Fatalf("5003 copies = %v, want the withheld copy listed", withheld["copies"])
@@ -333,6 +339,56 @@ func TestSteamFamilyFailureListsOwned(t *testing.T) {
 	for id, g := range byID {
 		if _, ok := g["sharedBy"]; ok {
 			t.Fatalf("game %s carries sharedBy on family failure: %v", id, g)
+		}
+	}
+}
+
+func TestSteamFamilyHangingCM(t *testing.T) {
+	// The CM accepts the names lookup and never answers (hang_link_details):
+	// library.list must still return within the family budget with the
+	// shared games, whose sharedBy carries the lender id and no name. (The
+	// plugin is a persistent stdio process, so the CM endpoint its
+	// environment names is fixed at setup; the fake CM hangs instead.)
+	e := familyEnv(t)
+	e.setCMState("hang_link_details", true)
+	start := time.Now()
+	byID := libraryByID(t, e)
+	if el := time.Since(start); el >= 15*time.Second {
+		t.Fatalf("library.list with a silent CM took %v, want < 15s", el)
+	}
+	for _, id := range []string{"5001", "5002", "5003"} {
+		g := byID[id]
+		if g == nil {
+			t.Fatalf("no shared game %s with a silent CM", id)
+		}
+		shared, _ := g["sharedBy"].(map[string]any)
+		if shared == nil || shared["id"] == nil || shared["id"] == "" {
+			t.Fatalf("game %s sharedBy = %v, want the lender id", id, g["sharedBy"])
+		}
+		if _, ok := shared["name"]; ok {
+			t.Fatalf("game %s sharedBy carries a name with a silent CM: %v", id, shared)
+		}
+	}
+}
+
+func TestSteamFamilyFailureServesLastGood(t *testing.T) {
+	// List once, store a pick (which invalidates the snapshot), then break
+	// the group lookup: the listing must still serve the shared games from
+	// the last good snapshot instead of pruning them.
+	e := familyEnv(t)
+	if byID := libraryByID(t, e); byID["5001"] == nil || byID["5002"] == nil || byID["5003"] == nil {
+		t.Fatalf("no shared games in the first listing: %v", byID)
+	}
+	e.rawCall("family.setPreferredCopy", map[string]any{"id": "5002", "ownerId": "76561200"})
+	_, apps, preferred := familyFixturesData()
+	e.familyFixtures(t,
+		[]any{float64(1)},
+		apps,
+		preferred)
+	byID := libraryByID(t, e)
+	for _, id := range []string{"5001", "5002", "5003"} {
+		if byID[id] == nil {
+			t.Fatalf("no shared game %s after the family fetch failed", id)
 		}
 	}
 }
