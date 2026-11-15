@@ -120,35 +120,45 @@ func callErr(op string, err error) error {
 	return fmt.Errorf("%s: %w", op, err)
 }
 
-// fetchDepots resolves the app's depots for the branch and downloads every
-// manifest: PICS tokens, product info (linux first, windows fallback),
-// depot keys, server list, request codes and manifest bodies.
-func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, error) {
-	branch := s.req.Branch
-	if branch == "" {
-		branch = "public"
-	}
+// fetchDepots resolves the app's depots for the install target and downloads
+// every manifest: PICS tokens, product info (linux first, windows fallback),
+// depot keys, server list, request codes and manifest bodies. The target
+// (branch, build, typed manifests or install-history reference) resolves
+// against the same PICS read, so one CM session covers listing and download.
+func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resolvedTarget, error) {
 	appID := s.req.AppID
 	toks, err := s.cm.PICSAccessTokens([]uint32{appID}, nil, 0)
 	if err != nil {
-		return nil, "", callErr("product info tokens", err)
+		return nil, "", resolvedTarget{}, callErr("product info tokens", err)
 	}
 	kv, _, err := s.cm.ProductInfo(appID, toks[appID], 0)
 	if err != nil {
-		return nil, "", callErr("product info", err)
+		return nil, "", resolvedTarget{}, callErr("product info", err)
 	}
+	branches, err := parseBranches(kv)
+	if err != nil {
+		return nil, "", resolvedTarget{}, fmt.Errorf("app %d: %v", appID, err)
+	}
+	rt, err := resolveTarget(branches, s.req)
+	if err != nil {
+		return nil, "", resolvedTarget{}, err
+	}
+	// Downstream (request codes, shared resolution) works off the request:
+	// point it at the resolved branch and its password.
+	s.req.Branch = rt.branch
+	s.req.BranchPassword = rt.password
 	// Linux depots first, Windows fallback — the platform used decides
 	// `native`, like the old `-os linux` then `-os windows` runs.
 	var refs []DepotRef
 	var osUsed string
 	for _, osname := range []string{"linux", "windows"} {
-		if r, err := selectDepots(kv, appID, branch, osname); err == nil {
+		if r, err := selectDepots(kv, appID, rt.branch, osname); err == nil {
 			refs, osUsed = r, osname
 			break
 		}
 	}
 	if len(refs) == 0 {
-		return nil, "", fmt.Errorf("no depots for this platform")
+		return nil, "", resolvedTarget{}, fmt.Errorf("no depots for this platform")
 	}
 	// Resolve shared depots: the manifest gid comes straight from the
 	// source app's entry (DepotDownloader recurses the same way), and
@@ -160,24 +170,44 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, error
 			refs[i].KeyAppID = appID
 			continue
 		}
-		gid, err := sharedManifestGID(ctx, s, r.DepotID, r.FromApp, branch, 0)
-		if err != nil {
-			return nil, "", err
-		}
-		refs[i].GID = gid
 		if free {
 			refs[i].KeyAppID = appID
 		} else {
 			refs[i].KeyAppID = r.FromApp
 		}
+		// A pinned override names the manifest itself: no need to ask
+		// the source app, which may not even carry this branch.
+		if _, ok := rt.manifests[r.DepotID]; ok {
+			continue
+		}
+		gid, err := sharedManifestGID(ctx, s, r.DepotID, r.FromApp, rt.branch, 0)
+		if err != nil {
+			return nil, "", resolvedTarget{}, err
+		}
+		refs[i].GID = gid
+	}
+	// Pinned manifests (typed or from the install history) win over the
+	// branch's: an override naming a depot outside this branch errors
+	// instead of installing the branch's gid there.
+	seen := map[uint32]bool{}
+	for i, r := range refs {
+		seen[r.DepotID] = true
+		if gid, ok := rt.manifests[r.DepotID]; ok {
+			refs[i].GID = gid
+		}
+	}
+	for depot := range rt.manifests {
+		if !seen[depot] {
+			return nil, "", resolvedTarget{}, fmt.Errorf("depot %d isn't downloadable from the %s branch", depot, rt.branch)
+		}
 	}
 	servers, err := s.cm.ServersForSteamPipe(cellID(), 32, 0)
 	if err != nil {
-		return nil, "", callErr("server list", err)
+		return nil, "", resolvedTarget{}, callErr("server list", err)
 	}
 	hosts := depotHosts(servers, appID)
 	if len(hosts) == 0 {
-		return nil, "", fmt.Errorf("Steam returned no download hosts for this app")
+		return nil, "", resolvedTarget{}, fmt.Errorf("Steam returned no download hosts for this app")
 	}
 	s.hosts = hosts
 	// Branch passwords (STEAM-4): check once against the app, then send
@@ -185,8 +215,8 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, error
 	// here with a distinct message instead of "no depots".
 	pwHash := branchPasswordHash(s.req)
 	if pwHash != "" {
-		if err := s.cm.CheckBetaPassword(appID, s.req.BranchPassword, 30*time.Second); err != nil {
-			return nil, "", fmt.Errorf("wrong branch password for %q: %w", branch, err)
+		if _, err := s.cm.CheckBetaPassword(appID, s.req.BranchPassword, 30*time.Second); err != nil {
+			return nil, "", resolvedTarget{}, fmt.Errorf("wrong branch password for %q: %w", s.req.Branch, err)
 		}
 	}
 	client := depot.NewClient()
@@ -254,14 +284,14 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, error
 	close(results)
 	for res := range results {
 		if res.err != nil {
-			return nil, "", res.err
+			return nil, "", resolvedTarget{}, res.err
 		}
 		out[res.idx] = res.fd
 	}
 	// CDN tokens for hosts that need them (third-party CDNs); the fake
 	// CDN ignores the query, real ones may require it.
 	withTokens(ctx, s, out)
-	return out, osUsed, nil
+	return out, osUsed, rt, nil
 }
 
 // depotHosts keeps SteamCache and CDN types, honours allowed_app_ids, and
@@ -377,7 +407,9 @@ type tokenKey struct {
 
 // sharedManifestGID resolves a shared depot's manifest gid straight from
 // the source app's entry, recursing like DepotDownloader when the source
-// entry itself proxies elsewhere. Depths stay tiny; self-references stop.
+// entry itself proxies elsewhere. When the source app has no gid for the
+// branch, its public gid is used: shared depots rarely carry every beta.
+// Depths stay tiny; self-references stop.
 func sharedManifestGID(ctx context.Context, s *session, depotID, appID uint32, branch string, depth int) (uint64, error) {
 	if depth > 3 {
 		return 0, fmt.Errorf("shared depot %d resolution too deep", depotID)
@@ -394,11 +426,16 @@ func sharedManifestGID(ctx context.Context, s *session, depotID, appID uint32, b
 	if entry == nil {
 		return 0, fmt.Errorf("shared depot %d has no entry in app %d", depotID, appID)
 	}
-	if gidStr := entry.String("manifests", branch, "gid"); gidStr != "" {
-		var gid uint64
-		fmt.Sscanf(gidStr, "%d", &gid)
-		if gid != 0 {
-			return gid, nil
+	try := []string{branch}
+	if branch != "public" {
+		try = append(try, "public")
+	}
+	for _, b := range try {
+		if gidStr := entry.String("manifests", b, "gid"); gidStr != "" {
+			var gid uint64
+			if _, err := fmt.Sscanf(gidStr, "%d", &gid); err == nil && gid != 0 {
+				return gid, nil
+			}
 		}
 	}
 	if from := entry.String("depotfromapp"); from != "" {

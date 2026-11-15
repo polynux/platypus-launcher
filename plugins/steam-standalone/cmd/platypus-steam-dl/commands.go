@@ -20,7 +20,7 @@ func runSize(ctx context.Context, req request) error {
 	}
 	defer cm.Close()
 	ss := &session{cm: cm, dataDir: dataDir(), req: req}
-	depots, _, err := fetchDepots(ctx, ss)
+	depots, _, _, err := fetchDepots(ctx, ss)
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func runInstall(ctx context.Context, req request) error {
 	}
 	defer cm.Close()
 	ss := &session{cm: cm, dataDir: dataDir(), req: req}
-	depots, osUsed, err := fetchDepots(ctx, ss)
+	depots, osUsed, rt, err := fetchDepots(ctx, ss)
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func runInstall(ctx context.Context, req request) error {
 	if len(bad) > 0 {
 		return fmt.Errorf("verify failed after install: %v", bad)
 	}
-	emit(map[string]any{"type": "result", "os_used": osUsed, "bytes": totalBytes(depots)})
+	emit(versionResult(rt, depots, map[string]any{"type": "result", "os_used": osUsed, "bytes": totalBytes(depots)}))
 	return nil
 }
 
@@ -150,7 +150,7 @@ func runUpdate(ctx context.Context, req request) error {
 	}
 	defer cm.Close()
 	ss := &session{cm: cm, dataDir: dataDir(), req: req}
-	depots, osUsed, err := fetchDepots(ctx, ss)
+	depots, osUsed, rt, err := fetchDepots(ctx, ss)
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,7 @@ func runUpdate(ctx context.Context, req request) error {
 	uflusher.stop()
 	depot.RemoveJob(ss.dataDir, jobID)
 	clearStaging(ss.dataDir, jobID)
-	emit(map[string]any{"type": "result", "os_used": osUsed, "bytes": totalBytes(depots)})
+	emit(versionResult(rt, depots, map[string]any{"type": "result", "os_used": osUsed, "bytes": totalBytes(depots)}))
 	return nil
 }
 
@@ -250,7 +250,7 @@ func runVerify(ctx context.Context, req request) error {
 	}
 	defer cm.Close()
 	ss := &session{cm: cm, dataDir: dataDir(), req: req}
-	depots, _, err := fetchDepots(ctx, ss)
+	depots, _, _, err := fetchDepots(ctx, ss)
 	if err != nil {
 		return err
 	}

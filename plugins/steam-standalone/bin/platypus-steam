@@ -1356,6 +1356,22 @@ def dl_bin():
     return sibling  # missing: the run surfaces it as an error
 
 
+def beta_passwords():
+    """Unlocked beta passwords by app and branch, from PLATYPUS_PLUGIN_DATA.
+    Never logged, never returned: only sent back to platypus-steam-dl over
+    stdin for the install it unlocks (see the protocol's Passwords rules)."""
+    return load_state("beta_passwords.json", {})
+
+
+def save_beta_password(app, channel, password):
+    with installed_lock:
+        pws = load_state("beta_passwords.json", {})
+        app_pws = pws.get(app) or {}
+        app_pws[channel] = password
+        pws[app] = app_pws
+        save_secret("beta_passwords.json", pws)
+
+
 def dl_request(params, extra=None):
     """The stdin request for platypus-steam-dl: ids plus the refresh token.
     The token travels on stdin, never argv, and is never logged."""
@@ -1369,16 +1385,32 @@ def dl_request(params, extra=None):
     pw = params.get("branchPassword") or params.get("branch_password")
     if pw:
         req["branch_password"] = pw
+    # A version target (protocol 1.3): the channel, build, typed manifests
+    # or install-history reference the downloader resolves against PICS.
+    # Stored beta passwords ride along keyed by branch; the downloader uses
+    # the resolved branch's. Never logged. A target naming its channel only
+    # needs that channel's password.
+    if params.get("target"):
+        req["target"] = params["target"]
+        stored = (beta_passwords().get(str(params["id"])) or {})
+        channel = params["target"].get("channel") if isinstance(params["target"], dict) else ""
+        if channel and channel in stored:
+            req["branch_passwords"] = {channel: stored[channel]}
+        elif stored and not channel:
+            req["branch_passwords"] = dict(stored)
     if extra:
         req.update(extra)
     return req
 
 
-def dl_run(subcommand, req, job_id=None, game_dir=None, label="download failed"):
+def dl_run(subcommand, req, job_id=None, game_dir=None, label="download failed",
+           err_code=-32000):
     """Runs platypus-steam-dl and follows its JSON lines: progress
     notifications until a result or error line. Returns the result dict.
     `label` names the run in its error (`Steam app info: ...`): a download
-    failing and an app info read failing aren't the same thing to the user."""
+    failing and an app info read failing aren't the same thing to the user.
+    `err_code` is the error for a failed run; a login problem stays -32001
+    and an unknown app stays -32000."""
     try:
         proc = subprocess.Popen([dl_bin(), subcommand], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -1426,12 +1458,14 @@ def dl_run(subcommand, req, job_id=None, game_dir=None, label="download failed")
         elif msg.get("type") == "error":
             if msg.get("code") == "auth-required":
                 raise RPCError(tr("need_login_expired"), CODE_AUTH_REQUIRED)
-            raise RPCError("{}: {}".format(label, msg.get("message") or tail(line)))
+            if msg.get("code") == "not-found":
+                raise RPCError(msg.get("message") or tail(line))
+            raise RPCError("{}: {}".format(label, msg.get("message") or tail(line)), err_code)
     rc = proc.wait()
     if result is None:
-        raise RPCError("{}: {}".format(label, tail("\n".join(text))))
+        raise RPCError("{}: {}".format(label, tail("\n".join(text))), err_code)
     if rc != 0:
-        raise RPCError("{}: {}".format(label, tail("\n".join(text))))
+        raise RPCError("{}: {}".format(label, tail("\n".join(text))), err_code)
     return result
 
 
@@ -1449,6 +1483,150 @@ def install_size(params):
     if disk == 0:
         raise RPCError("platypus-steam-dl produced no manifest sizes for app {}".format(params["id"]))
     return {"downloadBytes": compressed, "diskBytes": disk}
+
+
+# --- versions (protocol 1.3) -------------------------------------------------
+#
+# Channels are the PICS branches (public first; password branches unlock
+# through versions.unlock). Builds are each channel's current build plus the
+# install history's entries. CM work happens here, on demand — never in
+# game.details or other calls a game page makes — and a failed read errors
+# instead of answering an empty list that could install the wrong build.
+
+def versions_branches(app):
+    """PICS branches for the app via platypus-steam-dl, or raise."""
+    result = dl_run("versions", dl_request({"id": app}),
+                    label="Steam versions", err_code=-32002)
+    branches = result.get("branches") or []
+    if not branches:
+        raise RPCError("Steam returned no versions for app {}".format(app), -32002)
+    return branches
+
+
+def versions_list(params):
+    app = str(params.get("id") or "")
+    if not app:
+        raise RPCError("invalid params: id is required", -32602)
+    try:
+        int(app)
+    except ValueError:
+        raise RPCError("invalid params: id is required", -32602)
+    branches = versions_branches(app)
+    unlocked = beta_passwords().get(app) or {}
+    installed = load_state("installed.json", {}).get(app) or {}
+    installed_channel = installed.get("channel") or ""
+    installed_build = installed.get("build") or ""
+    channels = []
+    for b in branches:
+        locked = bool(b.get("pwd_required")) and b.get("name") not in unlocked
+        channels.append({
+            "id": b.get("name"), "name": b.get("name"),
+            "description": b.get("description") or "",
+            "updatedAt": b.get("time_updated") or "",
+            "buildId": str(b.get("build_id") or ""),
+            "requires": "password" if b.get("pwd_required") else "none",
+            "unlocked": not locked,
+            "current": installed_channel == b.get("name"),
+        })
+    by_build = {}
+    for b in branches:
+        bid = str(b.get("build_id") or "")
+        if bid and bid not in by_build:
+            by_build[bid] = b
+    builds = []
+    for bid, b in by_build.items():
+        locked = bool(b.get("pwd_required")) and b.get("name") not in unlocked
+        builds.append({
+            "id": bid, "name": "build " + bid,
+            "publishedAt": b.get("time_updated") or "",
+            "channel": b.get("name"), "source": "store",
+            "available": not locked,
+            "current": installed_build == bid,
+        })
+    for entry in params.get("ledger") or []:
+        if not isinstance(entry, dict):
+            continue
+        bid = str(entry.get("build") or "")
+        if not bid or bid in by_build:
+            continue
+        by_build[bid] = None
+        name = entry.get("versionName") or ("build " + bid)
+        published, _, _ = str(entry.get("date") or "").partition("T")
+        builds.append({
+            "id": bid, "name": name, "publishedAt": published,
+            "source": "archive", "available": True,
+            "current": installed_build == bid,
+        })
+    update_available = False
+    if installed_build:
+        # An unpinned game follows the channel it was installed from, so
+        # "update" means that channel moved; public is only the fallback
+        # when the recorded channel is gone.
+        want = public_build_id(channels)
+        if installed_channel:
+            ch = find_branch(channels, installed_channel)
+            if ch is not None:
+                want = ch.get("buildId") or ""
+        pinned = params.get("pinned") or {}
+        if isinstance(pinned, dict):
+            if pinned.get("kind") == "build" and pinned.get("id"):
+                want = str(pinned["id"])
+            elif pinned.get("kind") == "channel" and pinned.get("id"):
+                ch = find_branch(channels, pinned["id"])
+                if ch is not None:
+                    want = ch.get("buildId") or ""
+        update_available = installed_build != want
+    return {
+        "channels": channels, "builds": builds,
+        "manual": {
+            "label": "Steam manifest ids",
+            "hint": ("One manifest id per depot, one per line, like:\n"
+                     "11: 1122334455\n12: 6677889900\n"
+                     "Find them on the game's Depots page (link below)."),
+        },
+        "links": [{"label": "Depots on SteamDB",
+                   "url": "https://steamdb.info/app/{}/depots/".format(app)}],
+        "updateAvailable": update_available,
+    }
+
+
+def find_branch(channels, channel_id):
+    for c in channels:
+        if c.get("id") == channel_id:
+            return c
+    return None
+
+
+def public_build_id(channels):
+    public = find_branch(channels, "public")
+    if public:
+        return public.get("buildId") or ""
+    return channels[0].get("buildId") if channels else ""
+
+
+def versions_unlock(params):
+    app = str(params.get("id") or "")
+    channel = str(params.get("channel") or "")
+    password = params.get("password") or ""
+    if not app or not channel or not password:
+        raise RPCError("invalid params: id, channel and password are required", -32602)
+    token = refresh_token()
+    if not token:
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
+    try:
+        app_id = int(app)
+    except ValueError:
+        raise RPCError("invalid params: id is required", -32602)
+    # The password travels on stdin, like the token: never argv, never
+    # logged, and never written anywhere but the unlock store below.
+    result = dl_run("unlock",
+                    {"refresh_token": token, "app_id": app_id,
+                     "branch": channel, "branch_password": password},
+                    label="Steam beta password", err_code=-32002)
+    if not result.get("unlocked"):
+        return {"unlocked": False}
+    save_beta_password(app, channel, password)
+    return {"unlocked": True}
 
 
 # --- jobs ------------------------------------------------------------------
@@ -1476,8 +1654,19 @@ def start_job(params, kind):
     write_job_meta(job_id, {"app": app, "kind": kind, "dir": game_dir, "installDir": install_dir})
     os.makedirs(game_dir, exist_ok=True)
     dl_kind = "update" if kind == "update" else "install"
-    branch = {k: params[k] for k in ("branch", "branchPassword", "branch_password") if params.get(k)}
-    threading.Thread(target=follow_install, args=(job_id, app, game_dir, dl_kind, branch), daemon=True).start()
+    version = {k: params[k] for k in ("branch", "branchPassword", "branch_password", "target") if params.get(k)}
+    if kind == "update" and "target" not in version and "branch" not in version:
+        # An unpinned game stays on the channel it was installed from
+        # (like the Steam client), never silently back to public. The
+        # stored password unlocks it; without one the downloader refuses
+        # with the locked-branch error.
+        channel = (load_state("installed.json", {}).get(app) or {}).get("channel") or ""
+        if channel:
+            version["branch"] = channel
+            stored = (beta_passwords().get(app) or {})
+            if channel in stored and "branchPassword" not in version and "branch_password" not in version:
+                version["branchPassword"] = stored[channel]
+    threading.Thread(target=follow_install, args=(job_id, app, game_dir, dl_kind, version), daemon=True).start()
     return {}
 
 
@@ -1515,14 +1704,14 @@ def game_dir_name(app):
     return safe
 
 
-def follow_install(job_id, app, game_dir, dl_kind="install", branch=None):
+def follow_install(job_id, app, game_dir, dl_kind="install", version=None):
     """platypus-steam-dl install/update with progress. The binary resolves the
     depots itself (Linux first, Windows fallback — the platform used
     decides `native`); downloads are resumable and verified."""
     with jobs_lock:
         jobs.setdefault(job_id, {"canceled": False, "id": app, "dir": game_dir})
     try:
-        req = dl_request({"id": app, **(branch or {})}, {"install_dir": game_dir, "job_id": job_id})
+        req = dl_request({"id": app, **(version or {})}, {"install_dir": game_dir, "job_id": job_id})
         result = dl_run(dl_kind, req, job_id, game_dir)
     except RPCError as e:
         with jobs_lock:
@@ -1538,14 +1727,35 @@ def follow_install(job_id, app, game_dir, dl_kind="install", branch=None):
         job = jobs.pop(job_id, {})
     if job.get("canceled"):
         return
-    record_install(app, game_dir, result.get("os_used") or "linux")
+    installed = record_install(app, game_dir, result.get("os_used") or "linux",
+                               version_result(result))
     drop_job_meta(job_id)
-    notify("job.done", {"jobId": job_id})
+    done = {"jobId": job_id}
+    if installed:
+        done["installed"] = installed
+    notify("job.done", done)
 
 
-def record_install(app, game_dir, os_used):
+def version_result(result):
+    """The install ledger entry from an install/update result: the branch's
+    build id and the manifest gid per depot that actually went on disk."""
+    build = str(result.get("build") or "")
+    if not build:
+        return None
+    manifests = result.get("manifests") or {}
+    depots = {str(d): str(g) for d, g in manifests.items()}
+    installed = {"build": build, "archiveRef": {"depots": depots}}
+    if result.get("branch"):
+        installed["channel"] = str(result["branch"])
+    if result.get("version_name"):
+        installed["versionName"] = str(result["version_name"])
+    return installed
+
+
+def record_install(app, game_dir, os_used, version=None):
     """Remember the install: where it is, what runs it and which launch mode
-    applies (see launch modes below)."""
+    applies (see launch modes below). `version` is the ledger entry (build,
+    channel, archiveRef) for the versions capability."""
     exe = find_executable(game_dir, native=os_used == "linux")
     entry = {
         "path": game_dir,
@@ -1556,10 +1766,16 @@ def record_install(app, game_dir, os_used):
         "version": "",
         "title": store_app(app).get("name") or "",
     }
+    if version:
+        entry["channel"] = version.get("channel") or ""
+        entry["build"] = version.get("build") or ""
+        entry["versionName"] = version.get("versionName") or ""
+        entry["archiveRef"] = version.get("archiveRef") or {}
     with installed_lock:
         installed = load_state("installed.json", {})
         installed[app] = entry
         save_state("installed.json", installed)
+    return version
 
 
 def is_elf(path):
@@ -2085,9 +2301,14 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.5.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.6.0", "api": API,
             "protocol": protocol,
-            "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms"], "missing": []}
+            "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions"],
+            # Password branches are unverified against live Steam (no
+            # encryptedmanifests decryption yet): listed locked, unlock
+            # kept but unadvertised.
+            "features": {"versions": {"channels": True, "builds": True, "password": False, "manual": True}},
+            "missing": []}
 
 
 def game_client_status(params):
@@ -2175,6 +2396,8 @@ METHODS = {
     "game.install": lambda p: start_job(p, "install"),
     "game.update": lambda p: start_job(p, "update"),
     "game.uninstall": lambda p: start_job(p, "uninstall"),
+    "versions.list": versions_list,
+    "versions.unlock": versions_unlock,
     "job.cancel": job_cancel,
     "job.discard": job_discard,
     "game.launchSpec": launch_spec,

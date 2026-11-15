@@ -269,6 +269,9 @@ func (a *App) pinnedTarget(game types.Game) (*types.VersionTarget, error) {
 // withArchiveRef gives a build from the install history the reference the
 // history kept for it, so the plugin can fetch it again. The UI never sends
 // the reference; Platypus looks it up here, for the latest install of the build.
+// The target rarely names a channel (a bare build from the history); the
+// ledger's channel travels with the reference so the plugin reinstalls
+// under the branch the build came from.
 func (a *App) withArchiveRef(gameID string, t types.VersionTarget) types.VersionTarget {
 	if t.Build == "" {
 		return t
@@ -276,6 +279,9 @@ func (a *App) withArchiveRef(gameID string, t types.VersionTarget) types.Version
 	for _, e := range a.ledger.Entries(gameID) {
 		if e.Build == t.Build && len(e.ArchiveRef) > 0 {
 			t.ArchiveRef = e.ArchiveRef
+			if t.Channel == "" {
+				t.Channel = e.Channel
+			}
 		}
 	}
 	return t

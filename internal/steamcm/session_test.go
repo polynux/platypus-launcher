@@ -245,7 +245,7 @@ func TestContentRPCs(t *testing.T) {
 	if err != nil || token != "cdn-token" {
 		t.Fatalf("cdn token: %v %q", err, token)
 	}
-	if err := s.CheckBetaPassword(4321, "secret", 0); err != nil {
+	if _, err := s.CheckBetaPassword(4321, "secret", 0); err != nil {
 		t.Fatalf("beta password: %v", err)
 	}
 }

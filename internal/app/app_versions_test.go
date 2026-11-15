@@ -610,6 +610,26 @@ func TestAnArchiveBuildSendsTheLedgerReference(t *testing.T) {
 	}
 }
 
+func TestAnArchiveBuildSendsTheLedgerChannel(t *testing.T) {
+	t.Parallel()
+	e := versionsApp(t, allVersions, echoCaps)
+	ref := json.RawMessage(`{"echo":true,"build":"b1"}`)
+	if err := e.a.ledger.Append(types.LedgerEntry{Store: "echo", Game: e.game.ID, Build: "b1", Channel: "beta", ArchiveRef: ref}); err != nil {
+		t.Fatal(err)
+	}
+	// A bare build from the history picks up the ledger's channel, so the
+	// plugin reinstalls under the branch the build came from.
+	got := e.a.withArchiveRef(e.game.ID, types.VersionTarget{Build: "b1"})
+	if string(got.ArchiveRef) != string(ref) || got.Channel != "beta" {
+		t.Fatalf("target = %+v", got)
+	}
+	// An explicitly chosen channel wins over the ledger's.
+	got = e.a.withArchiveRef(e.game.ID, types.VersionTarget{Channel: "public", Build: "b1"})
+	if got.Channel != "public" || string(got.ArchiveRef) != string(ref) {
+		t.Fatalf("target = %+v", got)
+	}
+}
+
 func TestAJobWithAVersionNeedsTheVersionsGateWhenItRuns(t *testing.T) {
 	t.Parallel()
 	// The store no longer offers versions for this plugin (the capability is gone).

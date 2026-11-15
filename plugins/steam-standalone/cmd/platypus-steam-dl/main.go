@@ -2,7 +2,7 @@
 // plugin, replacing DepotDownloader for installs and logins. It speaks
 // one subcommand per argv:
 //
-//	platypus-steam-dl size|install|update|verify|terms|auth
+//	platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth
 //
 // The request (app id, branch, dirs, and the refresh token) arrives as one
 // JSON object on stdin — the token never goes in argv (visible in
@@ -29,7 +29,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|auth")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth")
 	}
 	if os.Args[1] == "auth" {
 		if err := runAuth(context.Background()); err != nil {
@@ -69,12 +69,18 @@ func main() {
 		runErr = runVerify(ctx, req)
 	case "terms":
 		runErr = runTerms(ctx, req)
+	case "versions":
+		runErr = runVersions(ctx, req)
+	case "unlock":
+		runErr = runUnlock(ctx, req)
 	default:
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|auth")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth")
 	}
 	if runErr != nil {
 		if ce, ok := runErr.(cmErr); ok && ce.auth {
 			emit(map[string]any{"type": "error", "code": "auth-required", "message": ce.msg})
+		} else if _, ok := runErr.(notFoundError); ok {
+			emit(map[string]any{"type": "error", "code": "not-found", "message": runErr.Error()})
 		} else {
 			emit(map[string]any{"type": "error", "code": "error", "message": runErr.Error()})
 		}
@@ -83,12 +89,16 @@ func main() {
 }
 
 type request struct {
-	RefreshToken   string `json:"refresh_token"`
-	AppID          uint32 `json:"app_id"`
-	Branch         string `json:"branch"`
-	BranchPassword string `json:"branch_password"`
-	InstallDir     string `json:"install_dir"`
-	JobID          string `json:"job_id"`
+	RefreshToken string `json:"refresh_token"`
+	AppID        uint32 `json:"app_id"`
+	Branch       string `json:"branch"`
+	// BranchPassword is the single password for Branch (legacy); Target
+	// installs take theirs from BranchPasswords by resolved branch.
+	BranchPassword  string            `json:"branch_password"`
+	BranchPasswords map[string]string `json:"branch_passwords"`
+	Target          *versionTarget    `json:"target"`
+	InstallDir      string            `json:"install_dir"`
+	JobID           string            `json:"job_id"`
 }
 
 type cmErr struct {
