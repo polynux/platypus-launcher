@@ -1,0 +1,23 @@
+// PICS app info excerpt for Trackmania (2225070), captured live 2026-11-15.
+// It keeps the "appinfo" section the CM wraps the text KeyValues buffer in,
+// trimmed to the fields the terms parser reads. Steam publishes app info, so
+// there is nothing account-specific here.
+"appinfo"
+{
+	"appid"		"2225070"
+	"common"
+	{
+		"name"		"Trackmania"
+		"type"		"Game"
+		"eulas"
+		{
+			"0"
+			{
+				"id"		"2225070_eula_0"
+				"name"		"Trackmania EULA"
+				"url"		"https://store.steampowered.com//eula/2225070_eula_0"
+				"version"		"4"
+			}
+		}
+	}
+}

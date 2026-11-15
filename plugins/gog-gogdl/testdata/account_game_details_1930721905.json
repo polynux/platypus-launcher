@@ -1,0 +1,46 @@
+{
+ "backgroundImage": "//images-4.gog-statics.com/9c50cde8865c0b97bce11aa23ccefd4e08be7046e33f29ccfbd6c3b15d44fff6",
+ "cdKey": "",
+ "cdKeys": [],
+ "changelog": null,
+ "dlcs": [],
+ "downloads": [
+  [
+   "English",
+   {
+    "windows": [
+     {
+      "date": "",
+      "manualUrl": "/downloads/cursed_to_golf/en1installer0",
+      "name": "Cursed to Golf",
+      "size": "677 MB",
+      "version": "2.0.1"
+     }
+    ]
+   }
+  ]
+ ],
+ "extras": [],
+ "features": [
+  "Cloud saves",
+  "Overlay"
+ ],
+ "forumLink": "https://embed.gog.com/forum/cursed_to_golf",
+ "galaxyDownloads": [],
+ "isBaseProductMissing": false,
+ "isPreOrder": false,
+ "isRegistryKey": false,
+ "messages": [],
+ "missingBaseProduct": null,
+ "registryDownloadUrl": "",
+ "releaseTimestamp": 1660834200,
+ "simpleGalaxyInstallers": [
+  {
+   "os": "windows",
+   "path": "/downloads/cursed_to_golf/f408729c53f064e8f075e00e201b86cd"
+  }
+ ],
+ "tags": [],
+ "textInformation": "",
+ "title": "Cursed to Golf"
+}
