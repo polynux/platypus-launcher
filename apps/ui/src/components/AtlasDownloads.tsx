@@ -9,6 +9,9 @@ import { ATLAS_PAGE, Cover, EmptyState, cx, relTime } from './ui';
 import { Button } from './ds/button';
 import { formatBytes, heroImages } from '../lib/games';
 import { plainError, friendlyCoreError } from '../lib/plainError';
+import { useThemeLayout } from '../lib/theme';
+import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
+import { ThemeLayout } from '../lib/layout';
 
 const VERB_KEY: Record<Job['kind'], string> = {
   install: 'downloads:action.install',
@@ -71,44 +74,55 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
     if (finished.length === 0) setClearing(false);
   }, [finished.length]);
   const speed = active.reduce((a, j) => a + (j.speed > 0 ? j.speed : 0), 0);
+  // The Atlas arrangement is itself a layout (issue #116): the regions,
+  // rows and blocks the picked theme rearranges, rendered through
+  // ThemeLayout. The first paint already shows the built-in arrangement.
+  const layout = useThemeLayout('downloads') ?? BUILTIN_LAYOUTS['downloads'];
+  // Each block renders null when it has nothing to show, so a layout
+  // orders blocks without conditionals of its own. The empty state lives
+  // in the queue block; the finished block stays empty when there is
+  // nothing finished yet.
   return (
-    <div className={ATLAS_PAGE}>
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.downloads')}</h1>
-          {/* No jobs at all: the EmptyState below already says it, so no subtitle. */}
-          {jobs.length > 0 && (
-            <p className="mt-[3px] text-[13px] text-text-muted">
-              {active.length > 0
-                ? (speed > 0
-                  ? t('downloads:atlas.queueSubSpeed', { count: active.length, speed: formatBytes(speed) })
-                  : t('downloads:atlas.queueSub', { count: active.length }))
-                : t('downloads:atlas.queueEmptySub')}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {active.some((j) => j.state === 'running' || j.state === 'queued') && (
-            <Button variant="neutral" onClick={() => active.forEach((j) => onAction('pause', j.id))}>
-              <Pause className="h-3.5 w-3.5" /> {t('downloads:atlas.pauseAll')}
-            </Button>
-          )}
-          {active.some((j) => j.state === 'paused') && (
-            <Button variant="neutral" onClick={() => active.filter((j) => j.state === 'paused').forEach((j) => onAction('resume', j.id))}>
-              {t('downloads:header.resumeAll')}
-            </Button>
-          )}
-          {finished.length > 0 && (
-            <Button variant="neutral" onClick={() => { setClearing(true); onClear(); }} disabled={clearing}>
-              {clearing ? t('downloads:header.clearing') : t('downloads:header.clearFinished')}
-            </Button>
-          )}
-        </div>
-      </header>
-      {jobs.length === 0 ? (
-        <EmptyState icon={Download} label={t('downloads:atlas.emptyTitle')}>{t('downloads:atlas.emptyBody')}</EmptyState>
-      ) : (
-        <>
+    <ThemeLayout
+      layout={layout}
+      blocks={{
+        header: (
+          <header className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.downloads')}</h1>
+              {/* No jobs at all: the EmptyState below already says it, so no subtitle. */}
+              {jobs.length > 0 && (
+                <p className="mt-[3px] text-[13px] text-text-muted">
+                  {active.length > 0
+                    ? (speed > 0
+                      ? t('downloads:atlas.queueSubSpeed', { count: active.length, speed: formatBytes(speed) })
+                      : t('downloads:atlas.queueSub', { count: active.length }))
+                    : t('downloads:atlas.queueEmptySub')}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {active.some((j) => j.state === 'running' || j.state === 'queued') && (
+                <Button variant="neutral" onClick={() => active.forEach((j) => onAction('pause', j.id))}>
+                  <Pause className="h-3.5 w-3.5" /> {t('downloads:atlas.pauseAll')}
+                </Button>
+              )}
+              {active.some((j) => j.state === 'paused') && (
+                <Button variant="neutral" onClick={() => active.filter((j) => j.state === 'paused').forEach((j) => onAction('resume', j.id))}>
+                  {t('downloads:header.resumeAll')}
+                </Button>
+              )}
+              {finished.length > 0 && (
+                <Button variant="neutral" onClick={() => { setClearing(true); onClear(); }} disabled={clearing}>
+                  {clearing ? t('downloads:header.clearing') : t('downloads:header.clearFinished')}
+                </Button>
+              )}
+            </div>
+          </header>
+        ),
+        queue: jobs.length === 0 ? (
+          <EmptyState icon={Download} label={t('downloads:atlas.emptyTitle')}>{t('downloads:atlas.emptyBody')}</EmptyState>
+        ) : (
           <section aria-label={t('downloads:atlas.queue')}>
             <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.queue')}</h2>
             {active.length > 0 ? (
@@ -175,59 +189,64 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
               <p className="text-[13px] text-text-muted">{t('downloads:atlas.queueEmpty')}</p>
             )}
           </section>
-          {finished.length > 0 && (
-            <section aria-label={t('downloads:atlas.recent')}>
-              <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.recent')}</h2>
-              <ul className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_80px_90px_auto] divide-y divide-hairline">
-                {finished.map((j) => {
-                  const raw = (j.error ?? '').trim();
-                  const friendly = friendlyCoreError(j.error, t);
-                  const fallback = t('downloads:state.failed');
-                  const plain = plainError(j.error, fallback);
-                  // Audit F4: known engine strings become sentences, with the
-                  // raw behind the tooltip; every failure reads "Failed" or
-                  // "Failed: …" (never "Failed: failed").
-                  const failedLabel = (() => {
-                    if (j.state !== 'failed') return '';
-                    if (raw === '') return t('downloads:atlas.failed');
-                    if (friendly) return t('downloads:atlas.failedPrefix', { error: friendly.text });
-                    if (plain !== raw) return t('downloads:atlas.failed');
-                    return t('downloads:atlas.failedPrefix', { error: plain });
-                  })();
-                  return (
-                  <li key={j.id} className="col-span-full grid grid-cols-subgrid items-center gap-3 py-1.5">
-                    <button onClick={() => onOpenGame(j.game_id)} className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-                      <Cover src={artOf(j.game_id)} title={byId.get(j.game_id)?.title ?? j.title} compact className="h-5 w-11 flex-none rounded ring-1 ring-hairline" />
-                      <span className="truncate text-[13px] font-semibold">{byId.get(j.game_id)?.title ?? j.title}</span>
-                    </button>
-                    <span
-                      className={cx('truncate text-[12.5px]', j.state === 'failed' ? 'text-danger' : 'text-text-muted')}
-                      title={j.state === 'failed' && raw !== '' ? raw : undefined}
-                    >
-                      {j.state === 'failed' ? failedLabel : j.state === 'done' ? t(FINISHED_KEY[j.kind]) : t(STATE_KEY[j.state])}
-                    </span>
-                    <span className="text-[12px] tabular-nums text-text-muted">{j.total > 0 ? formatBytes(j.total) : ''}</span>
-                    <span className="text-[12px] text-text-muted">{relTime(j.updated_at)}</span>
-                    <span className="flex justify-end gap-1.5">
-                      {(j.state === 'failed' || j.state === 'canceled') && (
-                        <Button variant="ghost" size="sm" onClick={() => onAction('retry', j.id)} className="text-danger">
-                          <RotateCcw className="h-3 w-3" /> {t('common:retry')}
-                        </Button>
-                      )}
-                      {j.state === 'canceled' && j.cleaned_at == null && j.kind !== 'verify' && j.kind !== 'move' && j.kind !== 'remove' && (
-                        <Button variant="neutral" size="sm" onClick={() => onAction('discard', j.id)} aria-label={t('downloads:aria.discardJob', { title: j.title })}>
-                          <Trash2 className="h-3 w-3" /> {t('downloads:job.discard')}
-                        </Button>
-                      )}
-                    </span>
-                  </li>
-                  );
-                  })}
-              </ul>
-            </section>
-          )}
-        </>
-      )}
-    </div>
+        ),
+        finished: finished.length === 0 ? null : (
+          <section aria-label={t('downloads:atlas.recent')}>
+            <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.recent')}</h2>
+            <ul className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_80px_90px_auto] divide-y divide-hairline">
+              {finished.map((j) => {
+                const raw = (j.error ?? '').trim();
+                const friendly = friendlyCoreError(j.error, t);
+                const fallback = t('downloads:state.failed');
+                const plain = plainError(j.error, fallback);
+                // Audit F4: known engine strings become sentences, with the
+                // raw behind the tooltip; every failure reads "Failed" or
+                // "Failed: …" (never "Failed: failed").
+                const failedLabel = (() => {
+                  if (j.state !== 'failed') return '';
+                  if (raw === '') return t('downloads:atlas.failed');
+                  if (friendly) return t('downloads:atlas.failedPrefix', { error: friendly.text });
+                  if (plain !== raw) return t('downloads:atlas.failed');
+                  return t('downloads:atlas.failedPrefix', { error: plain });
+                })();
+                return (
+                <li key={j.id} className="col-span-full grid grid-cols-subgrid items-center gap-3 py-1.5">
+                  <button onClick={() => onOpenGame(j.game_id)} className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                    <Cover src={artOf(j.game_id)} title={byId.get(j.game_id)?.title ?? j.title} compact className="h-5 w-11 flex-none rounded ring-1 ring-hairline" />
+                    <span className="truncate text-[13px] font-semibold">{byId.get(j.game_id)?.title ?? j.title}</span>
+                  </button>
+                  <span
+                    className={cx('truncate text-[12.5px]', j.state === 'failed' ? 'text-danger' : 'text-text-muted')}
+                    title={j.state === 'failed' && raw !== '' ? raw : undefined}
+                  >
+                    {j.state === 'failed' ? failedLabel : j.state === 'done' ? t(FINISHED_KEY[j.kind]) : t(STATE_KEY[j.state])}
+                  </span>
+                  <span className="text-[12px] tabular-nums text-text-muted">{j.total > 0 ? formatBytes(j.total) : ''}</span>
+                  <span className="text-[12px] text-text-muted">{relTime(j.updated_at)}</span>
+                  <span className="flex justify-end gap-1.5">
+                    {(j.state === 'failed' || j.state === 'canceled') && (
+                      <Button variant="ghost" size="sm" onClick={() => onAction('retry', j.id)} className="text-danger">
+                        <RotateCcw className="h-3 w-3" /> {t('common:retry')}
+                      </Button>
+                    )}
+                    {j.state === 'canceled' && j.cleaned_at == null && j.kind !== 'verify' && j.kind !== 'move' && j.kind !== 'remove' && (
+                      <Button variant="neutral" size="sm" onClick={() => onAction('discard', j.id)} aria-label={t('downloads:aria.discardJob', { title: j.title })}>
+                        <Trash2 className="h-3 w-3" /> {t('downloads:job.discard')}
+                      </Button>
+                    )}
+                  </span>
+                </li>
+                );
+                })}
+            </ul>
+          </section>
+        ),
+      }}
+      className={ATLAS_PAGE}
+      // The page is a grid with gap-6: each region stacks its blocks with
+      // the same gap, so the built-in arrangement keeps today's spacing.
+      // A region whose blocks all render nothing takes no space.
+      regionClassName={() => 'grid min-w-0 content-start gap-6 empty:hidden'}
+    />
   );
 }

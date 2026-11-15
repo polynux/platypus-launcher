@@ -197,6 +197,28 @@ value always wins. A use-site value with no broader value set keeps its
 built-in default. Inheritance applies only when the theme declares
 `variants`.
 
+- `dialog.presentation` (`dialog` or `sheet`) and `dialog.size` (`auto`,
+  `sm`, `md`, `lg`, `xl`) reach every dialog that renders through
+  `components/Modal.tsx` (all of them except the command palette and the
+  Tune flyout, which keep their own surfaces). `auto` keeps each dialog's built-in width, so the
+  defaults change nothing; an explicit size is a minimum for every dialog
+  (the larger of the use-site size and the theme size wins, so a theme can
+  widen but never shrink), and `sheet` slides dialogs in from the edge.
+- `store.presentation` picks the store page; `store.toolbar` (`full` or
+  `compact`) and `store.address` (`shown` or `hidden`) shape its toolbar.
+  `compact` is the same row at 42px with smaller controls, and `hidden`
+  removes the address strip while keeping the outside-domain warning. Only
+  the toolbar and frame are ours: the storefront is the shell's native view,
+  and its measured rect is reported again after a chrome change.
+
+```toml
+[variants]
+"dialog.presentation" = "sheet"
+"dialog.size" = "lg"
+"store.toolbar" = "compact"
+"store.address" = "hidden"
+```
+
 Source: `internal/themes/themes.go` (`setVariant`, `resolve`), `catalog.go`.
 
 ## `[variants]` game colour
@@ -256,11 +278,27 @@ the theme layout when the theme ships one, else the built-in arrangement
 `ThemeLayout`).
 
 The views that take layouts: `dashboard`, `library`, `game`, `storage`,
-`plugins`, and `shell`. Shell regions follow `shell.navigation`: `sidebar`
+`plugins`, `activity`, `fixes`, `runners`, `downloads`, `settings`,
+`library-header`, and `shell`.
+`activity`, `fixes`, `runners` and `downloads` (issue #116) had no layout
+before: their layouts describe the Atlas presentation only, and the classic
+presentations (`feed`, `rows`, `groups`) keep their fixed rendering. A
+region whose blocks all render nothing takes no space on the Atlas pages. Shell
+regions follow `shell.navigation`: `sidebar`
 for the sidebar variant, `topbar` for the topbar variant. Shell takes only
 the variant. A `layouts/shell.xml` file validates like any other layout,
 but the shell never loads a layout: `Shell.tsx` reads only
 `shell.navigation` and renders its blocks directly, arranged by the variant.
+
+`settings` and `library-header` are Atlas presentations with no classic
+layout: the classic settings page keeps its fixed sections, and the classic
+library keeps its built-in `library` layout and composite header. The
+`settings` layout drives the Atlas settings page (picked by
+`settings-row.style = srow`; sections as blocks, the category navigation
+following the layout's order); the `library-header` layout drives the Atlas
+grid/table page header (shown in the `library.presentation = list-detail`
+grid/table views). The settings page honours `settings.navigation`: `tabs`
+shows one category, `scroll` stacks every block in layout order.
 
 Regions per view, from the catalog:
 
@@ -269,6 +307,12 @@ Regions per view, from the catalog:
 - `game`: `hero`, `main`, `side`.
 - `storage`: `top`, `main`, `side`.
 - `plugins`: `top`, `main`, `side`.
+- `activity`: `top`, `main`.
+- `fixes`: `top`, `main`.
+- `runners`: `top`, `main`.
+- `downloads`: `top`, `main`.
+- `settings`: `main`.
+- `library-header`: `bar`, `sub`.
 - `shell`: `sidebar`, `topbar` (variant only, see above).
 
 Block names are per view; see `catalog.md` for the full list. Required
@@ -282,6 +326,19 @@ blocks per view, from the catalog:
 - `storage`: none. Every block is hideable.
 - `plugins`: `store` (in `main`). Each store card renders its own login row
   and approve/enable actions.
+- `activity`: none. Every block is hideable.
+- `fixes`: `cards` (in `main`). The cards hold the fix actions.
+- `runners`: `default`, `installed` and `available` (all in `main`). They
+  hold the default-runner pick, the remove action with the per-game usage
+  truth, and the only runner install in the app.
+- `downloads`: `header`, `queue` and `finished` (`header` in `top`, the
+  others in `main`). The header holds pause-all, resume-all and clear; the
+  queue holds pause, resume and cancel per job; finished holds retry and
+  discard.
+- `settings`: every section block (all in `main`). Each one acts or reports
+  state, so a layout can't drop a setting.
+- `library-header`: `warnings` (in `sub`). The search, sort, title, mode,
+  filters and chips blocks stay hideable, like the classic granular blocks.
 - `shell`: none. Both variants keep Settings and Plugins reachable by
   construction.
 
@@ -296,6 +353,35 @@ blocks per view, from the catalog:
   </region>
   <region name="side">
     <block name="activity" limit="6" />
+  </region>
+</layout>
+```
+A layout for one of these four views, e.g. `layouts/downloads.xml`, only
+changes their Atlas presentations (`activity.presentation = days`,
+`fixes = cards`, `runners = table`, `downloads = cards`):
+
+```xml
+<layout view="downloads" catalog="1.2">
+  <region name="main">
+    <block name="header" />
+    <block name="finished" />
+    <block name="queue" />
+  </region>
+</layout>
+```
+
+A library header that hides the sort and chips and moves search after a
+title, with the view-mode switch in the sub row (issue #118):
+
+```xml
+<layout view="library-header" catalog="1.2">
+  <region name="bar">
+    <block name="title" />
+    <block name="search" />
+  </region>
+  <region name="sub">
+    <block name="mode" />
+    <block name="warnings" />
   </region>
 </layout>
 ```
@@ -521,7 +607,7 @@ Source: `docs/plugins/data-plugins.md`, `internal/plugins/manifest.go`,
 
 ## `catalog = "x.y"` versioning
 
-The catalog is versioned `major.minor` (`CatalogVersion = "1.0"`). Minor is
+The catalog is versioned `major.minor` (`CatalogVersion = "1.2"`). Minor is
 additive: new entries, axes, values, blocks and regions. Every entry and
 axis carries `since`. Major is breaking: a removal or rename.
 
@@ -533,8 +619,8 @@ axis carries `since`. Major is breaking: a removal or rename.
 - The guard test refuses breaking changes: `go test ./internal/themes -run
   TestCatalogGuard -update` refreshes the snapshot
   (`internal/themes/testdata/catalog-1.json`) only for compatible changes.
-- Until the themes epic merges the catalog is unreleased: keep
-  `CatalogVersion = "1.0"` and mark additions `since = "1.0"`.
+- Every addition carries `since` = the minor it landed in (`1.2` for the
+  dialog and store chrome axes, for example).
 - `docs/themes/catalog.md` is generated from the catalog. Refresh it with
   `go run ./cmd/gen-ts`. The gents staleness test fails when it is out of
   date.

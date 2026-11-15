@@ -188,6 +188,7 @@
   },
   "atlasViews": {
     "filterPlaceholder": "Filter the library",
+    "viewSwitch": "Grid or table",
     "blocks": {
       "continue": "Last played",
       "recent": "Recently added"

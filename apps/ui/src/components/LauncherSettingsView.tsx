@@ -42,12 +42,17 @@ interface LauncherSettingsViewProps {
   plugins: StorePlugin[];
 }
 
+/** The launcher settings sections in Atlas order: the blocks record keys
+ *  (`name.toLowerCase()`) and the tabs categories derive from this list,
+ *  so it must match the settings catalog blocks and the built-in layout. */
+export const SETTINGS_SECTION_NAMES = ['language', 'theme', 'appearance', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'notices', 'tray', 'backups', 'cloud'];
+
 export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsViewProps) {
   const { t } = useTranslation('settings');
   const navigation = useVariant('settings.navigation');
   const chrome = useVariant('section.chrome');
   const atlas = useVariant('settings-row.style') === 'srow';
-  const sectionNames = ['language', 'theme', 'appearance', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'notices', 'tray', 'backups', 'cloud'];
+  const sectionNames = SETTINGS_SECTION_NAMES;
   const [, setRenderTick] = useState(0);
   const setActiveSection = (index: number) => {
     persistedSettingsSection = sectionNames[index] ?? persistedSettingsSection;
@@ -129,9 +134,12 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   const chromeClass = chrome === 'framed' ? '[&>section]:rounded-2xl [&>section]:border [&>section]:border-hairline-strong [&>section]:bg-surface [&>section]:px-5' : chrome === 'plain' ? '[&>section]:border-t-0' : '';
 
   // Atlas renders the /22 Settings page (issue #138): the lab's categories in
-  // the left nav. "Store clients" holds the client notices switch (issue #149).
+  // the left nav. The sections reach it as layout blocks (issue #117), keyed
+  // by section name in the same order; the page orders them by the settings
+  // layout and derives its category navigation from it.
   if (atlas) {
-    return <AtlasSettingsPage sections={sections} loadError={error} />;
+    const settingsBlocks: Record<string, React.ReactNode> = Object.fromEntries(sectionNames.map((name, i) => [name.toLowerCase(), sections[i]]));
+    return <AtlasSettingsPage blocks={settingsBlocks} loadError={error} />;
   }
 
   return (

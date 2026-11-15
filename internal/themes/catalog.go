@@ -2,8 +2,9 @@ package themes
 
 import "platypus/internal/types"
 
-// Catalog v1.1 is the frontend contract for the Settings testbed.
-const CatalogVersion = "1.1"
+// Catalog v1.2 adds the Atlas layout views (activity, fixes, runners,
+// downloads, settings, library header) and the dialog and store chrome.
+const CatalogVersion = "1.2"
 
 var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "settings", Since: "1.0", Axes: []types.ThemeCatalogAxis{
@@ -271,8 +272,15 @@ var Catalog = []types.ThemeCatalogEntry{
 	}},
 	// Store (issue #156): embedded is today's single-plugin view, storefronts
 	// is the /22 page listing every storefront above it.
+	// Store chrome (issue #115): only the toolbar and frame are ours, the
+	// storefront itself is the shell's native view. toolbar full is the /22
+	// shop bar (55px, roomy controls), compact the same row at 42px with
+	// smaller controls and an address strip that may be hidden. The defaults
+	// are today's Atlas bar, so a theme that names nothing looks unchanged.
 	{Entry: "store", Since: "1.1", Axes: []types.ThemeCatalogAxis{
 		{Name: "presentation", Values: []string{"embedded", "storefronts"}, Default: "embedded", Since: "1.1"},
+		{Name: "toolbar", Values: []string{"full", "compact"}, Default: "full", Since: "1.2"},
+		{Name: "address", Values: []string{"shown", "hidden"}, Default: "shown", Since: "1.2"},
 	}},
 	// Settings rows (issue #156): section is today's titled section, srow is
 	// the /22 settings row.
@@ -284,4 +292,77 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "toast", Since: "1.1", Axes: []types.ThemeCatalogAxis{
 		{Name: "style", Values: []string{"card", "pill"}, Default: "card", Since: "1.1"},
 	}},
+// Activity, Fixes, Runners and Downloads layout entries (issue #116):
+// the Atlas presentations' regions, then their blocks in built-in order.
+// Required (ADR §5) are the blocks that hold an action no other block
+// offers: the fix cards; the runners' default pick, installed table
+// (remove, with the per-game usage truth) and available list (the only
+// runner install); the downloads header (pause/resume all, clear), queue
+// (pause/resume/cancel) and finished list (retry, discard). Activity
+// and the page headers, whose actions exist elsewhere (Rescan, the shell
+// refresh), stay hideable.
+	{Entry: "activity.top", Since: "1.2", Kind: "region"},
+	{Entry: "activity.main", Since: "1.2", Kind: "region"},
+	{Entry: "activity.header", Since: "1.2", Kind: "block", Region: "top"},
+	{Entry: "activity.filter", Since: "1.2", Kind: "block", Region: "main"},
+	{Entry: "activity.days", Since: "1.2", Kind: "block", Region: "main"},
+	{Entry: "fixes.top", Since: "1.2", Kind: "region"},
+	{Entry: "fixes.main", Since: "1.2", Kind: "region"},
+	{Entry: "fixes.header", Since: "1.2", Kind: "block", Region: "top"},
+	{Entry: "fixes.cards", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "runners.top", Since: "1.2", Kind: "region"},
+	{Entry: "runners.main", Since: "1.2", Kind: "region"},
+	{Entry: "runners.header", Since: "1.2", Kind: "block", Region: "top"},
+	{Entry: "runners.default", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "runners.installed", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "runners.available", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "downloads.top", Since: "1.2", Kind: "region"},
+	{Entry: "downloads.main", Since: "1.2", Kind: "region"},
+	{Entry: "downloads.header", Since: "1.2", Kind: "block", Required: true, Region: "top"},
+	{Entry: "downloads.queue", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "downloads.finished", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	// Settings layout entries (issue #117): the launcher settings sections
+	// as blocks of a `settings` layout view, in the Atlas category order
+	// (general, appearance, folders, saves, data, social, stores). The Atlas
+	// presentation renders them through ThemeLayout; the classic
+	// presentation keeps its fixed rendering. Every section is required
+	// (ADR §5): each one acts (saving a setting) or reports state, so a
+	// layout that leaves one out still gets it back, in the main region,
+	// with a warning.
+	{Entry: "settings.main", Since: "1.2", Kind: "region"},
+	{Entry: "settings.language", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.tray", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.theme", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.appearance", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.folders", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.prefixes", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.cleanup", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.backups", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.cloud", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.ratings", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.artwork", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.gameinfo", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.chat", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	{Entry: "settings.notices", Since: "1.2", Kind: "block", Required: true, Region: "main"},
+	// Library header layout entries (issue #118): the Atlas grid/table
+	// page header as blocks of a `library-header` layout view. The Atlas
+	// page renders its header through ThemeLayout; the classic `library`
+	// view keeps its built-in layout and its composite header untouched
+	// (the granular classic blocks stack vertically and can't reproduce
+	// its two-row flex arrangement). `search` and `sort` are the lib-bar
+	// controls, `warnings` the store problems, `chips` the active
+	// collection and filters; `title`, `mode` and `filters` mirror the
+	// classic header parts for themes that want a classic-like Atlas
+	// header. Only `warnings` is required: they tell the truth about the
+	// stores (ADR §5), like `library.warnings`. The rest stays hideable,
+	// like the classic granular blocks.
+	{Entry: "library-header.bar", Since: "1.2", Kind: "region"},
+	{Entry: "library-header.sub", Since: "1.2", Kind: "region"},
+	{Entry: "library-header.title", Since: "1.2", Kind: "block", Region: "bar"},
+	{Entry: "library-header.mode", Since: "1.2", Kind: "block", Region: "bar"},
+	{Entry: "library-header.search", Since: "1.2", Kind: "block", Region: "bar"},
+	{Entry: "library-header.sort", Since: "1.2", Kind: "block", Region: "bar"},
+	{Entry: "library-header.filters", Since: "1.2", Kind: "block", Region: "bar"},
+	{Entry: "library-header.warnings", Since: "1.2", Kind: "block", Required: true, Region: "sub"},
+	{Entry: "library-header.chips", Since: "1.2", Kind: "block", Region: "sub"},
 }

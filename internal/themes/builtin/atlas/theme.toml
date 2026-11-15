@@ -34,6 +34,10 @@ supports = ["tokens", "variants"]
 "plugins.presentation" = "directory"
 "friends.presentation" = "panel"
 "store.presentation" = "storefronts"
+# The launcher settings page is the /22 category tabs (issue #117): the
+# page honors settings.navigation, so the theme declares the tabbed nav it
+# has always shown. Scroll stacks every section in layout order instead.
+"settings.navigation" = "tabs"
 "settings-row.style" = "srow"
 "toast.style" = "pill"
 

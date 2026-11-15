@@ -215,10 +215,12 @@ describe('Game settings catalog variants', () => {
     }
   });
 
-  it('honours an explicit dialog size and keeps xl for auto', () => {
+  it('treats dialog.size as a minimum and keeps xl for auto', () => {
+    // The game settings dialog is xl: a smaller theme size (lg) never
+    // shrinks it, and auto keeps its own width.
     state.variants['dialog.size'] = 'lg';
     const { unmount } = render(<GameSettingsModal {...modalProps()} />);
-    expect(screen.getByRole('dialog')).toHaveClass('max-w-[720px]');
+    expect(screen.getByRole('dialog')).toHaveClass('max-w-[920px]');
     unmount();
     state.variants['dialog.size'] = 'auto';
     render(<GameSettingsModal {...modalProps()} />);
