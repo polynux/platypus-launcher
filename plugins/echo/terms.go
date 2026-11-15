@@ -4,14 +4,17 @@ package main
 // "Terms"): the game "licensed" lists two terms in game.details, an end user
 // licence and a privacy notice. Platypus asks the user to accept them before an
 // install. The ECHO_TERMS_BUMP knob (or `config` termsBump) changes the licence
-// version, so it asks again. game.acceptTerms records what the user accepted
-// in state.json (see "recorded"); ECHO_MISSING=game.acceptTerms makes echo a
-// store that doesn't keep acceptance, which Platypus then keeps alone.
+// version, so it asks again; ECHO_TERMS_AUTH (or `config` termsAuth) makes a
+// terms request answer -32001, the way a store that isn't logged in does.
+// game.acceptTerms records what the user accepted in state.json (see
+// "recorded"); ECHO_MISSING=game.acceptTerms makes echo a store that doesn't
+// keep acceptance, which Platypus then keeps alone.
 
 import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"sync"
 )
 
 type echoTerm struct {
@@ -47,6 +50,37 @@ func termsList(gameID string) []map[string]any {
 		out = append(out, map[string]any{"id": t.id, "title": t.title, "url": t.url, "version": t.version})
 	}
 	return out
+}
+
+// askedTerms is the terms flag of the last game.details request. Platypus
+// sets `terms: true` only when it reads terms (install dialog, gate), so a
+// game page never pays for them; the tests read it through `recorded`.
+var (
+	askedMu    sync.Mutex
+	askedTerms bool
+)
+
+// termsRefused is the termsAuth knob's answer to a terms request: the store
+// can't list them (logged out), and a plugin must fail rather than answer
+// without them.
+func termsRefused(wantTerms bool) bool {
+	knobMu.Lock()
+	defer knobMu.Unlock()
+	return wantTerms && kn.TermsAuth
+}
+
+// noteDetailsAsk records the terms flag of a game.details request.
+func noteDetailsAsk(terms bool) {
+	askedMu.Lock()
+	askedTerms = terms
+	askedMu.Unlock()
+}
+
+// detailsAskedTerms is what the last game.details request asked for.
+func detailsAskedTerms() bool {
+	askedMu.Lock()
+	defer askedMu.Unlock()
+	return askedTerms
 }
 
 // acceptTerms answers game.acceptTerms { id, terms: [{id, version}] }. Only

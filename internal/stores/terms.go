@@ -16,11 +16,18 @@ import (
 // Terms asks the plugin for the game's terms. A plugin without game.details,
 // or one that lists none, has no terms. The result is not checked against
 // the user's acceptance; the caller marks it (types.MarkAccepted).
+//
+// The request carries `terms: true` so a plugin can skip its (expensive)
+// terms read in every other game.details call, and must fail here rather
+// than answer without the terms it couldn't read: a gate that sees "no
+// terms" because the store wasn't logged in would let the job through.
+// Older plugins ignore the extra param.
 func (s *Plugin) Terms(ctx context.Context, storeAppID string) ([]types.GameTerm, error) {
 	var d struct {
 		Terms []plugins.Term `json:"terms"`
 	}
-	if err := s.m.Call(ctx, s.ID(), "game.details", map[string]any{"id": storeAppID}, &d); err != nil {
+	params := map[string]any{"id": storeAppID, "terms": true}
+	if err := s.m.Call(ctx, s.ID(), "game.details", params, &d); err != nil {
 		if IsNotOffered(err) {
 			return nil, nil
 		}

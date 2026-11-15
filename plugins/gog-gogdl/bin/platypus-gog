@@ -745,7 +745,9 @@ def initialize(params):
 def game_details(params):
     """Art and description from the product API, no login needed. The old
     store-search endpoint (games/ajax/filtered) stopped returning products
-    for id searches."""
+    for id searches. GOG has no EULA/terms data (live check 2026-11-15: neither
+    the account gameDetails nor the product API carries one), so the plugin
+    lists no terms and doesn't declare the `terms` capability."""
     app = params["id"]
     try:
         data = api_get(f"https://api.gog.com/products/{app}?expand=description,screenshots", "")

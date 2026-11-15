@@ -145,6 +145,21 @@ func TestExchangeErrorsAreHonest(t *testing.T) {
 	setServiceEresult(t, 1)
 }
 
+// AccessDenied (15) at logon is the CM refusing a revoked token, not a CM
+// failure: Dial must mark it auth, the way client.go's parseLogonResponse
+// does, so the install asks for a login instead of failing generically.
+func TestDialLogonAccessDeniedIsAuth(t *testing.T) {
+	_, host := startFake(t)
+	withFakeCM(t, host)
+	setLogonEresult(t, 15)
+	defer setLogonEresult(t, 1)
+	_, err := Dial(context.Background(), testToken(76561198))
+	ce, ok := err.(*CMError)
+	if !ok || !ce.Auth {
+		t.Fatalf("logon AccessDenied must be auth: %v", err)
+	}
+}
+
 func TestMultiAndHeartbeat(t *testing.T) {
 	f, host := startFake(t)
 	withFakeCM(t, host)

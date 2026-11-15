@@ -268,6 +268,7 @@
   "terms": {
     "acceptFirst": "Accept the terms of {{title}} first: {{terms}}.",
     "changed": "The terms of {{title}} changed; look at them again.",
+    "needsLogin": "Log in to the store first: it can't list the terms of {{title}} until you do.",
     "unreadable": "Couldn't read the terms of {{title}} from the store; retry."
   },
   "verify": {

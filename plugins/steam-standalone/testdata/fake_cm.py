@@ -451,6 +451,8 @@ def serve_logged_in(conn, hdr, body, st):
 #   depot_id     depot the PICS reply describes (default 11)
 #   manifest_gid manifest gid the PICS reply and fake CDN agree on
 #   oslist       oslist the PICS depot carries ("linux", "windows", ...)
+#   appinfo      full text KeyValues served instead of the depot-only buffer
+#                (an excerpt of a real app info, e.g. with common/eulas)
 #   request_code manifest request code handed out
 #   cdn_token    CDN auth token handed out
 #   cdn_hosts    ["127.0.0.1:port", ...] served as SteamCache hosts
@@ -493,8 +495,9 @@ def serve_content(conn, emsg, hdr, body, st, steamid, sessionid):
         for raw in req.get(2, []):
             app = pb_parse(raw).get(1, [0])[0]
         record(f"pics_info {app}")
+        kv = st.get("appinfo") or product_kv(st)
         entry = (pb_int(1, app) + pb_int(2, 42)
-                 + pb_str(5, product_kv(st).encode()))
+                 + pb_str(5, kv.encode()))
         conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid),
                                 pb_msg(1, entry)))
     elif emsg == EMSG_CLIENT_CHECK_BETA_PASSWORD:

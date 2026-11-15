@@ -1374,9 +1374,11 @@ def dl_request(params, extra=None):
     return req
 
 
-def dl_run(subcommand, req, job_id=None, game_dir=None):
+def dl_run(subcommand, req, job_id=None, game_dir=None, label="download failed"):
     """Runs platypus-steam-dl and follows its JSON lines: progress
-    notifications until a result or error line. Returns the result dict."""
+    notifications until a result or error line. Returns the result dict.
+    `label` names the run in its error (`Steam app info: ...`): a download
+    failing and an app info read failing aren't the same thing to the user."""
     try:
         proc = subprocess.Popen([dl_bin(), subcommand], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -1424,12 +1426,12 @@ def dl_run(subcommand, req, job_id=None, game_dir=None):
         elif msg.get("type") == "error":
             if msg.get("code") == "auth-required":
                 raise RPCError(tr("need_login_expired"), CODE_AUTH_REQUIRED)
-            raise RPCError("download failed: {}".format(msg.get("message") or tail(line)))
+            raise RPCError("{}: {}".format(label, msg.get("message") or tail(line)))
     rc = proc.wait()
     if result is None:
-        raise RPCError("download failed: {}".format(tail("\n".join(text))))
+        raise RPCError("{}: {}".format(label, tail("\n".join(text))))
     if rc != 0:
-        raise RPCError("download failed: {}".format(tail("\n".join(text))))
+        raise RPCError("{}: {}".format(label, tail("\n".join(text))))
     return result
 
 
@@ -1818,9 +1820,36 @@ def _movie_url(movie):
     return "", ""
 
 
+def game_terms(app):
+    """The EULAs Steam lists for an app, from PICS app info (protocol 1.11,
+    docs/plugins/protocol.md "Terms"). Steam keeps the acceptance itself, so
+    the plugin has no game.acceptTerms: it only lists. Read it only when
+    Platypus asked for terms, and fail when it can't: an empty list would
+    read as "no terms to accept" and let the install through."""
+    if not refresh_token():
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
+    try:
+        result = dl_run("terms", dl_request({"id": app}), label="Steam app info")
+    except RPCError as e:
+        if e.code == CODE_AUTH_REQUIRED:
+            # The session expired, or the token was refused: the install
+            # asks for the login rather than installing without the EULA.
+            raise
+        raise RPCError(f"couldn't read the terms: {e}", e.code)
+    terms = []
+    for t in result.get("terms") or []:
+        # Platypus keys acceptance on id and version; skip anything else, the
+        # way the protocol drops terms it can't key on.
+        if not isinstance(t, dict) or not t.get("id") or not t.get("version"):
+            continue
+        terms.append({k: t[k] for k in ("id", "title", "url", "version") if t.get(k)})
+    return terms
+
+
 def game_details(params):
     """Public store metadata, no login needed (same API the built-in Steam
-    store uses). Richer facts are protocol 1.12; core sanitizes the HTML."""
+    store uses). Richer facts are protocol 1.12; core sanitizes the HTML. The
+    EULAs (protocol 1.11) come from PICS app info and need the login."""
     app = str(params["id"])
     try:
         data = api_get(f"https://store.steampowered.com/api/appdetails?appids={app}&l={steam_lang()}")
@@ -1896,6 +1925,10 @@ def game_details(params):
             ("title", (m.get("name") or "")[:200]), ("mime", mime)) if v})
     if videos:
         out["videos"] = videos
+    if params.get("terms"):
+        terms = game_terms(app)
+        if terms:
+            out["terms"] = terms
     return {k: v for k, v in out.items() if v}
 
 
@@ -2052,9 +2085,9 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.4.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.5.0", "api": API,
             "protocol": protocol,
-            "capabilities": ["library", "install", "launch", "auth", "discard", "save-context"], "missing": []}
+            "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms"], "missing": []}
 
 
 def game_client_status(params):

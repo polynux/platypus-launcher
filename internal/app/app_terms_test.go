@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"platypus/internal/apperr"
 	"platypus/internal/jobs"
+	"platypus/internal/plugins"
 	"platypus/internal/settings"
 	"platypus/internal/stores"
 	"platypus/internal/types"
@@ -178,6 +180,30 @@ func TestTermsStayOffBelowProtocol111(t *testing.T) {
 	calls := e.calls(t)
 	if calls["game.acceptTerms"] != 0 || calls["game.details"] != 0 {
 		t.Fatalf("terms calls sent under 1.11: %v", calls)
+	}
+}
+
+// A store that can't list its terms because it isn't logged in refuses the
+// install with a login problem, not a retry, and queues nothing: the login
+// comes first, then the dialog asks the terms over again. (A job queued here
+// would fail auth-required and be retried after the login without the gate.)
+func TestTermsThatNeedALoginRefuseTheInstall(t *testing.T) {
+	t.Parallel()
+	e := versionsApp(t, termsProtocols, termsCaps)
+	game := licensedGame()
+	e.config(t, map[string]any{"termsAuth": true})
+	_, err := e.a.InstallGame(game)
+	if err == nil {
+		t.Fatal("an install went through with the store logged out")
+	}
+	if code := apperr.CodeOf(err); code != "terms.needsLogin" {
+		t.Fatalf("install with the store logged out: %v (code %q), want terms.needsLogin", err, code)
+	}
+	if !plugins.IsAuthRequired(err) {
+		t.Fatalf("the refusal lost its auth code: %v", err)
+	}
+	if n := len(e.a.jobs.List()); n != 0 {
+		t.Fatalf("%d jobs queued with the terms unreadable: %+v", n, e.a.jobs.List())
 	}
 }
 

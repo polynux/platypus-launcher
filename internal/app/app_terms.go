@@ -127,6 +127,11 @@ func (a *App) AcceptGameTerms(game types.Game, refs []types.TermRef) error {
 func (a *App) termsGate(game types.Game) error {
 	terms, err := a.gameTerms(appCtx(a), game)
 	if err != nil {
+		// A logged-out store can't list its terms: the user has to log in,
+		// not retry, so the refusal carries its own code.
+		if plugins.IsAuthRequired(err) {
+			return apperr.Wrap("terms.needsLogin", fmt.Errorf("log in to the store to read the terms of %s: %w", game.Title, err), map[string]string{"title": game.Title})
+		}
 		return apperr.Wrap("terms.unreadable", fmt.Errorf("couldn't read the terms of %s from the store; retry: %w", game.Title, err), map[string]string{"title": game.Title})
 	}
 	pending := types.Pending(terms)

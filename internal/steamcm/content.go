@@ -191,27 +191,37 @@ func (s *Session) ProductInfo(appID uint32, accessToken uint64, timeout time.Dur
 			// fallback for any depot section that needs it.
 			raw := am.Bytes(5)
 			if kv, err := steam.ParseKV(string(raw)); err == nil {
-				if kv.Get("depots") != nil {
-					return kv, uint32(am.Int(2)), nil
-				}
-				if app := kv.Get("appinfo"); app != nil && app.Get("depots") != nil {
-					return app, uint32(am.Int(2)), nil
+				if root := appInfoRoot(kv); root != nil {
+					return root, uint32(am.Int(2)), nil
 				}
 			}
 			kv, err := steam.ParseBinaryKV(raw)
 			if err != nil {
 				return nil, 0, fmt.Errorf("product info didn't parse: %w", err)
 			}
-			if kv.Get("depots") == nil {
-				if app := kv.Get("appinfo"); app != nil && app.Get("depots") != nil {
-					return app, uint32(am.Int(2)), nil
-				}
-				return nil, 0, fmt.Errorf("product info has no depots section")
+			if root := appInfoRoot(kv); root != nil {
+				return root, uint32(am.Int(2)), nil
 			}
-			return kv, uint32(am.Int(2)), nil
+			return nil, 0, fmt.Errorf("product info has no depots or common section")
 		}
 		s.sideMessage(emsg, rhdr, body)
 	}
+}
+
+// appInfoRoot unwraps the "appinfo" section and reports whether the app info
+// carries what a caller can use: depots (installs) or common (terms, names).
+// An app with no depots still has usable app info.
+func appInfoRoot(kv *steam.KV) *steam.KV {
+	if kv == nil {
+		return nil
+	}
+	if app := kv.Get("appinfo"); app != nil {
+		kv = app
+	}
+	if kv.Get("depots") != nil || kv.Get("common") != nil {
+		return kv
+	}
+	return nil
 }
 
 // Server describes one CDN host from GetServersForSteamPipe.

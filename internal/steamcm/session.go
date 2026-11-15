@@ -220,7 +220,9 @@ func (s *Session) logon(ctx context.Context, refreshToken string) error {
 			}
 			s.sessionID = int32(hdr.Int(2))
 			if eresult != 1 {
-				auth := tokenRejected(eresult)
+				// Same logon-time set as client.go: a refused token is a
+				// login problem, not a CM failure.
+				auth := logonTokenRejected(eresult)
 				suffix := ""
 				if !auth {
 					suffix = " while logging on to its CM server"
