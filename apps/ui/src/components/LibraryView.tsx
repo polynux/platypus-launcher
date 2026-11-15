@@ -586,7 +586,7 @@ export function LibraryTitle({ filteredCount, installedCount, owned, lastScan, c
                 {collection.builtin ? t(`collections:builtin.${collection.id}`) : collection.name}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button type="button" aria-label={t('collections:clearCollection')} onClick={onClearCollection} className="rounded-full hover:text-white">
+                    <button type="button" aria-label={t('collections:clearCollection')} onClick={onClearCollection} className="rounded-full hover:text-text">
                       <X className="h-3 w-3" aria-hidden />
                     </button>
                   </TooltipTrigger>
@@ -594,14 +594,14 @@ export function LibraryTitle({ filteredCount, installedCount, owned, lastScan, c
                 </Tooltip>
               </Badge>
               {missing.length > 0 && (
-                <span className="text-amber-200" title={missing.join(', ')} data-testid="collection-missing">
+                <span className="text-attention" title={missing.join(', ')} data-testid="collection-missing">
                   {t('collections:missing', { count: missing.length })}
                 </span>
               )}
             </p>
           )}
           {!online && (
-            <p role="status" className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-surface-strong px-2.5 py-1 text-[12px] font-semibold text-white/80 ring-1 ring-white/[0.1]">
+            <p role="status" className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-surface-strong px-2.5 py-1 text-[12px] font-semibold text-text-muted ring-1 ring-hairline">
               <WifiOff className="h-3.5 w-3.5" aria-hidden />
               {t('library:offline', 'Offline — showing the last known library')}
             </p>

@@ -5,7 +5,7 @@
 // list-detail presentation renders these; every colour comes from a token.
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpDown, Download, FolderPlus, LayoutGrid, Play, Rows3, Search, Settings2, SlidersHorizontal, Table2, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpDown, Download, FolderPlus, LayoutGrid, Play, Search, Settings2, SlidersHorizontal, Table2, Users, X } from 'lucide-react';
 import type { ActivityEvent, Collection, Game, Job, ProtonVersion, SessionEvent, StoreType } from '../types';
 import { Cover, cx, relTime } from './ui';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
@@ -261,23 +261,23 @@ export function AtlasHeaderSearch({ query, onQuery }: {
   );
 }
 
-/** The Atlas header's view-mode switch (issue #118): list, grid or table.
- *  The shell carries this switch today; the block gives themes a working
- *  in-page switch. Without the view setter it renders nothing, so the
- *  built-in layout stays exactly as today. */
+/** The Atlas header's view-mode switch (issue #118): grid or table, the two
+ *  views this header belongs to. List lives on the shell's switch (with its
+ *  own "Library view" name), so this group carries its own accessible name
+ *  and never duplicates it. Without the view setter it renders nothing, so
+ *  the built-in layout stays exactly as today. */
 export function AtlasHeaderMode({ view, onViewChange }: {
   view: AtlasPageView;
-  onViewChange?: (v: 'list' | 'grid' | 'table') => void;
+  onViewChange?: (v: 'grid' | 'table') => void;
 }) {
-  const { t } = useTranslation('nav');
+  const { t } = useTranslation(['library', 'nav']);
   if (!onViewChange) return null;
   const opts = [
-    { id: 'list', label: t('nav:sourcebar.viewList'), Icon: Rows3 },
     { id: 'grid', label: t('nav:sourcebar.viewGrid'), Icon: LayoutGrid },
     { id: 'table', label: t('nav:sourcebar.viewTable'), Icon: Table2 },
   ] as const;
   return (
-    <div role="group" aria-label={t('nav:sourcebar.viewSwitch')} className="flex flex-none items-center gap-0.5">
+    <div role="group" aria-label={t('library:atlasViews.viewSwitch')} className="flex flex-none items-center gap-0.5">
       {opts.map(({ id, label, Icon }) => {
         const on = view === id;
         return (
@@ -300,7 +300,6 @@ export function AtlasHeaderMode({ view, onViewChange }: {
     </div>
   );
 }
-
 /** The Atlas header's filters popover (issue #118): compat tier, status and
  *  lending, sharing the page's filter state. The shell carries the filters
  *  popover today; the block gives themes a working in-page one. */

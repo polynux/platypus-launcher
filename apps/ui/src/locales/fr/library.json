@@ -188,6 +188,7 @@
   },
   "atlasViews": {
     "filterPlaceholder": "Filtrer la bibliothèque",
+    "viewSwitch": "Grille ou tableau",
     "blocks": {
       "continue": "Joués récemment",
       "recent": "Ajouts récents"

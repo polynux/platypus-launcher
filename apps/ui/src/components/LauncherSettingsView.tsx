@@ -42,12 +42,17 @@ interface LauncherSettingsViewProps {
   plugins: StorePlugin[];
 }
 
+/** The launcher settings sections in Atlas order: the blocks record keys
+ *  (`name.toLowerCase()`) and the tabs categories derive from this list,
+ *  so it must match the settings catalog blocks and the built-in layout. */
+export const SETTINGS_SECTION_NAMES = ['language', 'theme', 'appearance', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'notices', 'tray', 'backups', 'cloud'];
+
 export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsViewProps) {
   const { t } = useTranslation('settings');
   const navigation = useVariant('settings.navigation');
   const chrome = useVariant('section.chrome');
   const atlas = useVariant('settings-row.style') === 'srow';
-  const sectionNames = ['language', 'theme', 'appearance', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'notices', 'tray', 'backups', 'cloud'];
+  const sectionNames = SETTINGS_SECTION_NAMES;
   const [, setRenderTick] = useState(0);
   const setActiveSection = (index: number) => {
     persistedSettingsSection = sectionNames[index] ?? persistedSettingsSection;

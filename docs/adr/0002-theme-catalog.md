@@ -194,10 +194,13 @@ How the accepted decisions landed, without changing them.
   presentation (`days`, `cards`, `table`, `cards`); the classic
   presentations keep their fixed rendering and read no layout. No separate
   view id or presentation-keyed lookup was needed: the layout id is the
-  view id, and only the Atlas path loads it. Required: `downloads.queue`
-  (pause/resume/cancel), `fixes.cards` (fix actions), `runners.installed`
-  (remove, with the per-game usage truth); the empty states live inside
-  the content blocks, so hiding a content block hides its empty state.
+  view id, and only the Atlas path loads it. Required: `fixes.cards` (fix
+  actions); `runners.default`, `runners.installed` (remove, with the
+  per-game usage truth) and `runners.available` (the only runner install);
+  `downloads.header` (pause-all, resume-all, clear), `downloads.queue`
+  (pause/resume/cancel) and `downloads.finished` (retry, discard); the
+  empty states live inside the content blocks, so hiding a content block
+  hides its empty state.
 - Settings sections as layout blocks (issue #117): the fourteen launcher
   settings sections are blocks of a `settings` view (`settings.main`, all
   `Required`), used by the Atlas settings page only; the classic page
@@ -230,8 +233,10 @@ How the accepted decisions landed, without changing them.
 - Dialogs and store chrome (issues #114, #115): every dialog except the command
   palette and the Tune flyout renders through `components/Modal.tsx`, which reads `dialog.presentation` and
   `dialog.size`. `size = auto` is the use site's built-in width, so Atlas is
-  unchanged; an explicit value overrides it for every dialog, while a
-  use-site entry (e.g. `game-settings`) still owns its own presentation.
+  unchanged; an explicit value is a minimum for every dialog (the larger of
+  the use-site size and the theme size wins, so a theme can widen but never
+  shrink), while a use-site entry (e.g. `game-settings`) still owns its own
+  presentation.
   `StoreView` reads `store.toolbar` (`full|compact`) and `store.address`
   (`shown|hidden`); the native storefront is the shell's view, so the
   toolbar only reports its rect again on every render and through the

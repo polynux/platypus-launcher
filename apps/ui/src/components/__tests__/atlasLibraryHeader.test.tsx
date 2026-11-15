@@ -3,7 +3,7 @@
 // can hide the chips or move search to the end.
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
 import { TooltipProvider } from '../ds/tooltip';
 import type { Game, ThemeLayout } from '../../types';
 import { VARIANT_DEFAULTS } from '../../gen/catalog';
@@ -84,6 +84,12 @@ describe('atlas library header (issue #118)', () => {
     expect(document.querySelector('[data-region="sub"]')?.children).toHaveLength(1);
   });
 
+  it('no warnings and no chips: the sub row keeps its frame but takes no space', () => {
+    render(<AtlasLibraryPage {...pageProps()} view="grid" />);
+    const sub = document.querySelector('[data-region="sub"]');
+    expect(sub?.className).toBe('grid gap-4 empty:hidden');
+    expect(sub?.children).toHaveLength(0);
+  });
   it('a custom layout moves search to the end of the bar', () => {
     layoutState.layout = {
       view: 'library-header',
@@ -95,7 +101,7 @@ describe('atlas library header (issue #118)', () => {
     expect(sort.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('a custom layout adds the title and a working view-mode switch', () => {
+  it('a custom layout adds the title and a working grid/table switch', () => {
     const onViewChange = vi.fn();
     layoutState.layout = {
       view: 'library-header',
@@ -103,8 +109,12 @@ describe('atlas library header (issue #118)', () => {
     };
     render(<AtlasLibraryPage {...pageProps({ onViewChange, lastScan: 1700000000 })} view="grid" />);
     expect(screen.getByRole('heading', { name: 'Library' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Covers' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'List' }));
-    expect(onViewChange).toHaveBeenCalledWith('list');
+    // Grid or table only, under its own name: the shell's switch keeps
+    // "Library view" (with List) to itself.
+    const group = screen.getByRole('group', { name: 'Grid or table' });
+    expect(within(group).getByRole('button', { name: 'Covers' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(group).queryByRole('button', { name: 'List' })).not.toBeInTheDocument();
+    fireEvent.click(within(group).getByRole('button', { name: 'Table' }));
+    expect(onViewChange).toHaveBeenCalledWith('table');
   });
 });

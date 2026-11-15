@@ -163,7 +163,8 @@ export function AtlasActivity({ events, games, onOpenGame }: { events: ActivityE
       className={ATLAS_PAGE}
       // The page is a grid with gap-6: each region stacks its blocks with
       // the same gap, so the built-in arrangement keeps today's spacing.
-      regionClassName={() => 'grid min-w-0 content-start gap-6'}
+      // A region whose blocks all render nothing takes no space.
+      regionClassName={() => 'grid min-w-0 content-start gap-6 empty:hidden'}
     />
   );
 }

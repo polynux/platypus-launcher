@@ -11,6 +11,7 @@ import type { StorePlugin } from '../types';
 import { Button } from './ds/button';
 import { PluginLogo } from './PluginLogo';
 import { StoreView } from './StoreView';
+import { useVariant } from '../lib/theme';
 import { cx } from './ui';
 
 interface StoresPageProps {
@@ -26,9 +27,10 @@ interface StoresPageProps {
 
 export function StoresPage({ plugins, selected, onSelect, canRedeem, onRedeem, initialUrl, onClose, onNotify }: StoresPageProps) {
   const { t } = useTranslation(['store', 'nav']);
+  // The compact toolbar's controls shrink; the trailing Redeem follows it,
+  // while the full toolbar keeps today's 36px button.
+  const compact = useVariant('store.toolbar') === 'compact';
   // The lab's single shop bar (StorefrontPage .ap-shop-bar): the store switch
-  // as segmented buttons, then the browser row, then Redeem. No logo tabs row.
-  // The tabs shrink and scroll first when the bar narrows (audit finding 6).
   const seg = (
     <div role="tablist" aria-label={t('store:shop.storeLabel')} className="inline-flex min-w-0 shrink gap-0.5 overflow-x-auto rounded-[9px] bg-surface p-[3px]">
       {plugins.map((p) => {
@@ -68,7 +70,7 @@ export function StoresPage({ plugins, selected, onSelect, canRedeem, onRedeem, i
           shopBar
           toolbarLead={seg}
           toolbarTrail={canRedeem ? (
-              <Button variant="neutral" size="md" onClick={onRedeem} className="flex-none font-medium" title={t('store:shop.redeem')} aria-label={t('store:shop.redeem')}>
+              <Button variant="neutral" size={compact ? 'sm' : 'md'} onClick={onRedeem} className="flex-none font-medium" title={t('store:shop.redeem')} aria-label={t('store:shop.redeem')}>
               <Ticket className="h-3.5 w-3.5" /> <span className="shop-redeem-label">{t('store:shop.redeem')}</span>
             </Button>
           ) : undefined}

@@ -57,6 +57,27 @@ function layoutBlockOrder(layout: SettingsLayoutData): string[] {
   return out;
 }
 
+ /** In tabs mode the page renders one category, so prune the layout to it
+ *  before rendering: keep only the active category's blocks, collapse a
+ *  row left with one block into a plain block, and drop empty rows.
+ *  Without this a row that mixes categories renders its section half
+ *  width, with an empty column where the other category's block was. */
+function pruneLayoutForTabs(layout: SettingsLayoutData, cat: AtlasCat): SettingsLayoutData {
+  return {
+    ...layout,
+    regions: (layout.regions ?? []).map((region) => ({
+      ...region,
+      nodes: (region.nodes ?? []).flatMap((node): SettingsLayoutNode[] => {
+        if (!node.row) return node.block && SETTINGS_BLOCK_CATS[node.block] === cat ? [node] : [];
+        const kept = node.row.filter((child) => child.block && SETTINGS_BLOCK_CATS[child.block] === cat);
+        if (kept.length === 0) return [];
+        if (kept.length === 1) return [kept[0]];
+        return [{ ...node, row: kept }];
+      }),
+    })),
+  };
+}
+
 export function AtlasSettingsPage({ blocks, loadError }: {
   blocks: Record<string, React.ReactNode>;
   loadError: string | null;
@@ -126,7 +147,7 @@ export function AtlasSettingsPage({ blocks, loadError }: {
               <h2 className="mb-1 text-[18px] font-extrabold tracking-tight">{t(`atlas.cats.${activeCat}`)}</h2>
               <div>
                 <ThemeLayout
-                  layout={layout}
+                  layout={pruneLayoutForTabs(layout, activeCat)}
                   blocks={visible}
                   regionClassName={() => undefined}
                   rowClassName={() => 'grid gap-5 md:grid-cols-2'}

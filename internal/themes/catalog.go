@@ -292,14 +292,15 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "toast", Since: "1.1", Axes: []types.ThemeCatalogAxis{
 		{Name: "style", Values: []string{"card", "pill"}, Default: "card", Since: "1.1"},
 	}},
-	// Activity, Fixes, Runners and Downloads layout entries (issue #116):
-	// the Atlas presentations' regions, then their blocks in built-in order.
-	// Required (ADR §5) are the blocks that hold an action no other block
-	// offers: the fix cards; the runners' default pick, installed table
-	// (remove, with the per-game usage truth) and available list (the only
-	// runner install); the downloads header (pause/resume all, clear), queue
-	// (pause/resume/cancel) and finished list (retry, discard). Activity
-	// and the page headers without actions stay hideable.
+// Activity, Fixes, Runners and Downloads layout entries (issue #116):
+// the Atlas presentations' regions, then their blocks in built-in order.
+// Required (ADR §5) are the blocks that hold an action no other block
+// offers: the fix cards; the runners' default pick, installed table
+// (remove, with the per-game usage truth) and available list (the only
+// runner install); the downloads header (pause/resume all, clear), queue
+// (pause/resume/cancel) and finished list (retry, discard). Activity
+// and the page headers, whose actions exist elsewhere (Rescan, the shell
+// refresh), stay hideable.
 	{Entry: "activity.top", Since: "1.2", Kind: "region"},
 	{Entry: "activity.main", Since: "1.2", Kind: "region"},
 	{Entry: "activity.header", Since: "1.2", Kind: "block", Region: "top"},

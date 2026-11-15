@@ -38,10 +38,8 @@ vi.mock('../GameFoldersSettings', () => ({ GameFoldersSettings: () => <section><
 vi.mock('../BackupsSetting', () => ({ BackupsSetting: () => <section><h2>Save backups fixture</h2></section> }));
 vi.mock('../CloudSavesSetting', () => ({ CloudSavesDefaults: () => <section><h2>Cloud saves fixture</h2></section> }));
 
-import { LauncherSettingsView } from '../LauncherSettingsView';
-
-afterEach(() => { cleanup(); state.layout = null; });
-
+import { LauncherSettingsView, SETTINGS_SECTION_NAMES } from '../LauncherSettingsView';
+import { SETTINGS_BLOCK_CATS } from '../AtlasLauncherSettings';
 describe('atlas settings wiring (issue #117)', () => {
   it('shows the real Language and tray sections under General', () => {
     render(<LauncherSettingsView onNotify={() => {}} plugins={[]} />);
@@ -63,5 +61,17 @@ describe('atlas settings wiring (issue #117)', () => {
     // The game info section is block settings.gameinfo (lowercase): it must
     // reach the page, not drop out on a key mismatch.
     expect(names.some((n) => n.startsWith('Sideloaded game info lookup'))).toBe(true);
+  });
+
+  it('the blocks record keys, SETTINGS_BLOCK_CATS and the built-in layout agree', () => {
+    // The blocks record is keyed by section name lowercased, so its keys
+    // are SETTINGS_SECTION_NAMES lowercased by construction. A block the
+    // catalog adds but SETTINGS_BLOCK_CATS misses would silently disappear
+    // in tabs mode, and a renamed layout block would drop its section.
+    const layout = BUILTIN_LAYOUTS['settings'];
+    const layoutNames = layout.regions.flatMap((r) => r.nodes.flatMap((n) => n.row ? n.row.map((c) => c.block) : [n.block]));
+    const keys = SETTINGS_SECTION_NAMES.map((n) => n.toLowerCase()).sort().join(',');
+    expect(keys).toBe([...Object.keys(SETTINGS_BLOCK_CATS)].sort().join(','));
+    expect(keys).toBe([...(layoutNames as string[])].sort().join(','));
   });
 });

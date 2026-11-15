@@ -15,7 +15,6 @@ vi.mock('../../lib/theme', () => ({
 vi.mock('../../effect/runtime', () => ({ LauncherApi: {} }));
 
 import { AtlasSettingsPage } from '../AtlasLauncherSettings';
-
 afterEach(() => { cleanup(); layoutState.navigation = 'tabs'; layoutState.layout = null; });
 
 const NAMES = ['language', 'tray', 'theme', 'appearance', 'folders', 'prefixes', 'cleanup', 'backups', 'cloud', 'ratings', 'artwork', 'gameinfo', 'chat', 'notices'] as const;
@@ -80,5 +79,29 @@ describe('atlas settings layout (issue #117)', () => {
     const appearanceHeading = within(appearance).getByText('appearance heading');
     expect(theme.compareDocumentPosition(appearanceHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(theme.closest('[class*="md:grid-cols-2"]')).not.toBeNull();
+  });
+
+  it('tabs: a row mixing categories shows each section full width', () => {
+    // A theme grouping language (General) with theme (Appearance) in one
+    // row: each tab prunes the row to its own block, so no half-width row
+    // frame remains.
+    layoutState.layout = {
+      view: 'settings',
+      regions: [{
+        name: 'main',
+        nodes: [
+          { row: [{ block: 'language' }, { block: 'theme' }] },
+          ...NAMES.filter((n) => n !== 'language' && n !== 'theme').map((n) => ({ block: n })),
+        ],
+      }],
+    };
+    render(<AtlasSettingsPage blocks={fixtureBlocks()} loadError={null} />);
+    const general = screen.getByRole('region', { name: 'General' });
+    expect(within(general).getByText('language heading')).toBeInTheDocument();
+    expect(within(general).getByText('language heading').closest('[class*="md:grid-cols-2"]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+    const appearance = screen.getByRole('region', { name: 'Appearance' });
+    expect(within(appearance).getByText('theme heading')).toBeInTheDocument();
+    expect(within(appearance).getByText('theme heading').closest('[class*="md:grid-cols-2"]')).toBeNull();
   });
 });

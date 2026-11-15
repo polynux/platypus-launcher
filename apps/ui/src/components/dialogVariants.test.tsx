@@ -75,10 +75,18 @@ describe('dialogs follow the dialog variants (issue #114)', () => {
     expect(screen.getByRole('dialog', { name: 'Collection' }).className).toContain('max-w-[920px]');
   });
 
-  it('lets dialog.size override a use site size, and never a sheet width', () => {
-    state.variants['dialog.size'] = 'sm';
+  it('treats dialog.size as a minimum over a use site size, and never a sheet width', () => {
+    // A smaller theme size never shrinks a larger dialog; a larger one
+    // widens a small dialog.
+    state.variants['dialog.size'] = 'md';
     render(<Modal label="Settings" size="xl" onClose={() => {}}><p>Body</p></Modal>);
-    expect(screen.getByRole('dialog', { name: 'Settings' }).className).toContain('max-w-[440px]');
+    expect(screen.getByRole('dialog', { name: 'Settings' }).className).toContain('max-w-[920px]');
+    cleanup();
+    state.variants['dialog.size'] = 'lg';
+    render(<Modal label="Plain" onClose={() => {}}><p>Body</p></Modal>);
+    const dialog = screen.getByRole('dialog', { name: 'Plain' });
+    expect(dialog.className).toContain('max-w-[720px]');
+    expect(dialog.className).not.toContain('max-w-[440px]');
     cleanup();
     state.variants['dialog.size'] = 'xl';
     render(<Modal label="Settings sheet" presentation="sheet" onClose={() => {}}><p>Body</p></Modal>);

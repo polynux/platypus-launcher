@@ -17,4 +17,9 @@ describe('Atlas activity filters', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Updates' }));
     await waitFor(() => expect(screen.queryByText(event.detail)).toBeNull());
   });
+
+  it('the Atlas page regions collapse when their blocks render nothing', () => {
+    render(<ActivityView events={[]} />);
+    expect(document.querySelector('[data-region="main"]')?.className).toContain('empty:hidden');
+  });
 });

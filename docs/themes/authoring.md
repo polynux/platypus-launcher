@@ -197,16 +197,13 @@ value always wins. A use-site value with no broader value set keeps its
 built-in default. Inheritance applies only when the theme declares
 `variants`.
 
-Two shared surfaces read one axis each:
-
 - `dialog.presentation` (`dialog` or `sheet`) and `dialog.size` (`auto`,
   `sm`, `md`, `lg`, `xl`) reach every dialog that renders through
   `components/Modal.tsx` (all of them except the command palette and the
   Tune flyout, which keep their own surfaces). `auto` keeps each dialog's built-in width, so the
-  defaults change nothing; an explicit size overrides it, and `sheet`
-  slides dialogs in from the edge. `game-settings.presentation` still
-  overrides only the game settings. The lightbox stays a full-screen
-  overlay and the friends panel is not a dialog.
+  defaults change nothing; an explicit size is a minimum for every dialog
+  (the larger of the use-site size and the theme size wins, so a theme can
+  widen but never shrink), and `sheet` slides dialogs in from the edge.
 - `store.presentation` picks the store page; `store.toolbar` (`full` or
   `compact`) and `store.address` (`shown` or `hidden`) shape its toolbar.
   `compact` is the same row at 42px with smaller controls, and `hidden`
@@ -286,7 +283,7 @@ The views that take layouts: `dashboard`, `library`, `game`, `storage`,
 `activity`, `fixes`, `runners` and `downloads` (issue #116) had no layout
 before: their layouts describe the Atlas presentation only, and the classic
 presentations (`feed`, `rows`, `groups`) keep their fixed rendering. A
-region with no block takes no space. Shell
+region whose blocks all render nothing takes no space on the Atlas pages. Shell
 regions follow `shell.navigation`: `sidebar`
 for the sidebar variant, `topbar` for the topbar variant. Shell takes only
 the variant. A `layouts/shell.xml` file validates like any other layout,
@@ -296,11 +293,12 @@ but the shell never loads a layout: `Shell.tsx` reads only
 `settings` and `library-header` are Atlas presentations with no classic
 layout: the classic settings page keeps its fixed sections, and the classic
 library keeps its built-in `library` layout and composite header. The
-`settings` layout drives the Atlas settings page (sections as blocks, the
-category navigation following the layout's order); the `library-header`
-layout drives the Atlas grid/table page header. The settings page honours
-`settings.navigation`: `tabs` shows one category, `scroll` stacks every
-block in layout order.
+`settings` layout drives the Atlas settings page (picked by
+`settings-row.style = srow`; sections as blocks, the category navigation
+following the layout's order); the `library-header` layout drives the Atlas
+grid/table page header (shown in the `library.presentation = list-detail`
+grid/table views). The settings page honours `settings.navigation`: `tabs`
+shows one category, `scroll` stacks every block in layout order.
 
 Regions per view, from the catalog:
 
@@ -341,23 +339,8 @@ blocks per view, from the catalog:
   state, so a layout can't drop a setting.
 - `library-header`: `warnings` (in `sub`). The search, sort, title, mode,
   filters and chips blocks stay hideable, like the classic granular blocks.
-
-A layout for one of these four views, e.g. `layouts/downloads.xml`, only
-changes their Atlas presentations (`activity.presentation = days`,
-`fixes = cards`, `runners = table`, `downloads = cards`):
-
-```xml
-<layout view="downloads" catalog="1.2">
-  <region name="main">
-    <block name="header" />
-    <block name="finished" />
-    <block name="queue" />
-  </region>
-</layout>
-```
 - `shell`: none. Both variants keep Settings and Plugins reachable by
   construction.
-
 
 ```xml
 <layout view="dashboard" catalog="1.0">
@@ -373,9 +356,22 @@ changes their Atlas presentations (`activity.presentation = days`,
   </region>
 </layout>
 ```
+A layout for one of these four views, e.g. `layouts/downloads.xml`, only
+changes their Atlas presentations (`activity.presentation = days`,
+`fixes = cards`, `runners = table`, `downloads = cards`):
 
-A library header that hides the chips and moves search after a title, with
-the view-mode switch in the sub row (issue #118):
+```xml
+<layout view="downloads" catalog="1.2">
+  <region name="main">
+    <block name="header" />
+    <block name="finished" />
+    <block name="queue" />
+  </region>
+</layout>
+```
+
+A library header that hides the sort and chips and moves search after a
+title, with the view-mode switch in the sub row (issue #118):
 
 ```xml
 <layout view="library-header" catalog="1.2">
@@ -389,7 +385,6 @@ the view-mode switch in the sub row (issue #118):
   </region>
 </layout>
 ```
-
 
 - The root is `<layout>`. Anything else discards the file with a warning.
 - `view` should match the file name. A mismatch warns and reads the file as

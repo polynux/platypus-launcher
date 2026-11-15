@@ -49,15 +49,19 @@ interface ModalProps {
  *  Narrow by default (`sm`); a dialog that needs more passes a `size`.
  *  Without a presentation, the dialog.presentation axis decides (issue #156):
  *  every generic dialog follows the theme, so the axis has a reader. The
- *  dialog.size axis overrides the built-in width unless it is `auto`
- *  (issue #114), so one theme value reaches every dialog. */
+ *  dialog.size axis is a minimum unless it is `auto` (issue #114): the
+ *  larger of the use-site size and the theme size wins, so a theme can
+ *  widen but never shrink. Sheets keep their own width. */
 export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation: presentationProp, sheetWidth, onOpenAutoFocus, returnFocus, overlayClassName, contentClassName, innerClassName, contentStyle, onEscapeKeyDown, children }: ModalProps & { presentation?: 'dialog' | 'sheet' }) {
   const catalogPresentation = useVariant('dialog.presentation');
   const presentation = presentationProp ?? (catalogPresentation === 'sheet' ? 'sheet' : 'dialog');
-  // A theme that names a size overrides every dialog's built-in width; auto
+  // A theme that names a size widens every dialog at least to it; auto
   // keeps the use site's own (issue #114). Sheets keep their own width.
   const catalogSize = useVariant('dialog.size');
-  const resolvedSize: ModalSize = presentation === 'dialog' && catalogSize !== 'auto' ? catalogSize : size;
+  const order: ModalSize[] = ['sm', 'md', 'lg', 'xl'];
+  const resolvedSize: ModalSize = presentation === 'dialog' && catalogSize !== 'auto'
+    ? order[Math.max(order.indexOf(size), order.indexOf(catalogSize as ModalSize))]
+    : size;
   const restoreFocus = useRef<HTMLElement | null>(typeof document === 'undefined' ? null : document.activeElement as HTMLElement);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
