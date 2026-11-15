@@ -1374,9 +1374,11 @@ def dl_request(params, extra=None):
     return req
 
 
-def dl_run(subcommand, req, job_id=None, game_dir=None):
+def dl_run(subcommand, req, job_id=None, game_dir=None, label="download failed"):
     """Runs platypus-steam-dl and follows its JSON lines: progress
-    notifications until a result or error line. Returns the result dict."""
+    notifications until a result or error line. Returns the result dict.
+    `label` names the run in its error (`Steam app info: ...`): a download
+    failing and an app info read failing aren't the same thing to the user."""
     try:
         proc = subprocess.Popen([dl_bin(), subcommand], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -1424,12 +1426,12 @@ def dl_run(subcommand, req, job_id=None, game_dir=None):
         elif msg.get("type") == "error":
             if msg.get("code") == "auth-required":
                 raise RPCError(tr("need_login_expired"), CODE_AUTH_REQUIRED)
-            raise RPCError("download failed: {}".format(msg.get("message") or tail(line)))
+            raise RPCError("{}: {}".format(label, msg.get("message") or tail(line)))
     rc = proc.wait()
     if result is None:
-        raise RPCError("download failed: {}".format(tail("\n".join(text))))
+        raise RPCError("{}: {}".format(label, tail("\n".join(text))))
     if rc != 0:
-        raise RPCError("download failed: {}".format(tail("\n".join(text))))
+        raise RPCError("{}: {}".format(label, tail("\n".join(text))))
     return result
 
 
@@ -1821,18 +1823,18 @@ def _movie_url(movie):
 def game_terms(app):
     """The EULAs Steam lists for an app, from PICS app info (protocol 1.11,
     docs/plugins/protocol.md "Terms"). Steam keeps the acceptance itself, so
-    the plugin has no game.acceptTerms: it only lists."""
+    the plugin has no game.acceptTerms: it only lists. Read it only when
+    Platypus asked for terms, and fail when it can't: an empty list would
+    read as "no terms to accept" and let the install through."""
     if not refresh_token():
-        return []  # logged out: nothing to accept, and PICS needs the session
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
     try:
-        result = dl_run("terms", dl_request({"id": app}))
+        result = dl_run("terms", dl_request({"id": app}), label="Steam app info")
     except RPCError as e:
         if e.code == CODE_AUTH_REQUIRED:
-            # The session expired, or this app's info needs a token the account
-            # doesn't have (a sideloaded game's app id): the page keeps its
-            # metadata, and an install would ask for the login first anyway.
-            log("warn", f"no terms for {app}: {e}")
-            return []
+            # The session expired, or the token was refused: the install
+            # asks for the login rather than installing without the EULA.
+            raise
         raise RPCError(f"couldn't read the terms: {e}", e.code)
     terms = []
     for t in result.get("terms") or []:
@@ -1923,9 +1925,10 @@ def game_details(params):
             ("title", (m.get("name") or "")[:200]), ("mime", mime)) if v})
     if videos:
         out["videos"] = videos
-    terms = game_terms(app)
-    if terms:
-        out["terms"] = terms
+    if params.get("terms"):
+        terms = game_terms(app)
+        if terms:
+            out["terms"] = terms
     return {k: v for k, v in out.items() if v}
 
 

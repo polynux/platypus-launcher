@@ -49,6 +49,7 @@
 //	ECHO_FIXTURES      JSON {"<id>": {mode, log, code, afterMs, title}} - extra installed
 //	                   games whose launch script runs, exits or crashes on demand (fixtures.go)
 //	ECHO_TERMS_BUMP   set: the licence term of "licensed" has its next version (terms.go)
+//	ECHO_TERMS_AUTH   set: game.details answers -32001 when asked for terms (a store that isn't logged in)
 //	ECHO_LIBRARY_DELAY_MS  milliseconds library.list waits before it answers (a slow store)
 //	ECHO_AUTH_STATUS_DELAY_MS milliseconds auth.status waits before it answers (a slow login check)
 //	ECHO_GAMES        number of extra games to list, with covers served locally (bulk.go), to try the UI at scale
@@ -188,6 +189,10 @@ type knobs struct {
 	CopyUnavailable []string `json:"copyUnavailable"`
 	// TermsBump makes the licence term of "licensed" its next version (terms.go).
 	TermsBump bool `json:"termsBump"`
+	// TermsAuth makes game.details answer auth-required when it is asked
+	// for terms (a store that isn't logged in), and leaves it alone
+	// otherwise (terms.go).
+	TermsAuth bool `json:"termsAuth"`
 	// SettingsRefuse makes settings.apply answer an error; SettingsDelayMs holds
 	// settings.apply that many milliseconds first (settings.go).
 	SettingsRefuse  bool `json:"settingsRefuse"`
@@ -219,7 +224,7 @@ func loadKnobs() {
 	kn = knobs{Off: csv("ECHO_OFF"), Extra: csv("ECHO_EXTRA"), Unavailable: csv("ECHO_UNAVAILABLE"),
 		Missing: csv("ECHO_MISSING"), InitOmit: os.Getenv("ECHO_INIT_OMIT") != "", VersionsOff: csv("ECHO_VERSIONS_OFF"),
 		FamilyInUse: csv("ECHO_FAMILY_IN_USE"), CopyInUse: csv("ECHO_COPY_IN_USE"), CopyUnavailable: csv("ECHO_COPY_UNAVAILABLE"),
-		TermsBump: os.Getenv("ECHO_TERMS_BUMP") != ""}
+		TermsBump: os.Getenv("ECHO_TERMS_BUMP") != "", TermsAuth: os.Getenv("ECHO_TERMS_AUTH") != ""}
 	kn.FamilyWarn, _ = strconv.Atoi(os.Getenv("ECHO_FAMILY_WARN"))
 	if v := os.Getenv("ECHO_FEATURES"); v != "" {
 		_ = json.Unmarshal([]byte(v), &kn.Features)
@@ -253,6 +258,7 @@ func configure(raw json.RawMessage) {
 	set("copyInUse", &kn.CopyInUse)
 	set("copyUnavailable", &kn.CopyUnavailable)
 	set("termsBump", &kn.TermsBump)
+	set("termsAuth", &kn.TermsAuth)
 	set("settingsRefuse", &kn.SettingsRefuse)
 	set("settingsDelayMs", &kn.SettingsDelayMs)
 }
@@ -507,6 +513,9 @@ type params struct {
 	JobID      string            `json:"jobId"`
 	InstallDir string            `json:"installDir"`
 	Preview    bool              `json:"preview"`
+	// Terms is game.details asking for the terms (protocol 1.11): Platypus
+	// reads them only before an install or update, never for a game page.
+	Terms bool `json:"terms"`
 	// Executable is the user's per-game executable override (protocol 1.15):
 	// the plugin answers with a direct spec for that file.
 	Executable string            `json:"executable"`
@@ -623,6 +632,10 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 	case "game.clientStatus":
 		return map[string]any{"state": "updating", "label": "Echo client: updating"}, nil
 	case "game.details":
+		noteDetailsAsk(p.Terms)
+		if termsRefused(p.Terms) {
+			return nil, &rpcError{Code: -32001, Message: "log in to Echo first"}
+		}
 		g, ok := games[p.ID]
 		if !ok && strings.HasPrefix(p.ID, "bulk-") {
 			// The ECHO_GAMES extras have no store metadata of their own;
@@ -745,6 +758,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 	case "recorded":
 		rec := socialRecorded().(map[string]any)
 		rec["chat"] = chatRecorded()
+		rec["detailsAskedTerms"] = detailsAskedTerms()
 		stMu.Lock()
 		rec["acceptedTerms"] = st.AcceptedTerms
 		stMu.Unlock()

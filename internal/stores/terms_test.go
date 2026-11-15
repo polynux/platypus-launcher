@@ -26,3 +26,36 @@ func TestTermsAreNormalized(t *testing.T) {
 		t.Errorf("privacy = %+v: the title falls back to the id and a non-web url is dropped", got[1])
 	}
 }
+
+// Platypus reads a store's terms only when it asks for them: Terms sends
+// `terms: true` (protocol 1.11) so a plugin can keep its expensive terms read
+// for the install dialog and the gate, and a game page's Details must not.
+func TestTermsAreReadOnlyWhenAsked(t *testing.T) {
+	e := newEchoEnv(t)
+	e.login(t)
+	game := e.game(t, "licensed")
+	var rec struct {
+		DetailsAskedTerms bool `json:"detailsAskedTerms"`
+	}
+	asked := func() bool {
+		t.Helper()
+		if err := e.m.Call(e.ctx(t), "echo", "recorded", nil, &rec); err != nil {
+			t.Fatal(err)
+		}
+		return rec.DetailsAskedTerms
+	}
+
+	if _, err := e.store.Details(e.ctx(t), game); err != nil {
+		t.Fatal(err)
+	}
+	if asked() {
+		t.Error("game.details asked for terms: the game page would wait on the store's terms read")
+	}
+	terms, err := e.store.Terms(e.ctx(t), game.StoreAppID)
+	if err != nil || len(terms) == 0 {
+		t.Fatalf("terms = %+v, %v", terms, err)
+	}
+	if !asked() {
+		t.Error("Terms didn't send terms: true, so a plugin can't tell it apart from a game page")
+	}
+}

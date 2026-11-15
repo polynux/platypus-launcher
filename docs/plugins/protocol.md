@@ -125,7 +125,7 @@ other errors can contain.
 | `auth.complete` | `{ fields: { <id>: value } }` | `{ loggedIn, user? }` |
 | `auth.logout` | | `{ loggedIn }` |
 | `library.list` | | `{ games: [LibraryGame] }` |
-| `game.details` | `{ id }` | `GameDetails` (with `terms` from 1.11, media from 1.12) |
+| `game.details` | `{ id, terms? }` | `GameDetails` (with `terms` from 1.11, media from 1.12) |
 | `game.saveContext` | `{ id }` | `{ roots?, storeUserId?, prefix?, windows?, proton?, winUser? }` |
 | `game.installSize` | `{ id, target?, options? }` | `{ downloadBytes, diskBytes }` |
 | `game.install` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
@@ -1334,6 +1334,8 @@ game.acceptTerms { id, terms: [{ id, version }] } -> {}      optional: the store
   `id`, drops a term without an `id` or a `version`, and falls back to the id for a missing title. A game with no
   `terms`, or a store that doesn't answer `game.details` (`-32601`), has none. A `version` changes when the text does:
   a new version is a new term to accept, and an old acceptance doesn't count for it.
+  Platypus sets `terms: true` when it reads terms (install dialog, gate). A plugin may skip terms without it, and with it
+  must fail rather than omit terms it couldn't read.
 - **Installs and updates.** Before a fresh install, and before an update, the install dialog lists the terms the user
   hasn't accepted (in their current version) and asks for "I accept" or Cancel. Platypus checks the same before it queues
   the job: an install or update with a term still unaccepted is refused, and nothing is sent to the store. A verify,
