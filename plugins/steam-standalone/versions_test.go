@@ -251,8 +251,30 @@ func TestSteamVersionsInstallBranch(t *testing.T) {
 	if beta := channelByID(t, list, "beta"); beta["current"] != true {
 		t.Fatalf("beta not current after install: %+v", beta)
 	}
-	if list["updateAvailable"] != true {
-		t.Fatal("installing beta (200) over public (100) should offer an update")
+	// An unpinned install follows its channel: at the beta tip there is
+	// no update, even though public sits at another build.
+	if list["updateAvailable"] != false {
+		t.Fatalf("updateAvailable at the beta tip: %+v", list)
+	}
+
+	// M3: a plain update (no target) stays on the installed channel,
+	// never silently back to public.
+	if err := os.WriteFile(e.cmState+".log", nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.call("game.update", map[string]any{
+		"id": "4321", "jobId": "versions-stay", "installDir": e.folder,
+	}, nil); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	e.waitCMLog("request_code depot=11 branch=beta")
+	entry = e.waitInstalled("4321", "200")
+	if entry["channel"] != "beta" {
+		t.Fatalf("plain update left beta: %+v", entry)
+	}
+	list = e.versionsList(map[string]any{"id": "4321"})
+	if list["updateAvailable"] != false {
+		t.Fatalf("updateAvailable after staying on beta: %+v", list)
 	}
 
 	// Back to public: the same target road, no password needed.
@@ -269,6 +291,138 @@ func TestSteamVersionsInstallBranch(t *testing.T) {
 	list = e.versionsList(map[string]any{"id": "4321", "pinned": map[string]any{"kind": "channel", "id": "public"}})
 	if list["updateAvailable"] == true {
 		t.Fatal("updateAvailable pinned at the installed channel")
+	}
+}
+
+// A plain update of a locked-channel install without a stored password
+// fails with the locked error instead of switching to public.
+func TestSteamVersionsUpdateLockedWithoutPassword(t *testing.T) {
+	e := setup(t)
+	e.login()
+	e.setCMState("appinfo", versionsAppinfo(e.fix.GID))
+
+	var unlocked map[string]any
+	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "beta", "password": "beta-pw-7"}, &unlocked); err != nil {
+		t.Fatalf("unlock: %v", err)
+	}
+	if err := e.call("game.install", map[string]any{
+		"id": "4321", "jobId": "versions-locked-branch", "installDir": e.folder,
+		"target": map[string]any{"channel": "beta"},
+	}, nil); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if entry := e.waitInstalled("4321", "200"); entry["channel"] != "beta" {
+		t.Fatalf("installed = %+v", entry)
+	}
+	// Forget the password: the next plain update has nothing to unlock
+	// with. The downloader refuses before any request code goes out, so
+	// no request_code line may appear and the install stays on beta.
+	if err := os.Remove(filepath.Join(e.pluginData(), "beta_passwords.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(e.cmState+".log", nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.call("game.update", map[string]any{
+		"id": "4321", "jobId": "versions-locked-update", "installDir": e.folder,
+	}, nil); err != nil {
+		t.Fatalf("update start: %v", err)
+	}
+	e.waitCMLog("pics_info 4321")
+	time.Sleep(5 * time.Second)
+	raw, _ := os.ReadFile(e.cmState + ".log")
+	if strings.Contains(string(raw), "request_code") {
+		t.Fatalf("locked update downloaded instead of refusing:\n%s", raw)
+	}
+	var installed map[string]map[string]any
+	raw, _ = os.ReadFile(filepath.Join(e.pluginData(), "installed.json"))
+	if _ = json.Unmarshal(raw, &installed); installed["4321"]["channel"] != "beta" {
+		t.Fatalf("locked update switched channels: %+v", installed["4321"])
+	}
+}
+
+// Shared depots (depotfromapp) resolve their manifest from the source app.
+// The source here only carries public, so a beta install falls back to the
+// source's public gid; a pinned manifest for the shared depot skips the
+// source lookup entirely.
+func sharedVersionsAppinfo(gid uint64) string {
+	return `"depots"
+{
+"branches"
+{
+"public" { "buildid" "100" "description" "Default" }
+"beta" { "buildid" "200" "description" "Beta" "pwdrequired" "1" }
+}
+"11"
+{
+"config" { "oslist" "linux" }
+"manifests" { "public" { "gid" "` + fmt.Sprint(gid) + `" } "beta" { "gid" "` + fmt.Sprint(gid) + `" } }
+}
+"12"
+{
+"config" { "oslist" "linux" }
+"depotfromapp" "999"
+}
+}
+`
+}
+
+func sharedSourceAppinfo(gid uint64) string {
+	return `"depots"
+{
+"12"
+{
+"config" { "oslist" "linux" }
+"manifests" { "public" { "gid" "` + fmt.Sprint(gid) + `" } }
+}
+}
+`
+}
+
+func TestSteamVersionsSharedDepot(t *testing.T) {
+	e := setup(t)
+	e.login()
+	e.setCMState("appinfo", sharedVersionsAppinfo(e.fix.GID))
+	e.setCMState("appinfo_999", sharedSourceAppinfo(e.fix.GID))
+
+	var unlocked map[string]any
+	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "beta", "password": "beta-pw-7"}, &unlocked); err != nil {
+		t.Fatalf("unlock: %v", err)
+	}
+	if err := e.call("game.install", map[string]any{
+		"id": "4321", "jobId": "versions-shared", "installDir": e.folder,
+		"target": map[string]any{"channel": "beta"},
+	}, nil); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	entry := e.waitInstalled("4321", "200")
+	if entry["channel"] != "beta" {
+		t.Fatalf("installed = %+v", entry)
+	}
+	arch := entry["archiveRef"].(map[string]any)["depots"].(map[string]any)
+	if arch["11"] != fmt.Sprint(e.fix.GID) || arch["12"] != fmt.Sprint(e.fix.GID) {
+		t.Fatalf("shared depot missed the source public gid: %+v", arch)
+	}
+	if log := e.waitCMLog("pics_info 999"); !strings.Contains(log, "pics_info 999") {
+		t.Fatalf("no source-app lookup in CM log:\n%s", log)
+	}
+
+	// A pinned manifest for the shared depot skips the source app: point
+	// the source at nothing and the update still lands.
+	e.setCMState("appinfo_999", `"depots" { }`)
+	if err := os.WriteFile(e.cmState+".log", nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.call("game.update", map[string]any{
+		"id": "4321", "jobId": "versions-shared-pinned", "installDir": e.folder,
+		"target": map[string]any{"manual": map[string]string{"input": "11: " + fmt.Sprint(e.fix.GID) + "\n12: " + fmt.Sprint(e.fix.GID)}},
+	}, nil); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	e.waitCMLog("request_code depot=12")
+	log := e.cmLog()
+	if strings.Contains(log, "pics_info 999") {
+		t.Fatalf("pinned update asked the source app:\n%s", log)
 	}
 }
 

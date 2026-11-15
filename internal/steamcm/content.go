@@ -333,8 +333,12 @@ func (s *Session) CDNAuthToken(depotID uint32, host string, appID uint32, timeou
 }
 
 // CheckBetaPassword checks a password branch (EMsg 5450/5451:
-// CMsgClientCheckAppBetaPassword: app_id = 1, betapassword = 2).
-func (s *Session) CheckBetaPassword(appID uint32, password string, timeout time.Duration) error {
+// CMsgClientCheckAppBetaPassword: app_id = 1, betapassword = 2). On
+// success it returns the branch names the response lists
+// (CMsgClientCheckAppBetaPasswordResponse: betapasswords = 4, each an
+// AppBetaPassword with betaname = 1, per SteamDatabase/Protobufs), so the
+// caller can refuse a password that unlocked something else.
+func (s *Session) CheckBetaPassword(appID uint32, password string, timeout time.Duration) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if timeout == 0 {
@@ -346,13 +350,13 @@ func (s *Session) CheckBetaPassword(appID uint32, password string, timeout time.
 	s.jobID++
 	job := s.jobID
 	if err := s.conn.WriteMessage(2, packEMsg(EMsgClientCheckAppBetaPassword, header(s.steamID, s.sessionID, job, ""), e.Bytes())); err != nil {
-		return &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+		return nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 	}
 	deadline := time.Now().Add(timeout)
 	for {
 		emsg, rhdr, body, err := s.readOne(deadline)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if emsg == EMsgClientHeartBeat {
 			s.sideMessage(emsg, rhdr, body)
@@ -361,12 +365,22 @@ func (s *Session) CheckBetaPassword(appID uint32, password string, timeout time.
 		if emsg == EMsgClientCheckAppBetaPassword+1 && rhdr.Int(11) == job {
 			m, err := depot.Decode(body)
 			if err != nil {
-				return &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+				return nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 			}
 			if eresult := int(m.Int(1)); eresult != 1 {
-				return &CMError{Msg: "Steam rejected the request with " + EResultName(eresult), EResult: eresult, Auth: tokenRejected(eresult)}
+				return nil, &CMError{Msg: "Steam rejected the request with " + EResultName(eresult), EResult: eresult, Auth: tokenRejected(eresult)}
 			}
-			return nil
+			var names []string
+			for _, raw := range m.AllBytes(4) {
+				sub, err := depot.Decode(raw)
+				if err != nil {
+					continue
+				}
+				if name := string(sub.Bytes(1)); name != "" {
+					names = append(names, name)
+				}
+			}
+			return names, nil
 		}
 		s.sideMessage(emsg, rhdr, body)
 	}

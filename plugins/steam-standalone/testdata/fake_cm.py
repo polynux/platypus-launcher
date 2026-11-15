@@ -495,7 +495,9 @@ def serve_content(conn, emsg, hdr, body, st, steamid, sessionid):
         for raw in req.get(2, []):
             app = pb_parse(raw).get(1, [0])[0]
         record(f"pics_info {app}")
-        kv = st.get("appinfo") or product_kv(st)
+        # Per-app appinfo for shared-depot fixtures ("appinfo_<id>"),
+        # else the global one.
+        kv = st.get("appinfo_%d" % app) or st.get("appinfo") or product_kv(st)
         entry = (pb_int(1, app) + pb_int(2, 42)
                  + pb_str(5, kv.encode()))
         conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid),
@@ -504,8 +506,24 @@ def serve_content(conn, emsg, hdr, body, st, steamid, sessionid):
         # beta_password_eresult refuses the password (a wrong-password live
         # shape the unlock tests drive); the default 1 accepts it.
         record(f"beta_password app={pb_parse(body).get(1, [0])[0]}")
-        conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid),
-                                pb_int(1, st.get("beta_password_eresult", 1))))
+        resp = pb_int(1, st.get("beta_password_eresult", 1))
+        if st.get("beta_password_eresult", 1) == 1:
+            # The response lists the branches the password opened
+            # (betapasswords = 4, betaname = 1): every pwdrequired branch
+            # in the served appinfo, like a live accept.
+            for name in locked_branches(st.get("appinfo") or ""):
+                resp += pb_msg(4, pb_str(1, name))
+        conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid), resp))
+
+
+def locked_branches(appinfo):
+    """Branch names with pwdrequired in a text KeyValues appinfo buffer."""
+    import re
+    names = []
+    for m in re.finditer(r'"([^"]+)"\s*\{([^{}]*)\}', appinfo):
+        if re.search(r'"pwdrequired"\s+"1"', m.group(2)):
+            names.append(m.group(1))
+    return names
 
 
 def serve_servers(conn, hdr, body, st, steamid, sessionid):

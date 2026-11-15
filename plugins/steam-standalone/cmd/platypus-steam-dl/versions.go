@@ -141,10 +141,14 @@ func parseBranches(kv *steam.KV) ([]branchInfo, error) {
 			bi.Manifests[depotID] = gid
 		}
 	}
-	// Drop branches with no manifests anywhere: not installable.
+	// Drop open branches with no manifests anywhere: not installable.
+	// Locked branches stay listed even with none: live, their gids may
+	// live only in encryptedmanifests (decrypted after an unlock) or be
+	// absent. The plugin shows the channel locked with no builds instead
+	// of dropping it.
 	out := make([]branchInfo, 0, len(branches))
 	for _, bi := range branches {
-		if len(bi.Manifests) == 0 {
+		if len(bi.Manifests) == 0 && !bi.PwdRequired {
 			continue
 		}
 		out = append(out, *bi)
@@ -186,12 +190,18 @@ func branchForBuild(branches []branchInfo, build string) *branchInfo {
 
 // branchForManifests returns the first branch (public first) whose manifests
 // cover every override gid, so a pinned set reinstalls under its own branch.
-// Nil when no single branch carries them all.
-func branchForManifests(branches []branchInfo, overrides map[uint32]uint64) *branchInfo {
+// A locked branch only counts when its password is stored (hasPassword):
+// an old public build kept on a locked branch must not route there, or the
+// install is refused (or lands under the wrong branch). Nil when no single
+// branch carries them all.
+func branchForManifests(branches []branchInfo, overrides map[uint32]uint64, hasPassword func(string) bool) *branchInfo {
 	if len(overrides) == 0 {
 		return nil
 	}
 	for i := range branches {
+		if branches[i].PwdRequired && (hasPassword == nil || !hasPassword(branches[i].Name)) {
+			continue
+		}
 		match := true
 		for depot, gid := range overrides {
 			if branches[i].Manifests[depot] != gid {
@@ -220,15 +230,15 @@ func parseManualManifests(input string) (map[uint32]uint64, error) {
 		if sep < 0 {
 			return nil, fmt.Errorf("bad manifest line %q: want \"depot: gid\"", line)
 		}
-		var depot uint32
-		var gid uint64
-		if _, err := fmt.Sscanf(strings.TrimSpace(line[:sep]), "%d", &depot); err != nil || depot == 0 {
+		depot64, err := strconv.ParseUint(strings.TrimSpace(line[:sep]), 10, 32)
+		if err != nil || depot64 == 0 {
 			return nil, fmt.Errorf("bad manifest line %q: want \"depot: gid\"", line)
 		}
-		if _, err := fmt.Sscanf(strings.TrimSpace(line[sep+1:]), "%d", &gid); err != nil || gid == 0 {
+		gid, err := strconv.ParseUint(strings.TrimSpace(line[sep+1:]), 10, 64)
+		if err != nil || gid == 0 {
 			return nil, fmt.Errorf("bad manifest line %q: want \"depot: gid\"", line)
 		}
-		out[depot] = gid
+		out[uint32(depot64)] = gid
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("type one manifest id per depot, like \"11: 1234567890\"")
@@ -247,15 +257,15 @@ func parseArchiveManifests(raw json.RawMessage) (map[uint32]uint64, error) {
 	}
 	out := map[uint32]uint64{}
 	for idStr, gidStr := range ref.Depots {
-		var depot uint32
-		var gid uint64
-		if _, err := fmt.Sscanf(idStr, "%d", &depot); err != nil || depot == 0 {
+		depot64, err := strconv.ParseUint(strings.TrimSpace(idStr), 10, 32)
+		if err != nil || depot64 == 0 {
 			return nil, fmt.Errorf("bad archive reference: depot %q", idStr)
 		}
-		if _, err := fmt.Sscanf(gidStr, "%d", &gid); err != nil || gid == 0 {
+		gid, err := strconv.ParseUint(strings.TrimSpace(gidStr), 10, 64)
+		if err != nil || gid == 0 {
 			return nil, fmt.Errorf("bad archive reference: manifest %q", gidStr)
 		}
-		out[depot] = gid
+		out[uint32(depot64)] = gid
 	}
 	return out, nil
 }
@@ -310,6 +320,11 @@ func resolveTarget(branches []branchInfo, req request) (resolvedTarget, error) {
 		return resolvedTarget{branch: branch, password: pw, build: bi.BuildID, versionName: bi.Name}, nil
 	}
 	overrides := map[uint32]uint64{}
+	// Typed values with no usable input must error, never fall through
+	// to the default branch.
+	if len(t.Manual) > 0 && strings.TrimSpace(t.Manual["input"]) == "" {
+		return resolvedTarget{}, fmt.Errorf("type one manifest id per depot, like \"11: 1122334455\"")
+	}
 	if input := strings.TrimSpace(t.Manual["input"]); input != "" {
 		m, err := parseManualManifests(input)
 		if err != nil {
@@ -332,7 +347,7 @@ func resolveTarget(branches []branchInfo, req request) (resolvedTarget, error) {
 	if t.Channel != "" {
 		branch = t.Channel
 	} else if len(overrides) > 0 {
-		if bi := branchForManifests(branches, overrides); bi != nil {
+		if bi := branchForManifests(branches, overrides, func(branch string) bool { return passwordFor(branch) != "" }); bi != nil {
 			branch = bi.Name
 		} else {
 			branch = "public"
@@ -365,7 +380,13 @@ func resolveTarget(branches []branchInfo, req request) (resolvedTarget, error) {
 		} else {
 			build = manualBuildID(overrides)
 		}
-		versionName = "pinned manifests"
+		// A history build keeps its ledger name (or "build N"); the
+		// generic label is only for typed input.
+		if len(t.ArchiveRef) > 0 {
+			versionName = "build " + build
+		} else {
+			versionName = "pinned manifests"
+		}
 	} else if t.Build != "" && t.Build != bi.BuildID {
 		return resolvedTarget{}, fmt.Errorf("the %s branch is now at build %s, not %s: pick the version again", bi.Name, bi.BuildID, t.Build)
 	} else if t.Build != "" {
@@ -452,13 +473,22 @@ func runUnlock(ctx context.Context, req request) error {
 	if !bi.PwdRequired {
 		return fmt.Errorf("the %s branch has no password", bi.Name)
 	}
-	if err := cm.CheckBetaPassword(req.AppID, req.BranchPassword, 0); err != nil {
+	names, err := cm.CheckBetaPassword(req.AppID, req.BranchPassword, 0)
+	if err != nil {
 		if refused(err) {
 			emit(map[string]any{"type": "result", "unlocked": false})
 			return nil
 		}
 		return err
 	}
-	emit(map[string]any{"type": "result", "unlocked": true})
+	// Call success alone is not an unlock: the response lists the
+	// branches the password opened. Anything else is not this branch.
+	for _, n := range names {
+		if n == req.Branch {
+			emit(map[string]any{"type": "result", "unlocked": true})
+			return nil
+		}
+	}
+	emit(map[string]any{"type": "result", "unlocked": false})
 	return nil
 }

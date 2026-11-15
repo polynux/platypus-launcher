@@ -17,7 +17,7 @@ const versionsKV = `"depots" {` +
 	`"old" { "buildid" "50" "description" "Old" }` +
 	`}` +
 	`"11" { "config" { "oslist" "linux" } "manifests" { "public" { "gid" "111" } "beta" { "gid" "112" } "old" { "gid" "113" } } }` +
-	`"12" { "config" { "oslist" "linux" } "manifests" { "public" { "gid" "121" } "beta" { "gid" "122" } } }` +
+	`"12" { "config" { "oslist" "linux" } "manifests" { "public" { "gid" "121" } "beta" { "gid" "122" } "old" { "gid" "123" } } }` +
 	`}`
 
 func parseTestBranches(t *testing.T) []branchInfo {
@@ -75,6 +75,33 @@ func TestParseBranchesDropsEmpty(t *testing.T) {
 	}
 	if len(branches) != 1 || branches[0].Name != "public" {
 		t.Fatalf("branches = %+v, want only public", branches)
+	}
+}
+
+// A locked branch with no manifests anywhere is listed anyway (the channel
+// shows locked with no builds): live its gids may live only in
+// encryptedmanifests. An open one is still dropped.
+func TestParseBranchesKeepsLockedEmpty(t *testing.T) {
+	kv, err := steam.ParseKV(`"depots" { ` +
+		`"branches" { "ghost" { "buildid" "9" } "secret" { "buildid" "10" "pwdrequired" "1" } } ` +
+		`"11" { "manifests" { "public" { "gid" "111" } } } ` +
+		`}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	branches, err := parseBranches(kv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(branches) != 2 {
+		t.Fatalf("branches = %+v, want public and secret", branches)
+	}
+	bi := findBranch(branches, "secret")
+	if bi == nil || !bi.PwdRequired || len(bi.Manifests) != 0 {
+		t.Fatalf("secret = %+v, want a locked branch with no manifests", bi)
+	}
+	if findBranch(branches, "ghost") != nil {
+		t.Fatalf("open ghost branch must stay dropped: %+v", branches)
 	}
 }
 
@@ -185,7 +212,7 @@ func TestParseManualManifests(t *testing.T) {
 	if m[11] != 111 || m[12] != 122 {
 		t.Fatalf("manifests = %v", m)
 	}
-	for _, bad := range []string{"", "abc", "11", "11: 0", "0: 5", "11: xyz"} {
+	for _, bad := range []string{"", "abc", "11", "11: 0", "0: 5", "11: xyz", "11: 123abc", "12x: 5"} {
 		if _, err := parseManualManifests(bad); err == nil {
 			t.Fatalf("input %q must error", bad)
 		}
@@ -223,15 +250,73 @@ func TestResolveTargetManual(t *testing.T) {
 	if _, err := resolveTarget(branches, request{Target: &versionTarget{ArchiveRef: []byte(`{"depots": {"11": "x"}}`)}}); err == nil {
 		t.Fatal("expected an error for a bad archive reference")
 	}
+	// Typed values with no usable input install nothing, not the default.
+	for _, manual := range []map[string]string{{"foo": "x"}, {"input": ""}, {"input": "  \n "}} {
+		if _, err := resolveTarget(branches, request{Target: &versionTarget{Manual: manual}}); err == nil {
+			t.Fatalf("manual %v must error", manual)
+		}
+	}
 }
 
 // A pinned set from a branch reinstalls under that branch.
 func TestBranchForManifests(t *testing.T) {
 	branches := parseTestBranches(t)
-	if bi := branchForManifests(branches, map[uint32]uint64{11: 112, 12: 122}); bi == nil || bi.Name != "beta" {
+	unlocked := func(branch string) bool { return branch == "beta" }
+	if bi := branchForManifests(branches, map[uint32]uint64{11: 112, 12: 122}, unlocked); bi == nil || bi.Name != "beta" {
 		t.Fatalf("branch = %+v", bi)
 	}
-	if bi := branchForManifests(branches, map[uint32]uint64{11: 1}); bi != nil {
+	if bi := branchForManifests(branches, map[uint32]uint64{11: 1}, unlocked); bi != nil {
 		t.Fatalf("branch = %+v, want nil", bi)
+	}
+	// A locked branch only counts with its password stored: without one
+	// the old public gids must not route to it.
+	if bi := branchForManifests(branches, map[uint32]uint64{11: 112, 12: 122}, nil); bi != nil {
+		t.Fatalf("branch = %+v, want nil without the password", bi)
+	}
+}
+
+// M1: public moved to build 101 while locked `previous` still holds the old
+// public gids at build 100. A history target without a channel resolves to
+// public; the locked branch never grabs it.
+func TestResolveTargetHistorySkipsLockedBranch(t *testing.T) {
+	kv, err := steam.ParseKV(`"depots" {` +
+		`"branches" {` +
+		`"public" { "buildid" "101" }` +
+		`"previous" { "buildid" "100" "pwdrequired" "1" }` +
+		`}` +
+		`"11" { "manifests" { "public" { "gid" "201" } "previous" { "gid" "200" } } }` +
+		`}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	branches, err := parseBranches(kv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := []byte(`{"depots": {"11": "200"}}`)
+	rt, err := resolveTarget(branches, request{Target: &versionTarget{Build: "100", ArchiveRef: old}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rt.branch != "public" {
+		t.Fatalf("rt = %+v, want public", rt)
+	}
+	rt, err = resolveTarget(branches, request{Target: &versionTarget{Channel: "public", Build: "100", ArchiveRef: old}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rt.branch != "public" || rt.manifests[11] != 200 {
+		t.Fatalf("rt = %+v, want public with the pinned gid", rt)
+	}
+	// With the password stored the same set honestly resolves to previous.
+	rt, err = resolveTarget(branches, request{
+		Target:          &versionTarget{Build: "100", ArchiveRef: old},
+		BranchPasswords: map[string]string{"previous": "pw"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rt.branch != "previous" {
+		t.Fatalf("rt = %+v, want previous with its password stored", rt)
 	}
 }

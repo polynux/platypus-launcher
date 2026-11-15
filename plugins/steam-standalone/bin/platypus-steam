@@ -1388,11 +1388,15 @@ def dl_request(params, extra=None):
     # A version target (protocol 1.3): the channel, build, typed manifests
     # or install-history reference the downloader resolves against PICS.
     # Stored beta passwords ride along keyed by branch; the downloader uses
-    # the resolved branch's. Never logged.
+    # the resolved branch's. Never logged. A target naming its channel only
+    # needs that channel's password.
     if params.get("target"):
         req["target"] = params["target"]
         stored = (beta_passwords().get(str(params["id"])) or {})
-        if stored:
+        channel = params["target"].get("channel") if isinstance(params["target"], dict) else ""
+        if channel and channel in stored:
+            req["branch_passwords"] = {channel: stored[channel]}
+        elif stored and not channel:
             req["branch_passwords"] = dict(stored)
     if extra:
         req.update(extra)
@@ -1555,7 +1559,14 @@ def versions_list(params):
         })
     update_available = False
     if installed_build:
+        # An unpinned game follows the channel it was installed from, so
+        # "update" means that channel moved; public is only the fallback
+        # when the recorded channel is gone.
         want = public_build_id(channels)
+        if installed_channel:
+            ch = find_branch(channels, installed_channel)
+            if ch is not None:
+                want = ch.get("buildId") or ""
         pinned = params.get("pinned") or {}
         if isinstance(pinned, dict):
             if pinned.get("kind") == "build" and pinned.get("id"):
@@ -1644,6 +1655,17 @@ def start_job(params, kind):
     os.makedirs(game_dir, exist_ok=True)
     dl_kind = "update" if kind == "update" else "install"
     version = {k: params[k] for k in ("branch", "branchPassword", "branch_password", "target") if params.get(k)}
+    if kind == "update" and "target" not in version and "branch" not in version:
+        # An unpinned game stays on the channel it was installed from
+        # (like the Steam client), never silently back to public. The
+        # stored password unlocks it; without one the downloader refuses
+        # with the locked-branch error.
+        channel = (load_state("installed.json", {}).get(app) or {}).get("channel") or ""
+        if channel:
+            version["branch"] = channel
+            stored = (beta_passwords().get(app) or {})
+            if channel in stored and "branchPassword" not in version and "branch_password" not in version:
+                version["branchPassword"] = stored[channel]
     threading.Thread(target=follow_install, args=(job_id, app, game_dir, dl_kind, version), daemon=True).start()
     return {}
 
@@ -2282,7 +2304,10 @@ def initialize(params):
     return {"name": "Steam (standalone)", "version": "0.6.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions"],
-            "features": {"versions": {"channels": True, "builds": True, "password": True, "manual": True}},
+            # Password branches are unverified against live Steam (no
+            # encryptedmanifests decryption yet): listed locked, unlock
+            # kept but unadvertised.
+            "features": {"versions": {"channels": True, "builds": True, "password": False, "manual": True}},
             "missing": []}
 
 

@@ -2,7 +2,7 @@
 // plugin, replacing DepotDownloader for installs and logins. It speaks
 // one subcommand per argv:
 //
-//	platypus-steam-dl size|install|update|verify|terms|auth
+//	platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth
 //
 // The request (app id, branch, dirs, and the refresh token) arrives as one
 // JSON object on stdin — the token never goes in argv (visible in
@@ -29,7 +29,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|auth")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth")
 	}
 	if os.Args[1] == "auth" {
 		if err := runAuth(context.Background()); err != nil {

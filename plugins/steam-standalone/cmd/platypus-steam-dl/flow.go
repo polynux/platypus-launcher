@@ -170,16 +170,21 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 			refs[i].KeyAppID = appID
 			continue
 		}
-		gid, err := sharedManifestGID(ctx, s, r.DepotID, r.FromApp, rt.branch, 0)
-		if err != nil {
-			return nil, "", resolvedTarget{}, err
-		}
-		refs[i].GID = gid
 		if free {
 			refs[i].KeyAppID = appID
 		} else {
 			refs[i].KeyAppID = r.FromApp
 		}
+		// A pinned override names the manifest itself: no need to ask
+		// the source app, which may not even carry this branch.
+		if _, ok := rt.manifests[r.DepotID]; ok {
+			continue
+		}
+		gid, err := sharedManifestGID(ctx, s, r.DepotID, r.FromApp, rt.branch, 0)
+		if err != nil {
+			return nil, "", resolvedTarget{}, err
+		}
+		refs[i].GID = gid
 	}
 	// Pinned manifests (typed or from the install history) win over the
 	// branch's: an override naming a depot outside this branch errors
@@ -210,7 +215,7 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 	// here with a distinct message instead of "no depots".
 	pwHash := branchPasswordHash(s.req)
 	if pwHash != "" {
-		if err := s.cm.CheckBetaPassword(appID, s.req.BranchPassword, 30*time.Second); err != nil {
+		if _, err := s.cm.CheckBetaPassword(appID, s.req.BranchPassword, 30*time.Second); err != nil {
 			return nil, "", resolvedTarget{}, fmt.Errorf("wrong branch password for %q: %w", s.req.Branch, err)
 		}
 	}
@@ -402,7 +407,9 @@ type tokenKey struct {
 
 // sharedManifestGID resolves a shared depot's manifest gid straight from
 // the source app's entry, recursing like DepotDownloader when the source
-// entry itself proxies elsewhere. Depths stay tiny; self-references stop.
+// entry itself proxies elsewhere. When the source app has no gid for the
+// branch, its public gid is used: shared depots rarely carry every beta.
+// Depths stay tiny; self-references stop.
 func sharedManifestGID(ctx context.Context, s *session, depotID, appID uint32, branch string, depth int) (uint64, error) {
 	if depth > 3 {
 		return 0, fmt.Errorf("shared depot %d resolution too deep", depotID)
@@ -419,11 +426,16 @@ func sharedManifestGID(ctx context.Context, s *session, depotID, appID uint32, b
 	if entry == nil {
 		return 0, fmt.Errorf("shared depot %d has no entry in app %d", depotID, appID)
 	}
-	if gidStr := entry.String("manifests", branch, "gid"); gidStr != "" {
-		var gid uint64
-		fmt.Sscanf(gidStr, "%d", &gid)
-		if gid != 0 {
-			return gid, nil
+	try := []string{branch}
+	if branch != "public" {
+		try = append(try, "public")
+	}
+	for _, b := range try {
+		if gidStr := entry.String("manifests", b, "gid"); gidStr != "" {
+			var gid uint64
+			if _, err := fmt.Sscanf(gidStr, "%d", &gid); err == nil && gid != 0 {
+				return gid, nil
+			}
 		}
 	}
 	if from := entry.String("depotfromapp"); from != "" {
