@@ -1,7 +1,7 @@
-// Cloud saves (read + pull, issue #6) through the plugin's real JSON-RPC
-// surface: param errors, unsupported, status/pull/push/resolve against the
-// fake CM (testdata/fake_cm.py) Cloud handlers, with downloads over its
-// loopback HTTP server. No Valve network. Scratch dirs only: the CloudContext
+// Cloud saves (issue #6) through the plugin's real JSON-RPC surface: param
+// errors, unsupported, status/pull/push/resolve against the fake CM
+// (testdata/fake_cm.py) Cloud handlers, with file bytes over its loopback
+// HTTP server. No Valve network. Scratch dirs only: the CloudContext
 // homes/prefixes/install dirs all live under the test root, never the real
 // home or a real prefix.
 package steam_test
@@ -45,7 +45,7 @@ func (e *env) cloudCtx(t *testing.T) (map[string]any, string) {
 	}
 	return map[string]any{
 		"os": "linux", "home": home, "installDir": install,
-		"xdgData": filepath.Join(home, ".local", "share"),
+		"xdgData":   filepath.Join(home, ".local", "share"),
 		"xdgConfig": filepath.Join(home, ".config"),
 	}, install
 }
@@ -264,7 +264,7 @@ func TestCloudPullBadSHA(t *testing.T) {
 }
 
 // Conflicts are never overwritten: resolve remote downloads with a backup,
-// resolve local defers to the push phase without uploading.
+// resolve local uploads this device's copy.
 func TestCloudConflictResolve(t *testing.T) {
 	e := setup(t)
 	e.login()
@@ -325,8 +325,8 @@ func TestCloudConflictResolve(t *testing.T) {
 	}
 
 	// Local: change both sides again (a newer cloud save and a newer local
-	// file) so the status is a conflict the choices can settle. The cloud
-	// copy is never touched by a local choice; push reports it as pending.
+	// file) so the status is a conflict the choices can settle. A local
+	// choice uploads this device's copy with the push path.
 	write("local-newer")
 	e.cloudKnobs("%GameInstall%saves/c.sav", "cloud-newer", false, 1700000002)
 	st, err = e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": ctx})
@@ -341,23 +341,32 @@ func TestCloudConflictResolve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if kept.State != "pending" || kept.Counts.Upload != 1 {
-		t.Fatalf("resolve local = %+v", kept)
+	if kept.State != "synced" || kept.Counts.Same != 1 {
+		t.Fatalf("resolve local = %+v, want the upload applied", kept)
 	}
-	push, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-kept"})
+	// The repeated jobId answers the same stored result.
+	keptAgain, err := e.cloudCall(t, "cloud.resolve", map[string]any{"id": "4321", "ctx": ctx, "jobId": "resolve-local",
+		"choices": map[string]string{"saves/c.sav": "local"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if push.State != "pending" || !strings.Contains(push.Message, "Uploading saves isn't enabled yet.") {
-		t.Fatalf("push = %+v, must not upload", push)
+	if keptAgain.State != kept.State || keptAgain.Counts != kept.Counts {
+		t.Fatalf("repeated resolve jobId: %+v vs %+v", keptAgain, kept)
 	}
-	// The repeated push jobId answers the same stored result.
-	pushAgain, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-kept"})
+	// The fake holds the uploaded bytes: removing the local file and
+	// pulling brings back exactly what the local choice uploaded.
+	if err := os.Remove(filepath.Join(install, "saves", "c.sav")); err != nil {
+		t.Fatal(err)
+	}
+	back, err := e.cloudCall(t, "cloud.pull", map[string]any{"id": "4321", "ctx": ctx, "jobId": "pull-after-resolve-local"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pushAgain.State != push.State || pushAgain.Counts != push.Counts {
-		t.Fatalf("repeated push jobId: %+v vs %+v", pushAgain, push)
+	if back.State != "synced" {
+		t.Fatalf("pull after resolve local = %+v", back)
+	}
+	if got, _ := os.ReadFile(filepath.Join(install, "saves", "c.sav")); string(got) != "local-newer" {
+		t.Fatalf("downloaded = %q, want the uploaded copy", got)
 	}
 }
 

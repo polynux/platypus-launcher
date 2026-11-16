@@ -3582,9 +3582,9 @@ def game_save_context(params):
 # --- cloud saves (protocol 1.2) -------------------------------------------------
 #
 # Reads compare both sides; pulls download what changed only in the cloud
-# (verified, backed up, baseline updated). Pushes and `local` resolve
-# choices compute the status without uploading anything: uploads wait for
-# the push phase (issue #6), and the answer says so.
+# (verified, backed up, baseline updated); pushes and `local` resolve choices
+# upload what changed only on this device (quota-checked Steam batch flow,
+# baseline updated, conflicts never uploaded).
 
 def cloud_check(params, need_job):
     """The app id and CloudContext every cloud.* request carries. The exact

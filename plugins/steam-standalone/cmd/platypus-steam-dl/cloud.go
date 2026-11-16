@@ -1,9 +1,10 @@
-// Cloud saves, read + pull side (protocol 1.2, issue #6, plan phases P1+P2).
-//
-// One-shot `cloud` subcommand: the request carries op status|pull|push|
-// resolve plus the CloudContext and (for pull/push/resolve) the jobId.
-// Uploads are out of scope here: cloud.push and `local` resolve choices
-// compute the status and say so, without calling any Steam upload API.
+// Cloud saves (protocol 1.2, issue #6, plan phases P1-P3): compare, pull and
+// push over the helper's own CM session. Uploads run the Steam batch flow
+// (BeginAppUploadBatch -> per file BeginFileUpload -> HTTP blocks ->
+// CommitFileUpload -> CompleteAppUploadBatchBlocking, quota checked first)
+// and only for files the baseline proves unchanged in the cloud; a file the
+// cloud changed since the baseline is a conflict, uploaded never. Files to
+// delete are never named: the plan forbids cloud deletes.
 //
 // Layout under PLATYPUS_PLUGIN_DATA, per game (D6: our own baseline, never
 // the official client's remotecache.vdf):
@@ -19,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha1"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -783,11 +785,49 @@ func compareCloud(list []cloudFile, local map[string]string, ufs *cloudUFS, ctx 
 			pf.Want = "conflict" // was synced, now gone from the cloud: ask
 		} else {
 			pf.Want = "upload"
+			pf.CloudName = uploadCloudName(ufs, ctx, steamID, lp, rel)
 		}
 		files = append(files, pf)
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Rel < files[j].Rel })
 	return files, unmapped
+}
+
+// effectiveCloudRoot applies the first matching client-OS override to a rule
+// root, the same choice ruleSearchDir and mapCloudName make when placing a
+// cloud file. The returned token names the %Root% a new local file uploads
+// under.
+func effectiveCloudRoot(ruleRoot string, ufs *cloudUFS, osName string) string {
+	root := ruleRoot
+	for _, ov := range ufs.Overrides {
+		if !strings.EqualFold(ov.Root, root) || !strings.EqualFold(ov.OS, osName) {
+			continue
+		}
+		root = ov.UseInstead
+		break
+	}
+	return root
+}
+
+// uploadCloudName files a local-only save under the cloud name the listing
+// would carry for it: the matching rule's effective root plus the stable
+// rel. Empty when no rule places the file (scanLocal found it through a
+// rule, so this only happens when the rules changed mid-run).
+func uploadCloudName(ufs *cloudUFS, ctx cloudContext, steamID uint64, localPath, rel string) string {
+	for _, r := range ufs.Rules {
+		if r.Platforms != nil && !r.Platforms[strings.ToLower(ctx.OS)] {
+			continue
+		}
+		dir, ok := ruleSearchDir(r, ufs, ctx, steamID)
+		if !ok {
+			continue
+		}
+		if localPath != dir && !strings.HasPrefix(localPath, dir+string(os.PathSeparator)) {
+			continue
+		}
+		return "%" + effectiveCloudRoot(r.Root, ufs, ctx.OS) + "%" + rel
+	}
+	return ""
 }
 
 // noteSame records every file identical on both sides in the baseline, so a
@@ -1180,6 +1220,9 @@ type cloudEnv struct {
 	ufs     *cloudUFS
 	base    *cloudBaseline
 	timeout time.Duration
+	// buildID is the app's public build for BeginAppUploadBatch (0 when the
+	// appinfo carries none: the field is informational, not gating).
+	buildID uint64
 	// dirty marks an updated baseline the run must save (every exit path
 	// saves once through saveIfDirty). backupRoot is the run's own backup
 	// folder, created on first use.
@@ -1224,6 +1267,7 @@ func prepareCloud(ctx context.Context, req request, op string, rawCtx json.RawMe
 		return nil, notFoundOr("product info", req.AppID, err)
 	}
 	env.ufs = parseCloudRules(kv)
+	env.buildID = cloudAppBuildID(kv)
 	return env, nil
 }
 
@@ -1329,11 +1373,11 @@ func cloudMessage(files []cloudPlanFile, unmapped int) string {
 	case cf > 0:
 		return fmt.Sprintf("%d file(s) changed on this device and in the cloud.", cf) + suffix
 	case dl > 0 && up > 0:
-		return fmt.Sprintf("%d file(s) waiting to download. Uploading saves isn't enabled yet.", dl) + suffix
+		return fmt.Sprintf("%d file(s) waiting to download, %d waiting to upload.", dl, up) + suffix
 	case dl > 0:
 		return fmt.Sprintf("%d file(s) waiting to download.", dl) + suffix
 	case up > 0:
-		return "Uploading saves isn't enabled yet." + suffix
+		return fmt.Sprintf("%d file(s) waiting to upload.", up) + suffix
 	}
 	if suffix != "" {
 		return "saves are in sync." + suffix
@@ -1430,8 +1474,7 @@ func (e *cloudEnv) pullFiles(ctx context.Context, req request, files []cloudPlan
 
 // applyChoices validates resolve choices like the echo plugin does (a path
 // nobody listed is -32602) and settles them: remote downloads with a backup,
-// local records "keep this device's copy" for the later push — no upload
-// happens in this task.
+// local records "keep this device's copy" and uploads it with the push path.
 func (e *cloudEnv) applyChoices(files []cloudPlanFile, choices map[string]string) (remote map[string]bool, err error) {
 	byRel := map[string]int{}
 	for i := range files {
@@ -1518,8 +1561,349 @@ func runCloudPull(ctx context.Context, req request, rawCtx json.RawMessage, rawC
 	return finishJob(req, buildStatus(req.AppID, files, unmapped, cloudMessage(files, unmapped)))
 }
 
-// runCloudPush computes the status without uploading anything: uploads wait
-// for the push phase (issue #6). The answer still obeys the repeated jobId.
+// --- upload ---------------------------------------------------------------
+//
+// Field numbers are from steammessages_cloud.steamclient.proto
+// (docs/research/steam-cloud-social.md §1.2); the block flow (PUT unless
+// http_method is 3, verbatim headers, explicit bodies, offset slices) follows
+// Madeira's SteamOwnedLibrary.swift.
+
+// cloudAppBuildID reads the public branch build id out of PICS appinfo for
+// BeginAppUploadBatch (informational, 0 when absent).
+func cloudAppBuildID(kv *steam.KV) uint64 {
+	depots := kv.Get("depots")
+	if depots == nil {
+		return 0
+	}
+	branches := depots.Get("branches")
+	if branches == nil {
+		return 0
+	}
+	public := branches.Get("public")
+	if public == nil {
+		return 0
+	}
+	n, _ := strconv.ParseUint(public.String("buildid"), 10, 64)
+	return n
+}
+
+// cloudClientID is the stable per-install upload client id, derived from
+// the same machine seed the logon identity uses.
+func cloudClientID() uint64 {
+	id := steamcm.StableMachineID(os.Getenv("PLATYPUS_PLUGIN_DATA"))
+	if len(id) < 8 {
+		return 0
+	}
+	return binary.LittleEndian.Uint64(id[:8])
+}
+
+// cloudMachineName names this device for the upload batch.
+func cloudMachineName() string {
+	if h, err := os.Hostname(); err == nil && h != "" {
+		return h
+	}
+	return "platypus"
+}
+
+// checkCloudQuota refuses the upload before anything is named when the
+// cloud has no room left for it. A zero max is unlimited.
+func (e *cloudEnv) checkCloudQuota(newBytes uint64, newFiles int) error {
+	req := &depot.Enc{}
+	req.Varint(1, uint64(e.appID))
+	raw, err := e.cm.Call("Cloud.ClientGetAppQuotaUsage#1", req.Bytes(), e.timeout)
+	if err != nil {
+		return callErr("cloud quota", err)
+	}
+	m, err := depot.Decode(raw)
+	if err != nil {
+		return fmt.Errorf("decoding the cloud quota: %w", err)
+	}
+	if max := m.Int(4); max > 0 && m.Int(2)+newBytes > max {
+		return fmt.Errorf("Steam Cloud is full for this game: %d of %d bytes used, this upload needs %d more", m.Int(2), max, newBytes)
+	}
+	if max := m.Int(3); max > 0 && m.Int(1)+uint64(newFiles) > max {
+		return fmt.Errorf("Steam Cloud is full for this game: %d of %d files used, this upload adds %d", m.Int(1), max, newFiles)
+	}
+	return nil
+}
+
+// beginUploadBatch names the whole upload set. Files to delete are never
+// named: the plan forbids cloud deletes, so a local deletion uploads
+// nothing and the cloud copy stays.
+func (e *cloudEnv) beginUploadBatch(names []string) (uint64, error) {
+	req := &depot.Enc{}
+	req.Varint(1, uint64(e.appID))
+	req.Str(2, cloudMachineName())
+	for _, n := range names {
+		req.Str(3, n)
+	}
+	req.Fixed64(5, cloudClientID())
+	if e.buildID > 0 {
+		req.Varint(6, e.buildID)
+	}
+	raw, err := e.cm.Call("Cloud.BeginAppUploadBatch#1", req.Bytes(), e.timeout)
+	if err != nil {
+		return 0, callErr("cloud upload batch", err)
+	}
+	m, err := depot.Decode(raw)
+	if err != nil {
+		return 0, fmt.Errorf("decoding the cloud upload batch: %w", err)
+	}
+	if batch := m.Int(1); batch != 0 {
+		return batch, nil
+	}
+	return 0, fmt.Errorf("Steam wouldn't start the cloud upload batch")
+}
+
+// completeUploadBatch ends a begun batch, with eresult 1 on success and 2
+// otherwise. Every begun batch is completed, also on error and on cancel.
+func (e *cloudEnv) completeUploadBatch(batch uint64, ok bool) {
+	var eresult uint64 = 2
+	if ok {
+		eresult = 1
+	}
+	req := &depot.Enc{}
+	req.Varint(1, uint64(e.appID))
+	req.Fixed64(2, batch)
+	req.Varint(3, eresult)
+	_, _ = e.cm.Call("Cloud.CompleteAppUploadBatchBlocking#1", req.Bytes(), e.timeout)
+}
+
+// uploadBlock is one server-dictated HTTP drop for part of a file.
+type uploadBlock struct {
+	host, path string
+	https      bool
+	method     string // PUT, or POST when the reply says http_method 3
+	headers    map[string]string
+	offset     uint64
+	length     uint32
+	explicit   []byte // explicit_body_data: the whole body, not a file slice
+}
+
+// beginFileUpload opens one file of a begun batch and returns its block
+// requests exactly as the reply dictates. An encrypted answer is refused,
+// the way the pull side refuses encrypted files.
+func (e *cloudEnv) beginFileUpload(batch uint64, cloudName string, data []byte, mtime int64) ([]uploadBlock, error) {
+	req := &depot.Enc{}
+	req.Varint(1, uint64(e.appID))
+	req.Varint(2, uint64(len(data)))
+	req.Varint(3, uint64(len(data)))
+	sum := sha1.Sum(data)
+	req.BytesField(4, sum[:])
+	req.Varint(5, uint64(mtime))
+	req.Str(6, cloudName)
+	req.Varint(7, 0xFFFFFFFF)
+	if c := cellID(); c != 0 {
+		req.Varint(9, uint64(c))
+	}
+	req.Fixed64(13, batch)
+	raw, err := e.cm.Call("Cloud.ClientBeginFileUpload#1", req.Bytes(), e.timeout)
+	if err != nil {
+		return nil, callErr("cloud file upload", err)
+	}
+	m, err := depot.Decode(raw)
+	if err != nil {
+		return nil, fmt.Errorf("decoding the cloud file upload: %w", err)
+	}
+	if m.Int(1) != 0 {
+		return nil, fmt.Errorf("Steam wants the cloud file encrypted: refusing")
+	}
+	var out []uploadBlock
+	for _, bb := range m.AllBytes(2) {
+		bm, err := depot.Decode(bb)
+		if err != nil {
+			return nil, fmt.Errorf("decoding an upload block: %w", err)
+		}
+		blk := uploadBlock{
+			host: string(bm.Bytes(1)), path: string(bm.Bytes(2)),
+			https: bm.Int(3) != 0, method: "PUT",
+			headers: map[string]string{},
+			offset:  bm.Int(6), length: uint32(bm.Int(7)),
+		}
+		if f := bm[8]; f != nil && len(f.Bytes) > 0 {
+			blk.explicit = f.Bytes[0]
+		}
+		if bm.Int(4) == 3 {
+			blk.method = "POST"
+		}
+		for _, hb := range bm.AllBytes(5) {
+			hm, err := depot.Decode(hb)
+			if err != nil {
+				continue
+			}
+			blk.headers[string(hm.Bytes(1))] = string(hm.Bytes(2))
+		}
+		if blk.host == "" || blk.path == "" {
+			return nil, fmt.Errorf("the cloud gave no upload address")
+		}
+		if blk.explicit == nil && blk.offset+uint64(blk.length) > uint64(len(data)) {
+			return nil, fmt.Errorf("the cloud's upload block is outside the file")
+		}
+		out = append(out, blk)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("the cloud gave no upload address")
+	}
+	return out, nil
+}
+
+// putUploadBlock sends one block's bytes: the explicit body when the reply
+// carries one, else the file slice the block names.
+func putUploadBlock(ctx context.Context, blk uploadBlock, data []byte) error {
+	body := blk.explicit
+	if body == nil {
+		body = data[blk.offset : blk.offset+uint64(blk.length)]
+	}
+	scheme := "http"
+	if blk.https {
+		scheme = "https"
+	}
+	req, err := http.NewRequestWithContext(ctx, blk.method, scheme+"://"+blk.host+blk.path, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	for k, v := range blk.headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("uploading the cloud file: %w", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("uploading the cloud file: HTTP %s", resp.Status)
+	}
+	return nil
+}
+
+// commitFileUpload closes one file of the batch. A refused commit fails the
+// file without writing anything locally.
+func (e *cloudEnv) commitFileUpload(cloudName string, data []byte) error {
+	sum := sha1.Sum(data)
+	req := &depot.Enc{}
+	req.Varint(1, 1)
+	req.Varint(2, uint64(e.appID))
+	req.BytesField(3, sum[:])
+	req.Str(4, cloudName)
+	raw, err := e.cm.Call("Cloud.ClientCommitFileUpload#1", req.Bytes(), e.timeout)
+	if err != nil {
+		return callErr("cloud file commit", err)
+	}
+	m, err := depot.Decode(raw)
+	if err != nil {
+		return fmt.Errorf("decoding the cloud file commit: %w", err)
+	}
+	if m.Int(1) == 0 {
+		return fmt.Errorf("Steam wouldn't commit the cloud file")
+	}
+	return nil
+}
+
+// uploadData is one file staged for upload: the local bytes read before
+// anything is named on the wire, so a missing file fails before the batch.
+type uploadData struct {
+	idx  int
+	data []byte
+	sha  [20]byte
+}
+
+// pushFiles uploads every upload-wanted file over the Steam batch flow:
+// quota, begin, per file begin/blocks/commit, complete. Only files the
+// baseline proves unchanged in the cloud are ever named (compareCloud calls
+// anything else a conflict, and a conflict file is never uploaded). The
+// begun batch is always completed, also on error and on cancel; the
+// baseline is only touched on full success, so a failed or canceled push
+// leaves it (and the job retry) exactly as before.
+func (e *cloudEnv) pushFiles(ctx context.Context, req request, files []cloudPlanFile) error {
+	var staged []uploadData
+	for i := range files {
+		if files[i].Want != "upload" {
+			continue
+		}
+		if files[i].CloudName == "" {
+			return fmt.Errorf("can't place %q in the cloud: no cloud name", files[i].Rel)
+		}
+		data, err := os.ReadFile(files[i].Local)
+		if err != nil {
+			return fmt.Errorf("reading %q for upload: %w", files[i].Rel, err)
+		}
+		if len(data) > maxCloudFile {
+			return fmt.Errorf("can't upload %q: bigger than %d bytes", files[i].Rel, maxCloudFile)
+		}
+		staged = append(staged, uploadData{idx: i, data: data, sha: sha1.Sum(data)})
+	}
+	if len(staged) == 0 {
+		return nil
+	}
+	var total uint64
+	for _, s := range staged {
+		total += uint64(len(s.data))
+	}
+	if err := e.checkCloudQuota(total, len(staged)); err != nil {
+		return err
+	}
+	names := make([]string, len(staged))
+	for i, s := range staged {
+		names[i] = files[s.idx].CloudName
+	}
+	batch, err := e.beginUploadBatch(names)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return err
+	}
+	committed := false
+	defer func() { e.completeUploadBatch(batch, committed) }()
+	for n, s := range staged {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		f := &files[s.idx]
+		reportProgress(req.AppID, req.JobID, "upload", n, len(staged))
+		blocks, err := e.beginFileUpload(batch, f.CloudName, s.data, f.LocalInfo.MTime)
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return err
+		}
+		for _, blk := range blocks {
+			if err := putUploadBlock(ctx, blk, s.data); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return err
+			}
+		}
+		if err := e.commitFileUpload(f.CloudName, s.data); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return err
+		}
+	}
+	reportProgress(req.AppID, req.JobID, "upload", len(staged), len(staged))
+	// Full success: the cloud holds these bytes now, so the baseline learns
+	// them (dropping kept-local choices) and the files count as same. The
+	// caller saves through saveIfDirty; failures return above untouched.
+	for _, s := range staged {
+		f := &files[s.idx]
+		e.base.Files[f.Rel] = cloudBaselineFile{SHA: hex.EncodeToString(s.sha[:]), Size: uint32(len(s.data)), Local: f.Local}
+		delete(e.base.Choices, f.Rel)
+		f.Want = "same"
+	}
+	e.dirty = true
+	committed = true
+	return nil
+}
+
+// runCloudPush uploads what changed only on this device. A file the cloud
+// changed since the baseline is a conflict: it is listed, uploaded never,
+// and nothing is written. The answer still obeys the repeated jobId.
 func runCloudPush(ctx context.Context, req request, rawCtx json.RawMessage) error {
 	if raw, ok := loadJobResult(req.AppID, req.JobID); ok {
 		emit(map[string]any{"type": "result", "status": json.RawMessage(raw)})
@@ -1539,6 +1923,17 @@ func runCloudPush(ctx context.Context, req request, rawCtx json.RawMessage) erro
 			return ctx.Err()
 		}
 		return finishJob(req, offlineStatus(err, detectSteamClient()))
+	}
+	reportProgress(req.AppID, req.JobID, "check", 0, 1)
+	if err := env.pushFiles(ctx, req, files); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return err
+	}
+	reportProgress(req.AppID, req.JobID, "check", 1, 1)
+	if err := env.saveIfDirty(); err != nil {
+		return err
 	}
 	return finishJob(req, buildStatus(req.AppID, files, unmapped, cloudMessage(files, unmapped)))
 }
@@ -1562,7 +1957,7 @@ func parseChoices(rawChoices json.RawMessage) (map[string]string, error) {
 }
 
 // runCloudResolve settles the listed conflicts: remote downloads with a
-// backup, local keeps this device's copy for the later push.
+// backup, local uploads this device's copy with the push path.
 func runCloudResolve(ctx context.Context, req request, rawCtx json.RawMessage, rawChoices json.RawMessage) error {
 	if raw, ok := loadJobResult(req.AppID, req.JobID); ok {
 		emit(map[string]any{"type": "result", "status": json.RawMessage(raw)})
@@ -1605,6 +2000,12 @@ func runCloudResolve(ctx context.Context, req request, rawCtx json.RawMessage, r
 	}
 	reportProgress(req.AppID, req.JobID, "check", 0, 1)
 	if _, err := env.pullFiles(ctx, req, files, only); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return err
+	}
+	if err := env.pushFiles(ctx, req, files); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
