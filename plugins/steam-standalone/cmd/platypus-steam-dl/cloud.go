@@ -143,9 +143,13 @@ func parseCloudRules(kv *steam.KV) *cloudUFS {
 		r := cloudSaveRule{Root: root, Path: path, Pattern: pattern,
 			Recursive: s.String("recursive") == "1"}
 		if plats := s.Get("platforms"); plats != nil && len(plats.Children) > 0 {
+			// The block is indexed ("1" "Windows"), not a map of OS names:
+			// reading the keys skipped every tagged rule on every OS.
 			r.Platforms = map[string]bool{}
-			for k := range plats.Children {
-				r.Platforms[strings.ToLower(k)] = true
+			for _, v := range plats.Children {
+				if name := strings.TrimSpace(v.Value); name != "" {
+					r.Platforms[strings.ToLower(name)] = true
+				}
 			}
 		}
 		out.Rules = append(out.Rules, r)
@@ -190,23 +194,26 @@ func resolveCloudRoot(name, osName string, ctx cloudContext) (string, bool) {
 	if xdgConfig == "" && home != "" {
 		xdgConfig = filepath.Join(home, ".config")
 	}
-	switch name {
-	case "GameInstall":
+	// Root tokens are matched case-insensitively: appinfo spells a rule's
+	// root "gameinstall" (Super Cable Boy) while the cloud names use
+	// %GameInstall%, and cloudNameCovered already compares roots that way.
+	switch strings.ToLower(name) {
+	case "gameinstall":
 		if ctx.InstallDir != "" {
 			return ctx.InstallDir, true
 		}
 		return "", false
-	case "LinuxHome":
+	case "linuxhome":
 		if home != "" {
 			return home, true
 		}
 		return "", false
-	case "LinuxXdgDataHome":
+	case "linuxxdgdatahome":
 		if xdgData != "" {
 			return xdgData, true
 		}
 		return "", false
-	case "LinuxXdgConfigHome":
+	case "linuxxdgconfighome":
 		if xdgConfig != "" {
 			return xdgConfig, true
 		}
@@ -218,16 +225,16 @@ func resolveCloudRoot(name, osName string, ctx cloudContext) (string, bool) {
 			user = "steamuser"
 		}
 		profile := filepath.Join(ctx.PrefixDir, "drive_c", "users", user)
-		switch name {
-		case "WinAppDataLocalLow":
+		switch strings.ToLower(name) {
+		case "winappdatalocallow":
 			return filepath.Join(profile, "AppData", "LocalLow"), true
-		case "WinAppDataLocal":
+		case "winappdatalocal":
 			return filepath.Join(profile, "AppData", "Local"), true
-		case "WinAppDataRoaming":
+		case "winappdataroaming":
 			return filepath.Join(profile, "AppData", "Roaming"), true
-		case "WinMyDocuments":
+		case "winmydocuments":
 			return probeDir(profile, []string{"Documents", "My Documents"}), true
-		case "WinSavedGames":
+		case "winsavedgames":
 			return probeDir(profile, []string{"Saved Games"}), true
 		}
 		return "", false
@@ -432,14 +439,16 @@ func ruleSearchDir(r cloudSaveRule, ufs *cloudUFS, ctx cloudContext, steamID uin
 	if !ok {
 		return "", false
 	}
-	if rel == "" {
-		return base, true
-	}
-	parts := splitRel(rel)
+	// appinfo spells the same directory "/My Games/x", "./my games/x" or
+	// "Steam Save/": the parts the mapper and coverage use are the rule's.
+	parts := rulePathParts(rel)
 	for _, p := range parts {
-		if p == "" || p == "." || p == ".." || strings.ContainsAny(p, `:\`) {
+		if p == ".." || strings.ContainsAny(p, `:\`) {
 			return "", false
 		}
+	}
+	if len(parts) == 0 {
+		return base, true
 	}
 	if ctx.OS == "windows" {
 		out := base
@@ -483,7 +492,19 @@ func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]cloud
 		if !ok {
 			continue
 		}
-		relBase := substituteSteamID(r.Path, steamID)
+		// The upload name is the mapper's spelling: the rule's parts, joined,
+		// so "/My Games/x" scans as "My Games/x" and a new save uploads
+		// under a name cloudNameCovered accepts.
+		relBase := strings.Join(rulePathParts(substituteSteamID(r.Path, steamID)), "/")
+		// Proton's drive_c is case-insensitive: a rule's "*.sav" covers the
+		// Windows-written "SAVE1.SAV", like cloudNameCovered folds it.
+		fold := ctx.OS == "windows"
+		match := func(pattern, rel string) bool {
+			if fold {
+				pattern, rel = strings.ToLower(pattern), strings.ToLower(rel)
+			}
+			return matchCloudPattern(pattern, rel)
+		}
 		st, err := os.Stat(dir)
 		if err != nil || !st.IsDir() {
 			continue
@@ -509,7 +530,7 @@ func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]cloud
 				if err != nil {
 					return nil
 				}
-				if matchCloudPattern(r.Pattern, rel) {
+				if match(r.Pattern, rel) {
 					if _, dup := out[p]; !dup {
 						out[p] = cloudScanned{Rel: joinCloudRel(relBase, filepath.ToSlash(rel)), Root: r.Root}
 					}
@@ -529,7 +550,7 @@ func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]cloud
 			if strings.HasPrefix(e.Name(), ".platypus-cloud-") {
 				continue // our own half-written temp files: never saves
 			}
-			if ok, _ := filepath.Match(r.Pattern, e.Name()); ok {
+			if match(r.Pattern, e.Name()) {
 				p := filepath.Join(dir, e.Name())
 				if _, dup := out[p]; !dup {
 					out[p] = cloudScanned{Rel: joinCloudRel(relBase, e.Name()), Root: r.Root}
@@ -861,6 +882,13 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 		}
 		pf := cloudPlanFile{Rel: sc.Rel, Local: lp, HasRemote: false,
 			CloudName: "%" + sc.Root + "%" + sc.Rel}
+		if !cloudNameCovered(pf.CloudName, ufs, ctx, steamID) {
+			// The invariant every upload obeys: the name must be one a rule
+			// covers. The scan builds names from the rule's own parts, so
+			// this catches a rule the coverage check would drop.
+			unmapped++
+			continue
+		}
 		pf.LocalInfo = statLocal(lp)
 		if !pf.LocalInfo.Found {
 			continue
