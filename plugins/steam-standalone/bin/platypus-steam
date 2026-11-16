@@ -1522,22 +1522,31 @@ def family_fetch_preferred(token, group_id):
 _running_logged = set()  # running-read log lines already emitted once per process
 
 
-def family_fetch_running():
+def family_fetch_running(timeout=None, group_id=0):
     """Borrowed games played right now, over the CM: one platypus-steam-dl
-    family-running run per family fetch ([{appid, player, owner}], all
-    strings). [] when Steam pushes nothing — and on any failure, so a
+    family-running run ([{appid, player, owner}], all strings). Returns
+    (entries, read_at): read_at is the helper run's epoch, 0 when the
+    helper never answered (no token, skipped, failure) — [] then, so a
     silent helper or CM never breaks the snapshot (copies stay inUse
-    False). The helper gets the refresh token (like dl_request); the Web
-    API access token is never sent to a subprocess. The refresh token
-    travels on stdin, never argv, and is never logged."""
+    False). `timeout` bounds the run (the helper is killed at the
+    deadline); `group_id` skips the helper's own group lookup when the
+    caller knows it. The helper gets the refresh token (like dl_request);
+    the Web API access token is never sent to a subprocess. The refresh
+    token travels on stdin, never argv, and is never logged."""
     try:
         rt = refresh_token()
     except Exception:
         rt = ""
     if not rt:
-        return []
+        return [], 0
+    req = {"refresh_token": rt}
     try:
-        result = dl_run("family-running", {"refresh_token": rt},
+        if int(group_id or 0):
+            req["family_group_id"] = int(group_id)
+    except (TypeError, ValueError):
+        pass
+    try:
+        result = dl_run("family-running", req, timeout=timeout,
                         label="Steam family running apps", err_code=-32002)
     except Exception:
         # Never surface helper stdout (player/owner steamids) in errors:
@@ -1545,7 +1554,7 @@ def family_fetch_running():
         if "failed" not in _running_logged:
             _running_logged.add("failed")
             log("warning", "Steam running-apps read failed; borrowed copies list as free")
-        return []
+        return [], 0
     out = []
     for e in result.get("running") or []:
         if not isinstance(e, dict):
@@ -1555,10 +1564,10 @@ def family_fetch_running():
         owner = str(e.get("owner") or "")
         if appid and player and owner:
             out.append({"appid": appid, "player": player, "owner": owner})
-    if not out and "empty" not in _running_logged:
-        _running_logged.add("empty")
-        log("warning", "Steam sent no running-apps push; borrowed copies list as free")
-    return out
+    if not result.get("pushed", True) and "nopush" not in _running_logged:
+        _running_logged.add("nopush")
+        log("info", "Steam sent no running-apps push; borrowed copies list as free")
+    return out, time.time()
 
 
 def family_in_use_message(player_name):
@@ -1643,13 +1652,27 @@ def _family_names_lookup(ids, steamid, box):
     box["found"] = found
 
 
+def _family_names_into(ids, token, steamid, timeout, box):
+    """family_member_names into box["names"]; thread death is a fallback to
+    {} (names are supplementary)."""
+    box["names"] = family_member_names(ids, token, steamid, timeout=timeout)
+
+
+def _family_running_into(group_id, timeout, box):
+    """family_fetch_running into box["running"]/box["at"]; thread death is
+    a fallback to ([], 0)."""
+    running, at = family_fetch_running(timeout=timeout, group_id=group_id)
+    box["running"] = running
+    box["at"] = at
+
+
 def _family_fetch(token, steamid, deadline):
     """The whole fetch — group, apps, preferred, names, running — for one
     worker thread. Raises on failure; the worker decides what the failure means."""
     group = family_fetch_group(token, steamid)
     if group is None:
         return {"group_id": "", "members": [], "apps": [], "preferred": {},
-                "running": []}
+                "running": [], "running_at": 0}
     members = []
     for m in group["members"]:
         if not isinstance(m, dict):
@@ -1664,16 +1687,33 @@ def _family_fetch(token, steamid, deadline):
         members.append(entry)
     apps = family_fetch_apps(token, group["id"])
     preferred = family_fetch_preferred(token, group["id"])
-    names = family_member_names([m["id"] for m in members], token, steamid,
-                                timeout=max(1.0, deadline - time.time() - 1.0))
+    # Names and the running read run side by side in threads; the fetch
+    # waits only for the remaining budget, then falls back to running [].
+    # The running read is skipped when the group lends nothing: there is
+    # no copy to mark in use.
+    name_box, run_box = {}, {}
+    tn = threading.Thread(target=_family_names_into,
+                          args=([m["id"] for m in members], token, steamid,
+                                max(1.0, deadline - time.time() - 1.0), name_box),
+                          daemon=True)
+    tn.start()
+    tr = None
+    if apps:
+        tr = threading.Thread(target=_family_running_into,
+                              args=(group["id"], max(1.0, deadline - time.time() - 1.0),
+                                    run_box),
+                              daemon=True)
+        tr.start()
+    tn.join(max(1.0, deadline - time.time()))
+    if tr is not None:
+        tr.join(max(0.5, deadline - time.time()))
+    names = name_box.get("names") or {}
     for m in members:
         if names.get(m["id"]):
             m["name"] = names[m["id"]]
-    # The running read goes last (names keep their budget) and is skipped
-    # when the group lends nothing: there is no copy to mark in use.
-    running = family_fetch_running() if apps else []
     return {"group_id": group["id"], "members": members, "apps": apps,
-            "preferred": preferred, "running": running}
+            "preferred": preferred, "running": run_box.get("running") or [],
+            "running_at": run_box.get("at") or 0}
 
 
 def _family_fetch_worker(token, steamid, gen, box, deadline):
@@ -2021,19 +2061,34 @@ def dl_request(params, extra=None):
 
 
 def dl_run(subcommand, req, job_id=None, game_dir=None, label="download failed",
-           err_code=-32000, phase="downloading"):
+           err_code=-32000, phase="downloading", timeout=None):
     """Runs platypus-steam-dl and follows its JSON lines: progress
     notifications until a result or error line. Returns the result dict.
     `label` names the run in its error (`Steam app info: ...`): a download
     failing and an app info read failing aren't the same thing to the user.
     `err_code` is the error for a failed run; a login problem stays -32001
-    and an unknown app stays -32000."""
+    and an unknown app stays -32000. `timeout` bounds the run in seconds:
+    the helper is killed at the deadline and the run fails like any other
+    failed run."""
     try:
         proc = subprocess.Popen([dl_bin(), subcommand], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, bufsize=1, env=dict(os.environ))
     except FileNotFoundError:
         raise RPCError("platypus-steam-dl is missing; reinstall the plugin")
+    if timeout is not None:
+        # Bound the run: kill the helper at the deadline; the read loop
+        # below then sees EOF and the run fails. Daemon, so an early exit
+        # below never hangs on it; the kill itself is guarded.
+        def _kill():
+            try:
+                if proc.poll() is None:
+                    proc.kill()
+            except OSError:
+                pass
+        timer = threading.Timer(timeout, _kill)
+        timer.daemon = True
+        timer.start()
     if job_id is not None:
         with jobs_lock:
             job = jobs.get(job_id) or {}
@@ -2920,19 +2975,60 @@ def detect_mode(game_dir):
     return "optional"
 
 
+def running_fresh_seconds():
+    """How long a running read counts as current for the launch refusal:
+    60 s, or PLATYPUS_STEAM_RUNNING_FRESH in tests."""
+    try:
+        return max(0, int(os.environ.get("PLATYPUS_STEAM_RUNNING_FRESH", "60")))
+    except ValueError:
+        return 60
+
+
+def family_local_steamid():
+    """The login's steamid without touching the network: the refresh
+    token's sub, or the cached snapshot's user. "" when unknown."""
+    try:
+        rt = refresh_token()
+        if rt:
+            return str(steam_cm.jwt_payload(rt).get("sub") or "")
+    except Exception:
+        pass
+    with family_lock:
+        if family_cache:
+            return str(family_cache[0] or "")
+    return ""
+
+
+def family_busy_owners(snap, app, steamid):
+    """{owner: player} borrowed copies of app someone other than the user
+    is playing, per the snapshot's running list."""
+    busy = {}
+    for r in snap.get("running") or []:
+        if not isinstance(r, dict):
+            continue
+        if (str(r.get("appid") or "") != app
+                or str(r.get("player") or "") in ("", steamid)
+                or not str(r.get("owner") or "")):
+            continue
+        busy[str(r.get("owner") or "")] = str(r.get("player") or "")
+    return busy
+
+
 def family_launch_refusal(app):
     """-32002 message when every copy of a borrowed game is in use
     (protocol 1.8): each owner's copy played by someone other than the user.
     A free copy launches: the store picks around the busy one. Reads only
     the cached snapshot and the borrowed set library.list merged — never a
-    fetch or an owned-games lookup, so a launch never stalls on the store.
-    None when the game isn't borrowed, a copy is free, or nothing cached:
-    in-use is advisory, and a silent store must not break the launch."""
-    try:
-        if not logged_in():
-            return None
-        steamid = str(steam_cm.jwt_payload(access_token()).get("sub"))
-    except Exception:
+    fetch or an owned-games lookup — plus at most one bounded running read.
+    A stale snapshot (running data older than a minute) refuses only after
+    one fresh bounded read (≤ 3 s) still shows every copy busy; on any
+    failure the launch goes. None when the game isn't borrowed, a copy is
+    free, or nothing cached: in-use is advisory, and a silent store must
+    not break the launch."""
+    if not logged_in():
+        return None
+    steamid = family_local_steamid()
+    if not steamid:
         return None
     snap = family_snapshot_cached(steamid)
     borrowed = family_borrowed_cached(steamid)
@@ -2948,20 +3044,23 @@ def family_launch_refusal(app):
         return None
     names = {m.get("id"): m.get("name") or ""
              for m in snap.get("members") or [] if isinstance(m, dict)}
-    busy = {}
-    for r in snap.get("running") or []:
-        if not isinstance(r, dict):
-            continue
-        if (str(r.get("appid") or "") != app
-                or str(r.get("player") or "") in ("", steamid)
-                or not str(r.get("owner") or "")):
-            continue
-        busy[str(r.get("owner") or "")] = str(r.get("player") or "")
-    if not busy or any(o not in busy for o in owners):
-        return None
     preferred = snap.get("preferred") or {}
     lender = preferred.get(app) if preferred.get(app) in owners else owners[0]
-    return family_in_use_message(names.get(busy.get(lender)))
+    busy = family_busy_owners(snap, app, steamid)
+    if not busy or any(o not in busy for o in owners):
+        return None
+    if time.time() - (snap.get("running_at") or 0) < running_fresh_seconds():
+        return family_in_use_message(names.get(busy.get(lender)))
+    # Stale running data: one bounded re-read decides; the helper is killed
+    # at the deadline and any failure lets the launch go.
+    running, _ = family_fetch_running(timeout=3, group_id=snap.get("group_id"))
+    fresh = {}
+    for r in running:
+        if r.get("player") not in ("", steamid) and r.get("owner"):
+            fresh[r["owner"]] = r["player"]
+    if owners and all(o in fresh for o in owners):
+        return family_in_use_message(names.get(fresh.get(lender)))
+    return None
 
 
 def launch_spec(params):
@@ -3653,7 +3752,7 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.16.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.17.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],

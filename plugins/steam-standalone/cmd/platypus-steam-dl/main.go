@@ -133,6 +133,10 @@ type request struct {
 	Op      string          `json:"op"`
 	Ctx     json.RawMessage `json:"ctx"`
 	Choices json.RawMessage `json:"choices"`
+	// FamilyGroupID skips the ForUser lookup for the family-running read
+	// when the caller already knows the group (the plugin's Web API
+	// fetch does); zero means look it up over the CM.
+	FamilyGroupID uint64 `json:"family_group_id"`
 }
 
 type cmErr struct {

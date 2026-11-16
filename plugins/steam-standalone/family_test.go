@@ -421,9 +421,9 @@ func TestSteamFamilyFailureServesLastGood(t *testing.T) {
 }
 
 // Borrowed copies someone else is playing carry inUse: the helper's CM
-// read is real, with the fake answering GetFamilyGroupForUser /
-// GetFamilyGroup and pushing NotifyRunningApps after the reply (the real
-// ordering). Two pairs share one appid, riding one push entry.
+// read is real, with the fake answering GetFamilyGroup and pushing
+// NotifyRunningApps after the reply (the real ordering). Two pairs share
+// one appid, riding one push entry.
 func TestSteamFamilyInUse(t *testing.T) {
 	e := familyEnv(t)
 	e.setCMState("family_group_id", 424242)
@@ -439,11 +439,14 @@ func TestSteamFamilyInUse(t *testing.T) {
 		map[string]any{"appid": "5003", "player": "76561198", "owner": "76561200"},
 	})
 	byID := libraryByID(t, e)
-	// The running-apps read went over the CM: the group lookup, the
-	// varint steamid assertion, and the push the helper drains for.
+	// The running-apps read went over the CM: the group lookup and the
+	// push the helper drains for. The plugin passes its known group id,
+	// so the helper skips its own ForUser lookup.
 	e.waitCMLog("service FamilyGroups.GetFamilyGroup#1")
-	e.waitCMLog("family foruser ok")
 	e.waitCMLog("push 146 FamilyGroupsClient.NotifyRunningApps#1")
+	if strings.Contains(e.cmLog(), "GetFamilyGroupForUser") {
+		t.Fatal("the helper looked up the group id the plugin already knew")
+	}
 
 	both := byID["5002"]
 	if both == nil {
@@ -534,12 +537,20 @@ func TestSteamFamilyLaunchSpecRefusal(t *testing.T) {
 		e.installFakeExe(t, app)
 	}
 	libraryByID(t, e)
+	calls := func() int {
+		return strings.Count(e.cmLog(), "service FamilyGroups.GetFamilyGroup#1")
+	}
+	e.waitCMLog("service FamilyGroups.GetFamilyGroup#1")
+	if n := calls(); n != 1 {
+		t.Fatalf("GetFamilyGroup calls after listing = %d, want 1", n)
+	}
 	var spec map[string]any
 	// 5002's preferred copy is busy, but MemberB's own copy is free.
 	if err := e.call("game.launchSpec", map[string]any{"id": "5002"}, &spec); err != nil {
 		t.Fatalf("launchSpec for 5002 with a free copy: %v", err)
 	}
-	// 5001's only copy is busy: refusal naming the player.
+	// 5001's only copy is busy: refusal naming the player, decided from
+	// the fresh cache with no re-read.
 	err := e.rawCallErr("game.launchSpec", map[string]any{"id": "5001"})
 	if e.rpcCode(err) != -32002 {
 		t.Fatalf("launchSpec for in-use 5001 = %v, want -32002", err)
@@ -552,4 +563,120 @@ func TestSteamFamilyLaunchSpecRefusal(t *testing.T) {
 	if err := e.call("game.launchSpec", map[string]any{"id": "4321"}, &spec); err != nil {
 		t.Fatalf("launchSpec for owned 4321: %v", err)
 	}
+	time.Sleep(time.Second) // the CM log lands async: no re-read means none
+	if n := calls(); n != 1 {
+		t.Fatalf("GetFamilyGroup calls after fresh launches = %d, want 1", n)
+	}
+}
+
+// The CM rejects the running read: the listing still serves the shared
+// games, with every copy inUse false.
+func TestSteamFamilyRunningReadFailure(t *testing.T) {
+	e := familyEnv(t)
+	// Fail every service reply: the link-details names and the helper's
+	// GetFamilyGroup read go down together (the login's cached access
+	// token still opens the Web API).
+	e.setCMState("service_eresult", 2)
+	byID := libraryByID(t, e)
+	if byID["5001"] == nil || byID["5002"] == nil {
+		t.Fatalf("no shared games when the running read fails: %v", byID)
+	}
+	if _, ok := byID["5001"]["copies"]; ok {
+		t.Fatalf("single-owner 5001 carries copies on a failed read: %v", byID["5001"])
+	}
+	for _, c := range byID["5002"]["copies"].([]any) {
+		if c.(map[string]any)["inUse"] != false {
+			t.Fatalf("5002 copy = %v, want inUse false on a failed read", c)
+		}
+	}
+}
+
+// The helper binary is missing: the listing still serves the shared games,
+// with every copy inUse false and no FamilyGroups call on the wire.
+func TestSteamFamilyHelperMissing(t *testing.T) {
+	e := familyEnv(t)
+	bin := filepath.Join(e.root, "plugins", id, "bin", "platypus-steam-dl")
+	if err := os.Rename(bin, bin+".bak"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", e.root) // nothing resolvable: no PATH fallback either
+	byID := libraryByID(t, e)
+	if byID["5001"] == nil || byID["5002"] == nil {
+		t.Fatalf("no shared games with the helper missing: %v", byID)
+	}
+	for _, c := range byID["5002"]["copies"].([]any) {
+		if c.(map[string]any)["inUse"] != false {
+			t.Fatalf("5002 copy = %v, want inUse false with no helper", c)
+		}
+	}
+	if strings.Contains(e.cmLog(), "FamilyGroups.GetFamilyGroup") {
+		t.Fatal("the missing helper still reached the CM")
+	}
+}
+
+// The user playing their only borrowed copy launches: their own play is
+// neither in use nor a refusal.
+func TestSteamFamilyOwnPlayLaunches(t *testing.T) {
+	e := familyEnv(t)
+	e.setCMState("family_group_id", 424242)
+	e.setCMState("family_running", []any{
+		map[string]any{"appid": "5001", "player": "76561198", "owner": "76561199"},
+	})
+	e.installFakeExe(t, "5001")
+	byID := libraryByID(t, e)
+	if _, ok := byID["5001"]["copies"]; ok {
+		t.Fatalf("5001 carries copies for the user's own play: %v", byID["5001"])
+	}
+	var spec map[string]any
+	if err := e.call("game.launchSpec", map[string]any{"id": "5001"}, &spec); err != nil {
+		t.Fatalf("launchSpec for the user's own play: %v", err)
+	}
+}
+
+// Stale running data triggers one bounded re-read per launch: with every
+// copy still busy the refusal stands, and once the borrower quits the
+// re-read finds a free copy and the launch goes. FRESH=0 ages every read
+// instantly; it is set before setup so the plugin process inherits it.
+func TestSteamFamilyStaleRunningRefetches(t *testing.T) {
+	t.Setenv("PLATYPUS_STEAM_RUNNING_FRESH", "0")
+	e := familyEnv(t)
+	e.setCMState("family_group_id", 424242)
+	e.setCMState("family_running", []any{
+		map[string]any{"appid": "5001", "player": "76561200", "owner": "76561199"},
+	})
+	e.installFakeExe(t, "5001")
+	libraryByID(t, e)
+	calls := func() int {
+		return strings.Count(e.cmLog(), "service FamilyGroups.GetFamilyGroup#1")
+	}
+	e.waitCMLog("service FamilyGroups.GetFamilyGroup#1")
+	if n := calls(); n != 1 {
+		t.Fatalf("GetFamilyGroup calls after listing = %d, want 1", n)
+	}
+	waitCalls := func(want int) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			if calls() >= want {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("GetFamilyGroup calls = %d, want %d", calls(), want)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	// Every copy still busy: the re-read confirms, refusal stands.
+	err := e.rawCallErr("game.launchSpec", map[string]any{"id": "5001"})
+	if e.rpcCode(err) != -32002 {
+		t.Fatalf("launchSpec for in-use 5001 = %v, want -32002", err)
+	}
+	waitCalls(2)
+	// The borrower quit: the re-read finds a free copy, launch goes.
+	e.setCMState("family_running", []any{})
+	var spec map[string]any
+	if err := e.call("game.launchSpec", map[string]any{"id": "5001"}, &spec); err != nil {
+		t.Fatalf("launchSpec after the borrower quit: %v", err)
+	}
+	waitCalls(3)
 }

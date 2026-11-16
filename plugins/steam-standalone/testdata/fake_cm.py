@@ -721,8 +721,14 @@ def serve_family_groups(conn, target, hdr, body, st, steamid, sessionid):
             push = ((pb_int(1, group_id) if group_id else b"") + entries)
     else:
         return False
+    eres = st.get("service_eresult", 1)
     resp_hdr = (pb_int(1, steamid) + pb_int(2, sessionid)
-                + pb_fixed64(11, jobid) + pb_int(13, 1))
+                + pb_fixed64(11, jobid) + pb_int(13, eres))
+    if eres != 1:
+        # A rejected read: no reply body, no push — the helper degrades to
+        # an empty running list.
+        conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, resp_hdr, b""))
+        return True
     if push is not None and not st.get("family_push_after_reply"):
         send_family_push(conn, st, steamid, sessionid, push)
     conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, resp_hdr, resp_body))

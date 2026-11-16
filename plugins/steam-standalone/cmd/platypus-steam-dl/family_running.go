@@ -67,25 +67,45 @@ func runFamilyRunning(ctx context.Context, req request) error {
 		defer mu.Unlock()
 		return gotPush
 	}
-	// Field numbers from steammessages_familygroups.steamclient.proto:
-	// steamid is a uint64 varint, like the group id.
-	fu := &depot.Enc{}
-	fu.Varint(1, cm.SteamID())
-	fu.Varint(2, 1) // include_family_group_response
-	raw, err := cm.Call("FamilyGroups.GetFamilyGroupForUser#1", fu.Bytes(), 0)
-	if err != nil {
-		return callErr("family group", err)
+	emitRunning := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]any, 0, len(last))
+		for _, e := range last {
+			out = append(out, map[string]any{
+				"appid":  e.appID,
+				"player": fmt.Sprint(e.player),
+				"owner":  fmt.Sprint(e.owner),
+			})
+		}
+		emit(map[string]any{"type": "result", "running": out, "pushed": gotPush})
 	}
-	m, err := depot.Decode(raw)
-	if err != nil {
-		return fmt.Errorf("decoding the family group: %w", err)
+	// The plugin passes the group id its Web API fetch already knows;
+	// without it (direct runs) one lookup finds it first.
+	groupID := req.FamilyGroupID
+	if groupID == 0 {
+		// Field numbers from
+		// steammessages_familygroups.steamclient.proto: steamid is a
+		// uint64 varint, like the group id.
+		fu := &depot.Enc{}
+		fu.Varint(1, cm.SteamID())
+		fu.Varint(2, 1) // include_family_group_response
+		raw, err := cm.Call("FamilyGroups.GetFamilyGroupForUser#1", fu.Bytes(), 0)
+		if err != nil {
+			return callErr("family group", err)
+		}
+		m, err := depot.Decode(raw)
+		if err != nil {
+			return fmt.Errorf("decoding the family group: %w", err)
+		}
+		groupID = m.Int(1)
 	}
-	if m.Int(1) == 0 {
-		emit(map[string]any{"type": "result", "running": []any{}})
+	if groupID == 0 {
+		emitRunning()
 		return nil
 	}
 	g := &depot.Enc{}
-	g.Varint(1, m.Int(1))
+	g.Varint(1, groupID)
 	g.Varint(2, 1) // send_running_apps
 	if _, err := cm.Call("FamilyGroups.GetFamilyGroup#1", g.Bytes(), 0); err != nil {
 		return callErr("family running apps", err)
@@ -95,17 +115,7 @@ func runFamilyRunning(ctx context.Context, req request) error {
 	if !stopped() {
 		cm.DrainPushes(runningWait, stopped)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	out := make([]any, 0, len(last))
-	for _, e := range last {
-		out = append(out, map[string]any{
-			"appid":  e.appID,
-			"player": fmt.Sprint(e.player),
-			"owner":  fmt.Sprint(e.owner),
-		})
-	}
-	emit(map[string]any{"type": "result", "running": out})
+	emitRunning()
 	return nil
 }
 
