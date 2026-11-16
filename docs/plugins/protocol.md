@@ -876,9 +876,11 @@ the Plugins view shows; Platypus still handles any empty list.
 pin) picked a version: `{ channel?, build?, manual? }`. A `channel` alone means
 "that branch's current build"; a `build` is exactly that build (with a
 `channel`, the build within it); `manual` is the typed values (`{ "input": "<text>" }` from Platypus's UI). Without `target`,
-install the store's default. For a build from the install history (`source:
-"archive"`) Platypus adds `archiveRef` to the target: the reference it kept from
-that build's `installed`, as it was written there. The UI never sends it: Platypus
+a fresh install uses the store's default; an update stays on the channel the game
+was installed from (a build with no channel updates to the default). For a build
+from the install history (`source: "archive"`) Platypus adds `archiveRef` to the
+target: the reference it kept from that build's `installed`, as it was written
+there. The UI never sends it: Platypus
 refuses a target from the UI that already carries one. A pin makes Platypus send the same `target` on every
 `game.update`, so `update` may be a downgrade. `game.installSize` takes the
 same `target` so the free-space check is for that version. A target for a
@@ -910,7 +912,7 @@ Send `installed` for every install and update when the capability is on;
 as `target` on `game.update` (and on a reinstall), and hides the game's update
 prompt while it is set. It does not ask you to know about pins, except through
 `versions.list`'s `pinned` request field so you can compute `updateAvailable`.
-"Return to latest" clears the pin; the next update installs the default.
+"Return to latest" clears the pin; the next update stays on the installed channel.
 
 **Safety.** Before installing a version other than the store's default, the UI
 warns that cloud saves or online play may not match, and asks to confirm. Platypus

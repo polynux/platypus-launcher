@@ -113,8 +113,8 @@ func versionsFeatures() map[string]bool {
 }
 
 // resolveTarget turns a target into the version to install. No target means
-// the latest. A password channel stays locked until versions.unlock accepted
-// its password. Callers hold no locks.
+// the default channel, latest. A password channel stays locked until
+// versions.unlock accepted its password. Callers hold no locks.
 func resolveTarget(game string, t *targetParam) (versionRec, error) {
 	bad := func(format string, a ...any) (versionRec, error) {
 		return versionRec{}, &rpcError{Code: -32000, Message: fmt.Sprintf(format, a...)}
@@ -270,7 +270,13 @@ func versionsList(p params) (any, error) {
 		res["links"] = []map[string]string{{"label": "Echo depots (example.com)", "url": "https://example.com/echo/depots/" + p.ID}}
 	}
 	if installed {
+		// An unpinned game follows the channel it was installed from, so
+		// "update" means that channel moved; latest is only the fallback
+		// when the recorded channel is gone.
 		want := latestBuild
+		if c, ok := findChannel(rec.Channel); ok {
+			want = c.build
+		}
 		if p.Pinned != nil {
 			switch p.Pinned.Kind {
 			case "build":
