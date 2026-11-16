@@ -369,6 +369,20 @@ describe('finding 16: runners available rows', () => {
     // The installed runner with no games keeps its note; the available one says nothing.
     expect(screen.getAllByText('No game uses it')).toHaveLength(1);
   });
+
+  it('offers the installable runners when no runner is installed (#174)', () => {
+    const onInstall = vi.fn();
+    render(
+      <AtlasRunners
+        runners={[]} games={[]} onRefresh={() => {}} scanning={false} picked={null}
+        available={[{ tag: 'ge-10-5', name: 'GE-Proton10-5', url: 'https://example.com', size_bytes: 1 }]}
+        installing={null} removing={null} onInstall={onInstall} onRemove={() => {}} sizeLabel={() => '1 GB'} />,
+    );
+    expect(screen.getByText('No Proton or Wine builds found yet. Install one from the list below.')).toBeInTheDocument();
+    expect(screen.getByText('GE-Proton10-5')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /install/i }));
+    expect(onInstall).toHaveBeenCalledWith('ge-10-5');
+  });
 });
 
 describe('finding 17: attention cards', () => {
