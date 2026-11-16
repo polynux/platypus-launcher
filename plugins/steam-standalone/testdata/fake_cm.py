@@ -610,6 +610,9 @@ def serve_logged_in(conn, hdr, body, st):
                     conn.close_frame()
                     return
                 continue
+        if target.startswith("FamilyGroups."):
+            if serve_family_groups(conn, target, hdr, body, st, steamid, sessionid):
+                continue
         if target.startswith("Player.GetPlayerLinkDetails") and st.get("hang_link_details"):
             # Test hook: accept the names lookup and never answer, so the
             # plugin's family fetch must ride out a silent CM. Longer than
@@ -663,6 +666,89 @@ def serve_logged_in(conn, hdr, body, st):
                                     pb_int(1, steamid) + pb_int(2, sessionid), pb_int(1, kick)))
             conn.close_frame()
             return
+
+# --- family running apps (protocol 1.8, issue #178) ---------------------------
+# Driven by the state file so the plugin tests script what the helper's
+# family-running read sees, without touching Valve:
+#   family_group_id: this session's family group (unset = no group: the
+#            ForUser reply carries no group id and the helper stops there)
+#   family_running: [{"appid", "player", "owner"}] pushed as one
+#            FamilyGroupsClient.NotifyRunningApps#1 after a GetFamilyGroup
+#            with send_running_apps (unset = no push: Steam's silence when
+#            nothing is running). Entries for one app ride in one field-2
+#            entry with one field-3 pair per player. Steamids are strings,
+#            like the Web API's.
+#   family_push_after_reply: push after the GetFamilyGroup reply (the real
+#            ordering) instead of before it (the default, which also
+#            exercises the reader's pre-reply path).
+def serve_family_groups(conn, target, hdr, body, st, steamid, sessionid):
+    """FamilyGroups.GetFamilyGroupForUser#1 and GetFamilyGroup#1. Returns
+    True when handled (the reply — and the running-apps push — went out)."""
+    jobid = hdr.get(10, [0])[0]
+    if target == "FamilyGroups.GetFamilyGroupForUser#1":
+        # The helper sends steamid as a uint64 varint (field 1), like the
+        # group id: assert the wire shape the helper must use live.
+        wtype = pb_wire(body).get(1)
+        ok = wtype == 0 and pb_parse(body).get(1, [0])[0] == steamid
+        record("family foruser ok" if ok else f"family foruser BAD wire={wtype}")
+        group_id = int(st.get("family_group_id") or 0)
+        resp_body = pb_int(1, group_id) if group_id else b""
+        push = None
+    elif target == "FamilyGroups.GetFamilyGroup#1":
+        resp_body = b""
+        push = None
+        if pb_parse(body).get(2, [0])[0] and st.get("family_running") is not None:
+            # One field-2 entry per app, one field-3 pair per player: two
+            # pairs on one app ride in one entry, like the live push.
+            groups, order = {}, []
+            for e in st.get("family_running") or []:
+                try:
+                    appid = int(e.get("appid"))
+                    player = int(e.get("player"))
+                    owner = int(e.get("owner"))
+                except (TypeError, ValueError, AttributeError):
+                    continue
+                if not appid or not player or not owner:
+                    continue
+                if appid not in groups:
+                    groups[appid] = []
+                    order.append(appid)
+                groups[appid].append((player, owner))
+            entries = b""
+            for appid in order:
+                pairs = b"".join(pb_msg(3, pb_fixed64(1, player) + pb_fixed64(2, owner))
+                                 for player, owner in groups[appid])
+                entries += pb_msg(2, pb_int(1, appid) + pairs)
+            group_id = int(st.get("family_group_id") or 0)
+            push = ((pb_int(1, group_id) if group_id else b"") + entries)
+    else:
+        return False
+    eres = st.get("service_eresult", 1)
+    resp_hdr = (pb_int(1, steamid) + pb_int(2, sessionid)
+                + pb_fixed64(11, jobid) + pb_int(13, eres))
+    if eres != 1:
+        # A rejected read: no reply body, no push — the helper degrades to
+        # an empty running list.
+        conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, resp_hdr, b""))
+        return True
+    if push is not None and not st.get("family_push_after_reply"):
+        send_family_push(conn, st, steamid, sessionid, push)
+    conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, resp_hdr, resp_body))
+    if push is not None and st.get("family_push_after_reply"):
+        # The real ordering: the push lands after the reply, so the reader
+        # must drain for it (issue #178).
+        time.sleep(0.2)
+        send_family_push(conn, st, steamid, sessionid, push)
+    return True
+
+
+def send_family_push(conn, st, steamid, sessionid, push_body):
+    """One FamilyGroupsClient.NotifyRunningApps#1 push: EMsg 146 with a
+    target_job_name, like the live push."""
+    push_hdr = (pb_int(1, steamid) + pb_int(2, sessionid)
+                + pb_str(12, "FamilyGroupsClient.NotifyRunningApps#1"))
+    record("push 146 FamilyGroupsClient.NotifyRunningApps#1")
+    conn.send_frame(2, pack(146, push_hdr, push_body))
 
 # --- friends, persona and chat (protocol 1.6/1.9) ------------------------------
 # Driven by the state file so the plugin tests script lists, pushes and

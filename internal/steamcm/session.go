@@ -27,9 +27,10 @@ type Session struct {
 	loginID   uint32
 	conn      *websocket.Conn
 	licenses  []License
-	pending   [][]byte   // batched messages waiting for the next read
-	mu        sync.Mutex // serialises concurrent service calls (STEAM-5)
-	wmu       sync.Mutex // serialises socket writes (Call + Close)
+	pushHook  func(emsg uint32, hdr depot.Msg, body []byte) // sees pushes Call doesn't consume (SetPushHook)
+	pending   [][]byte                                      // batched messages waiting for the next read
+	mu        sync.Mutex                                    // serialises concurrent service calls (STEAM-5)
+	wmu       sync.Mutex                                    // serialises socket writes (Call + Close)
 	closeOnce sync.Once
 	// authed is false before any logon (DialUnauth): service calls go
 	// out as EMsg 9804 with no steamid/sessionid, like the real
@@ -279,6 +280,51 @@ func (s *Session) sideMessage(emsg uint32, hdr depot.Msg, body []byte) {
 				}
 			}
 		}
+	default:
+		// A server push (a service notification like
+		// FamilyGroupsClient.NotifyRunningApps#1, which arrives after the
+		// reply it belongs to): the hook sees it, whether it rode in
+		// before the reply Call waited for or is drained after. Runs
+		// under the session lock — it must not call back into Session.
+		if s.pushHook != nil {
+			s.pushHook(emsg, hdr, body)
+		}
+	}
+}
+
+// SetPushHook registers a hook for every message Call doesn't consume:
+// server pushes that arrive between requests. Only one-shot use: the hook
+// runs under the session lock, so it must copy what it keeps and return,
+// never calling back into Session.
+func (s *Session) SetPushHook(fn func(emsg uint32, hdr depot.Msg, body []byte)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pushHook = fn
+}
+
+// DrainPushes reads messages until timeout or stop says done (checked
+// after every message, so a caller that got its push stops draining
+// instead of waiting out the timeout), answering heartbeats, recording
+// licences and handing the rest to the push hook. A nil stop drains the
+// whole timeout. It returns early on a socket drop; a timeout is the
+// normal exit, not an error — the caller asked how long to listen.
+// Either way the session is spent afterwards: a fired read deadline
+// poisons the websocket for later reads (and a drop is a drop), so Close
+// the session. DrainPushes serialises with Call under the session lock;
+// stop and the hook run under it, so neither may call back into Session.
+func (s *Session) DrainPushes(timeout time.Duration, stop func() bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if stop != nil && stop() {
+			return
+		}
+		emsg, hdr, body, err := s.readOne(deadline)
+		if err != nil {
+			return
+		}
+		s.sideMessage(emsg, hdr, body)
 	}
 }
 
