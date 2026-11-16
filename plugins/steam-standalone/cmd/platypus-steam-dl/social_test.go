@@ -1194,9 +1194,11 @@ func TestSocialFamilySubscribeNeverBlocks(t *testing.T) {
 	p := startSocial(t, "none")
 	start := time.Now()
 	waitReadyReply(p, 1)
-	// A gated startup would sit out both 5 s subscribe timeouts first.
-	if dt := time.Since(start); dt > 8*time.Second {
-		t.Fatalf("social.start took %v with a silent family read, want under 8 s", dt)
+	// A gated startup would sit out at least one 5 s subscribe timeout
+	// first (the silent fake stalls GetFamilyGroupForUser, so the second
+	// call is never reached): anything near that means it blocked.
+	if dt := time.Since(start); dt > 3*time.Second {
+		t.Fatalf("social.start took %v with a silent family read, want under 3 s", dt)
 	}
 	p.stop(2)
 }

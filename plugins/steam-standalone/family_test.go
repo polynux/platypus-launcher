@@ -842,7 +842,8 @@ func TestSteamFamilyTakebackWarning(t *testing.T) {
 	if w.ID != "5002" {
 		t.Fatalf("first-seen take-back warned %+v, want id 5002", w)
 	}
-	// The user's entry vanishes before the owner's appears: still a warning.
+	// The user's entry vanishes in the same push the owner's appears: still a
+	// warning.
 	e.setCMState("family_running", []any{
 		map[string]any{"appid": "5002", "player": "76561198", "owner": "76561199"},
 	})
@@ -855,6 +856,23 @@ func TestSteamFamilyTakebackWarning(t *testing.T) {
 	})
 	restart()
 	waitWarnings(4)
+	// Separate pushes: the user stops, an empty list arrives, then the owner
+	// starts. From the list alone that's a user who quit, so no warning.
+	e.setCMState("family_running", []any{})
+	restart()
+	e.setCMState("family_running", []any{
+		map[string]any{"appid": "5002", "player": "76561198", "owner": "76561199"},
+	})
+	restart()
+	e.setCMState("family_running", []any{})
+	restart()
+	e.setCMState("family_running", []any{
+		map[string]any{"appid": "5002", "player": "76561199", "owner": "76561199"},
+	})
+	restart()
+	if n := len(warnings()); n != 4 {
+		t.Fatalf("separate quit-then-owner pushes warned: count = %d", n)
+	}
 	// Another lender's copy playing warns nothing for the user's copy...
 	e.setCMState("family_running", []any{
 		map[string]any{"appid": "5002", "player": "76561198", "owner": "76561199"},
