@@ -902,7 +902,19 @@ func startInstall(p params) (any, error) {
 	if !filepath.IsAbs(p.InstallDir) {
 		return nil, fmt.Errorf("installDir %q is not absolute", p.InstallDir)
 	}
-	rec, err := resolveTarget(p.ID, p.Target)
+	// An unpinned update stays on the channel the game was installed from
+	// (like the Steam client); only a fresh install takes the default. A
+	// build with no channel has none to keep.
+	target := p.Target
+	if target == nil {
+		stMu.Lock()
+		prev, installed := st.Versions[p.ID]
+		stMu.Unlock()
+		if installed && prev.Channel != "" {
+			target = &targetParam{Channel: prev.Channel}
+		}
+	}
+	rec, err := resolveTarget(p.ID, target)
 	if err != nil {
 		return nil, err
 	}

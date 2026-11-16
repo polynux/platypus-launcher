@@ -245,7 +245,7 @@ func TestPinBecomesTheTargetOfAnUpdate(t *testing.T) {
 	}
 	e.waitJob(t, j.ID, jobs.StateDone)
 
-	// Unpinned, an update asks for the store's default again.
+	// Unpinned, an update carries no target and stays on the installed channel.
 	if err := e.a.UnpinGameVersion(e.game.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -257,8 +257,38 @@ func TestPinBecomesTheTargetOfAnUpdate(t *testing.T) {
 		t.Fatalf("an unpinned update carries no target: %+v", j.Target)
 	}
 	e.waitJob(t, j.ID, jobs.StateDone)
-	if h := e.a.ledger.Entries(e.game.ID); h[len(h)-1].Build != "b300" {
-		t.Fatalf("return to latest installed %+v", h)
+	if h := e.a.ledger.Entries(e.game.ID); h[len(h)-1].Build != "b100" {
+		t.Fatalf("an unpinned update left the installed channel: %+v", h[len(h)-1])
+	}
+}
+
+// An update without a target stays on the installed channel; only a fresh
+// install takes the store's default.
+func TestUnpinnedUpdateStaysOnTheInstalledChannel(t *testing.T) {
+	t.Parallel()
+	e := versionsApp(t, allVersions, echoCaps)
+	e.install(t, nil) // a fresh install takes the default channel: latest
+	if h := e.a.ledger.Entries(e.game.ID); h[len(h)-1].Build != "b300" || h[len(h)-1].Channel != "latest" {
+		t.Fatalf("a fresh install took %+v", h[len(h)-1])
+	}
+	e.switchTo(t, types.VersionTarget{Channel: "legacy"})
+	j, err := e.a.UpdateGame(e.game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Target != nil {
+		t.Fatalf("an unpinned update carries no target: %+v", j.Target)
+	}
+	e.waitJob(t, j.ID, jobs.StateDone)
+	if h := e.a.ledger.Entries(e.game.ID); h[len(h)-1].Build != "b100" || h[len(h)-1].Channel != "legacy" {
+		t.Fatalf("the update left the installed channel: %+v", h[len(h)-1])
+	}
+	info, err := e.a.GetGameVersions(e.game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.UpdateAvailable {
+		t.Fatal("legacy is at its newest build, so nothing is available")
 	}
 }
 
