@@ -99,6 +99,9 @@ type request struct {
 	Target          *versionTarget    `json:"target"`
 	InstallDir      string            `json:"install_dir"`
 	JobID           string            `json:"job_id"`
+	// Repair, on a verify run, re-downloads the bad files after the check
+	// (protocol 1.4): without it the run only reads.
+	Repair bool `json:"repair"`
 }
 
 type cmErr struct {

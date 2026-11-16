@@ -49,6 +49,9 @@ func (b backend) Start(ctx context.Context, j types.Job) error {
 		if j.Title != "" {
 			p["title"] = j.Title
 		}
+		if j.Repair {
+			p["repair"] = true
+		}
 	}
 	return b.m.Call(ctx, j.Source, "game."+j.Kind, p, nil)
 }

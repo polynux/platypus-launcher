@@ -83,6 +83,8 @@ EMSG_CLIENT_CHECK_BETA_PASSWORD = 5450
 EMSG_CLIENT_LOGON = 5514
 EMSG_CLIENT_PICS_PRODUCT_INFO = 8903
 EMSG_CLIENT_PICS_ACCESS_TOKEN = 8905
+EMSG_CLIENT_GET_USER_STATS = 818
+EMSG_CLIENT_GET_USER_STATS_RESPONSE = 819
 EMSG_CLIENT_HELLO = 9805
 # Push messages phase 0 fakes (enums_clientserver.proto).
 EMSG_CLOUD_NOTIFY_APP_STATE_CHANGE = 146
@@ -394,6 +396,9 @@ def serve_logged_in(conn, hdr, body, st):
                     EMSG_CLIENT_PICS_PRODUCT_INFO, EMSG_CLIENT_CHECK_BETA_PASSWORD):
             serve_content(conn, emsg, hdr, body, st, steamid, sessionid)
             continue
+        if emsg == EMSG_CLIENT_GET_USER_STATS:
+            serve_user_stats(conn, hdr, body, st, steamid, sessionid)
+            continue
         target = (hdr.get(12, [b""])[0]).decode() if hdr.get(12) else ""
         jobid = hdr.get(10, [0])[0]
         if target.startswith("Authentication."):
@@ -460,6 +465,65 @@ def serve_logged_in(conn, hdr, body, st):
                                     pb_int(1, steamid) + pb_int(2, sessionid), pb_int(1, kick)))
             conn.close_frame()
             return
+
+
+# --- user stats (achievements) ------------------------------------------------
+# Driven by the state file's "userstats" map so the plugin tests control the
+# schema and unlock state without touching Valve:
+#   userstats: {"<appid>": {"achievements": [{"api", "name", "desc",
+#             "hidden", "icon", "unlocked"}]}}
+# An app with no entry answers eresult 2 (no stats), like a game without
+# achievements; "userstats": {"eresult": 2} forces that for every app.
+def vdf_write(out, node):
+    for k, v in node.items():
+        if isinstance(v, dict):
+            out.append(0)
+            out += k.encode() + b"\x00"
+            vdf_write(out, v)
+        elif isinstance(v, str):
+            out.append(1)
+            out += k.encode() + b"\x00" + v.encode() + b"\x00"
+        else:
+            out.append(2)
+            out += k.encode() + b"\x00" + struct.pack("<I", int(v))
+    out.append(8)
+
+
+def serve_user_stats(conn, hdr, body, st, steamid, sessionid):
+    game_id = pb_parse(body).get(1, [0])[0]
+    app = str(game_id & 0xFFFFFFFF)
+    cfg = st.get("userstats") or {}
+    h = pb_int(1, steamid) + pb_int(2, sessionid)
+    if cfg.get("eresult", 1) != 1 or app not in cfg:
+        record(f"userstats {app} eresult 2")
+        conn.send_frame(2, pack(EMSG_CLIENT_GET_USER_STATS_RESPONSE, h,
+                                pb_fixed64(1, game_id) + pb_int(2, 2)))
+        return
+    spec = cfg[app]
+    node = {"gamename": spec.get("name", "Fake Game"), "version": 1, "stats": {}}
+    bits, times = {}, []
+    for i, a in enumerate(spec.get("achievements") or []):
+        bits[str(i)] = {
+            "name": a.get("api", f"ACH_{i}"),
+            "display": {
+                "name": {"english": a.get("name", f"Achievement {i}")},
+                "desc": {"english": a.get("desc", "")},
+                "hidden": 1 if a.get("hidden") else 0,
+                "icon": a.get("icon", ""),
+                "icon_gray": "",
+            },
+        }
+        times.append(1700000000 + i if a.get("unlocked") else 0)
+    node["stats"]["0"] = {"type": "ACHIEVEMENTS", "bits": bits}
+    out = bytearray()
+    out.append(0)
+    out += app.encode() + b"\x00"
+    vdf_write(out, node)
+    out.append(8)
+    resp = pb_fixed64(1, game_id) + pb_int(2, 1) + pb_str(4, bytes(out))
+    resp += pb_msg(6, pb_int(1, 0) + b"".join(pb_fixed32(2, t) for t in times))
+    record(f"userstats {app} achievements {len(times)}")
+    conn.send_frame(2, pack(EMSG_CLIENT_GET_USER_STATS_RESPONSE, h, resp))
 
 
 # --- content RPCs for platypus-steam-dl -------------------------------------

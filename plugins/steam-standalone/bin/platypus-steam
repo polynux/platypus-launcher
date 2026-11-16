@@ -26,6 +26,7 @@ import re
 import shutil
 import signal
 import subprocess
+import struct
 import sys
 import threading
 import time
@@ -1290,20 +1291,13 @@ def resolve_art_assets(app_ids, deadline=None):
 
 
 def library_list(_params):
-    if not logged_in():
-        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
+    data = owned_games()
     token = access_token()
     steamid = steam_cm.jwt_payload(token).get("sub")
-    try:
-        # steamid is a routing parameter: without it the Web API answers
-        # 400 "missing required routing parameter" for token auth.
-        data = api_get("https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"
-                       f"?include_appinfo=1&include_played_free_games=1&steamid={steamid}", token)
-    except Exception as e:
-        raise RPCError(f"Steam Web API is unreachable: {e}")
     games = (data.get("response") or {}).get("games") or []
     persona_name(steamid)  # best effort, for auth.status
     installed = load_state("installed.json", {})
+    known_stats = load_state("stats-cache.json", {}) or {}
     out = []
     deadline = time.time() + STORE_BUDGET
     for g in games:
@@ -1329,6 +1323,10 @@ def library_list(_params):
         # Art needs no Store lookup: always set it, so games past the Store
         # budget (or with no Store entry at all) still show covers.
         entry.update(art_urls(app))
+        # Achievements only for games the stats cache confirms have some:
+        # filling the cache is what achievements.list does, on the game page.
+        if (known_stats.get(app) or {}).get("achievements"):
+            entry["features"] = ["achievements"]
         # Tools, movies, music etc. aren't depot installs Platypus can run.
         app_type = (store.get("type") or "").lower()
         if app_type and app_type not in ("game", "demo", "beta", "application"):
@@ -1904,7 +1902,7 @@ def dl_request(params, extra=None):
 
 
 def dl_run(subcommand, req, job_id=None, game_dir=None, label="download failed",
-           err_code=-32000):
+           err_code=-32000, phase="downloading"):
     """Runs platypus-steam-dl and follows its JSON lines: progress
     notifications until a result or error line. Returns the result dict.
     `label` names the run in its error (`Steam app info: ...`): a download
@@ -1927,7 +1925,7 @@ def dl_run(subcommand, req, job_id=None, game_dir=None, label="download failed",
         proc.stdin.close()
     except (BrokenPipeError, OSError):
         pass
-    state = {"jobId": job_id, "phase": "downloading", "percent": 0} if job_id else None
+    state = {"jobId": job_id, "phase": phase, "percent": 0} if job_id else None
     import collections as _collections
     text = _collections.deque(maxlen=20)
     result = None
@@ -2127,6 +2125,340 @@ def versions_unlock(params):
         return {"unlocked": False}
     save_beta_password(app, channel, password)
     return {"unlocked": True}
+
+
+# --- achievements and playtime (protocol 1.7) --------------------------------
+#
+# Achievements come from the CM session (ClientGetUserStats, EMsg 818/819),
+# the only read path that needs no publisher key: ISteamUserStats demands
+# one even with the user's access token. The reply carries the app's stats
+# schema (binary KeyValues: names, descriptions, icons and hidden flags per
+# language) plus the unlock times per stats group and bit. A game without
+# achievements, or one the account doesn't own, answers eresult 2 with no
+# schema: an empty list, like a store with no achievements. Global unlock
+# percentages are keyless HTTP and best effort.
+USERSTATS_REQ = 818
+USERSTATS_RESP = 819
+
+# Serializes read-modify-write of stats-cache.json across handler threads.
+stats_lock = threading.RLock()
+
+
+def parse_bin_kv(data):
+    """Binary KeyValues (0=subkey, 1=string, 2=int32, 3=float, 7=uint64,
+    8=end) to nested dicts; truncation and unknown types are ValueError."""
+    pos, stack, cur = 0, [], {}
+    get = data.__getitem__
+    while True:
+        if pos >= len(data):
+            raise ValueError("truncated stats schema")
+        try:
+            kind = get(pos)
+            pos += 1
+            if kind == 8:
+                if not stack:
+                    return cur
+                cur = stack.pop()
+                continue
+            end = data.index(b"\x00", pos)
+            key = data[pos:end].decode("utf-8", "replace")
+            pos = end + 1
+            if kind == 0:
+                child = {}
+                cur[key] = child
+                stack.append(cur)
+                cur = child
+            elif kind == 1:
+                end = data.index(b"\x00", pos)
+                cur[key] = data[pos:end].decode("utf-8", "replace")
+                pos = end + 1
+            elif kind == 2:
+                cur[key] = struct.unpack_from("<I", data, pos)[0]
+                pos += 4
+            elif kind == 3:
+                cur[key] = struct.unpack_from("<f", data, pos)[0]
+                pos += 4
+            elif kind == 7:
+                cur[key] = struct.unpack_from("<Q", data, pos)[0]
+                pos += 8
+            else:
+                raise ValueError(f"unknown stats value type {kind}")
+        except struct.error:
+            raise ValueError("truncated stats schema")
+
+
+def steam_user_stats(app):
+    """(schema node, unlock times) for the app over one CM session: the
+    stats schema plus the unlock time per (group, bit). (None, {}) when
+    Steam reports no stats for it. Transport problems raise CMError."""
+    token = access_token()
+    steamid = int(steam_cm.jwt_payload(token).get("sub"))
+    session = steam_cm.CMSession(steamid, refresh_token())
+    try:
+        body = steam_cm.pb_fixed64(1, int(app)) + steam_cm.pb_fixed64(4, steamid)
+        session.ws.send_binary(steam_cm.pack_emsg(
+            USERSTATS_REQ, steam_cm.header(steamid=steamid, sessionid=session.sessionid), body))
+        resp = None
+        for emsg, _h, b in session._messages(deadline=time.time() + 30):
+            if emsg == USERSTATS_RESP:
+                resp = b
+                break
+            session._side_message(emsg)
+        if resp is None:
+            raise steam_cm.CMError("Steam didn't answer the stats request")
+    finally:
+        session.logoff()
+    m = steam_cm.pb_parse(resp)
+    if (m.get(2) or [2])[0] != 1:
+        return None, {}
+    schema = (m.get(4) or [b""])[0]
+    node = parse_bin_kv(schema).get(str(int(app)), {}) if schema else {}
+    times = {}
+    for blk in m.get(6) or []:
+        bm = steam_cm.pb_parse(blk)
+        gid = str((bm.get(1) or [0])[0])
+        for bit, ts in enumerate(bm.get(2) or []):
+            if ts:
+                times[(gid, str(bit))] = ts
+    return node, times
+
+
+def stats_cached(app):
+    """The cached schema defs for the app, or None when never listed."""
+    with stats_lock:
+        entry = (load_state("stats-cache.json", {}) or {}).get(app)
+    return (entry or {}).get("achievements") if entry else None
+
+
+def schema_defs(app, node):
+    """The app's achievement defs in schema order: (api, group, bit, name,
+    description, hidden, icon). Unlock state comes from the times map, not
+    the schema."""
+    lang = steam_lang()
+    defs = []
+    stats = (node or {}).get("stats") or {}
+    for gid in sorted(stats, key=lambda g: (int(g) if g.isdigit() else 1 << 60, g)):
+        gval = stats[gid]
+        if not isinstance(gval, dict) or (gval.get("type") or "").upper() != "ACHIEVEMENTS":
+            continue
+        bits = gval.get("bits") or {}
+        for bit in sorted(bits, key=lambda b: (int(b) if b.isdigit() else 1 << 60, b)):
+            bval = bits[bit]
+            if not isinstance(bval, dict):
+                continue
+            api = bval.get("name") or ""
+            if not api:
+                continue
+            disp = bval.get("display") or {}
+            names = disp.get("name") or {}
+            descs = disp.get("desc") or {}
+            defs.append({
+                "api": api, "gid": gid, "bit": bit,
+                "name": names.get(lang) or names.get("english") or api,
+                "desc": descs.get(lang) or descs.get("english") or "",
+                "hidden": bool(disp.get("hidden", 0)),
+                "icon": disp.get("icon") or "",
+            })
+    return defs
+
+
+def save_stats_cache(app, defs):
+    with stats_lock:
+        cache = load_state("stats-cache.json", {}) or {}
+        cache[app] = {"at": int(time.time()), "achievements": defs}
+        save_state("stats-cache.json", cache)
+
+
+def achievement_percents(app):
+    """Global unlock percentages by achievement api name (keyless HTTP).
+    Best effort: {} when Steam doesn't answer, never fails the list."""
+    try:
+        data = api_get("https://api.steampowered.com/ISteamUserStats/"
+                       f"GetGlobalAchievementPercentagesForApp/v2/?gameid={app}")
+    except Exception:
+        return {}
+    out = {}
+    for a in ((data.get("achievementpercentages") or {}).get("achievements") or []):
+        try:
+            out[str(a.get("name"))] = float(a.get("percent"))
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def achievements_list(params):
+    app = str(params.get("id") or "")
+    if not app:
+        raise RPCError("invalid params: id is required", -32602)
+    try:
+        int(app)
+    except ValueError:
+        raise RPCError("invalid params: id is required", -32602)
+    defs = stats_cached(app)
+    if defs is None:
+        try:
+            node, times = steam_user_stats(app)
+        except steam_cm.CMError as e:
+            raise RPCError(str(e))
+        defs = schema_defs(app, node)
+        save_stats_cache(app, defs)
+    else:
+        try:
+            _node, times = steam_user_stats(app)
+        except steam_cm.CMError as e:
+            raise RPCError(str(e))
+    percents = achievement_percents(app)
+    out, unlocked = [], 0
+    for d in defs:
+        e = {"id": d["api"], "name": d["name"], "description": d["desc"], "hidden": d["hidden"]}
+        # Schema icons are bare filenames, not CDN URLs: only send a real one.
+        if (d["icon"] or "").startswith("http"):
+            e["icon"] = d["icon"]
+        ts = times.get((d["gid"], d["bit"]))
+        if ts:
+            e["unlockedAt"] = ts
+            unlocked += 1
+        if d["api"] in percents:
+            e["globalPercent"] = percents[d["api"]]
+        out.append(e)
+    return {"total": len(out), "unlocked": unlocked, "list": out}
+
+
+def owned_games():
+    """The owned-apps call library.list and playtime.list share: the login,
+    the token and the steamid routing the Web API demands for token auth."""
+    if not logged_in():
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
+    token = access_token()
+    steamid = steam_cm.jwt_payload(token).get("sub")
+    try:
+        # steamid is a routing parameter: without it the Web API answers
+        # 400 "missing required routing parameter" for token auth.
+        return api_get("https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"
+                       f"?include_appinfo=1&include_played_free_games=1&steamid={steamid}", token)
+    except Exception as e:
+        raise RPCError(f"Steam Web API is unreachable: {e}")
+
+
+def playtime_list(_params):
+    data = owned_games()
+    games = (data.get("response") or {}).get("games") or []
+    out = []
+    for g in games:
+        app = str(g.get("appid") or "")
+        if not app:
+            continue
+        try:
+            minutes = max(0, int(g.get("playtime_forever") or 0))
+        except (TypeError, ValueError):
+            minutes = 0
+        try:
+            last = int(g.get("rtime_last_played") or 0)
+        except (TypeError, ValueError):
+            last = 0
+        e = {"id": app, "minutes": minutes}
+        if last:
+            e["lastPlayed"] = last
+        out.append(e)
+    return {"games": out}
+
+
+# --- verify (protocol 1.4) ---------------------------------------------------
+#
+# game.verify runs platypus-steam-dl's verify subcommand as a job, like
+# install/update: a check (repair:false) only reads and reports, a repair
+# re-downloads what differs. The request pins the installed build (the
+# ledger's channel and manifest gids), so a game held on an old build or a
+# beta is checked against what is on disk, not today's public branch.
+def verify_version(app):
+    installed = load_state("installed.json", {}).get(app) or {}
+    channel = installed.get("channel") or ""
+    if installed.get("archiveRef"):
+        target = {"archiveRef": installed["archiveRef"]}
+        if channel:
+            target["channel"] = channel
+        if installed.get("build"):
+            target["build"] = installed["build"]
+        # dl_request adds the stored password for the target's channel.
+        return {"target": target}
+    if channel:
+        version = {"branch": channel}
+        stored = (beta_passwords().get(app) or {})
+        if channel in stored:
+            version["branchPassword"] = stored[channel]
+        return version
+    return {}
+
+
+def start_verify(params):
+    app, job_id = str(params["id"]), params["jobId"]
+    install_dir = params.get("installDir") or ""
+    if not os.path.isabs(install_dir):
+        raise RPCError("installDir is missing or relative; Platypus always sends one")
+    if app not in load_state("installed.json", {}):
+        raise RPCError(tr("not_installed", app=app))
+    if not claim_job(job_id, {"canceled": False, "id": app, "dir": install_dir, "proc": None}):
+        return {}
+    write_job_meta(job_id, {"app": app, "kind": "verify", "dir": install_dir, "installDir": install_dir})
+    repair = bool(params.get("repair"))
+    threading.Thread(target=follow_verify, args=(job_id, app, install_dir, repair), daemon=True).start()
+    return {}
+
+
+def follow_verify(job_id, app, install_dir, repair=False):
+    notify("job.progress", {"jobId": job_id, "phase": "checking"})
+    with jobs_lock:
+        jobs.setdefault(job_id, {"canceled": False, "id": app, "dir": install_dir})
+    try:
+        req = dl_request({"id": app, **verify_version(app)},
+                         {"install_dir": install_dir, "job_id": job_id})
+        req["repair"] = bool(repair)
+        result = dl_run("verify", req, job_id, install_dir,
+                        label="Steam verify", phase="checking")
+    except RPCError as e:
+        with jobs_lock:
+            job = jobs.pop(job_id, {})
+        if job.get("canceled"):
+            return
+        if e.code == CODE_AUTH_REQUIRED:
+            notify("job.failed", {"jobId": job_id, "error": tr("need_login_expired")})
+        else:
+            notify("job.failed", {"jobId": job_id, "error": str(e)})
+        return
+    with jobs_lock:
+        job = jobs.pop(job_id, {})
+    if job.get("canceled"):
+        return
+    drop_job_meta(job_id)
+    if not isinstance(result, dict) or not any(k in result for k in ("checked", "damaged", "missing", "repaired")):
+        notify("job.failed", {"jobId": job_id, "error": "Steam verify returned a bad report"})
+        return
+    try:
+        verify = {k: int(result.get(k) or 0) for k in ("checked", "damaged", "missing", "repaired")}
+    except (TypeError, ValueError):
+        notify("job.failed", {"jobId": job_id, "error": "Steam verify returned a bad report"})
+        return
+    notify("job.done", {"jobId": job_id, "verify": verify})
+
+
+def game_relocated(params):
+    """Platypus moved the game's folder itself (protocol 1.4, no
+    capability): rebase the install record from `from` to `to`. -32602 when
+    the record doesn't point at `from`."""
+    app = str(params.get("id") or "")
+    src, dst = params.get("from") or "", params.get("to") or ""
+    if not app or not src or not dst:
+        raise RPCError("invalid params: id, from and to are required", -32602)
+    with installed_lock:
+        installed = load_state("installed.json", {})
+        entry = installed.get(app)
+        if entry is None or os.path.normpath(entry.get("path") or "") != os.path.normpath(src):
+            raise RPCError(f"no install record at {src}", -32602)
+        entry["path"] = dst
+        entry["dir_name"] = os.path.basename(dst.rstrip("/")) or entry.get("dir_name")
+        installed[app] = entry
+        save_state("installed.json", installed)
+    return {}
 
 
 # --- jobs ------------------------------------------------------------------
@@ -2801,9 +3133,10 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.7.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.8.0", "api": API,
             "protocol": protocol,
-            "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family"],
+            "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
+                             "verify", "achievements", "playtime"],
             # Password branches are unverified against live Steam (no
             # encryptedmanifests decryption yet): listed locked, unlock
             # kept but unadvertised.
@@ -2896,6 +3229,10 @@ METHODS = {
     "game.install": lambda p: start_job(p, "install"),
     "game.update": lambda p: start_job(p, "update"),
     "game.uninstall": lambda p: start_job(p, "uninstall"),
+    "game.verify": start_verify,
+    "game.relocated": game_relocated,
+    "achievements.list": achievements_list,
+    "playtime.list": playtime_list,
     "versions.list": versions_list,
     "versions.unlock": versions_unlock,
     "job.cancel": job_cancel,

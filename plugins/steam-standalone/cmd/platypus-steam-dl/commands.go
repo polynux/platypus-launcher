@@ -255,17 +255,31 @@ func runVerify(ctx context.Context, req request) error {
 		return err
 	}
 	combined := installedManifests(depots)
+	checked := 0
+	for _, f := range combined.Files {
+		if f.IsDir() || f.IsSymlink() {
+			continue
+		}
+		if len(f.FileHash) == 0 || len(f.Chunks) == 0 {
+			continue
+		}
+		checked++
+	}
 	bad, err := depot.Verify(combined, req.InstallDir)
 	if err != nil {
 		return err
 	}
-	if len(bad) == 0 {
-		emit(map[string]any{"type": "result", "bad": 0, "fixed": 0})
+	// A check (repair:false) only reads: report what differs and stop.
+	// depot.Verify lumps damaged and missing files together; the protocol
+	// reports them apart.
+	damaged, missing := splitBad(req.InstallDir, bad)
+	if !req.Repair || len(bad) == 0 {
+		emit(map[string]any{"type": "result", "checked": checked,
+			"damaged": damaged, "missing": missing, "repaired": 0})
 		return nil
 	}
 	// Re-fetch the chunks of mismatched files only.
 	client := depot.NewClient()
-	fixed := 0
 	for _, d := range depots {
 		var want []string
 		for _, f := range d.man.Files {
@@ -295,10 +309,34 @@ func runVerify(ctx context.Context, req request) error {
 		if dlErr != nil {
 			return dlErr
 		}
-		fixed += len(want)
 	}
-	emit(map[string]any{"type": "result", "bad": len(bad), "fixed": fixed})
+	// A repair reports what is still wrong afterwards, and what the run
+	// restored (the files bad before and good now).
+	again, err := depot.Verify(combined, req.InstallDir)
+	if err != nil {
+		return err
+	}
+	restored := len(bad) - len(again)
+	if restored < 0 {
+		restored = 0
+	}
+	damaged, missing = splitBad(req.InstallDir, again)
+	emit(map[string]any{"type": "result", "checked": checked,
+		"damaged": damaged, "missing": missing, "repaired": restored})
 	return nil
+}
+
+// splitBad tells the protocol's damaged files (present but different) apart
+// from its missing ones (gone from the folder).
+func splitBad(dir string, bad []string) (damaged, missing int) {
+	for _, b := range bad {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(b))); os.IsNotExist(err) {
+			missing++
+		} else {
+			damaged++
+		}
+	}
+	return damaged, missing
 }
 
 func countChunks(depots []fetchedDepot) int {

@@ -262,3 +262,109 @@ print(hs.tr("need_login"))
 		t.Fatalf("locale errors = %q", got)
 	}
 }
+
+// The stats schema is binary KeyValues: nested dicts out, truncation and
+// unknown value types refused as ValueError.
+func TestSteamBinKVParse(t *testing.T) {
+	got := pyRun(t, `
+import struct
+def w(out, node):
+    for k, v in node.items():
+        if isinstance(v, dict):
+            out.append(0); out += k.encode() + b"\x00"; w(out, v)
+        elif isinstance(v, str):
+            out.append(1); out += k.encode() + b"\x00" + v.encode() + b"\x00"
+        else:
+            out.append(2); out += k.encode() + b"\x00" + struct.pack("<I", v)
+    out.append(8)
+o = bytearray(); o.append(0); o += b"4321\x00"
+w(o, {"gamename": "G", "version": 1, "stats": {"0": {"type": "ACHIEVEMENTS"}}})
+o.append(8)
+print(hs.parse_bin_kv(bytes(o))["4321"]["stats"]["0"]["type"])
+for bad in (b"\x02short", b"\x09k\x00", b"\x01k\x00v"):
+    try:
+        hs.parse_bin_kv(bad)
+        print("kept")
+    except ValueError:
+        print("refused")
+`)
+	if got != "ACHIEVEMENTS\nrefused\nrefused\nrefused" {
+		t.Fatalf("bin kv = %q", got)
+	}
+}
+
+// achievements.list joins the schema (names, hidden, icons) with the unlock
+// times and the global percentages; a bare filename is never sent as icon.
+func TestSteamAchievementsJoin(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+node = {"stats": {"0": {"type": "ACHIEVEMENTS", "bits": {
+    "1": {"name": "A.ONE", "display": {"name": {"english": "One"},
+        "desc": {"english": "First"}, "hidden": 0, "icon": "https://cdn/x.png"}},
+    "2": {"name": "A.TWO", "display": {"name": {"english": "Two"},
+        "desc": {}, "hidden": 1, "icon": "two.jpg"}}}}}}
+defs = hs.schema_defs("4321", node)
+print([(d["api"], d["bit"], d["name"], d["hidden"], d["icon"]) for d in defs])
+hs.achievement_percents = lambda app: {"A.ONE": 84.1}
+class FakeSession:
+    def __init__(self, *a): pass
+    def logoff(self): pass
+seen = {}
+def fake_stats(app):
+    seen["app"] = app
+    return node, {("0", "1"): 1700000000}
+hs.steam_user_stats = fake_stats
+import json
+print(json.dumps(hs.achievements_list({"id": "4321"}), sort_keys=True))
+try:
+    hs.achievements_list({})
+except Exception as e:
+    print("no-id:", getattr(e, "code", "?"))
+`)
+	want := `[('A.ONE', '1', 'One', False, 'https://cdn/x.png'), ('A.TWO', '2', 'Two', True, 'two.jpg')]
+{"list": [{"description": "First", "globalPercent": 84.1, "hidden": false, "icon": "https://cdn/x.png", "id": "A.ONE", "name": "One", "unlockedAt": 1700000000}, {"description": "", "hidden": true, "id": "A.TWO", "name": "Two"}], "total": 2, "unlocked": 1}
+no-id: -32602`
+	if got != want {
+		t.Fatalf("join = %q", got)
+	}
+}
+
+// A verify job pins the installed build (ledger target + stored password)
+// and reports the helper's check payload on job.done.
+func TestSteamVerifyRequestAndReport(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+hs.refresh_token = lambda: "tok"
+hs.notify = lambda m, p: sent.append((m, p))
+sent, reqs = [], []
+def fake_run(sub, req, job_id=None, game_dir=None, label="", err_code=-32000, phase="downloading"):
+    reqs.append((sub, dict(req), phase))
+    return {"checked": 10, "damaged": 1, "missing": 0, "repaired": 0}
+hs.dl_run = fake_run
+import json, os
+dd = os.environ["PLATYPUS_PLUGIN_DATA"]
+json.dump({"4321": {"path": "/g/4321", "channel": "beta", "build": "99",
+    "archiveRef": {"depots": {"11": 4242}}}},
+    open(os.path.join(dd, "installed.json"), "w"))
+json.dump({"4321": {"beta": "s3cret"}}, open(os.path.join(dd, "beta_passwords.json"), "w"))
+hs.follow_verify("jv", "4321", "/g/4321", True)
+sub, req, phase = reqs[0]
+print(sub, phase, req["repair"], req["target"], req.get("branch_passwords"))
+print(sent[-1])
+try:
+    hs.start_verify({"id": "4321", "installDir": "relative", "jobId": "jv"})
+except Exception as e:
+    print("rel:", getattr(e, "code", "?"))
+try:
+    hs.start_verify({"id": "9999", "installDir": "/g/9999", "jobId": "jv"})
+except Exception as e:
+    print("unknown:", str(e)[:12])
+`)
+	want := `verify checking True {'archiveRef': {'depots': {'11': 4242}}, 'channel': 'beta', 'build': '99'} {'beta': 's3cret'}
+('job.done', {'jobId': 'jv', 'verify': {'checked': 10, 'damaged': 1, 'missing': 0, 'repaired': 0}})
+rel: -32000
+unknown: app 9999 is`
+	if got != want {
+		t.Fatalf("verify = %q", got)
+	}
+}
