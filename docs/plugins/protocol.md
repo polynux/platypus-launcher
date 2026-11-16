@@ -400,17 +400,24 @@ shows the message under the call's generic code: `runner.wrapFailed` for a launc
 
 ## Jobs
 
-Platypus creates the `jobId`, picks `installDir` (the user's Games folder plus the
-plugin's `install_dir`, or the user's override) and checks free space against
-`game.installSize` before calling `game.install`. `title` is the game's title
-as Platypus lists it; use it for your own records instead of a second lookup, and
-treat it as cosmetic: never a path component. Install into `installDir`, never
-anywhere else, and give each game its own subfolder of it (Steam uses
-`<name>_<appid>`, GOG the store's folder name): two games must never share a
-directory, and a folder recorded by an earlier version of the plugin keeps working
-from its recorded path. `game.update` brings the installed game up to date in
-place; it is not a fresh `game.install`. `installSize.downloadBytes` is what
-`job.progress.total` counts. Report progress with notifications:
+Platypus creates the `jobId` and checks free space against `game.installSize`
+before calling `game.install`. `title` is the game's title as Platypus lists it;
+use it for your own records instead of a second lookup, and treat it as
+cosmetic: never a path component.
+
+What `installDir` names depends on the job. For `game.install` it is the folder
+to install under — the user's Games folder plus the plugin's `install_dir`, or
+the user's override: install into it, never anywhere else, and give each game
+its own subfolder of it (Steam uses `<name>_<appid>`, GOG the store's folder
+name), so two games never share a directory. For a job on a game that is
+already installed (`game.update`, `game.verify`, `game.move`) it is the game's
+own folder instead, the one `library.list` reports as `installPath`: update it
+in place, and don't add a second level to it. Either way, a folder recorded by
+an earlier version of the plugin keeps working from its recorded path.
+
+`game.update` brings the installed game up to date in place; it is not a fresh
+`game.install`. `installSize.downloadBytes` is what `job.progress.total` counts.
+Report progress with notifications:
 
 | Notification | Params |
 |---|---|
