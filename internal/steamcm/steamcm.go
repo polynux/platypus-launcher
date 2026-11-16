@@ -10,8 +10,10 @@ package steamcm
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"os"
 	"sync"
 )
 
@@ -49,11 +51,10 @@ const (
 	// EOSType.LinuxUnknown as uint32.
 	ClientOSLinux = uint32(0xFFFFFF35)
 	// The obfuscated private ip doubles as the login id. The base is
-	// fixed so one-shot logons differ from the official client's
-	// (derived from its private ip); per-role values and the one-shot
-	// random pick (LoginIDFor) keep Platypus's own sessions from kicking
-	// each other (plan D8, research R1).
-	LoginIDBase = 2718281
+	// derived from the install's machine id (loginIDBase), so two
+	// Platypus installs on one account get different role ids; per-role
+	// values and the one-shot random pick (LoginIDFor) keep Platypus's
+	// own sessions from kicking each other (plan D8, research R1).
 	MachineName = "Platypus"
 )
 
@@ -73,30 +74,54 @@ const (
 )
 
 var (
-	loginIDOnce sync.Once
-	shotLoginID uint32
+	loginBaseOnce sync.Once
+	loginBase     uint32
+	loginIDOnce   sync.Once
+	shotLoginID   uint32
 )
+
+// loginIDBaseFor derives a logon id base from a machine id blob: the low
+// bits of its digest. The result stays at or below 0x3F000000, so every
+// role value (base+0x03000000 at most) fits a uint32 and base-1 (the
+// one-shot fallback) is a distinct, non-zero id.
+func loginIDBaseFor(machineID []byte) uint32 {
+	digest := sha256.Sum256(machineID)
+	return binary.BigEndian.Uint32(digest[:4])%0x3F000000 + 1
+}
+
+// loginIDBase is this install's base: derived from StableMachineID, so two
+// installs on one account use different role ids and stop replacing each
+// other's sessions (issue #186), while one install keeps its ids across
+// restarts. An install with nowhere to store a machine id falls back to a
+// per-process id.
+func loginIDBase() uint32 {
+	loginBaseOnce.Do(func() {
+		loginBase = loginIDBaseFor(StableMachineID(os.Getenv("PLATYPUS_PLUGIN_DATA")))
+	})
+	return loginBase
+}
 
 // LoginIDFor returns the obfuscated_private_ip value for a role. Role
 // values sit well above the base so a collision with the official
 // client's id (derived from its real private ip) stays as unlikely as
 // the base itself; the one-shot value is one random pick per process.
 func LoginIDFor(role LoginRole) uint32 {
+	base := loginIDBase()
 	switch role {
 	case LoginRoleSocial:
-		return LoginIDBase + 0x01000000
+		return base + 0x01000000
 	case LoginRoleCloud:
-		return LoginIDBase + 0x02000000
+		return base + 0x02000000
 	case LoginRoleContent:
-		return LoginIDBase + 0x03000000
+		return base + 0x03000000
 	default:
 		loginIDOnce.Do(func() {
 			n := make([]byte, 4)
 			rand.Read(n)
 			v := binary.BigEndian.Uint32(n)
 			// Keep it distinct from the base and the role values.
-			if v == 0 || v == LoginIDBase || v >= LoginIDBase+0x01000000 && v <= LoginIDBase+0x03000000 {
-				v = LoginIDBase - 1
+			if v == 0 || v == base || v >= base+0x01000000 && v <= base+0x03000000 {
+				v = base - 1
 			}
 			shotLoginID = v
 		})
