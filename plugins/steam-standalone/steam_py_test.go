@@ -69,6 +69,39 @@ print("s3cret" in repr(sent) or "s3cret" in repr(hs.jobs))
 	}
 }
 
+// A stored password Steam refuses is dropped; an explicitly typed password
+// that fails leaves the store alone, and public/no stored password is a
+// no-op (issue #176, review finding S2).
+func TestSteamRefusedPasswordDropRules(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PLATYPUS_PLUGIN_DATA", dir)
+	got := pyRun(t, `
+hs.save_beta_password("4321", "beta", "stored-pw")
+hs.save_beta_password("4321", "other", "other-pw")
+# The install sent the stored secret: Steam refused it, drop it.
+hs.drop_refused_password("4321", {"branch": "beta", "branch_password": "stored-pw"})
+hs.save_beta_password("4321", "beta", "stored-pw")
+# Only the tried password counts: the mapped one goes.
+hs.drop_refused_password("4321", {"target": {"channel": "beta"},
+                                  "branch_passwords": {"beta": "stored-pw"}})
+# A typed password that failed is not the store's: keep everything.
+hs.save_beta_password("4321", "beta", "stored-pw")
+hs.drop_refused_password("4321", {"branch": "beta", "branch_password": "typed-pw"})
+hs.drop_refused_password("4321", {"branch": "other", "branch_password": "typed-pw"})
+# The helper's branch wins over the request's target.
+hs.drop_refused_password("4321", {"branch": "public", "target": {"channel": "other"},
+                                  "branch_passwords": {"other": "other-pw"}}, "other")
+# Public and unknown channels never touch the store.
+hs.drop_refused_password("4321", {"branch": "public", "branch_password": "stored-pw"})
+hs.drop_refused_password("4321", {"branch": "beta"})
+hs.drop_refused_password("9999", {"branch": "beta", "branch_password": "x"})
+print(hs.beta_passwords())
+`)
+	if got != `{'4321': {'beta': 'stored-pw'}}` {
+		t.Fatalf("beta_passwords = %s", got)
+	}
+}
+
 // STEAM-7: a token source persisted as JSON (list, mtime maybe an int) still
 // matches the live account.config stamp, so the legacy fast path hits.
 func TestSteamTokenSourceSurvivesJSONRoundTrip(t *testing.T) {

@@ -131,6 +131,7 @@ EMSG_CLIENT_CHECK_BETA_PASSWORD = 5450
 EMSG_CLIENT_LOGON = 5514
 EMSG_CLIENT_PICS_PRODUCT_INFO = 8903
 EMSG_CLIENT_PICS_ACCESS_TOKEN = 8905
+EMSG_CLIENT_PICS_PRIVATE_BETA = 8907
 EMSG_CLIENT_GET_USER_STATS = 818
 EMSG_CLIENT_GET_USER_STATS_RESPONSE = 819
 EMSG_CLIENT_HELLO = 9805
@@ -543,7 +544,8 @@ def serve_logged_in(conn, hdr, body, st):
             conn.close_frame()
             return
         if emsg in (EMSG_CLIENT_GET_DEPOT_KEY, EMSG_CLIENT_PICS_ACCESS_TOKEN,
-                    EMSG_CLIENT_PICS_PRODUCT_INFO, EMSG_CLIENT_CHECK_BETA_PASSWORD):
+                    EMSG_CLIENT_PICS_PRODUCT_INFO, EMSG_CLIENT_CHECK_BETA_PASSWORD,
+                    EMSG_CLIENT_PICS_PRIVATE_BETA):
             serve_content(conn, emsg, hdr, body, st, steamid, sessionid)
             continue
         if emsg == EMSG_CLIENT_GET_USER_STATS:
@@ -1011,16 +1013,53 @@ def serve_content(conn, emsg, hdr, body, st, steamid, sessionid):
                                 pb_msg(1, entry)))
     elif emsg == EMSG_CLIENT_CHECK_BETA_PASSWORD:
         # beta_password_eresult refuses the password (a wrong-password live
-        # shape the unlock tests drive); the default 1 accepts it.
+        # shape the unlock tests drive); the default 1 accepts it. Each
+        # entry carries the branch key (betapassword = 2, hex) the
+        # private-beta call needs, like SteamKit's FromHexString decode.
+        # drop_beta hangs up instead: a transport failure, never a refusal.
+        if st.get("drop_beta"):
+            record(f"beta_password app={pb_parse(body).get(1, [0])[0]} dropped")
+            conn.close_frame()
+            return
         record(f"beta_password app={pb_parse(body).get(1, [0])[0]}")
         resp = pb_int(1, st.get("beta_password_eresult", 1))
         if st.get("beta_password_eresult", 1) == 1:
-            # The response lists the branches the password opened
             # (betapasswords = 4, betaname = 1): every pwdrequired branch
-            # in the served appinfo, like a live accept.
-            for name in locked_branches(st.get("appinfo") or ""):
-                resp += pb_msg(4, pb_str(1, name))
+            # in the served appinfo, like a live accept, plus beta_branches
+            # (branches live hides from PICS but the password still opens).
+            # beta_key_<branch> overrides the announced key; the true key
+            # stays the branch hash, so a wrong override fails the 8907
+            # check below.
+            names = locked_branches(st.get("appinfo") or "")
+            for extra in st.get("beta_branches") or []:
+                if extra not in names:
+                    names.append(extra)
+            for name in names:
+                key = st.get("beta_key_" + name) or hashlib.sha1(name.encode()).hexdigest()
+                resp += pb_msg(4, pb_str(1, name) + pb_str(2, key))
         conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid), resp))
+    elif emsg == EMSG_CLIENT_PICS_PRIVATE_BETA:
+        # The private-beta depot section (PICSGetPrivateBeta): text
+        # KeyValues with the branch's manifest gids, served from the
+        # private_beta state (or private_beta_<app> per-app). The branch
+        # key (password_hash = 4) must match the hex key CheckBetaPassword
+        # returned; a refused password fails the install distinctly.
+        req = pb_parse(body)
+        app = req.get(1, [0])[0]
+        branch = req.get(3, [b""])[0]
+        if isinstance(branch, bytes):
+            branch = branch.decode("utf-8", "replace")
+        key = req.get(4, [b""])[0]
+        record(f"private_beta app={app} branch={branch} key={len(key) if isinstance(key, bytes) else 0}B")
+        section = st.get("private_beta_%d" % app, st.get("private_beta", ""))
+        # The true key is the branch hash; a beta_key_ override only
+        # changes what CheckBetaPassword announced, so it fails here.
+        want = hashlib.sha1(branch.encode()).digest()
+        if st.get("beta_password_eresult", 1) != 1 or not section or key != want:
+            conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid), pb_int(1, 2)))
+        else:
+            conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid),
+                                    pb_int(1, 1) + pb_str(2, section)))
 
 
 def locked_branches(appinfo):

@@ -147,6 +147,14 @@ class RPCError(Exception):
         self.code = code
 
 
+class WrongBranchPassword(RPCError):
+    """Steam refused the tried beta password (helper code wrong-password).
+    Carries the branch so the stored secret for it can be dropped."""
+    def __init__(self, message, code=-32000, branch=""):
+        super().__init__(message, code)
+        self.branch = branch
+
+
 def send(msg):
     msg["jsonrpc"] = "2.0"
     line = json.dumps(msg, separators=(",", ":"))
@@ -2029,6 +2037,55 @@ def save_beta_password(app, channel, password):
         save_state("beta_passwords.json", pws)
 
 
+def drop_beta_password(app, channel):
+    """Forget the stored password Steam just refused, so the unlock form
+    comes back instead of failing every later install behind a stale
+    secret. Only call after Steam refused that password (a wrong-password
+    error), never after a transport failure."""
+    with installed_lock:
+        pws = load_state("beta_passwords.json", {})
+        app_pws = pws.get(app) or {}
+        if channel in app_pws:
+            del app_pws[channel]
+            if app_pws:
+                pws[app] = app_pws
+            else:
+                del pws[app]
+            save_state("beta_passwords.json", pws)
+
+
+def drop_refused_password(app, req, branch=""):
+    """Drop the stored beta password when Steam refused the one this
+    install tried: the explicit branch_password when set, else the stored
+    one for the channel. An explicitly typed password that failed leaves
+    the store alone, and so does a channel that sent nothing. The compare
+    and the delete hold installed_lock together, so a concurrent unlock
+    can't slip a new secret between them."""
+    channel = branch
+    if not channel:
+        target = req.get("target") or {}
+        if isinstance(target, dict) and target.get("channel"):
+            channel = target["channel"]
+        else:
+            channel = req.get("branch") or ""
+    if not channel or channel == "public":
+        return
+    sent = req.get("branch_passwords") or {}
+    tried = req.get("branch_password") or sent.get(channel)
+    if tried is None:
+        return
+    with installed_lock:
+        pws = load_state("beta_passwords.json", {})
+        if (pws.get(app) or {}).get(channel) == tried:
+            app_pws = pws[app]
+            del app_pws[channel]
+            if app_pws:
+                pws[app] = app_pws
+            else:
+                del pws[app]
+            save_state("beta_passwords.json", pws)
+
+
 def dl_request(params, extra=None):
     """The stdin request for platypus-steam-dl: ids plus the refresh token.
     The token travels on stdin, never argv, and is never logged."""
@@ -2132,6 +2189,9 @@ def dl_run(subcommand, req, job_id=None, game_dir=None, label="download failed",
                 raise RPCError(tr("need_login_expired"), CODE_AUTH_REQUIRED)
             if msg.get("code") == "not-found":
                 raise RPCError(msg.get("message") or tail(line))
+            if msg.get("code") == "wrong-password":
+                raise WrongBranchPassword("{}: {}".format(label, msg.get("message") or tail(line)),
+                                          err_code, msg.get("branch") or "")
             raise RPCError("{}: {}".format(label, msg.get("message") or tail(line)), err_code)
     rc = proc.wait()
     if result is None:
@@ -2144,9 +2204,14 @@ def dl_run(subcommand, req, job_id=None, game_dir=None, label="download failed",
 def install_size(params):
     """Depot sizes from platypus-steam-dl: it resolves the app's depots over
     the CM and sums the manifests (Linux depots first, Windows fallback —
-    the same order an install uses)."""
+    the same order an install uses). A refused stored password is dropped
+    here too: the core sizes before it installs."""
     try:
-        result = dl_run("size", dl_request(params))
+        req = dl_request(params)
+        result = dl_run("size", req)
+    except WrongBranchPassword as e:
+        drop_refused_password(str(params["id"]), req, e.branch)
+        raise RPCError(str(e), e.code)
     except RPCError:
         raise
     except Exception as e:
@@ -2166,10 +2231,21 @@ def install_size(params):
 # instead of answering an empty list that could install the wrong build.
 
 def versions_branches(app):
-    """PICS branches for the app via platypus-steam-dl, or raise."""
-    result = dl_run("versions", dl_request({"id": app}),
+    """PICS branches for the app via platypus-steam-dl, or raise. Stored
+    passwords ride along so branches PICS hides come back unlocked. Names
+    the helper refused are dropped and come back as locked skeletons, so
+    the unlock form and the no-public-fallback rule still see them."""
+    req = dl_request({"id": app})
+    stored = (beta_passwords().get(app) or {})
+    if stored:
+        req["branch_passwords"] = dict(stored)
+    result = dl_run("versions", req,
                     label="Steam versions", err_code=-32002)
     branches = result.get("branches") or []
+    for name in result.get("refused") or []:
+        drop_beta_password(app, name)
+        if not any(b.get("name") == name for b in branches):
+            branches.append({"name": name, "build_id": "", "pwd_required": True, "manifests": {}})
     if not branches:
         raise RPCError("Steam returned no versions for app {}".format(app), -32002)
     return branches
@@ -2247,6 +2323,11 @@ def versions_list(params):
                 ch = find_branch(channels, pinned["id"])
                 if ch is not None:
                     want = ch.get("buildId") or ""
+        # A channel whose tip has no build id (a hidden branch whose
+        # section carried no metadata) can't be compared: report no
+        # update rather than a permanent one.
+        if not want and (not isinstance(pinned, dict) or pinned.get("kind") != "build"):
+            want = installed_build
         update_available = installed_build != want
     return {
         "channels": channels, "builds": builds,
@@ -2735,9 +2816,18 @@ def follow_install(job_id, app, game_dir, dl_kind="install", version=None):
     decides `native`); downloads are resumable and verified."""
     with jobs_lock:
         jobs.setdefault(job_id, {"canceled": False, "id": app, "dir": game_dir})
+    req = {}
     try:
         req = dl_request({"id": app, **(version or {})}, {"install_dir": game_dir, "job_id": job_id})
         result = dl_run(dl_kind, req, job_id, game_dir)
+    except WrongBranchPassword as e:
+        with jobs_lock:
+            job = jobs.pop(job_id, {})
+        if job.get("canceled"):
+            return
+        drop_refused_password(app, req, e.branch)
+        notify("job.failed", {"jobId": job_id, "error": str(e)})
+        return
     except RPCError as e:
         with jobs_lock:
             job = jobs.pop(job_id, {})
@@ -3752,14 +3842,14 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.17.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.18.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],
-            # Password branches are unverified against live Steam (no
-            # encryptedmanifests decryption yet): listed locked, unlock
-            # kept but unadvertised.
-            "features": {"versions": {"channels": True, "builds": True, "password": False, "manual": True}},
+            # Password branches unlock through their private-beta section,
+            # proven live on real Steam (Valheim public-test, No Man's Sky
+            # experimental: unlock, section gids, manifest code + download).
+            "features": {"versions": {"channels": True, "builds": True, "password": True, "manual": True}},
             "missing": []}
 
 

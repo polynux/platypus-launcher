@@ -68,7 +68,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
   const [step, setStep] = useState<'pick' | 'confirm'>('pick');
   const [busy, setBusy] = useState(false);
   const installed = game.is_installed;
-
+  const passwordFeature = plugin.offers?.find((o) => o.name === 'versions')?.features?.password === true;
   // resetPin: take the checkbox from the saved pin. A reload after an unlock
   // keeps what the user already ticked.
   const load = useCallback((resetPin = true) => {
@@ -234,7 +234,6 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
               </div>
             </section>
           )}
-
           {info.builds.length > 0 && (
             <section className="mt-5">
               <MonoLabel className="mb-1.5">{t('gameOps:versions.buildsKicker')}</MonoLabel>
@@ -248,6 +247,12 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
                   />
                 ))}
               </div>
+            </section>
+          )}
+          {passwordFeature && (
+            <section className="mt-5">
+              <MonoLabel className="mb-1.5">{t('gameOps:versions.unlockBranchKicker')}</MonoLabel>
+              <UnlockBranchForm game={game} onUnlocked={() => load(false)} onNotify={onNotify} />
             </section>
           )}
 
@@ -442,6 +447,70 @@ function UnlockForm({
         {problem && <ErrorNotice className="mt-1 text-[12px]" message={problem} fallback={t('gameOps:versions.unlockError')} />}
       </div>
       <Button type="submit" size="md" disabled={!password || busy}>{t('gameOps:versions.unlock')}</Button>
+    </form>
+  );
+}
+
+/** A branch PICS never lists unlocks by typed name through the same unlock
+ *  path as UnlockForm; the list reload then shows the channel. Only
+ *  rendered when the plugin advertises the versions password feature. */
+function UnlockBranchForm({
+  game, onUnlocked, onNotify,
+}: { game: Game; onUnlocked: () => ReloadChannels; onNotify: VersionsDialogProps['onNotify'] }) {
+  const { t } = useTranslation('gameOps');
+  const [branch, setBranch] = useState('');
+  const [password, setPassword] = useState('');
+  const [problem, setProblem] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = branch.trim();
+    if (!name || !password) return;
+    const sent = password;
+    setPassword('');
+    setProblem('');
+    setBusy(true);
+    try {
+      const ok = await Effect.runPromise(LauncherApi.unlockVersionChannel(game, name, sent));
+      if (ok) {
+        onNotify(t('gameOps:versions.unlocked', { name }));
+        setBranch('');
+        await onUnlocked();
+      } else {
+        setProblem(t('gameOps:versions.unlockRejected'));
+      }
+    } catch (err) {
+      setProblem(coreErrMsg(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form onSubmit={submit}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+        <Input
+          value={branch}
+          onChange={(e) => setBranch(e.target.value)}
+          placeholder={t('gameOps:versions.unlockBranchName')}
+          aria-label={t('gameOps:versions.unlockBranchName')}
+          autoComplete="off"
+          className="sm:max-w-56"
+        />
+        <div className="min-w-0 flex-1">
+          <Input
+            type="password"
+            autoComplete="off"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={t('gameOps:versions.unlockBranchPassword')}
+            aria-label={t('gameOps:versions.unlockBranchPassword')}
+            aria-invalid={problem ? true : undefined}
+          />
+          {problem && <ErrorNotice className="mt-1 text-[12px]" message={problem} fallback={t('gameOps:versions.unlockError')} />}
+        </div>
+        <Button type="submit" size="md" disabled={!branch.trim() || !password || busy}>{t('gameOps:versions.unlock')}</Button>
+      </div>
+      <p className="mt-1 text-[12px] text-text-muted">{t('gameOps:versions.unlockBranchHint')}</p>
     </form>
   );
 }

@@ -43,6 +43,7 @@ const (
 	EMsgClientLogon                 = 5514
 	EMsgClientPICSProductInfo       = 8903
 	EMsgClientPICSAccessToken       = 8905
+	EMsgClientPICSPrivateBeta       = 8907
 	EMsgClientHello                 = 9805
 )
 

@@ -139,6 +139,55 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 	if err != nil {
 		return nil, "", resolvedTarget{}, fmt.Errorf("app %d: %v", appID, err)
 	}
+	// A locked branch carries no plain manifests (live shape): its gids
+	// come from the private-beta section. A password branch is normally
+	// hidden from PICS entirely, so when the requested branch is missing
+	// it resolves here and joins the list; a listed locked branch just
+	// merges its gids. Either way the target below sees plain manifests.
+	if name, pw := privateBranchRequest(s.req); name != "" && pw != "" {
+		// An open branch resolves from plain PICS; only a hidden or
+		// locked one needs its private-beta section.
+		if listed := findBranch(branches, name); listed == nil || listed.PwdRequired {
+			pbi, err := privateBranchInfo(s.cm, kv, appID, toks[appID], name, pw)
+			if err != nil {
+				return nil, "", resolvedTarget{}, err
+			}
+			if listed == nil {
+				branches = append(branches, *pbi)
+			}
+		}
+	} else if t := s.req.Target; t != nil && t.Build != "" && t.Channel == "" {
+		// A build with no channel names no branch: resolve the stored
+		// branches PICS hides so branchForBuild sees them, and merge the
+		// private gids for listed locked ones. Only branches without a
+		// password resolve from plain PICS. A refused password only fails
+		// the install when no branch holds the build; otherwise the wrong
+		// branch is not this one.
+		var firstErr error
+		for _, name := range sortedKeys(s.req.BranchPasswords) {
+			pw := s.req.BranchPasswords[name]
+			if pw == "" {
+				continue
+			}
+			listed := findBranch(branches, name)
+			if listed != nil && !listed.PwdRequired {
+				continue
+			}
+			pbi, err := privateBranchInfo(s.cm, kv, appID, toks[appID], name, pw)
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			if listed == nil {
+				branches = append(branches, *pbi)
+			}
+		}
+		if branchForBuild(branches, t.Build) == nil && firstErr != nil {
+			return nil, "", resolvedTarget{}, firstErr
+		}
+	}
 	rt, err := resolveTarget(branches, s.req)
 	if err != nil {
 		return nil, "", resolvedTarget{}, err
@@ -210,15 +259,10 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 		return nil, "", resolvedTarget{}, fmt.Errorf("Steam returned no download hosts for this app")
 	}
 	s.hosts = hosts
-	// Branch passwords (STEAM-4): check once against the app, then send
-	// SHA1(password) with every request-code call. Wrong passwords fail
-	// here with a distinct message instead of "no depots".
+	// Branch passwords (STEAM-4): a locked branch was already checked by
+	// the private-beta merge above; send SHA1(password) with every
+	// request-code call.
 	pwHash := branchPasswordHash(s.req)
-	if pwHash != "" {
-		if _, err := s.cm.CheckBetaPassword(appID, s.req.BranchPassword, 30*time.Second); err != nil {
-			return nil, "", resolvedTarget{}, fmt.Errorf("wrong branch password for %q: %w", s.req.Branch, err)
-		}
-	}
 	client := depot.NewClient()
 	// STEAM-5: fetch depot keys/codes/manifests concurrently (bounded
 	// pool) instead of serially; small depots were dominated by

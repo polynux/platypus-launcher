@@ -10,7 +10,8 @@
 // go to stdout as JSON lines: {"type":"progress",...} during the job and
 // a last line that is either {"type":"result",...} or
 // {"type":"error","code":...,"message":...} with code "auth-required"
-// when Steam says the login is no good, else "error". The auth subcommand
+// when Steam says the login is no good, "wrong-password" (plus "branch")
+// when Steam refused the tried beta password, else "error". The auth
 // is interactive (qr/code-needed/waiting events, code replies on stdin —
 // see auth.go) and stores the login where the plugin finds it.
 //
@@ -21,6 +22,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -103,8 +105,13 @@ func main() {
 		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running")
 	}
 	if runErr != nil {
+		var wpe wrongPasswordError
 		if ce, ok := runErr.(cmErr); ok && ce.auth {
 			emit(map[string]any{"type": "error", "code": "auth-required", "message": ce.msg})
+		} else if errors.As(runErr, &wpe) {
+			// Structured refusal: the plugin drops the stored secret
+			// for this branch (a transport error never does).
+			emit(map[string]any{"type": "error", "code": "wrong-password", "branch": wpe.Branch, "message": wpe.Error()})
 		} else if _, ok := runErr.(notFoundError); ok {
 			emit(map[string]any{"type": "error", "code": "not-found", "message": runErr.Error()})
 		} else {

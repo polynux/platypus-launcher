@@ -395,6 +395,122 @@ func resolveTarget(branches []branchInfo, req request) (resolvedTarget, error) {
 	return resolvedTarget{branch: branch, password: pw, manifests: overrides, build: build, versionName: versionName}, nil
 }
 
+// wrongPasswordError marks a refused beta password: Steam answered the
+// CheckBetaPassword call (or the key opened another branch), as opposed
+// to a dropped connection. Only this error drops the stored secret; a
+// transport error with EResult 0 never does.
+type wrongPasswordError struct {
+	Branch string
+	Err    error
+}
+
+func (e wrongPasswordError) Error() string {
+	return fmt.Sprintf("wrong branch password for %q: %v", e.Branch, e.Err)
+}
+
+// sortedKeys lists a string map's keys in order, so multi-branch work
+// doesn't depend on map iteration order.
+func sortedKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// privateBranchRequest names the explicitly requested branch and its
+// password, if any: the plain branch or the target's channel, mirroring
+// resolveTarget's password lookup. Empty unless both are set.
+func privateBranchRequest(req request) (string, string) {
+	branch := req.Branch
+	if t := req.Target; t != nil && t.Channel != "" {
+		branch = t.Channel
+	}
+	if branch == "" || branch == "public" {
+		return "", ""
+	}
+	pw := req.BranchPassword
+	if pw == "" {
+		pw = req.BranchPasswords[branch]
+	}
+	if pw == "" {
+		return "", ""
+	}
+	return branch, pw
+}
+
+// privateBranchInfo resolves a password branch hidden from PICS through its
+// private-beta section (live shape, proven on real Steam for Valheim's
+// public-test and No Man's Sky's experimental): the section arrives wrapped
+// in a privatedepots node carrying per-depot manifests plus the branch
+// metadata. It merges the gids into kv's manifests, so depot selection
+// works off the one app-info read, and returns the branch for the target.
+// A wrong password, a key for some other branch, or a missing section all
+// refuse distinctly.
+func privateBranchInfo(cm *steamcm.Session, kv *steam.KV, appID uint32, token uint64, branch, password string) (*branchInfo, error) {
+	keys, err := cm.CheckBetaPassword(appID, password, 0)
+	if err != nil {
+		if refused(err) {
+			return nil, wrongPasswordError{Branch: branch, Err: err}
+		}
+		return nil, err
+	}
+	key, ok := keys[branch]
+	if !ok || len(key) == 0 {
+		return nil, wrongPasswordError{Branch: branch, Err: fmt.Errorf("Steam opened another branch")}
+	}
+	section, err := cm.PrivateBeta(appID, token, branch, key, 0)
+	if err != nil {
+		if refused(err) {
+			return nil, fmt.Errorf("Steam refused the %s section for app %d: %w", branch, appID, err)
+		}
+		return nil, err
+	}
+	if wrapped := section.Get("privatedepots"); wrapped != nil {
+		section = wrapped
+	}
+	bi := &branchInfo{Name: branch, PwdRequired: true, Manifests: map[uint32]uint64{}}
+	if meta := section.Get("branches", branch); meta != nil {
+		bi.BuildID = meta.String("buildid")
+		bi.Description = meta.String("description")
+		if ts := meta.String("timeupdated"); ts != "" {
+			if unix, err := strconv.ParseInt(ts, 10, 64); err == nil {
+				bi.TimeUpdated = time.Unix(unix, 0).UTC().Format("2006-01-02")
+			}
+		}
+	}
+	depots := kv.Get("depots")
+	if depots == nil {
+		return nil, fmt.Errorf("app %d: product info has no depots section", appID)
+	}
+	for id, d := range section.Children {
+		var depID uint32
+		fmt.Sscanf(id, "%d", &depID)
+		if depID == 0 {
+			continue
+		}
+		var gid uint64
+		fmt.Sscanf(d.String("manifests", branch, "gid"), "%d", &gid)
+		if gid == 0 {
+			continue
+		}
+		bi.Manifests[depID] = gid
+		if entry := depots.Get(id); entry != nil {
+			manifests := entry.Get("manifests")
+			if manifests == nil {
+				manifests = &steam.KV{Children: map[string]*steam.KV{}}
+				entry.Children["manifests"] = manifests
+			}
+			manifests.Children[branch] = &steam.KV{Children: map[string]*steam.KV{"gid": {Value: fmt.Sprint(gid)}}}
+		}
+	}
+	if len(bi.Manifests) == 0 {
+		return nil, fmt.Errorf("Steam has no %s manifests for app %d", branch, appID)
+	}
+	return bi, nil
+}
+
 // versionResult adds what the plugin records for the install ledger to an
 // install/update result: the branch, the build id and the manifest gid per
 func versionResult(rt resolvedTarget, depots []fetchedDepot, res map[string]any) map[string]any {
@@ -402,8 +518,15 @@ func versionResult(rt resolvedTarget, depots []fetchedDepot, res map[string]any)
 	for _, d := range depots {
 		manifests[d.ref.DepotID] = d.ref.GID
 	}
+	build := rt.build
+	if build == "" && rt.branch != "" && len(manifests) > 0 {
+		// A private section without branch metadata names no build:
+		// pin the manifest set so the install still records its
+		// channel and a later plain update stays on it.
+		build = manualBuildID(manifests)
+	}
 	res["branch"] = rt.branch
-	res["build"] = rt.build
+	res["build"] = build
 	res["version_name"] = rt.versionName
 	res["manifests"] = manifests
 	return res
@@ -433,7 +556,28 @@ func runVersions(ctx context.Context, req request) error {
 	if err != nil {
 		return fmt.Errorf("app %d: %v", req.AppID, err)
 	}
-	emit(map[string]any{"type": "result", "branches": branches})
+	// A stored password may open branches PICS hides: resolve each one
+	// through its private section so the list shows it unlocked. A
+	// refused password is reported by name so the plugin drops it; a
+	// transport failure keeps the branch listed as unlocked with no
+	// build id, and the install names any other failure.
+	var refused []string
+	for _, name := range sortedKeys(req.BranchPasswords) {
+		if pw := req.BranchPasswords[name]; pw != "" && findBranch(branches, name) == nil {
+			bi, err := privateBranchInfo(cm, kv, req.AppID, toks[req.AppID], name, pw)
+			if err == nil {
+				branches = append(branches, *bi)
+				continue
+			}
+			var wpe wrongPasswordError
+			if errors.As(err, &wpe) {
+				refused = append(refused, name)
+				continue
+			}
+			branches = append(branches, branchInfo{Name: name, PwdRequired: true, Manifests: map[uint32]uint64{}})
+		}
+	}
+	emit(map[string]any{"type": "result", "branches": branches, "refused": refused})
 	return nil
 }
 
@@ -466,14 +610,13 @@ func runUnlock(ctx context.Context, req request) error {
 	if err != nil {
 		return fmt.Errorf("app %d: %v", req.AppID, err)
 	}
-	bi := findBranch(branches, req.Branch)
-	if bi == nil {
-		return fmt.Errorf("Steam has no branch %q for app %d", req.Branch, req.AppID)
-	}
-	if !bi.PwdRequired {
+	// A password branch is normally hidden from PICS entirely (live
+	// shape): only a listed passwordless branch refuses the password
+	// here. Anything else is decided by what the password opens below.
+	if bi := findBranch(branches, req.Branch); bi != nil && !bi.PwdRequired {
 		return fmt.Errorf("the %s branch has no password", bi.Name)
 	}
-	names, err := cm.CheckBetaPassword(req.AppID, req.BranchPassword, 0)
+	keys, err := cm.CheckBetaPassword(req.AppID, req.BranchPassword, 0)
 	if err != nil {
 		if refused(err) {
 			emit(map[string]any{"type": "result", "unlocked": false})
@@ -482,13 +625,11 @@ func runUnlock(ctx context.Context, req request) error {
 		return err
 	}
 	// Call success alone is not an unlock: the response lists the
-	// branches the password opened. Anything else is not this branch.
-	for _, n := range names {
-		if n == req.Branch {
-			emit(map[string]any{"type": "result", "unlocked": true})
-			return nil
-		}
+	// branches the password opened. Anything else is a wrong password
+	// or an unknown branch name.
+	if _, ok := keys[req.Branch]; ok {
+		emit(map[string]any{"type": "result", "unlocked": true})
+		return nil
 	}
-	emit(map[string]any{"type": "result", "unlocked": false})
-	return nil
+	return fmt.Errorf("wrong password or unknown branch name %q for app %d", req.Branch, req.AppID)
 }
