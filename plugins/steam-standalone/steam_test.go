@@ -1319,6 +1319,52 @@ func TestSteamLegacyInstallFolderKeepsWorking(t *testing.T) {
 	}
 }
 
+// An update is a job on a game that is already installed, so Platypus names
+// the game's own folder (library.list's installPath), not the parent it
+// installed under. The plugin must update it in place: joining the folder name
+// again nested <game>/<game> on every update and re-pointed installed.json at
+// the copy (issue #183). The parent folder is the older core's shape and stays.
+func TestSteamUpdateInGameFolderDoesNotNest(t *testing.T) {
+	e := setup(t)
+	e.login()
+	game := e.find(e.library(), "4321")
+	j, err := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
+	}
+	first := e.find(e.library(), "4321")
+	if !first.IsInstalled || first.InstallDir == "" {
+		t.Fatalf("after install: %+v", first)
+	}
+	nested := filepath.Join(first.InstallDir, filepath.Base(first.InstallDir))
+	for _, step := range []struct {
+		name   string
+		folder string
+	}{
+		{"the game folder", first.InstallDir},
+		{"the parent folder", e.folder},
+	} {
+		up, err := e.q.Add(jobs.KindUpdate, id, first.ID, first.StoreAppID, first.Title, step.folder)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := e.waitJob(up.ID); got.State != jobs.StateDone {
+			t.Fatalf("update from %s: %+v", step.name, got)
+		}
+		// installed.json's path is what library.list reports: a nested update
+		// re-points it one level deeper.
+		if now := e.find(e.library(), "4321"); now.InstallDir != first.InstallDir {
+			t.Fatalf("update from %s moved the install to %s, want %s", step.name, now.InstallDir, first.InstallDir)
+		}
+		if _, err := os.Stat(nested); !os.IsNotExist(err) {
+			t.Fatalf("update from %s nested the game folder: %s", step.name, nested)
+		}
+	}
+}
+
 // The dialog closes on its own once a polled auth.status turns loggedIn,
 // without ever calling auth.complete: that first status must already carry
 // the persona, not the account name.

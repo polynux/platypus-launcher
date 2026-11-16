@@ -2145,7 +2145,15 @@ def start_job(params, kind):
     if not os.path.isabs(install_dir):
         raise RPCError("installDir is missing or relative; Platypus always sends one")
     # One folder per game under Platypus's install dir, like steamapps/common/<name>.
-    game_dir = os.path.join(install_dir, game_dir_name(app))
+    # An update runs on an existing install and Platypus names that game's own
+    # folder for it (library.list's installPath), so joining again would nest
+    # <game>/<game> on every update. Older cores send the parent folder instead:
+    # keep the join for those.
+    recorded = (load_state("installed.json", {}).get(app) or {}).get("path") or ""
+    if kind != "install" and recorded and os.path.normpath(install_dir) == os.path.normpath(recorded):
+        game_dir = install_dir
+    else:
+        game_dir = os.path.join(install_dir, game_dir_name(app))
     # Platypus resends a job with the same jobId after a crash: run it once. A
     # job that was just paused or canceled is still winding down: wait for it,
     # then start again from what it left on disk.
