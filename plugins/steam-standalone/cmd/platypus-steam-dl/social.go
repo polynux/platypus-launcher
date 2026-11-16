@@ -321,7 +321,7 @@ func (s *socialSession) resync() {
 	s.mu.Lock()
 	s.playingSent = 0 // force a resend below
 	s.mu.Unlock()
-	_ = s.sendPlayingLocked(desired, true)
+	_ = s.sendPlaying(desired, true)
 }
 
 func (s *socialSession) handle(cmd socialCommand) {
@@ -403,9 +403,9 @@ func (s *socialSession) sendStatus(state string) error {
 	return s.client.Send(steamcm.EMsgClientChangeStatus, e.Bytes())
 }
 
-// sendPlayingLocked reports the game (0 clears it) unless another session
+// sendPlaying reports the game (0 clears it) unless another session
 // holds the playing slot; it never forces or kicks (plan D9/R11).
-func (s *socialSession) sendPlayingLocked(appID uint32, force bool) error {
+func (s *socialSession) sendPlaying(appID uint32, force bool) error {
 	s.mu.Lock()
 	blocked := s.blocked && s.playingApp != 0
 	if !force && appID == s.playingSent {
@@ -650,7 +650,7 @@ func (s *socialSession) onPlayingState(body []byte) {
 	desired := s.playingDesired
 	s.mu.Unlock()
 	if was && !blocked {
-		_ = s.sendPlayingLocked(desired, true)
+		_ = s.sendPlaying(desired, true)
 	}
 }
 
@@ -910,7 +910,7 @@ func (s *socialSession) opSetPlaying(raw json.RawMessage) (map[string]any, *soci
 	s.mu.Lock()
 	s.playingDesired = app
 	s.mu.Unlock()
-	if err := s.sendPlayingLocked(app, false); err != nil {
+	if err := s.sendPlaying(app, false); err != nil {
 		return nil, &socialError{Code: codeStoreError, Message: shortSocialErr(err)}
 	}
 	return map[string]any{}, nil

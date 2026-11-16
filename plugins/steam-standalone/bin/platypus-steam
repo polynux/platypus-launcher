@@ -3289,7 +3289,7 @@ def social_notify_event(rec, event, params):
         notify("social.self", params)
     elif event == "friends":
         notify("social.friends", {"full": bool(params.get("full")),
-                                  "friends": [social_map_friend(f) for f in params.get("friends") or []]})
+                                  "friends": social_map_friends(params.get("friends") or [])})
     elif event == "message":
         notify("chat.message", params)
     elif event == "typing":
@@ -3347,7 +3347,7 @@ def social_ensure():
 def social_mapped_snapshot(snap):
     return {"connection": snap.get("connection") or {"state": "offline"},
             "self": snap.get("self") or {},
-            "friends": [social_map_friend(f) for f in snap.get("friends") or []]}
+            "friends": social_map_friends(snap.get("friends") or [])}
 
 
 def social_default_status():
@@ -3369,7 +3369,7 @@ def social_start(_params):
     if snap.get("self"):
         notify("social.self", snap["self"])
     notify("social.friends", {"full": True,
-                              "friends": [social_map_friend(f) for f in snap.get("friends") or []]})
+                              "friends": social_map_friends(snap.get("friends") or [])})
     if pending is not None:
         with social_lock:
             social_pending_playing = None
