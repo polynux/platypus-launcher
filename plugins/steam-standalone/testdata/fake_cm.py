@@ -1159,13 +1159,18 @@ def serve_cloud_changelist(conn, hdr, body, st, steamid, sessionid):
         files = [f for f in files
                  if not (f.get("name", "") == rest and f.get("prefix", 0) == idx)]
         files.append({"name": rest, "sha": u["sha"].hex(), "time": u["time"],
-                      "size": u["size"], "persist": 0, "prefix": idx, "machine": midx})
+                      "size": u["size"], "persist": 0, "prefix": idx,
+                      "machine": midx, "platforms": u.get("platforms")})
     resp = pb_int(1, current)
     for f in files:
         entry = pb_str(1, f.get("name", ""))
         entry += pb_str(2, bytes.fromhex(f.get("sha", "00" * 20)))
         entry += pb_int(3, f.get("time", 0)) + pb_int(4, f.get("size", 0))
         entry += pb_int(5, f.get("persist", 0))
+        # platforms_to_sync (field 6): emitted when the entry names one, like
+        # the real cloud; a missing field reads as "all platforms".
+        if f.get("platforms") is not None:
+            entry += pb_int(6, f["platforms"])
         entry += pb_int(7, f.get("prefix", 0)) + pb_int(8, f.get("machine", 0))
         resp += pb_msg(2, entry)
     if cl.get("is_only_delta"):
@@ -1324,6 +1329,7 @@ def serve_upload_begin_file(conn, hdr, body, st, steamid, sessionid):
             _cloud["chunks"][(batch, name)] = {
                 "appid": req.get(1, [0])[0], "size": size,
                 "sha": req.get(4, [b""])[0], "time": req.get(5, [0])[0],
+                "platforms": req.get(7, [0])[0],
                 "spans": [(off, ln) for off, ln, _body, _m in _upload_spans(st, size, name)],
                 "parts": {}}
     if not known or not in_batch:
@@ -1347,7 +1353,7 @@ def serve_upload_begin_file(conn, hdr, body, st, steamid, sessionid):
             blk += pb_str(8, explicit)
         resp += pb_msg(2, blk)
     spans = _upload_spans(st, size, name)
-    record(f"upload begin-file {batch} {name} {len(spans)} blocks")
+    record(f"upload begin-file {batch} {name} {len(spans)} blocks platforms={req.get(7, [0])[0]}")
     conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
                             content_hdr(steamid, sessionid, jobid), resp))
 
@@ -1397,7 +1403,8 @@ def serve_upload_commit(conn, hdr, body, st, steamid, sessionid):
                 _cloud["change"] = base
             _cloud["uploads"][(staged["appid"], name)] = {
                 "body": assembled, "sha": staged["sha"],
-                "time": staged["time"], "size": staged["size"], "machine": machine}
+                "time": staged["time"], "size": staged["size"],
+                "machine": machine, "platforms": staged.get("platforms")}
         record(f"upload commit {name} ok=1 {len(assembled)} bytes")
     else:
         record(f"upload commit {name} ok={ok} refused")

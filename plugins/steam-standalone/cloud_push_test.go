@@ -789,3 +789,105 @@ func TestCloudPushNewSaveBorrowsFolderCase(t *testing.T) {
 		t.Fatalf("status after edit = %+v, want an upload, not a conflict", edited)
 	}
 }
+
+// Upload masks follow the rule (issue #188): a Windows-tagged rule sends
+// platforms_to_sync 1 and owns no location on Linux; an untagged rule sends
+// All for a new file and only widens an existing file's mask with this OS
+// (0x1 → 0x9), never narrowing it. Downloads follow the rule too, not field 6.
+func TestCloudPushSendsRulePlatforms(t *testing.T) {
+	e := setup(t)
+	e.login()
+	home := t.TempDir()
+	prefix := filepath.Join(home, "prefix")
+	install := filepath.Join(home, "install")
+	saves := filepath.Join(install, "saves")
+	if err := os.MkdirAll(saves, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx := map[string]any{"os": "windows", "home": home, "installDir": install,
+		"prefixDir": prefix, "winUser": "steamuser"}
+	const tagged = `"appinfo" { "appid" "4321" "common" { "name" "Standalone Game" } "ufs" { "savefiles" {
+		"0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" "platforms" { "Windows" "1" } } } } }`
+	e.setCMState("appinfo_4321", tagged)
+	e.setCMState("cloud_changelist", map[string]any{"current_change_number": float64(5)})
+	e.setCMState("cloud_files", map[string]any{})
+	if err := os.WriteFile(filepath.Join(saves, "a.sav"), []byte("win-only"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-platforms"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.State != "synced" || pushed.Counts.Same != 1 {
+		t.Fatalf("push = %+v", pushed)
+	}
+	log := e.waitCMLog("upload complete 1 1")
+	if !strings.Contains(log, "platforms=1") {
+		t.Fatalf("log misses the rule's platforms mask: %s", log)
+	}
+
+	// The rule, not the file's mask, decides: a Windows-tagged rule names no
+	// Linux location, so the save counts as not synced there.
+	linux := map[string]any{"os": "linux", "home": home, "installDir": install}
+	other, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": linux})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.Counts.Unmapped != 1 || other.Counts.Same != 0 {
+		t.Fatalf("linux status = %+v, want the Windows-only rule's save unmapped", other)
+	}
+
+	// An untagged rule offers every platform to a new file.
+	e.setCMState("appinfo_4321", `"appinfo" { "appid" "4321" "common" { "name" "Standalone Game" } "ufs" { "savefiles" {
+		"0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" } } } }`)
+	if err := os.WriteFile(filepath.Join(saves, "b.sav"), []byte("both"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	again, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-platforms-all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.State != "synced" {
+		t.Fatalf("push = %+v", again)
+	}
+	log = e.waitCMLog("upload complete 2 1")
+	if !strings.Contains(log, "platforms=4294967295") {
+		t.Fatalf("log misses the all-platforms mask: %s", log)
+	}
+
+	// Linux now owns the location, so both files download although a.sav's
+	// own mask says Windows only: the field never filters a download.
+	for _, name := range []string{"a.sav", "b.sav"} {
+		if err := os.Remove(filepath.Join(saves, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pending, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": linux})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending.Counts.Unmapped != 0 || pending.Counts.Download != 2 {
+		t.Fatalf("linux status = %+v, want both files to download", pending)
+	}
+	if _, err := e.cloudCall(t, "cloud.pull", map[string]any{"id": "4321", "ctx": linux, "jobId": "pull-platforms"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(saves, "a.sav"), []byte("linux-edit"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Updating the 0x1 file from Linux under the untagged rule adds this
+	// OS's bit and keeps Windows: 0x1 | 0x8 = 0x9.
+	edited, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": linux, "jobId": "push-platforms-update"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edited.State != "synced" {
+		t.Fatalf("push = %+v", edited)
+	}
+	log = e.waitCMLog("upload complete 3 1")
+	if !strings.Contains(log, "platforms=9") {
+		t.Fatalf("log misses the widened mask: %s", log)
+	}
+}

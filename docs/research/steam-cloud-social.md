@@ -111,6 +111,22 @@ marked **(M)** where only Madeira confirms it.
 
 Notes:
 
+- **`platforms_to_sync` is the SDK's `ERemoteStoragePlatform` mask**, sent on upload (field 7) and listed per
+  file (field 6); the local `remotecache.vdf` keeps it as the signed `platformstosync2` (`-1` = all). Bits, from
+  `steamworks/isteamremotestorage.h`: Windows `1`, OSX `2`, PS3 `4`, Linux `8`, Switch `16`, Android `32`,
+  iOS `64`; `All` is `0xFFFFFFFF`. The SDK's own `None` is `0`, which is also how a listing without the field
+  looks: read `0` as All deliberately, so a missing mask never hides or narrows a save.
+- **What the field means.** Live listings of this account (2026-11-16, 13 games with cloud files, 130 files)
+  carry only `0xFFFFFFFF` or `0x1`: 7 games all-platform, 5 Windows-only games (Fallout 4, The Witcher 3,
+  Taiji, Elden Ring, Sekiro) `0x1` throughout, and Hollow Knight mixed (its two real saves `0x1`, an older
+  third-party upload all-platform). No listing had a Linux-only or other mask. It is **not** the client's
+  download filter: Hollow Knight's appinfo changed on **2022-08-15** from per-OS `savefiles` entries to one
+  untagged rule plus `rootoverrides`, and its 2022 saves still say `0x1`, so the field records what the
+  uploader chose while the rule (its `platforms` block, or none) says where the save location exists now.
+  Platypus therefore decides downloads, and which names are reserved, by the rule — the same test its local
+  scan applies — and only uses the field to widen an upload's mask. **Open check**: `platformstosync2` in
+  `remotecache.vdf` on a machine where the official client really synced a Cloud game (this one only ever
+  synced app 7), to see whether the client reads field 6 at all. [src: live]
 - **`GetAppFileChangelist` is the modern list call**; `EnumerateUserFiles` is the older web-UGC style list
   (`CCloud_UserFile`: `ugcid`, `url`, `file_sha` as a *string*, `flags`). Prefer the changelist: it returns raw SHA-1
   bytes, timestamps, `persist_state`, and **path prefixes split out** (`path_prefix_index` into `path_prefixes`;

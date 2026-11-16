@@ -80,6 +80,86 @@ type cloudSaveRule struct {
 	Platforms map[string]bool
 }
 
+// ERemoteStoragePlatform bits (steamworks isteamremotestorage.h): the
+// platforms_to_sync mask a cloud file carries. 0xFFFFFFFF is "all".
+const (
+	cloudPlatformWindows uint32 = 1 << 0
+	cloudPlatformLinux   uint32 = 1 << 3
+	cloudPlatformAll     uint32 = 0xFFFFFFFF
+)
+
+// cloudPlatformOSBits maps the OS names appinfo spells in a rule's platforms
+// block to their ERemoteStoragePlatform bit.
+var cloudPlatformOSBits = map[string]uint32{
+	"windows": cloudPlatformWindows,
+	"macos":   1 << 1,
+	"osx":     1 << 1,
+	"mac":     1 << 1,
+	"ps3":     1 << 2,
+	"linux":   cloudPlatformLinux,
+	"switch":  1 << 4,
+	"android": 1 << 5,
+	"ios":     1 << 6,
+}
+
+// cloudRulePlatforms is the platforms_to_sync mask to send for a file matched
+// by a save rule: the bits the rule's platforms block names, All when it names
+// none. A name this launcher doesn't know keeps All, so an upload never
+// narrows a save to platforms the appinfo didn't ask for.
+func cloudRulePlatforms(platforms map[string]bool) uint32 {
+	if platforms == nil {
+		return cloudPlatformAll
+	}
+	var out uint32
+	for name := range platforms {
+		bit, ok := cloudPlatformOSBits[name]
+		if !ok {
+			return cloudPlatformAll
+		}
+		out |= bit
+	}
+	if out == 0 {
+		return cloudPlatformAll
+	}
+	return out
+}
+
+// cloudPlatformOSBit is the ERemoteStoragePlatform bit of the OS a launch runs
+// as: windows for a Proton/Wine run, linux for a native one.
+func cloudPlatformOSBit(osName string) uint32 {
+	if osName == "linux" {
+		return cloudPlatformLinux
+	}
+	return cloudPlatformWindows
+}
+
+// cloudRuleApplies reports whether a save rule names locations that exist on
+// this client OS. The local scan and the cloud-name coverage test share it, so
+// a rule excluded here neither contributes device files nor owns cloud names.
+func cloudRuleApplies(r cloudSaveRule, osName string) bool {
+	return r.Platforms == nil || r.Platforms[strings.ToLower(osName)]
+}
+
+// cloudUploadPlatforms is the platforms_to_sync mask an upload offers. A new
+// file sends its rule's mask (All for an untagged rule). An update of a listed
+// file keeps what the cloud already offers: a tagged rule replaces the mask
+// (that rule says where the save belongs), an untagged one only adds this OS's
+// bit, so a file another platform uploaded is never narrowed. 0 reads as All:
+// the SDK's ERemoteStoragePlatformNone is 0, and treating it as All here is
+// deliberate, so a listing without a mask can't hide or narrow a save.
+func cloudUploadPlatforms(ruleMask, remote uint32, hasRemote bool, osName string) uint32 {
+	if !hasRemote {
+		return ruleMask
+	}
+	if ruleMask != cloudPlatformAll {
+		return ruleMask
+	}
+	if remote == 0 || remote == cloudPlatformAll {
+		return cloudPlatformAll
+	}
+	return remote | cloudPlatformOSBit(osName)
+}
+
 // cloudOverride is one ufs/rootoverrides entry: on a matching client OS the
 // root is replaced before mapping, with addpath prefixed and pathtransforms
 // applied to the relative part.
@@ -346,14 +426,16 @@ func mapCloudName(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID uin
 	return local, cloudRel, true
 }
 
-// cloudNameCovered reports whether some ufs save rule describes a cloud file
-// name: the same root (case-insensitively), under the rule's path, matching
-// its pattern. The comparison works on the cloud's own spelling:
-// rootoverrides only decide where a file lands (mapCloudName), never whether
-// a rule owns it, so a pathtransforms find string that also appears in a file
-// name can't make a save look foreign. Platforms are ignored: one cloud name
-// serves every OS. Pulls and pushes only touch names a rule covers, so a
-// stray name (a game-install or home path no rule lists) can never replace a
+// cloudNameCovered reports whether some ufs save rule for this client OS
+// describes a cloud file name: the same root (case-insensitively), under the
+// rule's path, matching its pattern. The comparison works on the cloud's own
+// spelling: rootoverrides only decide where a file lands (mapCloudName), never
+// whether a rule owns it, so a pathtransforms find string that also appears in
+// a file name can't make a save look foreign. A rule whose platforms block
+// leaves this OS out names locations that don't exist here, so it never covers
+// a name either: a cloud file only such rules own is unmapped (not synced on
+// this device). Pulls and pushes only touch names a rule covers, so a stray
+// name (a game-install or home path no rule lists) can never replace a
 // non-save.
 func cloudNameCovered(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID uint64) bool {
 	root, rel, ok := splitCloudName(cloudName)
@@ -365,6 +447,9 @@ func cloudNameCovered(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID
 	// "My Games/…/SaveData" covers the cloud's "my games/…/savedata".
 	fold := ctx.OS == "windows"
 	for _, r := range ufs.Rules {
+		if !cloudRuleApplies(r, ctx.OS) {
+			continue
+		}
 		if !strings.EqualFold(r.Root, root) {
 			continue
 		}
@@ -508,6 +593,9 @@ func joinCloudRel(base, name string) string {
 type cloudScanned struct {
 	Rel  string
 	Root string
+	// Platforms is the matching rule's platforms_to_sync mask: what an
+	// upload of this file offers the cloud.
+	Platforms uint32
 }
 
 // canonicalRootSpellings are the root tokens docs/research/steam-cloud-social.md
@@ -597,7 +685,7 @@ func uploadCloudName(sc cloudScanned, list []cloudFile) (root, rel string) {
 func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]cloudScanned {
 	out := map[string]cloudScanned{} // local path -> match
 	for _, r := range ufs.Rules {
-		if r.Platforms != nil && !r.Platforms[strings.ToLower(ctx.OS)] {
+		if !cloudRuleApplies(r, ctx.OS) {
 			continue
 		}
 		dir, ok := ruleSearchDir(r, ufs, ctx, steamID)
@@ -608,6 +696,7 @@ func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]cloud
 		// so "/My Games/x" scans as "My Games/x" and a new save uploads
 		// under a name cloudNameCovered accepts.
 		relBase := strings.Join(rulePathParts(substituteSteamID(r.Path, steamID)), "/")
+		platforms := cloudRulePlatforms(r.Platforms)
 		// Proton's drive_c is case-insensitive: a rule's "*.sav" covers the
 		// Windows-written "SAVE1.SAV", like cloudNameCovered folds it.
 		fold := ctx.OS == "windows"
@@ -643,8 +732,11 @@ func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]cloud
 					return nil
 				}
 				if match(r.Pattern, rel) {
-					if _, dup := out[p]; !dup {
-						out[p] = cloudScanned{Rel: joinCloudRel(relBase, filepath.ToSlash(rel)), Root: r.Root}
+					if prev, dup := out[p]; dup {
+						prev.Platforms |= platforms
+						out[p] = prev
+					} else {
+						out[p] = cloudScanned{Rel: joinCloudRel(relBase, filepath.ToSlash(rel)), Root: r.Root, Platforms: platforms}
 					}
 				}
 				return nil
@@ -664,8 +756,11 @@ func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]cloud
 			}
 			if match(r.Pattern, e.Name()) {
 				p := filepath.Join(dir, e.Name())
-				if _, dup := out[p]; !dup {
-					out[p] = cloudScanned{Rel: joinCloudRel(relBase, e.Name()), Root: r.Root}
+				if prev, dup := out[p]; dup {
+					prev.Platforms |= platforms
+					out[p] = prev
+				} else {
+					out[p] = cloudScanned{Rel: joinCloudRel(relBase, e.Name()), Root: r.Root, Platforms: platforms}
 				}
 			}
 		}
@@ -702,6 +797,10 @@ type cloudFile struct {
 	MTime     int64
 	Machine   string
 	Persist   uint64 // persist_state: 0 persisted, 1 forgotten, 2 deleted
+	// Platforms is the file's platforms_to_sync bitmask (field 6):
+	// ERemoteStoragePlatform bits, 0 when the listing carries none. It only
+	// informs an update's mask; the save rules decide what syncs here.
+	Platforms uint32
 	Unmapped  bool
 }
 
@@ -731,10 +830,11 @@ func fetchChangelist(cm *steamcm.Session, appID uint32, timeout time.Duration) (
 			return nil, 0, fmt.Errorf("decoding a cloud file entry: %w", err)
 		}
 		f := cloudFile{
-			SHA:     fm.Bytes(2),
-			Size:    uint32(fm.Int(4)),
-			MTime:   int64(fm.Int(3)),
-			Persist: fm.Int(5),
+			SHA:       fm.Bytes(2),
+			Size:      uint32(fm.Int(4)),
+			MTime:     int64(fm.Int(3)),
+			Persist:   fm.Int(5),
+			Platforms: uint32(fm.Int(6)),
 		}
 		if f.Persist == 1 {
 			continue // forgotten by the cloud: not ours to sync
@@ -917,6 +1017,10 @@ type cloudPlanFile struct {
 	HasRemote bool
 	LocalInfo cloudLocal
 	Want      string // same|download|upload|conflict
+	// Platforms is the platforms_to_sync mask an upload sends: a new file
+	// its rule's mask (All when untagged), an update per
+	// cloudUploadPlatforms.
+	Platforms uint32
 }
 
 // compareCloud groups the listing by resolved local path (issue #6 L2: one
@@ -930,6 +1034,11 @@ type cloudPlanFile struct {
 func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS, ctx cloudContext, steamID uint64, base *cloudBaseline) (files []cloudPlanFile, unmapped int) {
 	byLocal := map[string]*cloudFile{}
 	ordered := []string{}
+	// Names no rule for this OS covers: another platform's save, not this
+	// device's to sync, and still reserved so a local file never uploads over
+	// them. The save rule decides this, like the local scan, never a file's
+	// own platforms_to_sync (issue #188).
+	var notSynced []string
 	for i := range list {
 		f := &list[i]
 		if _, _, ok := splitCloudName(f.CloudName); !ok {
@@ -937,7 +1046,12 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 			continue
 		}
 		localPath, rel, ok := mapCloudName(f.CloudName, ufs, ctx, steamID)
-		if !ok || !cloudNameCovered(f.CloudName, ufs, ctx, steamID) {
+		if !ok {
+			unmapped++
+			continue
+		}
+		if !cloudNameCovered(f.CloudName, ufs, ctx, steamID) {
+			notSynced = append(notSynced, f.CloudName)
 			unmapped++
 			continue
 		}
@@ -956,7 +1070,12 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 	for _, lp := range ordered {
 		f := byLocal[lp]
 		seen[lp] = true
-		pf := cloudPlanFile{Rel: f.Rel, CloudName: f.CloudName, Local: lp, Remote: *f, HasRemote: true}
+		plat := cloudPlatformAll
+		if sc, ok := local[lp]; ok {
+			plat = sc.Platforms // the rule that matched
+		}
+		plat = cloudUploadPlatforms(plat, f.Platforms, true, ctx.OS)
+		pf := cloudPlanFile{Rel: f.Rel, CloudName: f.CloudName, Local: lp, Remote: *f, HasRemote: true, Platforms: plat}
 		li := statLocal(lp)
 		pf.LocalInfo = li
 		remoteSHA := hex.EncodeToString(f.SHA)
@@ -1014,6 +1133,19 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 			unmapped++
 			continue
 		}
+		// A name the listing keeps for another platform is reserved: it is
+		// already counted unmapped, and overwriting it from here would hand
+		// this device's save to that platform.
+		reserved := false
+		for _, n := range notSynced {
+			if strings.EqualFold(n, name) {
+				reserved = true
+				break
+			}
+		}
+		if reserved {
+			continue
+		}
 		// A listed name that only differs in case is this file's cloud copy:
 		// on a case-sensitive OS it lists as a different path, and uploading
 		// the other casing would add a duplicate save.
@@ -1028,8 +1160,10 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 			unmapped++
 			continue
 		}
+		// A new file offers its rule's mask: All when the rule is untagged,
+		// the rule's platforms when it names them.
 		pf := cloudPlanFile{Rel: rel, Local: lp, HasRemote: false,
-			CloudName: name}
+			CloudName: name, Platforms: sc.Platforms}
 		pf.LocalInfo = statLocal(lp)
 		if !pf.LocalInfo.Found {
 			continue
@@ -1921,9 +2055,14 @@ type uploadBlock struct {
 var errEncryptRefused = errors.New("Steam wants the cloud file encrypted: refusing")
 
 // beginFileUpload opens one file of a begun batch and returns its block
-// requests exactly as the reply dictates. An encrypted answer is refused,
-// the way the pull side refuses encrypted files.
-func (e *cloudEnv) beginFileUpload(batch uint64, cloudName string, data []byte, mtime int64) ([]uploadBlock, error) {
+// requests exactly as the reply dictates. platforms is the platforms_to_sync
+// mask the batch offers (the matched rule's platforms, All when it has none).
+// An encrypted answer is refused, the way the pull side refuses encrypted
+// files.
+func (e *cloudEnv) beginFileUpload(batch uint64, cloudName string, data []byte, mtime int64, platforms uint32) ([]uploadBlock, error) {
+	if platforms == 0 {
+		platforms = cloudPlatformAll
+	}
 	req := &depot.Enc{}
 	req.Varint(1, uint64(e.appID))
 	req.Varint(2, uint64(len(data)))
@@ -1932,7 +2071,7 @@ func (e *cloudEnv) beginFileUpload(batch uint64, cloudName string, data []byte, 
 	req.BytesField(4, sum[:])
 	req.Varint(5, uint64(mtime))
 	req.Str(6, cloudName)
-	req.Varint(7, 0xFFFFFFFF)
+	req.Varint(7, uint64(platforms))
 	if c := cellID(); c != 0 {
 		req.Varint(9, uint64(c))
 	}
@@ -2214,7 +2353,7 @@ func (e *cloudEnv) uploadStaged(ctx context.Context, req request, files []cloudP
 			}
 			return nil, err
 		}
-		blocks, err := e.beginFileUpload(batch, f.CloudName, data, f.LocalInfo.MTime)
+		blocks, err := e.beginFileUpload(batch, f.CloudName, data, f.LocalInfo.MTime, f.Platforms)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
