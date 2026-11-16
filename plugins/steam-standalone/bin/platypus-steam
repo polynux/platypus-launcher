@@ -1346,7 +1346,7 @@ def library_list(_params):
         log("warning", "Steam family lookup failed; listing owned games only")
         fam = None
     if fam:
-        merge_family_games(out, fam, installed, deadline)
+        merge_family_games(out, fam, installed, deadline, str(steamid))
     for app, ig in installed.items():  # installed but missing from the owned list
         if not any(e["id"] == app for e in out):
             missing = {
@@ -1380,15 +1380,18 @@ def library_list(_params):
 
 
 # --- family (protocol 1.8) -----------------------------------------------------
-# Steam Families: the user's family group, the games members lend, and the
-# lender pick Steam stores server-side. Reads go through the FamilyGroups Web
-# API (IFamilyGroupsService); member names come from the CM
-# (Player.GetPlayerLinkDetails#1), one session for all misses, persisted in
-# family-names.json. No new round trips happen in game.details or other
-# game-page calls: library.list makes the family lookup, and family.members
-# reuses the cached snapshot. The snapshot is supplementary: a slow or failed
-# fetch serves the last good one, and only when no fetch ever succeeded does
-# library.list return the user's own games (with a warning).
+# Steam Families: the user's family group, the games members lend, which
+# borrowed copies are in use, and the lender pick Steam stores server-side.
+# Reads go through the FamilyGroups Web API (IFamilyGroupsService); member
+# names come from the CM (Player.GetPlayerLinkDetails#1), one session for all
+# misses, persisted in family-names.json; the in-use list comes from one
+# platypus-steam-dl family-running run per fetch (NotifyRunningApps).
+# No new round trips happen in game.details or other
+# game-page calls: library.list makes the family lookup, launchSpec reuses
+# the cached snapshot, and family.members reuses it too. The snapshot is
+# supplementary: a slow or failed fetch serves the last good one, and only
+# when no fetch ever succeeded does library.list return the user's own
+# games (with a warning).
 FAMILY_GROUP_URL = "https://api.steampowered.com/IFamilyGroupsService/"
 FAMILY_TTL = 300  # seconds; one snapshot serves library.list + family.members
 FAMILY_BUDGET = 8  # seconds for one family fetch; a slow fetch serves the last good snapshot
@@ -1406,8 +1409,9 @@ names_negative = {}  # steamid -> epoch of the attempt that resolved nothing
 FAMILY_ROLES = {1: "adult", 2: "child"}
 
 # ESharedLibraryExcludeReason: GetSharedLibraryApps reports one reason per
-# app (exclude_reason, 0 = included); there is no per-copy DLC or in-use
-# signal in it, so copies carry no dlc and inUse: False (unknown, not "free").
+# app (exclude_reason, 0 = included); there is no per-copy DLC signal in
+# it, so copies carry no dlc. The in-use signal isn't in it either: inUse
+# comes from the helper's NotifyRunningApps read, False when unknown.
 # Reasons without an entry here (5, 11-15, …) use the generic fallback.
 FAMILY_EXCLUDE = {
     1: "The publisher doesn't allow family sharing",
@@ -1514,6 +1518,38 @@ def family_fetch_preferred(token, group_id):
     return out
 
 
+def family_fetch_running(token):
+    """Borrowed games played right now, over the CM: one platypus-steam-dl
+    family-running run per family fetch ([{appid, player, owner}], all
+    strings). [] when Steam pushes nothing — and on any failure, so a
+    silent helper or CM never breaks the snapshot (copies stay inUse
+    False). The token travels on stdin, never argv, and is never logged."""
+    try:
+        result = dl_run("family-running", {"refresh_token": token},
+                        label="Steam family running apps", err_code=-32002)
+    except Exception:
+        return []
+    out = []
+    for e in result.get("running") or []:
+        if not isinstance(e, dict):
+            continue
+        appid = str(e.get("appid") or "")
+        player = str(e.get("player") or "")
+        owner = str(e.get("owner") or "")
+        if appid and player and owner:
+            out.append({"appid": appid, "player": player, "owner": owner})
+    return out
+
+
+def family_in_use_message(player_name):
+    """The user-facing text for a borrowed game in use (launchSpec -32002
+    and family.warning share it, protocol 1.8): the player by name, or a
+    generic fallback when the CM stayed silent about names."""
+    if player_name:
+        return f"Family member {player_name} is playing this game"
+    return "A family member is playing this game"
+
+
 def family_member_names(ids, token, steamid, timeout=30):
     """Display names for member steamids: the persisted map first, one CM
     session for the misses (a single GetPlayerLinkDetails#1 with
@@ -1588,11 +1624,12 @@ def _family_names_lookup(ids, steamid, box):
 
 
 def _family_fetch(token, steamid, deadline):
-    """The whole fetch — group, apps, preferred, names — for one worker
-    thread. Raises on failure; the worker decides what the failure means."""
+    """The whole fetch — group, apps, preferred, running, names — for one
+    worker thread. Raises on failure; the worker decides what the failure means."""
     group = family_fetch_group(token, steamid)
     if group is None:
-        return {"group_id": "", "members": [], "apps": [], "preferred": {}}
+        return {"group_id": "", "members": [], "apps": [], "preferred": {},
+                "running": []}
     members = []
     for m in group["members"]:
         if not isinstance(m, dict):
@@ -1607,13 +1644,14 @@ def _family_fetch(token, steamid, deadline):
         members.append(entry)
     apps = family_fetch_apps(token, group["id"])
     preferred = family_fetch_preferred(token, group["id"])
+    running = family_fetch_running(token)
     names = family_member_names([m["id"] for m in members], token, steamid,
                                 timeout=max(1.0, deadline - time.time() - 1.0))
     for m in members:
         if names.get(m["id"]):
             m["name"] = names[m["id"]]
     return {"group_id": group["id"], "members": members, "apps": apps,
-            "preferred": preferred}
+            "preferred": preferred, "running": running}
 
 
 def _family_fetch_worker(token, steamid, gen, box, deadline):
@@ -1690,16 +1728,30 @@ def family_invalidate():
         family_generation += 1
 
 
-def merge_family_games(out, fam, installed, deadline):
+def merge_family_games(out, fam, installed, deadline, steamid=""):
     """Fold the snapshot's shared apps into the library entries. Owned games
     carry no sharedBy (protocol 1.8): an app the user also owns stays a
     plain entry. A shared app with several owners carries copies (one per
     owner; the store reports one availability per app, so all copies share
     it) and the stored preferredCopy; an excluded app does too, so the
-    withheld state shows instead of silently vanishing."""
+    withheld state shows instead of silently vanishing. A copy someone other
+    than the user is playing carries inUse (copies appear for it even when
+    it is the only one), and the listing warns about a borrowed game whose
+    launch copy is in use (family.warning, protocol 1.8)."""
     names = {m["id"]: m.get("name") or "" for m in fam.get("members") or []}
     owned_ids = {e["id"] for e in out}
     preferred = fam.get("preferred") or {}
+    # (appid, owner) copies someone other than the user is playing, with
+    # the player behind each one.
+    playing = {}
+    for r in fam.get("running") or []:
+        if not isinstance(r, dict):
+            continue
+        if str(r.get("player") or "") in ("", steamid):
+            continue
+        appid, owner = str(r.get("appid") or ""), str(r.get("owner") or "")
+        if appid and owner:
+            playing.setdefault((appid, owner), str(r.get("player") or ""))
     for app in fam.get("apps") or []:
         if not isinstance(app, dict):
             continue
@@ -1753,10 +1805,12 @@ def merge_family_games(out, fam, installed, deadline):
         if names.get(lender):
             shared["name"] = names[lender]
         entry["sharedBy"] = shared
-        if len(owners) > 1 or reason != 0:
+        in_use = {o for o in owners if (appid, o) in playing}
+        if len(owners) > 1 or reason != 0 or in_use:
             copies = []
             for o in owners:
-                copy = {"ownerId": o, "available": reason == 0, "inUse": False}
+                copy = {"ownerId": o, "available": reason == 0,
+                        "inUse": o in in_use}
                 if names.get(o):
                     copy["ownerName"] = names[o]
                 if reason != 0:
@@ -1766,6 +1820,11 @@ def merge_family_games(out, fam, installed, deadline):
             entry["copies"] = copies
             if preferred.get(appid) in owners:
                 entry["preferredCopy"] = preferred[appid]
+        if (appid, lender) in playing:
+            notify("family.warning",
+                   {"id": appid,
+                    "message": family_in_use_message(
+                        names.get(playing[(appid, lender)]))})
         out.append(entry)
 
 
@@ -2809,6 +2868,52 @@ def detect_mode(game_dir):
     return "optional"
 
 
+def family_launch_refusal(app):
+    """-32002 message when the borrowed copy the launch would use is in use
+    (protocol 1.8): the lender's copy — the stored pick, or the store's
+    default — played by someone other than the user. None when the game is
+    the user's own, no copy is in use, or the lookup fails: a silent store
+    must not break the launch."""
+    try:
+        if not logged_in():
+            return None
+        token = access_token()
+        steamid = str(steam_cm.jwt_payload(token).get("sub"))
+        snap = family_snapshot(token, steamid)
+    except Exception:
+        return None
+    owners = []
+    for a in snap.get("apps") or []:
+        if isinstance(a, dict) and str(a.get("appid") or "") == app:
+            owners = [str(o or "") for o in a.get("owner_steamids") or []]
+            owners = [o for o in owners if o]
+            break
+    if not owners:
+        return None
+    try:
+        data = api_get("https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"
+                       f"?include_appinfo=0&include_played_free_games=0&steamid={steamid}", token)
+        owned = {str(g.get("appid") or "")
+                 for g in (data.get("response") or {}).get("games") or []}
+    except Exception:
+        return None
+    if app in owned:
+        # Played from the user's own copy, whatever members lend.
+        return None
+    preferred = snap.get("preferred") or {}
+    lender = preferred.get(app) if preferred.get(app) in owners else owners[0]
+    names = {m.get("id"): m.get("name") or ""
+             for m in snap.get("members") or [] if isinstance(m, dict)}
+    for r in snap.get("running") or []:
+        if not isinstance(r, dict):
+            continue
+        if (str(r.get("appid") or "") == app
+                and str(r.get("owner") or "") == lender
+                and str(r.get("player") or "") not in ("", steamid)):
+            return family_in_use_message(names.get(str(r.get("player") or "")))
+    return None
+
+
 def launch_spec(params):
     app = str(params["id"])
     installed = load_state("installed.json", {})
@@ -2827,6 +2932,9 @@ def launch_spec(params):
                 save_state("installed.json", fresh)
         ig["executable"] = exe
     mode = ig.get("mode") or "none"
+    refusal = family_launch_refusal(app)
+    if refusal:
+        raise RPCError(refusal, -32002)
     native = bool(ig.get("native"))
     if mode in ("none", "optional"):
         spec = {

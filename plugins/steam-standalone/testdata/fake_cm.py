@@ -608,6 +608,9 @@ def serve_logged_in(conn, hdr, body, st):
                     conn.close_frame()
                     return
                 continue
+        if target.startswith("FamilyGroups."):
+            if serve_family_groups(conn, target, hdr, body, st, steamid, sessionid):
+                continue
         if target.startswith("Player.GetPlayerLinkDetails") and st.get("hang_link_details"):
             # Test hook: accept the names lookup and never answer, so the
             # plugin's family fetch must ride out a silent CM. Longer than
@@ -661,6 +664,52 @@ def serve_logged_in(conn, hdr, body, st):
                                     pb_int(1, steamid) + pb_int(2, sessionid), pb_int(1, kick)))
             conn.close_frame()
             return
+
+# --- family running apps (protocol 1.8, issue #178) ---------------------------
+# Driven by the state file so the plugin tests script what the helper's
+# family-running read sees, without touching Valve:
+#   family_group_id: this session's family group (unset = no group: the
+#            ForUser reply carries no group id and the helper stops there)
+#   family_running: [{"appid", "player", "owner"}] pushed as one
+#            FamilyGroupsClient.NotifyRunningApps#1 after a GetFamilyGroup
+#            with send_running_apps (unset = no push: Steam's silence when
+#            nothing is running). Steamids are strings, like the Web API's.
+def serve_family_groups(conn, target, hdr, body, st, steamid, sessionid):
+    """FamilyGroups.GetFamilyGroupForUser#1 and GetFamilyGroup#1. Returns
+    True when handled (the reply — and the running-apps push — went out)."""
+    jobid = hdr.get(10, [0])[0]
+    if target == "FamilyGroups.GetFamilyGroupForUser#1":
+        group_id = int(st.get("family_group_id") or 0)
+        resp_body = pb_int(1, group_id) if group_id else b""
+    elif target == "FamilyGroups.GetFamilyGroup#1":
+        resp_body = b""
+        if pb_parse(body).get(2, [0])[0] and st.get("family_running") is not None:
+            entries = b""
+            for e in st.get("family_running") or []:
+                try:
+                    appid = int(e.get("appid"))
+                    player = int(e.get("player"))
+                    owner = int(e.get("owner"))
+                except (TypeError, ValueError, AttributeError):
+                    continue
+                if not appid or not player or not owner:
+                    continue
+                # Live shape (issue #178): 2: {1: appid, 3: {1: player, 2: owner}}.
+                running = pb_msg(3, pb_fixed64(1, player) + pb_fixed64(2, owner))
+                entries += pb_msg(2, pb_int(1, appid) + running)
+            group_id = int(st.get("family_group_id") or 0)
+            push_body = (pb_int(1, group_id) if group_id else b"") + entries
+            push_hdr = (pb_int(1, steamid) + pb_int(2, sessionid)
+                        + pb_str(12, "FamilyGroupsClient.NotifyRunningApps#1"))
+            # EMsg 146 with a target_job_name, like the live push.
+            record("push 146 FamilyGroupsClient.NotifyRunningApps#1")
+            conn.send_frame(2, pack(146, push_hdr, push_body))
+    else:
+        return False
+    resp_hdr = (pb_int(1, steamid) + pb_int(2, sessionid)
+                + pb_fixed64(11, jobid) + pb_int(13, 1))
+    conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, resp_hdr, resp_body))
+    return True
 
 # --- friends, persona and chat (protocol 1.6/1.9) ------------------------------
 # Driven by the state file so the plugin tests script lists, pushes and

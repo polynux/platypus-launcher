@@ -97,6 +97,8 @@ func main() {
 		runErr = runVersions(ctx, req)
 	case "unlock":
 		runErr = runUnlock(ctx, req)
+	case "family-running":
+		runErr = runFamilyRunning(ctx, req)
 	default:
 		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth")
 	}

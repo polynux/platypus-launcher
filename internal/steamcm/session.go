@@ -27,9 +27,10 @@ type Session struct {
 	loginID   uint32
 	conn      *websocket.Conn
 	licenses  []License
-	pending   [][]byte   // batched messages waiting for the next read
-	mu        sync.Mutex // serialises concurrent service calls (STEAM-5)
-	wmu       sync.Mutex // serialises socket writes (Call + Close)
+	pushHook  func(emsg uint32, hdr depot.Msg, body []byte) // sees pushes Call doesn't consume (SetPushHook)
+	pending   [][]byte                                      // batched messages waiting for the next read
+	mu        sync.Mutex                                    // serialises concurrent service calls (STEAM-5)
+	wmu       sync.Mutex                                    // serialises socket writes (Call + Close)
 	closeOnce sync.Once
 	// authed is false before any logon (DialUnauth): service calls go
 	// out as EMsg 9804 with no steamid/sessionid, like the real
@@ -279,6 +280,40 @@ func (s *Session) sideMessage(emsg uint32, hdr depot.Msg, body []byte) {
 				}
 			}
 		}
+	default:
+		// A server push (a service notification like
+		// FamilyGroupsClient.NotifyRunningApps#1, which arrives after the
+		// reply it belongs to): the hook sees it, whether it rode in
+		// before the reply Call waited for or is drained after. Runs
+		// under the session lock — it must not call back into Session.
+		if s.pushHook != nil {
+			s.pushHook(emsg, hdr, body)
+		}
+	}
+}
+
+// SetPushHook registers a hook for every message Call doesn't consume:
+// server pushes that arrive between requests. Only one-shot use (no Call
+// in flight while draining): the hook runs under the session lock, so it
+// must copy what it keeps and return, never calling back into Session.
+func (s *Session) SetPushHook(fn func(emsg uint32, hdr depot.Msg, body []byte)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pushHook = fn
+}
+
+// DrainPushes reads messages until timeout, answering heartbeats,
+// recording licences and handing the rest to the push hook. It returns
+// when the deadline passes or the socket drops; a timeout is the normal
+// exit, not an error — the caller asked how long to listen.
+func (s *Session) DrainPushes(timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		emsg, hdr, body, err := s.readOne(deadline)
+		if err != nil {
+			return
+		}
+		s.sideMessage(emsg, hdr, body)
 	}
 }
 

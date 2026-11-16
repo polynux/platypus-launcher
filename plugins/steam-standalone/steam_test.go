@@ -83,6 +83,16 @@ type env struct {
 	cmState     string
 	fix         *fakesteam.Fixture
 	cdn         *fakesteam.CDN
+	// notes records every plugin notification (family.warning, job
+	// progress, ...) in arrival order; tests poll it with waitNotify.
+	notesMu sync.Mutex
+	notes   []pluginNote
+}
+
+// pluginNote is one plugin-to-core notification the test env saw.
+type pluginNote struct {
+	method string
+	params json.RawMessage
 }
 
 // refreshCDN rebuilds the fake content from the current knobs (FAKE_DD_STATE
@@ -217,6 +227,9 @@ func setup(t *testing.T) *env {
 	m := plugins.NewManager(plugins.Options{
 		Dir: filepath.Join(root, "plugins"), LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"), Settings: sets,
 		OnNotify: func(pid, method string, params json.RawMessage) {
+			e.notesMu.Lock()
+			e.notes = append(e.notes, pluginNote{method, params})
+			e.notesMu.Unlock()
 			var u plugins.JobUpdate
 			if json.Unmarshal(params, &u) == nil {
 				q.Notify(pid, method, u)
