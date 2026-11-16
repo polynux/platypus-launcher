@@ -3495,7 +3495,7 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.13.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.14.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],
@@ -3582,9 +3582,9 @@ def game_save_context(params):
 # --- cloud saves (protocol 1.2) -------------------------------------------------
 #
 # Reads compare both sides; pulls download what changed only in the cloud
-# (verified, backed up, baseline updated). Pushes and `local` resolve
-# choices compute the status without uploading anything: uploads wait for
-# the push phase (issue #6), and the answer says so.
+# (verified, backed up, baseline updated); pushes and `local` resolve choices
+# upload what changed only on this device (quota-checked Steam batch flow,
+# baseline updated, conflicts never uploaded).
 
 def cloud_check(params, need_job):
     """The app id and CloudContext every cloud.* request carries. The exact

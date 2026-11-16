@@ -172,6 +172,16 @@ func (s *Session) write(emsg uint32, hdr, body []byte) error {
 	return s.conn.WriteMessage(websocket.BinaryMessage, packEMsg(emsg, hdr, body))
 }
 
+// Notify sends a one-way service notification (a method whose proto answers
+// NoResponse, like Cloud.ClientConflictResolution#1) and returns once
+// written, without waiting for a reply. A reply the server sends anyway is
+// set aside by the next Call's read.
+func (s *Session) Notify(service string, body []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.jobID++
+	return s.write(uint32(EMsgServiceMethodCallFromClient), header(s.steamID, s.sessionID, s.jobID, service), body)
+}
 func dialOne(ctx context.Context, endpoint string, tls bool, steamID uint64, refreshToken string) (*Session, error) {
 	scheme := "wss"
 	if !tls {
