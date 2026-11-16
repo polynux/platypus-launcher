@@ -240,7 +240,8 @@
     "title": {
       "missing": "Le jeu a besoin d'un titre."
     },
-    "unknown": "Jeu inconnu : « {{id}} »."
+    "unknown": "Jeu inconnu : « {{id}} ».",
+    "scriptUnsupported": "{{executable}} est un script pour lequel ce système n'a pas d'interpréteur : il ne peut pas démarrer."
   },
   "social": {
     "none": "« {{plugin}} » n'a pas de liste d'amis.",
