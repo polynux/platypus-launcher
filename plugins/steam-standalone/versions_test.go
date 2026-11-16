@@ -43,13 +43,81 @@ func versionsAppinfo(gid uint64) string {
 }
 
 // privateBetaSection is the fake's 8907 answer for the locked branch: the
-// depot section naming beta's manifest gid per depot.
+// depot section naming beta's manifest gid per depot plus the branch
+// metadata, wrapped in a privatedepots node exactly like live Steam.
 func privateBetaSection(gid uint64) string {
-	return `"11"
+	return `"privatedepots"
+{
+"11"
 {
 "manifests" { "beta" { "gid" "` + fmt.Sprint(gid) + `" } }
 }
+"branches"
+{
+"beta" { "buildid" "200" "timeupdated" "1700001000" "description" "Beta" "pwdrequired" "1" }
+}
+}
 `
+}
+
+// hiddenBranchAppinfo is the live shape for a password branch: PICS lists
+// only the open branches, so the locked one must resolve through its
+// private-beta section (privateBetaSection) alone.
+func hiddenBranchAppinfo(gid uint64) string {
+	return `"depots"
+{
+"branches"
+{
+"public" { "buildid" "100" "timeupdated" "1700000000" "description" "Default" }
+"old" { "buildid" "50" "description" "Old" }
+}
+"11"
+{
+"config" { "oslist" "linux" }
+"manifests" { "public" { "gid" "` + fmt.Sprint(gid) + `" } "old" { "gid" "` + fmt.Sprint(gid) + `" } }
+}
+}
+`
+}
+
+// A branch hidden from PICS unlocks with its password and installs from
+// its private-beta section: the live Valheim public-test shape.
+func TestSteamVersionsInstallHiddenBranch(t *testing.T) {
+	e := setup(t)
+	e.login()
+	e.setCMState("appinfo", hiddenBranchAppinfo(e.fix.GID))
+	e.setCMState("private_beta", privateBetaSection(e.fix.GID))
+	e.setCMState("beta_branches", []string{"beta"})
+
+	// Unlock first: PICS never lists the branch, but the password opens
+	// it, so unlock succeeds and the password is stored.
+	var unlocked map[string]any
+	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "beta", "password": "beta-pw-7"}, &unlocked); err != nil {
+		t.Fatalf("unlock: %v", err)
+	}
+	if unlocked["unlocked"] != true {
+		t.Fatalf("unlock: %+v", unlocked)
+	}
+	// Install by channel: the target resolves through the private
+	// section (build 200 comes from its branch metadata) and the
+	// manifest downloads under that gid.
+	if err := e.call("game.install", map[string]any{
+		"id": "4321", "jobId": "versions-hidden", "installDir": e.folder,
+		"target": map[string]any{"channel": "beta"},
+	}, nil); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	entry := e.waitInstalled("4321", "200")
+	if entry["channel"] != "beta" {
+		t.Fatalf("installed = %+v", entry)
+	}
+	arch := entry["archiveRef"].(map[string]any)["depots"].(map[string]any)
+	if arch["11"] != fmt.Sprint(e.fix.GID) {
+		t.Fatalf("archiveRef = %+v, want depot 11 at the fixture gid", arch)
+	}
+	if log := e.waitCMLog("private_beta app=4321 branch=beta"); !strings.Contains(log, "private_beta app=4321 branch=beta") {
+		t.Fatalf("no private-beta section fetch in CM log:\n%s", log)
+	}
 }
 
 func rpcCode(t *testing.T, err error) int {
@@ -167,8 +235,11 @@ func TestSteamVersionsUnlock(t *testing.T) {
 	if err := e.call("versions.unlock", map[string]any{}, &out); rpcCode(t, err) != jsonrpc.CodeInvalidParams {
 		t.Fatalf("empty params err = %v", err)
 	}
-	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "nope", "password": "x"}, &out); err == nil {
-		t.Fatal("unknown channel unlocked")
+	// A branch PICS never lists (hidden live, or unknown) is decided by
+	// what the password opens: not this branch, so {unlocked: false}.
+	// Only a listed passwordless branch refuses the password outright.
+	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "nope", "password": "x"}, &out); err != nil || out["unlocked"] != false {
+		t.Fatalf("unknown channel: err=%v out=%+v, want {unlocked: false}", err, out)
 	}
 	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "public", "password": "x"}, &out); err == nil {
 		t.Fatal("passwordless channel took a password")

@@ -139,17 +139,27 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 	if err != nil {
 		return nil, "", resolvedTarget{}, fmt.Errorf("app %d: %v", appID, err)
 	}
+	// A locked branch carries no plain manifests (live shape): its gids
+	// come from the private-beta section. A password branch is normally
+	// hidden from PICS entirely, so when the requested branch is missing
+	// it resolves here and joins the list; a listed locked branch just
+	// merges its gids. Either way the target below sees plain manifests.
+	if name, pw := privateBranchRequest(s.req); name != "" && pw != "" {
+		// An open branch resolves from plain PICS; only a hidden or
+		// locked one needs its private-beta section.
+		if listed := findBranch(branches, name); listed == nil || listed.PwdRequired {
+			pbi, err := privateBranchInfo(s.cm, kv, appID, toks[appID], name, pw)
+			if err != nil {
+				return nil, "", resolvedTarget{}, err
+			}
+			if listed == nil {
+				branches = append(branches, *pbi)
+			}
+		}
+	}
 	rt, err := resolveTarget(branches, s.req)
 	if err != nil {
 		return nil, "", resolvedTarget{}, err
-	}
-	// A locked branch carries no plain manifests (live shape): merge its
-	// private-beta gids into the app info before depot selection, so one
-	// read serves listing and download.
-	if bi := findBranch(branches, rt.branch); bi != nil && bi.PwdRequired && rt.password != "" {
-		if err := mergePrivateBranch(s.cm, kv, appID, toks[appID], rt.branch, rt.password); err != nil {
-			return nil, "", resolvedTarget{}, err
-		}
 	}
 	// Downstream (request codes, shared resolution) works off the request:
 	// point it at the resolved branch and its password.

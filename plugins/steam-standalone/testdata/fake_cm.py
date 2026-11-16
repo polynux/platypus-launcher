@@ -933,11 +933,15 @@ def serve_content(conn, emsg, hdr, body, st, steamid, sessionid):
         record(f"beta_password app={pb_parse(body).get(1, [0])[0]}")
         resp = pb_int(1, st.get("beta_password_eresult", 1))
         if st.get("beta_password_eresult", 1) == 1:
-            # The response lists the branches the password opened
             # (betapasswords = 4, betaname = 1): every pwdrequired branch
-            # in the served appinfo, like a live accept.
+            # in the served appinfo, like a live accept, plus beta_branches
+            # (branches live hides from PICS but the password still opens).
+            names = locked_branches(st.get("appinfo") or "")
+            for extra in st.get("beta_branches") or []:
+                if extra not in names:
+                    names.append(extra)
             import hashlib as _hashlib
-            for name in locked_branches(st.get("appinfo") or ""):
+            for name in names:
                 key = st.get("beta_key_" + name) or _hashlib.sha1(name.encode()).hexdigest()
                 resp += pb_msg(4, pb_str(1, name) + pb_str(2, key))
         conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid), resp))

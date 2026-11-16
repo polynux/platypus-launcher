@@ -3531,15 +3531,14 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.16.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.17.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],
-            # Password branches unlock through the private-beta section
-            # (issue #176), but no locked branch exists on live Steam to
-            # prove the full path: listed locked, unlock kept but
-            # unadvertised.
-            "features": {"versions": {"channels": True, "builds": True, "password": False, "manual": True}},
+            # Password branches unlock through their private-beta section,
+            # proven live on real Steam (Valheim public-test, No Man's Sky
+            # experimental: unlock, section gids, manifest code + download).
+            "features": {"versions": {"channels": True, "builds": True, "password": True, "manual": True}},
             "missing": []}
 
 
