@@ -1067,6 +1067,11 @@ copy can be borrowed now (an unavailable one is shown greyed out), `inUse` says 
 playing it. `preferredCopy` is the `ownerId` the user picked, or absent/`null` for the store's
 default. Copies are read only from a borrowed game: a game the user owns has no `sharedBy`, and
 Platypus shows no picker for it, whatever `copies` it carries.
+Steam-family plugins leave each copy's `dlc` out (issue #179): `GetSharedLibraryApps`
+carries one entry per app (lenders as an id list) with no per-copy DLC — no `v2`,
+no DLC entries even with `include_non_games`, and unknown params ignored — and other
+members' licences can't be queried, while PICS (`extended.listofdlc`,
+`common.parent`) and the store's app details list only the game's global DLC set.
 
 `family.setPreferredCopy { id, ownerId }` records the user's pick. Platypus sends it only for a game
 that is borrowed in the library, with a copy from `ownerId` that is listed and `available`; the
