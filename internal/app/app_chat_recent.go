@@ -325,14 +325,16 @@ func (a *App) pruneChatRecentsOfRemoved(present map[string]bool) {
 }
 
 // chatOffers says whether a plugin's rows may be listed: installed with the
-// chat capability. Readiness is not required, so rows survive until the
-// plugin starts on demand. Without a plugin manager there is nothing to
-// check against, and rows are kept.
+// chat capability and with its friends list still on. Readiness is not
+// required, so rows survive until the plugin starts on demand; the rows stay
+// persisted while the friends list is off, so switching it back on lists them
+// again. Without a plugin manager there is nothing to check against, and rows
+// are kept.
 func (a *App) chatOffers(id string) bool {
 	if a.plugins == nil {
 		return true
 	}
-	return a.plugins.Has(id, "chat")
+	return a.plugins.Has(id, "chat") && a.settings.SocialEnabled(id)
 }
 
 // ChatConversations lists the recent conversations with friends, most recent
