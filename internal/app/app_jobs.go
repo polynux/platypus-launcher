@@ -359,6 +359,25 @@ func cleanupAfter(days int) time.Duration {
 }
 
 func (a *App) RetryJob(id string) error {
+	// A job saved by an older build may predate its terms acceptance: a
+	// failed or canceled install or update is re-gated before it is
+	// re-queued, the same gate a new install would meet. Anything else (an
+	// uninstall, a verify, a move, a job that is gone) retries as before.
+	for _, j := range a.jobs.List() {
+		if j.ID != id || !termsKind(j.Kind) {
+			continue
+		}
+		game := types.Game{ID: j.GameID, Source: j.Source, StoreAppID: j.StoreGameID, Title: j.Title, InstallDir: j.InstallDir}
+		if full, err := a.findGame(j.GameID); err == nil {
+			if j.InstallDir != "" {
+				full.InstallDir = j.InstallDir
+			}
+			game = full
+		}
+		if err := a.termsGate(game); err != nil {
+			return err
+		}
+	}
 	return a.jobs.Retry(id)
 }
 

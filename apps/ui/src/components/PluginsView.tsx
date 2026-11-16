@@ -32,6 +32,10 @@ interface PluginsViewProps {
   /** Approval, login and folder changes change what the library lists. */
   onLibraryChanged: () => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+  /** A refused install's "Log in" action (issue #175): open this store's login flow. */
+  loginRequestId?: string | null;
+  /** The login request was opened (or had no store to open for). */
+  onLoginOpened?: () => void;
 }
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>['variant']>;
@@ -56,10 +60,18 @@ export const hasAuth = (p: StorePlugin) => offers(p, 'auth');
  *  keep working; the cache itself lives in the view-owned data hook. */
 export { resetPluginsAuthCache } from './usePluginsData';
 
-export function PluginsView({ plugins, games = [], warnings, onPlugins, onLibraryChanged, onNotify }: PluginsViewProps) {
+export function PluginsView({ plugins, games = [], warnings, onPlugins, onLibraryChanged, onNotify, loginRequestId, onLoginOpened }: PluginsViewProps) {
   const { t } = useTranslation(['plugins', 'common']);
   const data = usePluginsData({ plugins, onPlugins, onLibraryChanged, onNotify });
   const { reviewing, setReviewing, loggingIn, setLoggingIn, auth, busy, storeAuth, refresh, act, uninstalling, setUninstalling, replacing, setReplacing, install, installFile, confirmUninstall } = data;
+  // A refused install asks for the login here: open the store's login flow
+  // once the request arrives, then release it so a later visit starts clean.
+  useEffect(() => {
+    if (!loginRequestId) return;
+    const p = plugins.find((x) => x.id === loginRequestId);
+    if (p) setLoggingIn(p);
+    onLoginOpened?.();
+  }, [loginRequestId, plugins, setLoggingIn, onLoginOpened]);
   // One branch per view root (issue #156): the plugins presentation, not the shell.
   const presentation = useVariant('plugins.presentation');
   // The lab's file drop installs plugin zips: the shell exposes the real

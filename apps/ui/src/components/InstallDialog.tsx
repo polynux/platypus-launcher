@@ -15,6 +15,8 @@ import { useInstallSize } from '../lib/installSize';
 import { cx } from './ui';
 import { useVariant } from '../lib/theme';
 import { coreErrMsg } from '../lib/coreError';
+import { notify } from '../lib/notify';
+import { loginActionFor } from '../lib/storeLogin';
 
 export interface InstallDialogProps {
   game: Game;
@@ -49,7 +51,9 @@ export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: In
       onChanged();
       onClose();
     } catch (e) {
-      onNotify(coreErrMsg(e), 'err');
+      const action = loginActionFor(e, game.source, t('gameOps:install.logIn'));
+      if (action) notify.error(coreErrMsg(e), { action });
+      else onNotify(coreErrMsg(e), 'err');
     } finally {
       setBusy(false);
     }

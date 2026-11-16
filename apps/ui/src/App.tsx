@@ -57,6 +57,7 @@ import { useVariant } from './lib/theme';
 import { useGameTone } from './lib/gameTone';
 import type { GameSettingsTab } from './lib/gameSettingsTabs';
 import { notify as toastNotify, type LegacyKind as NoticeKind } from './lib/notify';
+import { loginActionFor, setStoreLoginOpener } from './lib/storeLogin';
 import { X } from 'lucide-react';
 import { RouterProvider, useRouter } from '@tanstack/react-router';
 import { createAppRouter, useSetView, useView, viewToLocation } from './router';
@@ -282,6 +283,13 @@ export function AppContent() {
   // The one-time Hydra→Platypus migration notice (issue #14). Null when there
   // is nothing to show; dismissing persists it in the core and hides it here.
   const [migration, setMigration] = useState<MigrationNotice | null>(null);
+  // A refused install's "Log in" toast action (issue #175): the store whose
+  // login flow the Plugins page should open for the user.
+  const [loginRequestId, setLoginRequestId] = useState<string | null>(null);
+  useEffect(() => setStoreLoginOpener((source) => {
+    setLoginRequestId(source);
+    setView({ name: 'plugins' });
+  }), [setView]);
   // Every in-app notice goes through Sonner (issue #64): stacked top-right
   // toasts, newest on top. onNotify props stay (least churn) as a thin
   // wrapper: ok → success, err → error, busy → info.
@@ -697,7 +705,11 @@ export function AppContent() {
     queue
       .then((ok) => ok && Effect.runPromise(op(game))
         .then(() => notify(t('downloads:queued', { action: t(`downloads:action.${kind}`), title: game.title }), 'busy')))
-      .catch((err) => notify(coreErrMsg(err), 'err'));
+      .catch((err) => {
+        const action = loginActionFor(err, game.source, t('gameOps:install.logIn'));
+        if (action) toastNotify.error(coreErrMsg(err), { action });
+        else notify(coreErrMsg(err), 'err');
+      });
   };
 
   const jobAction = (action: 'cancel' | 'retry' | 'pause' | 'resume' | 'discard', id: string) => {
@@ -707,7 +719,12 @@ export function AppContent() {
       : action === 'pause' ? LauncherApi.pauseJob
       : action === 'resume' ? LauncherApi.resumeJob
       : LauncherApi.discardJob;
-    Effect.runPromise(call(id)).catch((err) => notify(coreErrMsg(err), 'err'));
+    Effect.runPromise(call(id)).catch((err) => {
+      const source = action === 'retry' ? jobs.find((j) => j.id === id)?.source : undefined;
+      const login = source ? loginActionFor(err, source, t('gameOps:install.logIn')) : null;
+      if (login) toastNotify.error(coreErrMsg(err), { action: login });
+      else notify(coreErrMsg(err), 'err');
+    });
   };
 
   const allowFolder = (game: Game, folder: string) => {
@@ -1185,6 +1202,8 @@ export function AppContent() {
             onPlugins={onPluginsChanged}
             onLibraryChanged={() => loadData('update')}
             onNotify={notify}
+            loginRequestId={loginRequestId}
+            onLoginOpened={() => setLoginRequestId(null)}
           />
         );
       case 'storage':

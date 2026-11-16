@@ -9,6 +9,7 @@
     "short": "Not enough space there for this game.",
     "action": "Install",
     "toFolder": "Install to {{folder}}",
+    "logIn": "Log in",
     "queued": "Install of {{title}} queued"
   },
   "options": {

@@ -207,6 +207,59 @@ func TestTermsThatNeedALoginRefuseTheInstall(t *testing.T) {
 	}
 }
 
+// A job saved by an older build predates its terms acceptance: retrying it
+// meets the same gate a new install would, instead of re-queuing silently.
+func TestRetryRerunsTheTermsGate(t *testing.T) {
+	t.Parallel()
+	e := versionsApp(t, termsProtocols, termsCaps)
+	game := licensedGame()
+	saved := func() types.Job {
+		t.Helper()
+		j, err := e.a.jobs.AddWithOptions(jobs.KindInstall, game.Source, game.ID, game.StoreAppID,
+			game.Title, filepath.Join(e.root, "Games", "licensed"), nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := e.a.CancelJob(j.ID); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}
+	j := saved()
+	// Nothing accepted: the retry is refused like a new install.
+	_, installErr := e.a.InstallGame(game)
+	retryErr := e.a.RetryJob(j.ID)
+	if retryErr == nil || apperr.CodeOf(retryErr) != apperr.CodeOf(installErr) {
+		t.Fatalf("retry = %v (code %q), want the new-install refusal %v (code %q)",
+			retryErr, apperr.CodeOf(retryErr), installErr, apperr.CodeOf(installErr))
+	}
+	if got := e.a.jobs.List(); len(got) != 1 || got[0].State != jobs.StateCanceled {
+		t.Fatalf("refused retry re-queued the job: %+v", got)
+	}
+	// Accepted: the retry queues and installs.
+	terms, err := e.a.GetGameTerms(game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.a.AcceptGameTerms(game, termRefs(terms)); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.a.RetryJob(j.ID); err != nil {
+		t.Fatalf("retry after acceptance: %v", err)
+	}
+	e.waitJob(t, j.ID, jobs.StateDone)
+	// Unreadable (logged out): the retry needs the login like a new install.
+	j2 := saved()
+	e.config(t, map[string]any{"termsAuth": true})
+	_, installErr = e.a.InstallGame(game)
+	if apperr.CodeOf(installErr) != "terms.needsLogin" {
+		t.Fatalf("install logged out: %v (code %q), want terms.needsLogin", installErr, apperr.CodeOf(installErr))
+	}
+	if retryErr = e.a.RetryJob(j2.ID); apperr.CodeOf(retryErr) != "terms.needsLogin" {
+		t.Fatalf("retry logged out: %v (code %q), want terms.needsLogin", retryErr, apperr.CodeOf(retryErr))
+	}
+}
+
 func TestAStoreWithoutServerAcceptanceKeepsTheRecordInPlatypus(t *testing.T) {
 	t.Setenv("ECHO_MISSING", "game.acceptTerms")
 	e := versionsApp(t, termsProtocols, termsCaps)
