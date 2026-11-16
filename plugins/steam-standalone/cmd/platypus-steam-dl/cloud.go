@@ -261,6 +261,27 @@ func splitCloudName(name string) (root, rel string, ok bool) {
 	return name[1 : 1+end], name[1+end+1:], true
 }
 
+// applyRootOverride rewrites a root and its relative path for the client OS:
+// the first rootoverrides entry with that root and os wins, prefixing addpath
+// and applying pathtransforms to the relative part. Without a match both are
+// returned unchanged.
+func applyRootOverride(ufs *cloudUFS, root, rel, osName string) (string, string) {
+	for _, ov := range ufs.Overrides {
+		if !strings.EqualFold(ov.Root, root) || !strings.EqualFold(ov.OS, osName) {
+			continue
+		}
+		root = ov.UseInstead
+		if ov.AddPath != "" {
+			rel = ov.AddPath + "/" + rel
+		}
+		for i := range ov.Find {
+			rel = strings.ReplaceAll(rel, ov.Find[i], ov.Replace[i])
+		}
+		break // first matching override wins, like the client's rule order
+	}
+	return root, rel
+}
+
 // mapCloudName resolves one cloud file name to a local path through the ufs
 // rules. Entries group by machine/prefix on the wire (issue #6 L2); the
 // caller groups winners by local path, so one file synced from two machines
@@ -274,19 +295,7 @@ func mapCloudName(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID uin
 	// The returned rel is the stable cloud-relative part (the status path
 	// and baseline key); mapping works on a transformed copy.
 	rel = cloudRel
-	for _, ov := range ufs.Overrides {
-		if !strings.EqualFold(ov.Root, root) || !strings.EqualFold(ov.OS, ctx.OS) {
-			continue
-		}
-		root = ov.UseInstead
-		if ov.AddPath != "" {
-			rel = ov.AddPath + "/" + rel
-		}
-		for i := range ov.Find {
-			rel = strings.ReplaceAll(rel, ov.Find[i], ov.Replace[i])
-		}
-		break // first matching override wins, like the client's rule order
-	}
+	root, rel = applyRootOverride(ufs, root, rel, ctx.OS)
 	base, ok := resolveCloudRoot(root, ctx.OS, ctx)
 	if !ok {
 		return "", "", false
@@ -309,6 +318,76 @@ func mapCloudName(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID uin
 		local = filepath.Join(append([]string{base}, parts...)...)
 	}
 	return local, cloudRel, true
+}
+
+// cloudNameCovered reports whether some ufs save rule describes a cloud file
+// name: the same root (case-insensitively), under the rule's path, matching
+// its pattern. The comparison works on the cloud's own spelling:
+// rootoverrides only decide where a file lands (mapCloudName), never whether
+// a rule owns it, so a pathtransforms find string that also appears in a file
+// name can't make a save look foreign. Platforms are ignored: one cloud name
+// serves every OS. Pulls and pushes only touch names a rule covers, so a
+// stray name (a game-install or home path no rule lists) can never replace a
+// non-save.
+func cloudNameCovered(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID uint64) bool {
+	root, rel, ok := splitCloudName(cloudName)
+	if !ok || rel == "" {
+		return false
+	}
+	parts := splitRel(substituteSteamID(rel, steamID))
+	// Proton's drive_c is case-insensitive, so a rule spelling
+	// "My Games/…/SaveData" covers the cloud's "my games/…/savedata".
+	fold := ctx.OS == "windows"
+	for _, r := range ufs.Rules {
+		if !strings.EqualFold(r.Root, root) {
+			continue
+		}
+		prefix := rulePathParts(substituteSteamID(r.Path, steamID))
+		if len(parts) <= len(prefix) {
+			continue
+		}
+		// A rule without `recursive` lists the folder's own files, like the
+		// scan it feeds; only a recursive rule owns subdirectories.
+		if !r.Recursive && len(parts) != len(prefix)+1 {
+			continue
+		}
+		under := true
+		for i := range prefix {
+			same := parts[i] == prefix[i]
+			if fold {
+				same = strings.EqualFold(parts[i], prefix[i])
+			}
+			if !same {
+				under = false
+				break
+			}
+		}
+		if !under {
+			continue
+		}
+		pattern, rest := r.Pattern, strings.Join(parts[len(prefix):], "/")
+		if fold {
+			pattern, rest = strings.ToLower(pattern), strings.ToLower(rest)
+		}
+		if matchCloudPattern(pattern, rest) {
+			return true
+		}
+	}
+	return false
+}
+
+// rulePathParts splits a rule path into components, dropping the empty and
+// "." pieces appinfo paths carry ("/My Games/Fallout4/Saves", "./my games/x",
+// "Steam Save/"): they name the same directory.
+func rulePathParts(rel string) []string {
+	var out []string
+	for _, p := range splitRel(rel) {
+		if p == "" || p == "." {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // substituteSteamID expands {64BitSteamID} and {Steam3AccountID} (the low 32
@@ -348,20 +427,7 @@ func resolveCaseInsensitive(dir, want string) string {
 // ruleSearchDir maps one rule to the local directory its files live under
 // (root + transformed path), for scanning the device side.
 func ruleSearchDir(r cloudSaveRule, ufs *cloudUFS, ctx cloudContext, steamID uint64) (string, bool) {
-	root, rel := r.Root, substituteSteamID(r.Path, steamID)
-	for _, ov := range ufs.Overrides {
-		if !strings.EqualFold(ov.Root, root) || !strings.EqualFold(ov.OS, ctx.OS) {
-			continue
-		}
-		root = ov.UseInstead
-		if ov.AddPath != "" {
-			rel = ov.AddPath + "/" + rel
-		}
-		for i := range ov.Find {
-			rel = strings.ReplaceAll(rel, ov.Find[i], ov.Replace[i])
-		}
-		break
-	}
+	root, rel := applyRootOverride(ufs, r.Root, substituteSteamID(r.Path, steamID), ctx.OS)
 	base, ok := resolveCloudRoot(root, ctx.OS, ctx)
 	if !ok {
 		return "", false
@@ -725,8 +791,9 @@ type cloudPlanFile struct {
 // decides per file against the baseline (D6). A baseline entry counts only
 // for the local path it was recorded for, so a native<->Proton switch
 // compares fresh instead of misreading the other side. Local-only files
-// matching the rules are upload candidates; cloud names nobody maps are
-// unmapped.
+// matching the rules are upload candidates; a cloud name no save rule covers
+// (#184) and a name nobody maps are unmapped, so a stray name never lands on
+// a file outside the game's save locations.
 func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS, ctx cloudContext, steamID uint64, base *cloudBaseline) (files []cloudPlanFile, unmapped int) {
 	byLocal := map[string]*cloudFile{}
 	ordered := []string{}
@@ -737,7 +804,7 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 			continue
 		}
 		localPath, rel, ok := mapCloudName(f.CloudName, ufs, ctx, steamID)
-		if !ok {
+		if !ok || !cloudNameCovered(f.CloudName, ufs, ctx, steamID) {
 			unmapped++
 			continue
 		}
@@ -1358,7 +1425,7 @@ func cloudMessage(files []cloudPlanFile, unmapped int) string {
 	}
 	var suffix string
 	if unmapped > 0 {
-		suffix = fmt.Sprintf(" %d cloud file(s) can't be placed on this device.", unmapped)
+		suffix = fmt.Sprintf(" %d cloud file(s) aren't synced on this device.", unmapped)
 	}
 	switch {
 	case cf > 0:
