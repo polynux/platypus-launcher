@@ -7,6 +7,7 @@ package steamcm
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -334,11 +335,14 @@ func (s *Session) CDNAuthToken(depotID uint32, host string, appID uint32, timeou
 
 // CheckBetaPassword checks a password branch (EMsg 5450/5451:
 // CMsgClientCheckAppBetaPassword: app_id = 1, betapassword = 2). On
-// success it returns the branch names the response lists
-// (CMsgClientCheckAppBetaPasswordResponse: betapasswords = 4, each an
-// AppBetaPassword with betaname = 1, per SteamDatabase/Protobufs), so the
-// caller can refuse a password that unlocked something else.
-func (s *Session) CheckBetaPassword(appID uint32, password string, timeout time.Duration) ([]string, error) {
+// success it returns the branches the password opened, each with its
+// branch key (CMsgClientCheckAppBetaPasswordResponse: betapasswords = 4,
+// each an AppBetaPassword with betaname = 1 and a hex betapassword = 2,
+// per SteamDatabase/Protobufs), so the caller can refuse a password that
+// unlocked something else and pass the key to PrivateBeta. A refusal
+// (eresult != 1, e.g. a wrong password gives Fail) is a CMError with
+// EResult set; only a dropped connection (EResult 0) is a transport error.
+func (s *Session) CheckBetaPassword(appID uint32, password string, timeout time.Duration) (map[string][]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if timeout == 0 {
@@ -370,17 +374,79 @@ func (s *Session) CheckBetaPassword(appID uint32, password string, timeout time.
 			if eresult := int(m.Int(1)); eresult != 1 {
 				return nil, &CMError{Msg: "Steam rejected the request with " + EResultName(eresult), EResult: eresult, Auth: tokenRejected(eresult)}
 			}
-			var names []string
+			keys := map[string][]byte{}
 			for _, raw := range m.AllBytes(4) {
 				sub, err := depot.Decode(raw)
 				if err != nil {
 					continue
 				}
 				if name := string(sub.Bytes(1)); name != "" {
-					names = append(names, name)
+					key, err := hex.DecodeString(string(sub.Bytes(2)))
+					if err != nil {
+						continue
+					}
+					keys[name] = key
 				}
 			}
-			return names, nil
+			return keys, nil
+		}
+		s.sideMessage(emsg, rhdr, body)
+	}
+}
+
+// PrivateBeta fetches a password branch's depot section (EMsg 8907/8908:
+// CMsgClientPICSPrivateBetaRequest: appid = 1, access_token = 2,
+// beta_name = 3, password_hash = 4 — the branch key from
+// CheckBetaPassword). The response's depot_section is text KeyValues
+// naming the branch's manifest gid per depot, merged by the caller into
+// the PICS app info like DepotDownloader does. Branches missing from
+// plain PICS (the live shape: no manifests/<branch> entry at all) only
+// resolve this way.
+func (s *Session) PrivateBeta(appID uint32, accessToken uint64, branch string, key []byte, timeout time.Duration) (*steam.KV, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	e := &depot.Enc{}
+	e.Varint(1, uint64(appID))
+	if accessToken != 0 {
+		e.Varint(2, accessToken)
+	}
+	e.Str(3, branch)
+	e.BytesField(4, key)
+	s.jobID++
+	job := s.jobID
+	if err := s.conn.WriteMessage(2, packEMsg(EMsgClientPICSPrivateBeta, header(s.steamID, s.sessionID, job, ""), e.Bytes())); err != nil {
+		return nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		emsg, rhdr, body, err := s.readOne(deadline)
+		if err != nil {
+			return nil, err
+		}
+		if emsg == EMsgClientHeartBeat {
+			s.sideMessage(emsg, rhdr, body)
+			continue
+		}
+		if emsg == EMsgClientPICSPrivateBeta+1 && rhdr.Int(11) == job {
+			m, err := depot.Decode(body)
+			if err != nil {
+				return nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+			}
+			if eresult := int(m.Int(1)); eresult != 1 {
+				return nil, &CMError{Msg: "Steam rejected the request with " + EResultName(eresult), EResult: eresult, Auth: tokenRejected(eresult)}
+			}
+			raw := m.Bytes(2)
+			if kv, err := steam.ParseKV(string(raw)); err == nil && len(kv.Children) > 0 {
+				return kv, nil
+			}
+			kv, err := steam.ParseBinaryKV(raw)
+			if err != nil {
+				return nil, fmt.Errorf("private beta section didn't parse: %w", err)
+			}
+			return kv, nil
 		}
 		s.sideMessage(emsg, rhdr, body)
 	}

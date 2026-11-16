@@ -12,10 +12,10 @@
 //	  }
 //	}
 //
-// Branch defaults to "public". Password branches need CheckAppBetaPassword
-// first; the request code call then carries the branch and its hash.
-// The exact key spellings are an assumption to check against a real
-// product-info reply in phase 5.
+// Branch defaults to "public". A password branch carries no plain
+// manifests: mergePrivateBranch unlocks its private-beta section with the
+// branch key CheckBetaPassword returned (DepotDownloader flow), and the
+// request code call then carries the branch and its SHA-1 password hash.
 package main
 
 import (

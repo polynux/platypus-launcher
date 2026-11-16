@@ -395,6 +395,54 @@ func resolveTarget(branches []branchInfo, req request) (resolvedTarget, error) {
 	return resolvedTarget{branch: branch, password: pw, manifests: overrides, build: build, versionName: versionName}, nil
 }
 
+// mergePrivateBranch resolves a locked branch's depot gids through the
+// private-beta section and merges them into kv's manifests, so depot
+// selection works off the one app-info read. Live, a password branch
+// carries no plain manifests/<branch> entry at all: its gids only come
+// from PICSGetPrivateBeta, unlocked with the branch key CheckBetaPassword
+// returned (the DepotDownloader flow). A wrong password, a key for some
+// other branch, or a missing section all refuse distinctly.
+func mergePrivateBranch(cm *steamcm.Session, kv *steam.KV, appID uint32, token uint64, branch, password string) error {
+	keys, err := cm.CheckBetaPassword(appID, password, 0)
+	if err != nil {
+		return fmt.Errorf("wrong branch password for %q: %w", branch, err)
+	}
+	key, ok := keys[branch]
+	if !ok || len(key) == 0 {
+		return fmt.Errorf("wrong branch password for %q: Steam opened another branch", branch)
+	}
+	section, err := cm.PrivateBeta(appID, token, branch, key, 0)
+	if err != nil {
+		return fmt.Errorf("Steam has no %s manifests for app %d: %w", branch, appID, err)
+	}
+	depots := kv.Get("depots")
+	if depots == nil {
+		return fmt.Errorf("app %d: product info has no depots section", appID)
+	}
+	merged := 0
+	for id, d := range section.Children {
+		var gid uint64
+		fmt.Sscanf(d.String("manifests", branch, "gid"), "%d", &gid)
+		if gid == 0 {
+			continue
+		}
+		entry := depots.Get(id)
+		if entry == nil {
+			continue
+		}
+		manifests := entry.Get("manifests")
+		if manifests == nil {
+			continue
+		}
+		manifests.Children[branch] = &steam.KV{Children: map[string]*steam.KV{"gid": {Value: fmt.Sprint(gid)}}}
+		merged++
+	}
+	if merged == 0 {
+		return fmt.Errorf("Steam has no %s manifests for app %d", branch, appID)
+	}
+	return nil
+}
+
 // versionResult adds what the plugin records for the install ledger to an
 // install/update result: the branch, the build id and the manifest gid per
 func versionResult(rt resolvedTarget, depots []fetchedDepot, res map[string]any) map[string]any {
@@ -473,7 +521,7 @@ func runUnlock(ctx context.Context, req request) error {
 	if !bi.PwdRequired {
 		return fmt.Errorf("the %s branch has no password", bi.Name)
 	}
-	names, err := cm.CheckBetaPassword(req.AppID, req.BranchPassword, 0)
+	keys, err := cm.CheckBetaPassword(req.AppID, req.BranchPassword, 0)
 	if err != nil {
 		if refused(err) {
 			emit(map[string]any{"type": "result", "unlocked": false})
@@ -483,11 +531,9 @@ func runUnlock(ctx context.Context, req request) error {
 	}
 	// Call success alone is not an unlock: the response lists the
 	// branches the password opened. Anything else is not this branch.
-	for _, n := range names {
-		if n == req.Branch {
-			emit(map[string]any{"type": "result", "unlocked": true})
-			return nil
-		}
+	if _, ok := keys[req.Branch]; ok {
+		emit(map[string]any{"type": "result", "unlocked": true})
+		return nil
 	}
 	emit(map[string]any{"type": "result", "unlocked": false})
 	return nil

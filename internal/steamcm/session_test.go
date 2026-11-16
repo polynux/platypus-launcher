@@ -2,6 +2,7 @@ package steamcm
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -33,6 +34,7 @@ func startFake(t *testing.T) (*fakeCM, string) {
 		RequestCode: 4242,
 		CDNToken:    "cdn-token",
 		BetaOK:      true,
+		PrivateKV:   "\"11\"\n{\n\"manifests\"\n{\n\"beta\"\n{\n\"gid\"\t\t\"4242\"\n}\n}\n}\n\x00",
 		Licenses:    []uint32{77},
 	})
 	currentFake = f
@@ -245,8 +247,16 @@ func TestContentRPCs(t *testing.T) {
 	if err != nil || token != "cdn-token" {
 		t.Fatalf("cdn token: %v %q", err, token)
 	}
-	if _, err := s.CheckBetaPassword(4321, "secret", 0); err != nil {
-		t.Fatalf("beta password: %v", err)
+	keys, err := s.CheckBetaPassword(4321, "secret", 0)
+	if err != nil || len(keys["beta"]) == 0 {
+		t.Fatalf("beta password: %v %+v", err, keys)
+	}
+	section, err := s.PrivateBeta(4321, 12345, "beta", keys["beta"], 0)
+	if err != nil {
+		t.Fatalf("private beta: %v", err)
+	}
+	if got := section.String("11", "manifests", "beta", "gid"); got != "4242" {
+		t.Fatalf("private beta gid: %q", got)
 	}
 }
 
@@ -282,5 +292,34 @@ func TestExchangeAgainstPythonFakeCM(t *testing.T) {
 	}
 	if tok == "" {
 		t.Fatal("empty token from python fake")
+	}
+}
+
+// A refused beta password (live: eresult Fail for a wrong password) is a
+// CMError with EResult set — an answer, not a dropped connection — and a
+// refused private section errors the same way.
+func TestBetaPasswordRefused(t *testing.T) {
+	_, host := startFake(t)
+	currentFake.mu.Lock()
+	currentFake.cfg.BetaOK = false
+	currentFake.mu.Unlock()
+	withFakeCM(t, host)
+	ctx := context.Background()
+	s, err := Dial(ctx, testToken(76561198))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	if _, err := s.CheckBetaPassword(4321, "wrong", 0); err == nil {
+		t.Fatal("wrong beta password accepted")
+	} else {
+		var ce *CMError
+		if !errors.As(err, &ce) || ce.EResult == 0 {
+			t.Fatalf("refusal is not a server answer: %v", err)
+		}
+	}
+	if _, err := s.PrivateBeta(4321, 12345, "beta", []byte{0xde, 0xad}, 0); err == nil {
+		t.Fatal("private beta accepted after refusal")
 	}
 }

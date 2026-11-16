@@ -892,6 +892,8 @@ in `PLATYPUS_PLUGIN_DATA`; answer `{ "unlocked": false }` (or `-32000` with a
 message) for a wrong one. Platypus holds a password only for the length of that
 call: it is never written to a job, the settings or the install history, never
 logged, and a target never names one. A resumed job re-uses the stored unlock.
+When the store later refuses a stored password, the plugin forgets it, so the
+unlock form comes back.
 Don't write the password to your log either. Don't implement the method when the
 store has no passwords: it is optional and the first `-32601` is remembered.
 

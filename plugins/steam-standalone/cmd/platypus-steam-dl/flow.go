@@ -143,6 +143,14 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 	if err != nil {
 		return nil, "", resolvedTarget{}, err
 	}
+	// A locked branch carries no plain manifests (live shape): merge its
+	// private-beta gids into the app info before depot selection, so one
+	// read serves listing and download.
+	if bi := findBranch(branches, rt.branch); bi != nil && bi.PwdRequired && rt.password != "" {
+		if err := mergePrivateBranch(s.cm, kv, appID, toks[appID], rt.branch, rt.password); err != nil {
+			return nil, "", resolvedTarget{}, err
+		}
+	}
 	// Downstream (request codes, shared resolution) works off the request:
 	// point it at the resolved branch and its password.
 	s.req.Branch = rt.branch
@@ -210,15 +218,10 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 		return nil, "", resolvedTarget{}, fmt.Errorf("Steam returned no download hosts for this app")
 	}
 	s.hosts = hosts
-	// Branch passwords (STEAM-4): check once against the app, then send
-	// SHA1(password) with every request-code call. Wrong passwords fail
-	// here with a distinct message instead of "no depots".
+	// Branch passwords (STEAM-4): a locked branch was already checked by
+	// the private-beta merge above; send SHA1(password) with every
+	// request-code call.
 	pwHash := branchPasswordHash(s.req)
-	if pwHash != "" {
-		if _, err := s.cm.CheckBetaPassword(appID, s.req.BranchPassword, 30*time.Second); err != nil {
-			return nil, "", resolvedTarget{}, fmt.Errorf("wrong branch password for %q: %w", s.req.Branch, err)
-		}
-	}
 	client := depot.NewClient()
 	// STEAM-5: fetch depot keys/codes/manifests concurrently (bounded
 	// pool) instead of serially; small depots were dominated by

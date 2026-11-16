@@ -1878,6 +1878,39 @@ def save_beta_password(app, channel, password):
         save_state("beta_passwords.json", pws)
 
 
+def drop_beta_password(app, channel):
+    """Forget the stored password Steam just refused, so the unlock form
+    comes back instead of failing every later install behind a stale
+    secret. Only call after Steam refused that password (a wrong-password
+    error), never after a transport failure."""
+    with installed_lock:
+        pws = load_state("beta_passwords.json", {})
+        app_pws = pws.get(app) or {}
+        if channel in app_pws:
+            del app_pws[channel]
+            if app_pws:
+                pws[app] = app_pws
+            else:
+                del pws[app]
+            save_state("beta_passwords.json", pws)
+
+
+def drop_refused_password(app, req):
+    """Drop the stored beta password when Steam refused the one this
+    install sent. Only the stored secret for the tried channel goes; an
+    explicitly typed password that failed leaves the store alone."""
+    stored = (beta_passwords().get(app) or {})
+    channel = req.get("branch") or ""
+    target = req.get("target") or {}
+    if isinstance(target, dict) and target.get("channel"):
+        channel = target["channel"]
+    if not channel or channel == "public":
+        return
+    sent = [req.get("branch_password"), (req.get("branch_passwords") or {}).get(channel)]
+    if stored.get(channel) is not None and stored.get(channel) in sent:
+        drop_beta_password(app, channel)
+
+
 def dl_request(params, extra=None):
     """The stdin request for platypus-steam-dl: ids plus the refresh token.
     The token travels on stdin, never argv, and is never logged."""
@@ -2569,6 +2602,7 @@ def follow_install(job_id, app, game_dir, dl_kind="install", version=None):
     decides `native`); downloads are resumable and verified."""
     with jobs_lock:
         jobs.setdefault(job_id, {"canceled": False, "id": app, "dir": game_dir})
+    req = {}
     try:
         req = dl_request({"id": app, **(version or {})}, {"install_dir": game_dir, "job_id": job_id})
         result = dl_run(dl_kind, req, job_id, game_dir)
@@ -2580,6 +2614,8 @@ def follow_install(job_id, app, game_dir, dl_kind="install", version=None):
         if e.code == CODE_AUTH_REQUIRED:
             notify("job.failed", {"jobId": job_id, "error": tr("need_login_expired")})
         else:
+            if "wrong branch password" in str(e):
+                drop_refused_password(app, req)
             notify("job.failed", {"jobId": job_id, "error": str(e)})
         return
     with jobs_lock:
@@ -3495,13 +3531,14 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.15.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.16.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],
-            # Password branches are unverified against live Steam (no
-            # encryptedmanifests decryption yet): listed locked, unlock
-            # kept but unadvertised.
+            # Password branches unlock through the private-beta section
+            # (issue #176), but no locked branch exists on live Steam to
+            # prove the full path: listed locked, unlock kept but
+            # unadvertised.
             "features": {"versions": {"channels": True, "builds": True, "password": False, "manual": True}},
             "missing": []}
 

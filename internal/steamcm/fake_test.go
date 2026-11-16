@@ -36,6 +36,9 @@ type fakeConfig struct {
 	RequestCode    uint64
 	CDNToken       string
 	BetaOK         bool
+	BetaBranches   []string // betanames the fake unlock lists (default ["beta"])
+	BetaKeyHex     string   // hex branch key per entry (default deadbeef)
+	PrivateKV      string   // depot_section text KV for the 8907 handler
 	Licenses       []uint32
 	// Auth knobs (phase 6): QR/password logins without Valve's network.
 	AuthAccount         string
@@ -261,7 +264,7 @@ func (f *fakeCM) serve(c *websocket.Conn) {
 			if cfg.ServiceEresult != 0 && cfg.ServiceEresult != 1 {
 				return
 			}
-		case EMsgClientGetDepotDecryptionKey, EMsgClientPICSAccessToken, EMsgClientPICSProductInfo, EMsgClientCheckAppBetaPassword:
+		case EMsgClientGetDepotDecryptionKey, EMsgClientPICSAccessToken, EMsgClientPICSProductInfo, EMsgClientCheckAppBetaPassword, EMsgClientPICSPrivateBeta:
 			job := hdr.Int(10)
 			f.answerDirect(c, emsg, job, steamID, body, cfg)
 		default:
@@ -386,6 +389,33 @@ func (f *fakeCM) answerDirect(c *websocket.Conn, emsg uint32, job, steamID uint6
 		}
 		e := &depot.Enc{}
 		e.Varint(1, uint64(eres))
+		if cfg.BetaOK {
+			branches := cfg.BetaBranches
+			if len(branches) == 0 {
+				branches = []string{"beta"}
+			}
+			keyHex := cfg.BetaKeyHex
+			if keyHex == "" {
+				keyHex = "deadbeef"
+			}
+			for _, name := range branches {
+				be := &depot.Enc{}
+				be.Str(1, name)
+				be.Str(2, keyHex)
+				e.MsgField(4, be)
+			}
+		}
+		_ = c.WriteMessage(websocket.BinaryMessage, packEMsg(emsg+1, f.replyHdr(steamID, job, eres), e.Bytes()))
+	case EMsgClientPICSPrivateBeta:
+		eres := 1
+		if !cfg.BetaOK || cfg.PrivateKV == "" {
+			eres = 2
+		}
+		e := &depot.Enc{}
+		e.Varint(1, uint64(eres))
+		if eres == 1 {
+			e.BytesField(2, []byte(cfg.PrivateKV))
+		}
 		_ = c.WriteMessage(websocket.BinaryMessage, packEMsg(emsg+1, f.replyHdr(steamID, job, eres), e.Bytes()))
 	}
 }

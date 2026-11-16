@@ -20,9 +20,10 @@ import (
 )
 
 // versionsAppinfo is a PICS-shaped appinfo with three branches over the
-// fixture depot: public and old open, beta behind a password. Every branch
-// carries the fixture's gid so the fake CDN serves installs from any of
-// them.
+// fixture depot: public and old open, beta behind a password. Like live,
+// the locked branch carries no plain manifest gid: its gids only come
+// from the private-beta section (privateBetaSection), unlocked with the
+// branch key CheckBetaPassword returns.
 func versionsAppinfo(gid uint64) string {
 	return `"depots"
 {
@@ -35,8 +36,18 @@ func versionsAppinfo(gid uint64) string {
 "11"
 {
 "config" { "oslist" "linux" }
-"manifests" { "public" { "gid" "` + fmt.Sprint(gid) + `" } "beta" { "gid" "` + fmt.Sprint(gid) + `" } "old" { "gid" "` + fmt.Sprint(gid) + `" } }
+"manifests" { "public" { "gid" "` + fmt.Sprint(gid) + `" } "old" { "gid" "` + fmt.Sprint(gid) + `" } }
 }
+}
+`
+}
+
+// privateBetaSection is the fake's 8907 answer for the locked branch: the
+// depot section naming beta's manifest gid per depot.
+func privateBetaSection(gid uint64) string {
+	return `"11"
+{
+"manifests" { "beta" { "gid" "` + fmt.Sprint(gid) + `" } }
 }
 `
 }
@@ -219,6 +230,7 @@ func TestSteamVersionsInstallBranch(t *testing.T) {
 	e := setup(t)
 	e.login()
 	e.setCMState("appinfo", versionsAppinfo(e.fix.GID))
+	e.setCMState("private_beta", privateBetaSection(e.fix.GID))
 
 	var unlocked map[string]any
 	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "beta", "password": "beta-pw-7"}, &unlocked); err != nil {
@@ -245,6 +257,11 @@ func TestSteamVersionsInstallBranch(t *testing.T) {
 	}
 	if !strings.Contains(string(log), "beta_password app=4321") {
 		t.Fatalf("no CheckBetaPassword in CM log:\n%s", log)
+	}
+	// The locked gid comes from the private-beta section, unlocked with
+	// the branch key — never from plain manifests (live shape).
+	if !strings.Contains(string(log), "private_beta app=4321 branch=beta key=20B") {
+		t.Fatalf("no private-beta section fetch in CM log:\n%s", log)
 	}
 
 	list := e.versionsList(map[string]any{"id": "4321"})
@@ -300,6 +317,7 @@ func TestSteamVersionsUpdateLockedWithoutPassword(t *testing.T) {
 	e := setup(t)
 	e.login()
 	e.setCMState("appinfo", versionsAppinfo(e.fix.GID))
+	e.setCMState("private_beta", privateBetaSection(e.fix.GID))
 
 	var unlocked map[string]any
 	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "beta", "password": "beta-pw-7"}, &unlocked); err != nil {
@@ -341,6 +359,57 @@ func TestSteamVersionsUpdateLockedWithoutPassword(t *testing.T) {
 	}
 }
 
+// A stored password Steam refuses fails the install distinctly and is
+// dropped, so the unlock form comes back instead of failing every later
+// install behind a stale secret.
+func TestSteamVersionsRefusedPasswordDropped(t *testing.T) {
+	e := setup(t)
+	e.login()
+	e.setCMState("appinfo", versionsAppinfo(e.fix.GID))
+	e.setCMState("private_beta", privateBetaSection(e.fix.GID))
+
+	var unlocked map[string]any
+	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "beta", "password": "beta-pw-7"}, &unlocked); err != nil {
+		t.Fatalf("unlock: %v", err)
+	}
+	// Steam now refuses the stored password (changed or revoked): even a
+	// size check fails with the wrong-password error, not a transport one.
+	e.setCMState("beta_password_eresult", 5)
+	var size plugins.InstallSize
+	if err := e.call("game.installSize", map[string]any{
+		"id": "4321", "target": map[string]any{"channel": "beta"},
+	}, &size); err == nil || !strings.Contains(err.Error(), "wrong branch password") {
+		t.Fatalf("refused size err = %v, want the wrong-password error", err)
+	}
+	if err := e.call("game.install", map[string]any{
+		"id": "4321", "jobId": "versions-refused", "installDir": e.folder,
+		"target": map[string]any{"channel": "beta"},
+	}, nil); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	// The failed job drops the refused password: poll the plugin store,
+	// the way the unlock form reads it back.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		raw, _ := os.ReadFile(filepath.Join(e.pluginData(), "beta_passwords.json"))
+		if !strings.Contains(string(raw), "beta-pw-7") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("refused password kept: %s", raw)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	raw, _ := os.ReadFile(filepath.Join(e.pluginData(), "installed.json"))
+	if strings.Contains(string(raw), `"channel":"beta"`) {
+		t.Fatal("refused install recorded a beta install")
+	}
+	list := e.versionsList(map[string]any{"id": "4321"})
+	if beta := channelByID(t, list, "beta"); beta["unlocked"] != false {
+		t.Fatalf("beta still unlocked after drop: %+v", beta)
+	}
+}
+
 // Shared depots (depotfromapp) resolve their manifest from the source app.
 // The source here only carries public, so a beta install falls back to the
 // source's public gid; a pinned manifest for the shared depot skips the
@@ -356,7 +425,7 @@ func sharedVersionsAppinfo(gid uint64) string {
 "11"
 {
 "config" { "oslist" "linux" }
-"manifests" { "public" { "gid" "` + fmt.Sprint(gid) + `" } "beta" { "gid" "` + fmt.Sprint(gid) + `" } }
+"manifests" { "public" { "gid" "` + fmt.Sprint(gid) + `" } }
 }
 "12"
 {
@@ -384,6 +453,7 @@ func TestSteamVersionsSharedDepot(t *testing.T) {
 	e.login()
 	e.setCMState("appinfo", sharedVersionsAppinfo(e.fix.GID))
 	e.setCMState("appinfo_999", sharedSourceAppinfo(e.fix.GID))
+	e.setCMState("private_beta", privateBetaSection(e.fix.GID))
 
 	var unlocked map[string]any
 	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "beta", "password": "beta-pw-7"}, &unlocked); err != nil {
