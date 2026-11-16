@@ -50,6 +50,7 @@
 //	                   games whose launch script runs, exits or crashes on demand (fixtures.go)
 //	ECHO_TERMS_BUMP   set: the licence term of "licensed" has its next version (terms.go)
 //	ECHO_TERMS_AUTH   set: game.details answers -32001 when asked for terms (a store that isn't logged in)
+//	ECHO_TERMS_ASKED_ONLY set: game.details lists terms only when asked with terms:true (a store that keeps them out of the game page)
 //	ECHO_LIBRARY_DELAY_MS  milliseconds library.list waits before it answers (a slow store)
 //	ECHO_AUTH_STATUS_DELAY_MS milliseconds auth.status waits before it answers (a slow login check)
 //	ECHO_GAMES        number of extra games to list, with covers served locally (bulk.go), to try the UI at scale
@@ -193,6 +194,10 @@ type knobs struct {
 	// for terms (a store that isn't logged in), and leaves it alone
 	// otherwise (terms.go).
 	TermsAuth bool `json:"termsAuth"`
+	// TermsAskedOnly lists a game's terms only when asked with terms:true
+	// (terms.go): a game page's game.details carries none, like a store
+	// that keeps the terms out of it.
+	TermsAskedOnly bool `json:"termsAskedOnly"`
 	// SettingsRefuse makes settings.apply answer an error; SettingsDelayMs holds
 	// settings.apply that many milliseconds first (settings.go).
 	SettingsRefuse  bool `json:"settingsRefuse"`
@@ -224,7 +229,7 @@ func loadKnobs() {
 	kn = knobs{Off: csv("ECHO_OFF"), Extra: csv("ECHO_EXTRA"), Unavailable: csv("ECHO_UNAVAILABLE"),
 		Missing: csv("ECHO_MISSING"), InitOmit: os.Getenv("ECHO_INIT_OMIT") != "", VersionsOff: csv("ECHO_VERSIONS_OFF"),
 		FamilyInUse: csv("ECHO_FAMILY_IN_USE"), CopyInUse: csv("ECHO_COPY_IN_USE"), CopyUnavailable: csv("ECHO_COPY_UNAVAILABLE"),
-		TermsBump: os.Getenv("ECHO_TERMS_BUMP") != "", TermsAuth: os.Getenv("ECHO_TERMS_AUTH") != ""}
+		TermsBump: os.Getenv("ECHO_TERMS_BUMP") != "", TermsAuth: os.Getenv("ECHO_TERMS_AUTH") != "", TermsAskedOnly: os.Getenv("ECHO_TERMS_ASKED_ONLY") != ""}
 	kn.FamilyWarn, _ = strconv.Atoi(os.Getenv("ECHO_FAMILY_WARN"))
 	if v := os.Getenv("ECHO_FEATURES"); v != "" {
 		_ = json.Unmarshal([]byte(v), &kn.Features)
@@ -259,6 +264,7 @@ func configure(raw json.RawMessage) {
 	set("copyUnavailable", &kn.CopyUnavailable)
 	set("termsBump", &kn.TermsBump)
 	set("termsAuth", &kn.TermsAuth)
+	set("termsAskedOnly", &kn.TermsAskedOnly)
 	set("settingsRefuse", &kn.SettingsRefuse)
 	set("settingsDelayMs", &kn.SettingsDelayMs)
 }
@@ -680,7 +686,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 			if sb := storeBaseURL(); sb != "" {
 				out["storeUrl"] = sb + "/store/game/" + p.ID
 			}
-			if g.terms {
+			if g.terms && !termsOmitted(p.Terms) {
 				out["terms"] = termsList(p.ID)
 			}
 			for k, v := range mediaFor(p.ID) {

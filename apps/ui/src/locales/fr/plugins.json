@@ -63,7 +63,8 @@
     "checkDead": "La vérification de la connexion échoue sans arrêt. Fermez et réessayez.",
     "scannedIt": "Je l'ai scanné",
     "qrLabel": "QR code de connexion",
-    "actionFailed": "Platypus n'a pas pu terminer cette action du plugin."
+    "actionFailed": "Platypus n'a pas pu terminer cette action du plugin.",
+    "unknownStore": "Aucune boutique nommée {{id}} n'est disponible."
   },
   "notify": {
     "loggedOutOf": "Déconnexion de {{name}}",

@@ -65,6 +65,10 @@ type Suite struct {
 	// NoUnknownDetails excludes the check that game.details on an unknown id
 	// errors (a plugin whose test double answers every id).
 	NoUnknownDetails bool
+	// TermsGame, when set, is the store app id of a game that lists terms:
+	// the suite then requires game.details with terms:true to answer them
+	// (a self-described unreadable error stays accepted).
+	TermsGame string
 }
 
 // Session is the running plugin wired the way app.go wires it.
@@ -449,6 +453,9 @@ func (s Suite) Conformance(t *testing.T) {
 		}
 		if has("terms") {
 			sess.checkTerms(t, game.StoreAppID, rawDetails)
+		}
+		if s.TermsGame != "" {
+			sess.checkTermsRequired(t, s.TermsGame)
 		}
 	}
 	if !s.NoUnknownDetails {

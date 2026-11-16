@@ -20,6 +20,8 @@ import {
 import type { VersionPin } from '../types';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
+import { notify } from '../lib/notify';
+import { loginActionFor } from '../lib/storeLogin';
 
 /** Reloading the channel list after an unlock: sync or async. */
 type ReloadChannels = Promise<void> | void;
@@ -117,7 +119,9 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       onChanged();
       onClose();
     } catch (e) {
-      onNotify(coreErrMsg(e), 'err');
+      const action = loginActionFor(e, game.source, t('gameOps:install.logIn'));
+      if (action) notify.error(coreErrMsg(e), { action });
+      else onNotify(coreErrMsg(e), 'err');
       setStep('pick');
     } finally {
       setBusy(false);
@@ -157,7 +161,9 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       onChanged();
       onClose();
     } catch (e) {
-      onNotify(coreErrMsg(e), 'err');
+      const action = loginActionFor(e, game.source, t('gameOps:install.logIn'));
+      if (action) notify.error(coreErrMsg(e), { action });
+      else onNotify(coreErrMsg(e), 'err');
     } finally {
       setBusy(false);
     }

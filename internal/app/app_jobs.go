@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"time"
 
 	"platypus/internal/apperr"
@@ -308,8 +309,13 @@ func (a *App) PauseJob(id string) error {
 	return a.jobs.Pause(a.ctx, id)
 }
 
-// ResumeJob continues a paused or canceled download where it stopped.
+// ResumeJob continues a paused or canceled download where it stopped. A
+// canceled install or update meets the terms gate first (see requeueGate);
+// a paused one keeps going: it was gated when it was queued.
 func (a *App) ResumeJob(id string) error {
+	if err := a.requeueGate(id, jobs.StateCanceled); err != nil {
+		return err
+	}
 	return a.jobs.Resume(id)
 }
 
@@ -359,7 +365,34 @@ func cleanupAfter(days int) time.Duration {
 }
 
 func (a *App) RetryJob(id string) error {
+	// A job saved by an older build may predate its terms acceptance: a
+	// failed or canceled install or update meets the terms gate before it
+	// is re-queued, the same gate a new install would meet. Anything else
+	// (an uninstall, a verify, a move, a job that is gone, a retry that
+	// would be a no-op) retries as before.
+	if err := a.requeueGate(id, jobs.StateFailed, jobs.StateCanceled); err != nil {
+		return err
+	}
 	return a.jobs.Retry(id)
+}
+
+// requeueGate refuses re-queuing an install or update whose terms aren't
+// accepted, when the job is in one of the given states (a retry that would
+// be a no-op, and a resume that only continues paused data, are not gated).
+// A job whose game can't be resolved anymore skips the gate: it fails when
+// it starts either way.
+func (a *App) requeueGate(id string, gated ...string) error {
+	for _, j := range a.jobs.List() {
+		if j.ID != id || !termsKind(j.Kind) || !slices.Contains(gated, j.State) {
+			continue
+		}
+		game, err := a.findGame(j.GameID)
+		if err != nil {
+			return nil
+		}
+		return a.termsGate(game)
+	}
+	return nil
 }
 
 // MoveJobToFront moves a queued or paused download to the top of the queue,

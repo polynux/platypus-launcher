@@ -37,6 +37,10 @@ func TestConformanceEcho(t *testing.T) {
 		BuildOut: "plugins/echo/bin/platypus-echo",
 		// Echo's uninstall is instant, so there is nothing for job.cancel to stop.
 		NoUninstallCancel: true,
+		// "licensed" lists terms only when asked: the suite requires the
+		// terms:true answer to carry them (protocol 1.11, "Terms").
+		Env:       map[string]string{"ECHO_TERMS_ASKED_ONLY": "1"},
+		TermsGame: "licensed",
 		Login: func(t *testing.T, s *plugtest.Session) {
 			var st types.AuthStatus
 			if err := s.Call("auth.complete", map[string]any{"fields": map[string]string{"code": "letmein"}}, &st); err != nil || !st.LoggedIn {

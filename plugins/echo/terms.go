@@ -69,6 +69,15 @@ func termsRefused(wantTerms bool) bool {
 	return wantTerms && kn.TermsAuth
 }
 
+// termsOmitted is the termsAskedOnly knob's answer to an unasked terms read:
+// the plugin lists terms only when asked with terms:true (protocol 1.11),
+// and a game page's game.details carries none.
+func termsOmitted(wantTerms bool) bool {
+	knobMu.Lock()
+	defer knobMu.Unlock()
+	return kn.TermsAskedOnly && !wantTerms
+}
+
 // noteDetailsAsk records the terms flag of a game.details request.
 func noteDetailsAsk(terms bool) {
 	askedMu.Lock()

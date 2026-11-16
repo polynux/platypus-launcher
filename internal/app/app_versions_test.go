@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"platypus/internal/dataplug"
 	"platypus/internal/jobs"
 	"platypus/internal/ledger"
 	"platypus/internal/plugins"
@@ -43,7 +44,7 @@ func versionsApp(t *testing.T, protocols, caps string) *versionsEnv {
 	if _, err := st.SetGamesFolder(filepath.Join(root, "Games")); err != nil {
 		t.Fatal(err)
 	}
-	a := &App{settings: st, ctx: context.Background(), optHome: root}
+	a := &App{settings: st, ctx: context.Background(), optHome: root, data: dataplug.NewRegistry()}
 	if a.ledger, err = ledger.Open(filepath.Join(root, "install-history.json")); err != nil {
 		t.Fatal(err)
 	}

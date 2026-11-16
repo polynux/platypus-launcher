@@ -20,6 +20,8 @@ import { addedBytes, canPick, chosenIds, pickValue, removedAddOns, sameChoices, 
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
 import { useVariant } from '../lib/theme';
+import { notify } from '../lib/notify';
+import { loginActionFor } from '../lib/storeLogin';
 
 export interface InstallOptionsDialogProps {
   game: Game;
@@ -112,7 +114,9 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       onChanged();
       onClose();
     } catch (e) {
-      onNotify(coreErrMsg(e), 'err');
+      const action = loginActionFor(e, game.source, t('gameOps:install.logIn'));
+      if (action) notify.error(coreErrMsg(e), { action });
+      else onNotify(coreErrMsg(e), 'err');
     } finally {
       setBusy(false);
     }
