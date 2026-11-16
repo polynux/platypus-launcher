@@ -164,6 +164,9 @@ func (s *Session) hello() error {
 func (s *Session) write(emsg uint32, hdr, body []byte) error {
 	s.wmu.Lock()
 	defer s.wmu.Unlock()
+	// A write deadline so a wedged socket can't hold wmu forever and
+	// block Close behind it.
+	_ = s.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	return s.conn.WriteMessage(websocket.BinaryMessage, packEMsg(emsg, hdr, body))
 }
 

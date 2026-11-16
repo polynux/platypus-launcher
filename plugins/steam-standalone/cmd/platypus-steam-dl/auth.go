@@ -166,6 +166,11 @@ func runAuthQR(ctx context.Context, req authRequest) error {
 				return ctx.Err()
 			case <-time.After(time.Duration(attempt) * time.Second):
 			}
+			// Out of time: fail now rather than paint a code nobody
+			// can scan before the deadline.
+			if time.Now().After(deadline) {
+				return err
+			}
 		}
 		err = runAuthQRSession(ctx, deadline)
 		if err == nil || !dropped(err) {
