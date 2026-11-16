@@ -3104,6 +3104,86 @@ def family_busy_owners(snap, app, steamid):
     return busy
 
 
+family_warned = set()  # (appid, owner) a take-back warning already went out for
+family_borrow_seen = set()  # (appid, owner) the user was seen playing: the warning's memory
+
+
+def family_takeback_message(owner_name):
+    """The user-facing text for an owner taking a borrowed game back
+    (protocol 1.8): the owner by name, like the launchSpec refusal, or a
+    generic fallback when the CM stayed silent about names."""
+    if owner_name:
+        return f"Family member {owner_name} started playing this game and is taking it back"
+    return "The owner started playing this game and is taking it back"
+
+
+def family_owner_name(owner, steamid):
+    """A member's display name from the cached snapshot or the persisted
+    names, without any fetch: the event path never does its own lookup."""
+    if steamid:
+        snap = family_snapshot_cached(steamid)
+        if snap:
+            for m in snap.get("members") or []:
+                if isinstance(m, dict) and str(m.get("id") or "") == owner and m.get("name"):
+                    return m["name"]
+    try:
+        known = load_state("family-names.json", {})
+    except Exception:
+        known = {}
+    if isinstance(known, dict):
+        return known.get(owner) or ""
+    return ""
+
+
+def family_running_event(params):
+    """One familyRunning push from the social session: the full running
+    list, replacing the last. Refreshes the cached in-use list (with a
+    timestamp, so launch decisions read fresher data) and warns once per
+    take-back: the user is playing a borrowed copy (an entry with
+    player == user and owner != user) and the owner of that copy starts
+    the same app (an entry with player == owner), or the user's entry
+    disappears while the owner's appears. The warning carries no
+    secondsLeft: Steam gives no deadline in these messages. Events only
+    arrive while the social session runs; with social off there is no
+    warning."""
+    global family_warned, family_borrow_seen
+    entries = []
+    for e in (params or {}).get("running") or []:
+        if not isinstance(e, dict):
+            continue
+        appid, player, owner = (str(e.get("appid") or ""), str(e.get("player") or ""),
+                                str(e.get("owner") or ""))
+        if appid and player and owner:
+            entries.append({"appid": appid, "player": player, "owner": owner})
+    steamid = family_local_steamid()
+    now = time.time()
+    with family_lock:
+        if steamid:
+            if family_cache and family_cache[0] == steamid:
+                family_cache[2]["running"] = entries
+                family_cache[2]["running_at"] = now
+            last = family_last_good.get(steamid)
+            if last is not None and (not family_cache or family_cache[2] is not last):
+                last["running"] = entries
+                last["running_at"] = now
+        if not steamid:
+            return
+        borrowing = {(e["appid"], e["owner"]) for e in entries
+                     if e["player"] == steamid and e["owner"] != steamid}
+        owners = {(e["appid"], e["owner"]) for e in entries
+                  if e["player"] == e["owner"] and e["player"] != steamid}
+        family_borrow_seen |= borrowing
+        family_borrow_seen &= borrowing | owners
+        for key in [k for k in family_warned if k not in owners]:
+            family_warned.discard(key)
+        takebacks = [k for k in owners if k in family_borrow_seen and k not in family_warned]
+        family_warned.update(takebacks)
+    for appid, owner in sorted(takebacks):
+        notify("family.warning", {"id": appid,
+                                  "message": family_takeback_message(
+                                      family_owner_name(owner, steamid))})
+
+
 def family_launch_refusal(app):
     """-32002 message when every copy of a borrowed game is in use
     (protocol 1.8): each owner's copy played by someone other than the user.
@@ -3642,6 +3722,10 @@ def social_notify_event(rec, event, params):
         notify("chat.typing", params)
     elif event == "unread":
         notify("chat.unread", params)
+    elif event == "familyRunning":
+        # The take-back signal from the social session's NotifyRunningApps
+        # push: refresh the in-use list and warn once per take-back.
+        family_running_event(params)
 
 
 def social_call_rec(rec, op, params=None, timeout=30):
@@ -3842,7 +3926,7 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.18.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.20.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],

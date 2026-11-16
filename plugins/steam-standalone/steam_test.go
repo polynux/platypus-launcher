@@ -83,6 +83,38 @@ type env struct {
 	cmState     string
 	fix         *fakesteam.Fixture
 	cdn         *fakesteam.CDN
+	notes       *notifyLog
+}
+
+// notifyLog records every plugin notification (family.warning, chat.*,
+// social.*, ...) for tests that assert on them; the manager otherwise
+// routes only job updates out of OnNotify.
+type notifyLog struct {
+	mu  sync.Mutex
+	all []notifyEntry
+}
+
+type notifyEntry struct {
+	method string
+	params json.RawMessage
+}
+
+func (l *notifyLog) add(method string, params json.RawMessage) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.all = append(l.all, notifyEntry{method, params})
+}
+
+func (l *notifyLog) forMethod(method string) []json.RawMessage {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []json.RawMessage
+	for _, e := range l.all {
+		if e.method == method {
+			out = append(out, e.params)
+		}
+	}
+	return out
 }
 
 // refreshCDN rebuilds the fake content from the current knobs (FAKE_DD_STATE
@@ -205,7 +237,8 @@ func setup(t *testing.T) *env {
 	t.Setenv("PLATYPUS_STEAM_CM_SERVER", endpoint)
 
 	sets, _ := settings.Open(filepath.Join(root, "settings.json"))
-	e := &env{t: t, root: root, folder: filepath.Join(root, "Games", "steam"), gamesFolder: filepath.Join(root, "Games"), cmState: cmState}
+	notes := &notifyLog{}
+	e := &env{t: t, root: root, folder: filepath.Join(root, "Games", "steam"), gamesFolder: filepath.Join(root, "Games"), cmState: cmState, notes: notes}
 	// platypus-steam-dl is built once in TestMain (real environment) and only
 	// copied here, the way install.sh ships it into the plugin's bin/.
 	// Logins and downloads both go through it, against the fake CM.
@@ -217,6 +250,7 @@ func setup(t *testing.T) *env {
 	m := plugins.NewManager(plugins.Options{
 		Dir: filepath.Join(root, "plugins"), LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"), Settings: sets,
 		OnNotify: func(pid, method string, params json.RawMessage) {
+			notes.add(method, params)
 			var u plugins.JobUpdate
 			if json.Unmarshal(params, &u) == nil {
 				q.Notify(pid, method, u)
@@ -248,6 +282,21 @@ func (e *env) call(method string, params, result any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	return e.m.Call(ctx, id, method, params, result)
+}
+
+// waitNotify polls for a plugin notification, failing when it never comes.
+// It returns the latest params seen for the method.
+func (e *env) waitNotify(method string, timeout time.Duration) json.RawMessage {
+	e.t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if got := e.notes.forMethod(method); len(got) > 0 {
+			return got[len(got)-1]
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	e.t.Fatalf("no %s notification within %v", method, timeout)
+	return nil
 }
 
 func (e *env) login() {

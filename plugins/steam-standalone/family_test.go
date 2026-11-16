@@ -680,3 +680,103 @@ func TestSteamFamilyStaleRunningRefetches(t *testing.T) {
 	}
 	waitCalls(3)
 }
+
+// The owner taking a borrowed game back warns once (issue #178, part 2):
+// the social session's NotifyRunningApps push carries the running list,
+// and when the owner of the copy the user plays starts the same app the
+// plugin sends family.warning once. Repeats stay silent, unrelated starts
+// don't warn, and with the social session off nothing warns.
+func TestSteamFamilyTakebackWarning(t *testing.T) {
+	e := familyEnv(t)
+	e.installFakeExe(t, "5001")
+	e.installFakeExe(t, "5003")
+	libraryByID(t, e)
+	e.setCMState("family_group_id", 424242)
+	borrowing := []any{
+		map[string]any{"appid": "5001", "player": "76561198", "owner": "76561199"},
+		map[string]any{"appid": "5003", "player": "76561200", "owner": "76561200"},
+	}
+	e.setCMState("family_running", borrowing)
+	if err := e.call("social.start", map[string]any{}, nil); err != nil {
+		t.Fatalf("social.start: %v", err)
+	}
+	// Gate: the push is applied once the refreshed in-use list refuses
+	// 5003, naming the player.
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		err := e.rawCallErr("game.launchSpec", map[string]any{"id": "5003"})
+		if err != nil && e.rpcCode(err) == -32002 && strings.Contains(err.Error(), "MemberB") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("push not applied: launchSpec 5003 = %v", err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	// With the social session off, the same take-back warns nothing.
+	if err := e.call("social.stop", map[string]any{}, nil); err != nil {
+		t.Fatalf("social.stop: %v", err)
+	}
+	takeback := append(append([]any{}, borrowing...),
+		map[string]any{"appid": "5001", "player": "76561199", "owner": "76561199"})
+	e.setCMState("family_running", takeback)
+	time.Sleep(2 * time.Second)
+	if n := len(e.notes.forMethod("family.warning")); n != 0 {
+		t.Fatalf("family.warning with social off = %d, want 0", n)
+	}
+	// The owner starts the copy the user plays: exactly one warning,
+	// naming the owner, with no deadline (Steam gives none).
+	if err := e.call("social.start", map[string]any{}, nil); err != nil {
+		t.Fatalf("social.start again: %v", err)
+	}
+	raw := e.waitNotify("family.warning", 20*time.Second)
+	var w struct {
+		ID      string `json:"id"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &w); err != nil {
+		t.Fatalf("family.warning params: %v", err)
+	}
+	if w.ID != "5001" || !strings.Contains(w.Message, "MemberA") {
+		t.Fatalf("family.warning = %+v, want id 5001 naming MemberA", w)
+	}
+	if strings.Contains(string(raw), "secondsLeft") {
+		t.Fatalf("family.warning carries secondsLeft: %s", raw)
+	}
+	if n := len(e.notes.forMethod("family.warning")); n != 1 {
+		t.Fatalf("family.warning count = %d, want exactly 1", n)
+	}
+	restart := func() {
+		t.Helper()
+		if err := e.call("social.stop", map[string]any{}, nil); err != nil {
+			t.Fatalf("social.stop: %v", err)
+		}
+		if err := e.call("social.start", map[string]any{}, nil); err != nil {
+			t.Fatalf("social.start: %v", err)
+		}
+		e.waitCMLog("push 146 FamilyGroupsClient.NotifyRunningApps#1")
+		time.Sleep(2 * time.Second)
+	}
+	// The same push again: no repeat.
+	restart()
+	if n := len(e.notes.forMethod("family.warning")); n != 1 {
+		t.Fatalf("repeated push warned again: count = %d", n)
+	}
+	// An unrelated start (a game the user isn't playing) warns nothing.
+	unrelated := append(append([]any{}, takeback...),
+		map[string]any{"appid": "5002", "player": "76561199", "owner": "76561199"})
+	e.setCMState("family_running", unrelated)
+	restart()
+	got := e.notes.forMethod("family.warning")
+	if len(got) != 1 {
+		t.Fatalf("unrelated start warned: %d warnings", len(got))
+	}
+	for _, g := range got {
+		if strings.Contains(string(g), `"id":"5002"`) {
+			t.Fatalf("warning for a game the user isn't playing: %s", g)
+		}
+	}
+	if err := e.call("social.stop", map[string]any{}, nil); err != nil {
+		t.Fatalf("social.stop: %v", err)
+	}
+}

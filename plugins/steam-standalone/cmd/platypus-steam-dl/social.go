@@ -207,6 +207,10 @@ func runSocial(ctx context.Context) error {
 			steamcm.EMsgClientPersonaState:        func(_ depot.Msg, body []byte) { s.onPersonaState(body) },
 			steamcm.EMsgClientPlayingSessionState: func(_ depot.Msg, body []byte) { s.onPlayingState(body) },
 			steamcm.EMsgServiceMethodResponse:     func(hdr depot.Msg, body []byte) { s.onService(hdr, body) },
+			// FamilyGroupsClient.NotifyRunningApps#1 shares EMsg 146
+			// with the cloud change notification; onFamilyRunning
+			// keeps only that target_job_name.
+			steamcm.EMsgCloudNotifyAppStateChange: func(hdr depot.Msg, body []byte) { s.onFamilyRunning(hdr, body) },
 		},
 	}
 	c, err := steamcm.Connect(ctx, cfg)
@@ -232,6 +236,9 @@ func runSocial(ctx context.Context) error {
 		}
 	}
 	s.emit("connection", map[string]any{"state": "online"})
+	// Ask Steam to push the family running list to this session; the push
+	// carries the take-back signal the plugin warns about.
+	s.subscribeFamilyRunning()
 
 	sc := bufio.NewScanner(br)
 	sc.Buffer(make([]byte, 256*1024), 1024*1024)
@@ -300,7 +307,9 @@ func (s *socialSession) monitor(ctx context.Context) {
 }
 
 // resync restores the session after a reconnect: own status, persona data
-// for every known friend, and the current game.
+// for every known friend, the current game, and the family running-apps
+// push (Steam only pushes to a session that asked with send_running_apps,
+// so every reconnect re-asks).
 func (s *socialSession) resync() {
 	s.mu.Lock()
 	status := s.status
@@ -321,6 +330,7 @@ func (s *socialSession) resync() {
 	s.playingSent = 0 // force a resend below
 	s.mu.Unlock()
 	_ = s.sendPlaying(desired, true)
+	s.subscribeFamilyRunning()
 }
 
 func (s *socialSession) handle(cmd socialCommand) {
@@ -651,6 +661,56 @@ func (s *socialSession) onPlayingState(body []byte) {
 	if was && !blocked {
 		_ = s.sendPlaying(desired, true)
 	}
+}
+
+// subscribeFamilyRunning asks Steam to push the family running list to this
+// persistent session: the group id via GetFamilyGroupForUser (the steamid
+// is a uint64 varint, like the group id), then GetFamilyGroup with
+// send_running_apps. Steam pushes FamilyGroupsClient.NotifyRunningApps#1
+// now and again on every start/stop, each push the full current list.
+// Failures stay silent: the running list is supplementary, and a user in
+// no group simply gets no push. No ids reach any log.
+func (s *socialSession) subscribeFamilyRunning() {
+	if s.client == nil {
+		return
+	}
+	fu := &depot.Enc{}
+	fu.Varint(1, s.selfID)
+	fu.Varint(2, 1) // include_family_group_response
+	raw, err := s.client.Call("FamilyGroups.GetFamilyGroupForUser#1", fu.Bytes(), 0)
+	if err != nil {
+		return
+	}
+	m, err := depot.Decode(raw)
+	if err != nil {
+		return
+	}
+	if m.Int(1) == 0 {
+		return
+	}
+	g := &depot.Enc{}
+	g.Varint(1, m.Int(1))
+	g.Varint(2, 1) // send_running_apps
+	_, _ = s.client.Call("FamilyGroups.GetFamilyGroup#1", g.Bytes(), 0)
+}
+
+// onFamilyRunning forwards one NotifyRunningApps push as a familyRunning
+// event: the full running list ([{appid, player, owner}], steamids as
+// strings), each push replacing the last. Malformed pushes are dropped
+// silently; ids never reach any log.
+func (s *socialSession) onFamilyRunning(hdr depot.Msg, body []byte) {
+	if string(hdr.Bytes(12)) != notifyRunningApps {
+		return
+	}
+	running := make([]map[string]any, 0)
+	for _, e := range decodeRunningApps(body) {
+		running = append(running, map[string]any{
+			"appid":  e.appID,
+			"player": strconv.FormatUint(e.player, 10),
+			"owner":  strconv.FormatUint(e.owner, 10),
+		})
+	}
+	s.emit("familyRunning", map[string]any{"running": running})
 }
 
 // onService routes service notifications: incoming chat messages and typing.
