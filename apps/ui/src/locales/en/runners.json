@@ -40,6 +40,7 @@
     "noGames": "No game uses it",
     "sizeLabel": "Size",
     "installed": "Installed",
-    "available": "Available"
+    "available": "Available",
+    "emptyBodyInstall": "No Proton or Wine builds found yet. Install one from the list below."
   }
 }

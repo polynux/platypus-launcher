@@ -79,7 +79,7 @@ export function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDe
           </section>
         ),
         installed: runners.length === 0 ? (
-          <EmptyState label={t('runners:emptyTitle')}>{t('runners:emptyBody')}</EmptyState>
+          <EmptyState label={t('runners:emptyTitle')}>{t(pending.length > 0 ? 'runners:atlas.emptyBodyInstall' : 'runners:emptyBody')}</EmptyState>
         ) : (
           <section aria-label={t('runners:atlas.installed')}>
             <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('runners:atlas.installed')}</h2>
@@ -130,7 +130,7 @@ export function AtlasRunners({ runners, games, onRefresh, scanning, picked, onDe
             </ul>
           </section>
         ),
-        available: runners.length === 0 || pending.length === 0 ? null : (
+        available: pending.length === 0 ? null : (
           <section aria-label={t('runners:atlas.available')}>
             <h2 className="mb-2.5 mt-6 text-[13px] font-bold text-text-muted">{t('runners:atlas.available')}</h2>
             <ul className="divide-y divide-hairline">
