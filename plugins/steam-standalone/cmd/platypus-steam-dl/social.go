@@ -195,6 +195,9 @@ func runSocial(ctx context.Context) error {
 		requested: map[uint64]bool{},
 		ready:     make(chan struct{}),
 	}
+	// Known before Connect: the friends list and persona pushes ride in
+	// with the logon response, and their handlers need our own id.
+	s.selfID, _ = steamcm.SteamIDFromToken(token)
 	cfg := steamcm.ClientConfig{
 		RefreshToken: token,
 		Role:         steamcm.LoginRoleSocial,
@@ -222,9 +225,11 @@ func runSocial(ctx context.Context) error {
 		return err
 	}
 	s.client = c
-	// The session's steamid after logon, not the token's parse: the
-	// subscribe and the self rows use this (issue #189).
-	s.selfID = c.SteamID()
+	// The session's steamid after logon wins over the token's parse when
+	// they differ (issue #189); the subscribe reads it from the client.
+	if id := c.SteamID(); id != 0 {
+		s.selfID = id
+	}
 
 	// Reconnects resend what the session needs; the monitor also reports
 	// connection changes and ends the process on replaced/loggedOut.
