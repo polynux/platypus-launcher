@@ -169,15 +169,12 @@ func TestMakeExecutableOnlyTouchesThatFile(t *testing.T) {
 	}
 }
 
-// .sh without the bit runs through /bin/sh; anything else needs it.
-func TestNativeTargetShFallback(t *testing.T) {
+// An executable script runs directly; without the bit, ScriptCommand decides
+// (tested per host in script_unix_test.go and script_test.go).
+func TestNativeTargetDirect(t *testing.T) {
 	t.Parallel()
-	sh := NativeTarget("/g/start.sh", ExecScript, false)
-	if sh.Exe != "/bin/sh" || len(sh.Args) != 1 || sh.Args[0] != "/g/start.sh" || !sh.Native {
-		t.Fatalf("sh fallback = %+v", sh)
-	}
-	direct := NativeTarget("/g/start.sh", ExecScript, true)
-	if direct.Exe != "/g/start.sh" || len(direct.Args) != 0 {
-		t.Fatalf("executable sh must run directly: %+v", direct)
+	direct, err := NativeTarget("/g/start.sh", ExecScript, true)
+	if err != nil || direct.Exe != "/g/start.sh" || len(direct.Args) != 0 {
+		t.Fatalf("executable sh must run directly: %+v, %v", direct, err)
 	}
 }

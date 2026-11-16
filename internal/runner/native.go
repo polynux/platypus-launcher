@@ -137,13 +137,19 @@ func MakeExecutable(path string) error {
 	return os.Chmod(path, st.Mode().Perm()|0o100)
 }
 
-// NativeTarget builds the runner target for a native game. A .sh script
-// without the execute bit runs through /bin/sh; everything else runs
-// directly and needs the bit (the launch then fails with a clear error when
-// it is missing, instead of a raw exec failure).
-func NativeTarget(exe string, kind ExecKind, executable bool) Target {
+// NativeTarget builds the runner target for a native game. A script without
+// the execute bit runs through the host interpreter (ScriptCommand);
+// everything else runs directly and needs the bit (the launch then fails with
+// a clear error when it is missing, instead of a raw exec failure).
+func NativeTarget(exe string, kind ExecKind, executable bool) (Target, error) {
 	if !executable && (kind == ExecScript || strings.EqualFold(filepath.Ext(exe), ".sh")) {
-		return Target{Exe: "/bin/sh", Args: []string{exe}, Native: true}
+		target, isScript, err := ScriptCommand(exe)
+		if err != nil {
+			return Target{}, err
+		}
+		if isScript {
+			return target, nil
+		}
 	}
-	return Target{Exe: exe, Native: true}
+	return Target{Exe: exe, Native: true}, nil
 }
