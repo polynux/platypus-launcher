@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -80,7 +81,7 @@ func TestCloudAppBuildID(t *testing.T) {
 	}
 }
 
-// A local-only save names the %effective-root% cloud file a later listing
+// A local-only save names the %rule-root% cloud file a later listing
 // carries, so push and status agree on it.
 func TestUploadCloudNameLocalOnly(t *testing.T) {
 	home := t.TempDir()
@@ -99,6 +100,59 @@ func TestUploadCloudNameLocalOnly(t *testing.T) {
 	}
 	if files[0].CloudName != "%GameInstall%saves/new.sav" {
 		t.Fatalf("cloud name = %q", files[0].CloudName)
+	}
+}
+
+// With a root override (SUPERHOT on native Linux), the upload name keeps
+// the rule's own root: mapping it back through the override must land on
+// the same local file (B2).
+func TestUploadCloudNameRoundTripsOverride(t *testing.T) {
+	home := t.TempDir()
+	ufs := parseCloudRules(mustParseKV(t, superhotUFS))
+	ctx := cloudContext{OS: "linux", Home: home, InstallDir: filepath.Join(home, "install")}
+	local := filepath.Join(home, ".config", "unity3d", "SUPERHOT_Team", "SUPERHOT", "super.hot")
+	writeLocal(t, local, "fresh")
+	const name = "%WinAppDataLocalLow%SUPERHOT_Team/SUPERHOT/super.hot"
+	mapped, rel, ok := mapCloudName(name, ufs, ctx, 0)
+	if !ok || mapped != local {
+		t.Fatalf("map = %q, %v, want %q", mapped, ok, local)
+	}
+	if got := uploadCloudName(ufs, ctx, 0, local, rel); got != name {
+		t.Fatalf("upload name = %q, want %q", got, name)
+	}
+	if back, _, ok := mapCloudName(name, ufs, ctx, 0); !ok || back != local {
+		t.Fatalf("round trip = %q, %v", back, ok)
+	}
+}
+
+// The staged read refuses a save that changed after the compare, instead
+// of uploading half-written bytes (S5). The message names the cloud-rel
+// path, never the local one.
+func TestReadUploadFileRefusesChangedSave(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "a.sav")
+	writeLocal(t, p, "compared")
+	f := cloudPlanFile{Rel: "saves/a.sav", Local: p, LocalInfo: statLocal(p)}
+	if _, err := readUploadFile(&f); err != nil {
+		t.Fatalf("unchanged file must read: %v", err)
+	}
+	if err := os.WriteFile(p, []byte("changed!"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	data, err := readUploadFile(&f)
+	if err == nil || !strings.Contains(err.Error(), "changed while syncing") {
+		t.Fatalf("data = %q, err = %v, want the changed-save refusal", data, err)
+	}
+	if data != nil {
+		t.Fatalf("a refused read must return no bytes")
+	}
+}
+
+// The client id is stable across runs of one install (S4).
+func TestCloudClientIDStable(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	a, b := cloudClientID(), cloudClientID()
+	if a == 0 || a != b {
+		t.Fatalf("client ids = %d, %d, want one stable nonzero id", a, b)
 	}
 }
 

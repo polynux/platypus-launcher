@@ -80,6 +80,17 @@ re-read on every auth poll so tests can approve mid-login):
                        (absent = unlimited)
     cloud_split_blocks  true: every uploaded file gets two blocks, so the
                        client must honor block_offset/block_length
+    cloud_post_blocks   true: block drops say POST (http_method 3)
+    cloud_shuffle_blocks  true: block drops come in reverse offset order;
+                       the store assembles by offset, not arrival order
+    cloud_explicit      {"<name>": {"body": b64, "post": bool}}: the block
+                       carries its own explicit_body_data (POST by default)
+    cloud_fail_files    ["<name>", ...]: begin-file and commit refuse these
+                       files (mid-batch failure)
+    cloud_begin_bump    true: the begin reply's change number moves past the
+                       listing's (S3 race)
+    cloud_complete_eresult  eresult for the complete reply (default 1);
+                       2 fails the push at completion
     cloud_upload_hang   true: the block endpoint reads the bytes and never
                        answers (cancel test)
     cloud_upload_eresult  eresult for begin-file/commit replies (default 1);
@@ -88,10 +99,6 @@ re-read on every auth poll so tests can approve mid-login):
 # its second stdout line and serves /cloud/<appid>/<name>; url_host in the
 # ClientFileDownload reply points at it. Uploaded blocks ride the same
 # server at /upload/<appid>/<batch>/<name>. No Valve network.
-Every connection appends a line to $FAKE_CM_STATE.log: "connect",
-"logon <steamid>", "heartbeat_reply", "service <jobid>", "logoff" — the Go
-tests read it to assert what the plugin actually did on the wire.
-
 The server prints its port on stdout, serves connections one after another
 and exits when its state file disappears.
 """
@@ -231,6 +238,51 @@ def pb_parse(data):
         out.setdefault(field, []).append(value)
     return out
 
+# wire types, for the upload tests' assertions that the client sends the
+# proto's varint fields (client_id, batch_id, upload_batch_id) as varints.
+_WT = {0: "varint", 1: "fixed64", 2: "bytes", 5: "fixed32"}
+
+
+def pb_wire(data):
+    """First wire type seen per field number."""
+    out, i = {}, 0
+    while i < len(data):
+        key, shift = 0, 0
+        while True:
+            b = data[i]
+            i += 1
+            key |= (b & 0x7F) << shift
+            if not b & 0x80:
+                break
+            shift += 7
+        field, wt = key >> 3, key & 7
+        out.setdefault(field, wt)
+        if wt == 0:
+            while data[i] & 0x80:
+                i += 1
+            i += 1
+        elif wt == 1:
+            i += 8
+        elif wt == 5:
+            i += 4
+        elif wt == 2:
+            length, shift = 0, 0
+            while True:
+                b = data[i]
+                i += 1
+                length |= (b & 0x7F) << shift
+                if not b & 0x80:
+                    break
+                shift += 7
+            i += length
+        else:
+            break
+    return out
+
+
+def wire_line(names, data):
+    wt = pb_wire(data)
+    return ",".join(f"{names.get(f, f)}={_WT.get(w, w)}" for f, w in sorted(wt.items()))
 
 # --- websocket framing (server side: frames to the client are unmasked) -----
 # All reads go through one buffer per connection: the plugin can pipeline its
@@ -527,6 +579,9 @@ def serve_logged_in(conn, hdr, body, st):
             continue
         if target == "Cloud.CompleteAppUploadBatchBlocking#1":
             serve_upload_complete(conn, hdr, body, st, steamid, sessionid)
+            continue
+        if target == "Cloud.ClientConflictResolution#1":
+            serve_upload_conflict(conn, hdr, body, st, steamid, sessionid)
             continue
         if target == "ContentServerDirectory.GetServersForSteamPipe#1":
             serve_servers(conn, hdr, body, st, steamid, sessionid)
@@ -1066,39 +1121,75 @@ def serve_upload_quota(conn, hdr, body, st, steamid, sessionid):
                             content_hdr(steamid, sessionid, jobid), resp))
 
 
+_BEGIN_WIRE = {1: "appid", 2: "machine", 3: "files", 5: "client_id", 6: "build_id"}
+_BEGIN_FILE_WIRE = {1: "appid", 2: "size", 3: "raw", 4: "sha", 5: "time",
+                     6: "name", 7: "platforms", 9: "cell", 13: "upload_batch_id"}
+_COMMIT_WIRE = {1: "ok", 2: "appid", 3: "sha", 4: "name"}
+_COMPLETE_WIRE = {1: "appid", 2: "batch_id", 3: "eresult"}
+
+
+def _fail_names(st):
+    return st.get("cloud_fail_files") or []
+
+
 def serve_upload_begin(conn, hdr, body, st, steamid, sessionid):
     jobid = hdr.get(10, [0])[0]
     req = pb_parse(body)
+    record("wire begin " + wire_line(_BEGIN_WIRE, body))
     names = [n.decode() for n in req.get(3, [])]
     machine = (req.get(2, [b""])[0].decode() if req.get(2) else "")
+    base = (st.get("cloud_changelist") or {}).get("current_change_number", 0)
     with _cloud_lock:
         _cloud["batch"] += 1
         batch = _cloud["batch"]
         _cloud["batches"][batch] = {"appid": req.get(1, [0])[0],
                                     "names": names, "machine": machine, "done": None}
+        cur = _cloud["change"]
+        if cur is None:
+            cur = base
+        if st.get("cloud_begin_bump"):
+            cur = max(cur, base) + 1
+        _cloud["change"] = cur
     record(f"upload begin {batch} {len(names)} files")
-    with _cloud_lock:
-        change = _cloud["change"]
-    base = (st.get("cloud_changelist") or {}).get("current_change_number", 0)
-    current = base if change is None else max(base, change)
-    resp = pb_fixed64(1, batch) + pb_fixed64(4, current)
+    resp = pb_int(1, batch) + pb_int(4, _cloud["change"])
     conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
                             content_hdr(steamid, sessionid, jobid), resp))
+
+
+def _upload_spans(st, size, name):
+    explicit = (st.get("cloud_explicit") or {}).get(name)
+    if explicit is not None:
+        spans = [(0, size, base64.b64decode(explicit.get("body", "")),
+                  3 if explicit.get("post", True) else 2)]
+    elif st.get("cloud_split_blocks") and size > 1:
+        half = size // 2
+        spans = [(0, half, None, 3 if st.get("cloud_post_blocks") else 2),
+                 (half, size - half, None, 3 if st.get("cloud_post_blocks") else 2)]
+    else:
+        spans = [(0, size, None, 3 if st.get("cloud_post_blocks") else 2)]
+    if st.get("cloud_shuffle_blocks"):
+        spans = spans[::-1]
+    return spans
 
 
 def serve_upload_begin_file(conn, hdr, body, st, steamid, sessionid):
     jobid = hdr.get(10, [0])[0]
     req = pb_parse(body)
+    record("wire begin-file " + wire_line(_BEGIN_FILE_WIRE, body))
     size = req.get(2, [0])[0]
     name = (req.get(6, [b""])[0].decode() if req.get(6) else "")
     batch = req.get(13, [0])[0]
     eres = st.get("cloud_upload_eresult", 1)
+    if name in _fail_names(st):
+        eres = 2
     with _cloud_lock:
         known = batch in _cloud["batches"]
         if known and eres == 1:
             _cloud["chunks"][(batch, name)] = {
                 "appid": req.get(1, [0])[0], "size": size,
-                "sha": req.get(4, [b""])[0], "time": req.get(5, [0])[0], "parts": []}
+                "sha": req.get(4, [b""])[0], "time": req.get(5, [0])[0],
+                "spans": [(off, ln) for off, ln, _body, _m in _upload_spans(st, size, name)],
+                "parts": []}
     if not known:
         eres = 2
     if eres != 1:
@@ -1108,17 +1199,15 @@ def serve_upload_begin_file(conn, hdr, body, st, steamid, sessionid):
     import urllib.parse
     host = "127.0.0.1:%d" % HTTP_PORT
     path = "/upload/%d/%d/%s" % (req.get(1, [0])[0], batch, urllib.parse.quote(name, safe=""))
-    if st.get("cloud_split_blocks") and size > 1:
-        half = size // 2
-        spans = [(0, half), (half, size - half)]
-    else:
-        spans = [(0, size)]
     resp = b""
-    for offset, length in spans:
-        blk = pb_str(1, host) + pb_str(2, path) + pb_int(3, 0) + pb_int(4, 2)
+    for offset, length, explicit, method in _upload_spans(st, size, name):
+        blk = pb_str(1, host) + pb_str(2, path) + pb_int(3, 0) + pb_int(4, method)
         blk += pb_msg(5, pb_str(1, "X-Fake-Block") + pb_str(2, "1"))
         blk += pb_int(6, offset) + pb_int(7, length)
+        if explicit is not None:
+            blk += pb_str(8, explicit)
         resp += pb_msg(2, blk)
+    spans = _upload_spans(st, size, name)
     record(f"upload begin-file {batch} {name} {len(spans)} blocks")
     conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
                             content_hdr(steamid, sessionid, jobid), resp))
@@ -1127,6 +1216,7 @@ def serve_upload_begin_file(conn, hdr, body, st, steamid, sessionid):
 def serve_upload_commit(conn, hdr, body, st, steamid, sessionid):
     jobid = hdr.get(10, [0])[0]
     req = pb_parse(body)
+    record("wire commit " + wire_line(_COMMIT_WIRE, body))
     ok = req.get(1, [0])[0]
     name = (req.get(4, [b""])[0].decode() if req.get(4) else "")
     batch = None
@@ -1136,26 +1226,42 @@ def serve_upload_commit(conn, hdr, body, st, steamid, sessionid):
                 batch = b
                 break
     eres = st.get("cloud_upload_eresult", 1)
+    if name in _fail_names(st):
+        eres = 2
     if not ok or batch is None:
         eres = 2
+    assembled, match = None, False
     if eres == 1:
         with _cloud_lock:
             staged = _cloud["chunks"].pop((batch, name))
             machine = _cloud["batches"][batch]["machine"]
-        buf = bytearray(staged["size"])
-        at = 0
-        for _offset, part in staged["parts"]:
-            buf[at:at + len(part)] = part
-            at += len(part)
+        # Offset-honoring assembly: parts land at the spans' offsets, so
+        # shuffled blocks still reassemble. Anything off fails the commit.
+        if len(staged["parts"]) == len(staged["spans"]):
+            buf = bytearray(staged["size"])
+            match = True
+            for (off, ln), part in zip(staged["spans"], staged["parts"]):
+                if len(part) != ln or off + ln > staged["size"]:
+                    match = False
+                    break
+                buf[off:off + ln] = part
+            if match and hashlib.sha1(bytes(buf)).digest() == staged["sha"]:
+                assembled = bytes(buf)
+            else:
+                match = False
+        if assembled is None:
+            eres = 2
+            record(f"upload commit {name} sha mismatch")
+    if eres == 1:
         with _cloud_lock:
             base = (st.get("cloud_changelist") or {}).get("current_change_number", 0)
             if _cloud["change"] is None:
                 _cloud["change"] = base
             _cloud["change"] += 1
             _cloud["uploads"][(staged["appid"], name)] = {
-                "body": bytes(buf), "sha": staged["sha"],
+                "body": assembled, "sha": staged["sha"],
                 "time": staged["time"], "size": staged["size"], "machine": machine}
-        record(f"upload commit {name} {len(buf)} bytes")
+        record(f"upload commit {name} {len(assembled)} bytes")
     conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
                             content_hdr(steamid, sessionid, jobid, eres),
                             pb_int(1, 1) if eres == 1 else b""))
@@ -1164,12 +1270,22 @@ def serve_upload_commit(conn, hdr, body, st, steamid, sessionid):
 def serve_upload_complete(conn, hdr, body, st, steamid, sessionid):
     jobid = hdr.get(10, [0])[0]
     req = pb_parse(body)
+    record("wire complete " + wire_line(_COMPLETE_WIRE, body))
     batch = req.get(2, [0])[0]
     eres = req.get(3, [0])[0]
     with _cloud_lock:
         if batch in _cloud["batches"]:
             _cloud["batches"][batch]["done"] = eres
     record(f"upload complete {batch} {eres}")
+    reply_eres = st.get("cloud_complete_eresult", 1)
+    conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                            content_hdr(steamid, sessionid, jobid, reply_eres), b""))
+
+
+def serve_upload_conflict(conn, hdr, body, st, steamid, sessionid):
+    jobid = hdr.get(10, [0])[0]
+    req = pb_parse(body)
+    record("conflict-resolution %d %d" % (req.get(1, [0])[0], req.get(2, [0])[0]))
     conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
                             content_hdr(steamid, sessionid, jobid), b""))
 
@@ -1246,7 +1362,7 @@ class CloudHTTPHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             return
-        record("upload http %s %d" % (name, len(body)))
+        record("upload http %s %s %d" % (self.command, name, len(body)))
         if load().get("cloud_upload_hang"):
             time.sleep(60)
             self.send_response(200)
@@ -1255,8 +1371,7 @@ class CloudHTTPHandler(BaseHTTPRequestHandler):
         with _cloud_lock:
             staged = _cloud["chunks"].get((batch, name))
             if staged is not None:
-                at = sum(len(p) for _o, p in staged["parts"])
-                staged["parts"].append((at, body))
+                staged["parts"].append(body)
         self.send_response(200)
         self.send_header("Content-Length", "0")
         self.end_headers()

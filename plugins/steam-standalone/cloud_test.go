@@ -344,6 +344,10 @@ func TestCloudConflictResolve(t *testing.T) {
 	if kept.State != "synced" || kept.Counts.Same != 1 {
 		t.Fatalf("resolve local = %+v, want the upload applied", kept)
 	}
+	// The kept-local choice is reported the plan's way.
+	if log := e.cmLog(); !strings.Contains(log, "conflict-resolution 4321 1") {
+		t.Fatalf("log misses the kept-local report: %s", log)
+	}
 	// The repeated jobId answers the same stored result.
 	keptAgain, err := e.cloudCall(t, "cloud.resolve", map[string]any{"id": "4321", "ctx": ctx, "jobId": "resolve-local",
 		"choices": map[string]string{"saves/c.sav": "local"}})

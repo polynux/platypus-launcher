@@ -20,9 +20,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -495,17 +497,19 @@ type cloudFile struct {
 // fetchChangelist calls Cloud.GetAppFileChangelist#1 (synced_change_number 0
 // = the whole list) and decodes the reply. Field numbers are from
 // steammessages_cloud.steamclient.proto (docs/research/steam-cloud-social.md
-// §1.2); usage order (prefix + name as filename) follows Madeira.
-func fetchChangelist(cm *steamcm.Session, appID uint32, timeout time.Duration) ([]cloudFile, error) {
+// §1.2); usage order (prefix + name as filename) follows Madeira. It also
+// returns the listing's current_change_number, the concurrency tripwire for
+// uploads (S3).
+func fetchChangelist(cm *steamcm.Session, appID uint32, timeout time.Duration) ([]cloudFile, uint64, error) {
 	req := &depot.Enc{}
 	req.Varint(1, uint64(appID))
 	raw, err := cm.Call("Cloud.GetAppFileChangelist#1", req.Bytes(), timeout)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	m, err := depot.Decode(raw)
 	if err != nil {
-		return nil, fmt.Errorf("decoding the cloud file list: %w", err)
+		return nil, 0, fmt.Errorf("decoding the cloud file list: %w", err)
 	}
 	prefixes := m.AllBytes(4)
 	machines := m.AllBytes(5)
@@ -513,7 +517,7 @@ func fetchChangelist(cm *steamcm.Session, appID uint32, timeout time.Duration) (
 	for _, fb := range m.AllBytes(2) {
 		fm, err := depot.Decode(fb)
 		if err != nil {
-			return nil, fmt.Errorf("decoding a cloud file entry: %w", err)
+			return nil, 0, fmt.Errorf("decoding a cloud file entry: %w", err)
 		}
 		f := cloudFile{
 			SHA:     fm.Bytes(2),
@@ -535,7 +539,7 @@ func fetchChangelist(cm *steamcm.Session, appID uint32, timeout time.Duration) (
 		}
 		out = append(out, f)
 	}
-	return out, nil
+	return out, m.Int(1), nil
 }
 
 // --- baseline ---------------------------------------------------------------
@@ -793,26 +797,13 @@ func compareCloud(list []cloudFile, local map[string]string, ufs *cloudUFS, ctx 
 	return files, unmapped
 }
 
-// effectiveCloudRoot applies the first matching client-OS override to a rule
-// root, the same choice ruleSearchDir and mapCloudName make when placing a
-// cloud file. The returned token names the %Root% a new local file uploads
-// under.
-func effectiveCloudRoot(ruleRoot string, ufs *cloudUFS, osName string) string {
-	root := ruleRoot
-	for _, ov := range ufs.Overrides {
-		if !strings.EqualFold(ov.Root, root) || !strings.EqualFold(ov.OS, osName) {
-			continue
-		}
-		root = ov.UseInstead
-		break
-	}
-	return root
-}
-
 // uploadCloudName files a local-only save under the cloud name the listing
-// would carry for it: the matching rule's effective root plus the stable
-// rel. Empty when no rule places the file (scanLocal found it through a
-// rule, so this only happens when the rules changed mid-run).
+// carries for it: the matching rule's own root plus the stable rel. The name
+// is platform-independent (research §1.4): mapCloudName resolves a Windows
+// root through this device's override, so the name must keep r.Root, not
+// the resolved local root. Empty when no rule places the file (scanLocal
+// found it through a rule, so this only happens when the rules changed
+// mid-run).
 func uploadCloudName(ufs *cloudUFS, ctx cloudContext, steamID uint64, localPath, rel string) string {
 	for _, r := range ufs.Rules {
 		if r.Platforms != nil && !r.Platforms[strings.ToLower(ctx.OS)] {
@@ -825,7 +816,7 @@ func uploadCloudName(ufs *cloudUFS, ctx cloudContext, steamID uint64, localPath,
 		if localPath != dir && !strings.HasPrefix(localPath, dir+string(os.PathSeparator)) {
 			continue
 		}
-		return "%" + effectiveCloudRoot(r.Root, ufs, ctx.OS) + "%" + rel
+		return "%" + r.Root + "%" + rel
 	}
 	return ""
 }
@@ -1223,6 +1214,9 @@ type cloudEnv struct {
 	// buildID is the app's public build for BeginAppUploadBatch (0 when the
 	// appinfo carries none: the field is informational, not gating).
 	buildID uint64
+	// change is the listing's current_change_number, the S3 tripwire: the
+	// batch must still be current when it begins.
+	change uint64
 	// dirty marks an updated baseline the run must save (every exit path
 	// saves once through saveIfDirty). backupRoot is the run's own backup
 	// folder, created on first use.
@@ -1277,8 +1271,9 @@ func (e *cloudEnv) close() {
 
 // cloudCompare lists the cloud, scans the device and compares. The machine
 // names ride the conflicts so the user sees which device holds the copy.
+// The listing's change number is kept on the env as the upload tripwire.
 func (e *cloudEnv) cloudCompare(ctx context.Context) ([]cloudPlanFile, int, error) {
-	list, err := fetchChangelist(e.cm, e.appID, e.timeout)
+	list, change, err := fetchChangelist(e.cm, e.appID, e.timeout)
 	if err != nil {
 		return nil, 0, callErr("cloud file list", err)
 	}
@@ -1289,6 +1284,7 @@ func (e *cloudEnv) cloudCompare(ctx context.Context) ([]cloudPlanFile, int, erro
 	}
 	local := scanLocal(e.ufs, e.ctx, e.steamID)
 	files, unmapped := compareCloud(list, local, e.ufs, e.ctx, e.steamID, e.base)
+	e.change = change
 	return files, unmapped, nil
 }
 
@@ -1587,14 +1583,14 @@ func cloudAppBuildID(kv *steam.KV) uint64 {
 	return n
 }
 
-// cloudClientID is the stable per-install upload client id, derived from
-// the same machine seed the logon identity uses.
+// cloudClientID is the stable per-install upload client id, derived from a
+// hash of the machine seed the way #186 derives the logon id base (the blob
+// starts with a constant prefix, so the raw bytes would be near-constant).
+// Stable while the install's machine.id file exists; the documented random
+// fallback otherwise, like loginIDBase.
 func cloudClientID() uint64 {
-	id := steamcm.StableMachineID(os.Getenv("PLATYPUS_PLUGIN_DATA"))
-	if len(id) < 8 {
-		return 0
-	}
-	return binary.LittleEndian.Uint64(id[:8])
+	sum := sha256.Sum256(steamcm.StableMachineID(os.Getenv("PLATYPUS_PLUGIN_DATA")))
+	return binary.LittleEndian.Uint64(sum[:8])
 }
 
 // cloudMachineName names this device for the upload batch.
@@ -1606,8 +1602,10 @@ func cloudMachineName() string {
 }
 
 // checkCloudQuota refuses the upload before anything is named when the
-// cloud has no room left for it. A zero max is unlimited.
-func (e *cloudEnv) checkCloudQuota(newBytes uint64, newFiles int) error {
+// cloud has no room left for it. Only what the cloud doesn't already hold
+// counts: new files in full, overwrites as (new − old), so a cloud at 5/5
+// files still accepts a changed save. A zero max is unlimited.
+func (e *cloudEnv) checkCloudQuota(deltaBytes int64, newFiles int) error {
 	req := &depot.Enc{}
 	req.Varint(1, uint64(e.appID))
 	raw, err := e.cm.Call("Cloud.ClientGetAppQuotaUsage#1", req.Bytes(), e.timeout)
@@ -1618,8 +1616,8 @@ func (e *cloudEnv) checkCloudQuota(newBytes uint64, newFiles int) error {
 	if err != nil {
 		return fmt.Errorf("decoding the cloud quota: %w", err)
 	}
-	if max := m.Int(4); max > 0 && m.Int(2)+newBytes > max {
-		return fmt.Errorf("Steam Cloud is full for this game: %d of %d bytes used, this upload needs %d more", m.Int(2), max, newBytes)
+	if max := int64(m.Int(4)); max > 0 && int64(m.Int(2))+deltaBytes > max {
+		return fmt.Errorf("Steam Cloud is full for this game: %d of %d bytes used, this upload adds %d", m.Int(2), max, deltaBytes)
 	}
 	if max := m.Int(3); max > 0 && m.Int(1)+uint64(newFiles) > max {
 		return fmt.Errorf("Steam Cloud is full for this game: %d of %d files used, this upload adds %d", m.Int(1), max, newFiles)
@@ -1627,46 +1625,51 @@ func (e *cloudEnv) checkCloudQuota(newBytes uint64, newFiles int) error {
 	return nil
 }
 
-// beginUploadBatch names the whole upload set. Files to delete are never
-// named: the plan forbids cloud deletes, so a local deletion uploads
-// nothing and the cloud copy stays.
-func (e *cloudEnv) beginUploadBatch(names []string) (uint64, error) {
+// beginUploadBatch names the whole upload set and returns the batch id with
+// its app_change_number (the S3 tripwire). Files to delete are never named:
+// the plan forbids cloud deletes, so a local deletion uploads nothing and
+// the cloud copy stays.
+func (e *cloudEnv) beginUploadBatch(names []string) (uint64, uint64, error) {
 	req := &depot.Enc{}
 	req.Varint(1, uint64(e.appID))
 	req.Str(2, cloudMachineName())
 	for _, n := range names {
 		req.Str(3, n)
 	}
-	req.Fixed64(5, cloudClientID())
+	req.Varint(5, cloudClientID())
 	if e.buildID > 0 {
 		req.Varint(6, e.buildID)
 	}
 	raw, err := e.cm.Call("Cloud.BeginAppUploadBatch#1", req.Bytes(), e.timeout)
 	if err != nil {
-		return 0, callErr("cloud upload batch", err)
+		return 0, 0, callErr("cloud upload batch", err)
 	}
 	m, err := depot.Decode(raw)
 	if err != nil {
-		return 0, fmt.Errorf("decoding the cloud upload batch: %w", err)
+		return 0, 0, fmt.Errorf("decoding the cloud upload batch: %w", err)
 	}
 	if batch := m.Int(1); batch != 0 {
-		return batch, nil
+		return batch, m.Int(4), nil
 	}
-	return 0, fmt.Errorf("Steam wouldn't start the cloud upload batch")
+	return 0, 0, fmt.Errorf("Steam wouldn't start the cloud upload batch")
 }
 
 // completeUploadBatch ends a begun batch, with eresult 1 on success and 2
-// otherwise. Every begun batch is completed, also on error and on cancel.
-func (e *cloudEnv) completeUploadBatch(batch uint64, ok bool) {
+// otherwise. Every begun batch is completed, also on error and on cancel; a
+// rejected completion fails the push (S2).
+func (e *cloudEnv) completeUploadBatch(batch uint64, ok bool) error {
 	var eresult uint64 = 2
 	if ok {
 		eresult = 1
 	}
 	req := &depot.Enc{}
 	req.Varint(1, uint64(e.appID))
-	req.Fixed64(2, batch)
+	req.Varint(2, batch)
 	req.Varint(3, eresult)
-	_, _ = e.cm.Call("Cloud.CompleteAppUploadBatchBlocking#1", req.Bytes(), e.timeout)
+	if _, err := e.cm.Call("Cloud.CompleteAppUploadBatchBlocking#1", req.Bytes(), e.timeout); err != nil {
+		return callErr("cloud upload complete", err)
+	}
+	return nil
 }
 
 // uploadBlock is one server-dictated HTTP drop for part of a file.
@@ -1696,7 +1699,7 @@ func (e *cloudEnv) beginFileUpload(batch uint64, cloudName string, data []byte, 
 	if c := cellID(); c != 0 {
 		req.Varint(9, uint64(c))
 	}
-	req.Fixed64(13, batch)
+	req.Varint(13, batch)
 	raw, err := e.cm.Call("Cloud.ClientBeginFileUpload#1", req.Bytes(), e.timeout)
 	if err != nil {
 		return nil, callErr("cloud file upload", err)
@@ -1800,23 +1803,57 @@ func (e *cloudEnv) commitFileUpload(cloudName string, data []byte) error {
 	return nil
 }
 
-// uploadData is one file staged for upload: the local bytes read before
-// anything is named on the wire, so a missing file fails before the batch.
-type uploadData struct {
+// notifyConflictResolution reports a kept-local choice, the way the plan's
+// Phase 3 says (appid 1, chose_local_files 2, from
+// steammessages_cloud.steamclient.proto). Best-effort, never failing the
+// resolve it follows.
+func (e *cloudEnv) notifyConflictResolution() {
+	req := &depot.Enc{}
+	req.Varint(1, uint64(e.appID))
+	req.Varint(2, 1)
+	_ = e.cm.Notify("Cloud.ClientConflictResolution#1", req.Bytes())
+}
+
+// errCloudChanged reports the S3 race: the cloud moved between the listing
+// and the batch begin. Callers answer a "try again" result, never an error.
+var errCloudChanged = errors.New("the cloud changed while the upload started, try again")
+
+// uploadDone is one file the batch committed: what the baseline learns.
+type uploadDone struct {
 	idx  int
-	data []byte
 	sha  [20]byte
+	size uint32
+}
+
+// readUploadFile reads one staged file for upload and checks it still
+// matches the comparison: a save that changed after the compare is refused
+// instead of uploading half-written bytes (S5). Messages name the
+// cloud-relative path, never the local one (plan R14).
+func readUploadFile(f *cloudPlanFile) ([]byte, error) {
+	data, err := os.ReadFile(f.Local)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't read %q for upload", f.Rel)
+	}
+	if len(data) > maxCloudFile {
+		return nil, fmt.Errorf("can't upload %q: bigger than %d bytes", f.Rel, maxCloudFile)
+	}
+	if sum := sha1.Sum(data); !bytes.Equal(sum[:], f.LocalInfo.SHA[:]) || int64(len(data)) != f.LocalInfo.Size {
+		return nil, fmt.Errorf("%q changed while syncing, try again", f.Rel)
+	}
+	return data, nil
 }
 
 // pushFiles uploads every upload-wanted file over the Steam batch flow:
-// quota, begin, per file begin/blocks/commit, complete. Only files the
+// quota, begin, per file read/begin/blocks/commit, complete. Only files the
 // baseline proves unchanged in the cloud are ever named (compareCloud calls
-// anything else a conflict, and a conflict file is never uploaded). The
-// begun batch is always completed, also on error and on cancel; the
-// baseline is only touched on full success, so a failed or canceled push
-// leaves it (and the job retry) exactly as before.
+// anything else a conflict, and a conflict file is never uploaded). Files
+// are read inside the per-file loop, so a late read failure is a mid-batch
+// failure like any other: the begun batch is always completed, also on
+// error and on cancel, and the baseline is only touched on full success,
+// so a failed or canceled push leaves it (and the job retry) exactly as
+// before.
 func (e *cloudEnv) pushFiles(ctx context.Context, req request, files []cloudPlanFile) error {
-	var staged []uploadData
+	var idx []int
 	for i := range files {
 		if files[i].Want != "upload" {
 			continue
@@ -1824,81 +1861,127 @@ func (e *cloudEnv) pushFiles(ctx context.Context, req request, files []cloudPlan
 		if files[i].CloudName == "" {
 			return fmt.Errorf("can't place %q in the cloud: no cloud name", files[i].Rel)
 		}
-		data, err := os.ReadFile(files[i].Local)
-		if err != nil {
-			return fmt.Errorf("reading %q for upload: %w", files[i].Rel, err)
-		}
-		if len(data) > maxCloudFile {
-			return fmt.Errorf("can't upload %q: bigger than %d bytes", files[i].Rel, maxCloudFile)
-		}
-		staged = append(staged, uploadData{idx: i, data: data, sha: sha1.Sum(data)})
+		idx = append(idx, i)
 	}
-	if len(staged) == 0 {
+	if len(idx) == 0 {
 		return nil
 	}
-	var total uint64
-	for _, s := range staged {
-		total += uint64(len(s.data))
+	var newFiles int
+	var delta int64
+	for _, i := range idx {
+		f := &files[i]
+		if !f.HasRemote {
+			newFiles++
+			delta += f.LocalInfo.Size
+		} else if d := f.LocalInfo.Size - int64(f.Remote.Size); d > 0 {
+			delta += d
+		}
 	}
-	if err := e.checkCloudQuota(total, len(staged)); err != nil {
+	if err := e.checkCloudQuota(delta, newFiles); err != nil {
 		return err
 	}
-	names := make([]string, len(staged))
-	for i, s := range staged {
-		names[i] = files[s.idx].CloudName
+	names := make([]string, len(idx))
+	for n, i := range idx {
+		names[n] = files[i].CloudName
 	}
-	batch, err := e.beginUploadBatch(names)
+	batch, begun, err := e.beginUploadBatch(names)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		return err
 	}
-	committed := false
-	defer func() { e.completeUploadBatch(batch, committed) }()
-	for n, s := range staged {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		f := &files[s.idx]
-		reportProgress(req.AppID, req.JobID, "upload", n, len(staged))
-		blocks, err := e.beginFileUpload(batch, f.CloudName, s.data, f.LocalInfo.MTime)
-		if err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			return err
-		}
-		for _, blk := range blocks {
-			if err := putUploadBlock(ctx, blk, s.data); err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				return err
-			}
-		}
-		if err := e.commitFileUpload(f.CloudName, s.data); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			return err
-		}
+	// S3: the cloud moved since the listing this run compared. Complete
+	// with failure and let the caller answer "try again", uploading
+	// nothing.
+	if begun != e.change {
+		_ = e.completeUploadBatch(batch, false)
+		return errCloudChanged
 	}
-	reportProgress(req.AppID, req.JobID, "upload", len(staged), len(staged))
+	done, err := e.uploadStaged(ctx, req, files, idx, batch)
+	if err != nil {
+		_ = e.completeUploadBatch(batch, false)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return err
+	}
+	if err := e.completeUploadBatch(batch, true); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return err
+	}
 	// Full success: the cloud holds these bytes now, so the baseline learns
 	// them (dropping kept-local choices) and the files count as same. The
 	// caller saves through saveIfDirty; failures return above untouched.
-	for _, s := range staged {
-		f := &files[s.idx]
-		e.base.Files[f.Rel] = cloudBaselineFile{SHA: hex.EncodeToString(s.sha[:]), Size: uint32(len(s.data)), Local: f.Local}
+	for _, d := range done {
+		f := &files[d.idx]
+		e.base.Files[f.Rel] = cloudBaselineFile{SHA: hex.EncodeToString(d.sha[:]), Size: d.size, Local: f.Local}
 		delete(e.base.Choices, f.Rel)
 		f.Want = "same"
 	}
 	e.dirty = true
-	committed = true
 	return nil
+}
+
+// uploadStaged reads, uploads and commits every staged file of a begun
+// batch, serially, with upload progress. A read failure here is a mid-batch
+// failure (S6): the caller completes the batch with failure and the
+// baseline stays untouched.
+func (e *cloudEnv) uploadStaged(ctx context.Context, req request, files []cloudPlanFile, idx []int, batch uint64) ([]uploadDone, error) {
+	var done []uploadDone
+	for n, i := range idx {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+		f := &files[i]
+		reportProgress(req.AppID, req.JobID, "upload", n, len(idx))
+		data, err := readUploadFile(f)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, err
+		}
+		blocks, err := e.beginFileUpload(batch, f.CloudName, data, f.LocalInfo.MTime)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, err
+		}
+		for _, blk := range blocks {
+			if err := putUploadBlock(ctx, blk, data); err != nil {
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				return nil, err
+			}
+		}
+		if err := e.commitFileUpload(f.CloudName, data); err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, err
+		}
+		done = append(done, uploadDone{idx: i, sha: sha1.Sum(data), size: uint32(len(data))})
+	}
+	reportProgress(req.AppID, req.JobID, "upload", len(idx), len(idx))
+	return done, nil
+}
+
+// changedStatus answers the S3 race: the cloud moved between the listing and
+// the batch begin, so nothing was uploaded. An error state keeps the push
+// owed for a fresh run, without asking the user to resolve anything.
+func changedStatus() map[string]any {
+	return map[string]any{
+		"state": "error", "message": "the cloud changed while the upload started; try again",
+		"counts": cloudStatusCounts{}, "conflicts": []cloudStatusConflict{},
+		"checkedAt": time.Now().Unix(),
+	}
 }
 
 // runCloudPush uploads what changed only on this device. A file the cloud
@@ -1926,6 +2009,9 @@ func runCloudPush(ctx context.Context, req request, rawCtx json.RawMessage) erro
 	}
 	reportProgress(req.AppID, req.JobID, "check", 0, 1)
 	if err := env.pushFiles(ctx, req, files); err != nil {
+		if errors.Is(err, errCloudChanged) {
+			return finishJob(req, changedStatus())
+		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -2006,14 +2092,33 @@ func runCloudResolve(ctx context.Context, req request, rawCtx json.RawMessage, r
 		return err
 	}
 	if err := env.pushFiles(ctx, req, files); err != nil {
+		if errors.Is(err, errCloudChanged) {
+			if serr := env.saveIfDirty(); serr != nil {
+				return serr
+			}
+			return finishJob(req, changedStatus())
+		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		return err
 	}
+	for path, side := range choices {
+		if side == "local" && !only[path] {
+			// A kept-local choice uploaded: report it the way the plan's
+			// Phase 3 says. Best-effort, never failing the resolve.
+			env.notifyConflictResolution()
+			break
+		}
+	}
 	reportProgress(req.AppID, req.JobID, "check", 1, 1)
 	if env.backedUp {
 		pruneBackups(env.appID, 5)
+	}
+	// The baseline lands before the stored job result, so a repeated jobId
+	// reads back what the run wrote.
+	if err := env.saveIfDirty(); err != nil {
+		return err
 	}
 	return finishJob(req, buildStatus(req.AppID, files, unmapped, cloudMessage(files, unmapped)))
 }

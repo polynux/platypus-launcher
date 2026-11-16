@@ -6,6 +6,7 @@ package steam_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -74,6 +75,13 @@ func TestCloudPushRoundTrip(t *testing.T) {
 	log := e.waitCMLog("upload complete 1 1")
 	if !strings.Contains(log, "upload begin 1 1 files") || !strings.Contains(log, "2 blocks") {
 		t.Fatalf("log misses the batch: %s", log)
+	}
+	// The proto's uint64 fields go out as varints, the way real Steam
+	// reads them (B1).
+	for _, want := range []string{"client_id=varint", "upload_batch_id=varint", "batch_id=varint"} {
+		if !strings.Contains(log, want) {
+			t.Fatalf("log misses %q: %s", want, log)
+		}
 	}
 	pushBaselineSHA(t, e, "saves/a.sav", "hello-saves")
 
@@ -256,5 +264,270 @@ func TestCloudPushCancelMidUpload(t *testing.T) {
 	e.waitCMLog("upload complete 1 2")
 	if _, statErr := os.Stat(filepath.Join(e.pluginData(), "cloud", "4321", "baseline.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("a canceled push must leave the baseline untouched")
+	}
+}
+
+// A batch whose second file fails is completed with eresult 2 and the
+// baseline stays untouched; clearing the failure lets a retry upload (S2).
+func TestCloudPushMultiFileFailAndRetry(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	e.pushKnobs(t)
+	for name, content := range map[string]string{"a.sav": "aaa", "b.sav": "bbb"} {
+		if err := os.WriteFile(filepath.Join(install, "saves", name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.setCMState("cloud_fail_files", []any{"%GameInstall%saves/b.sav"})
+
+	var st types.CloudStatus
+	err := e.call("cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-multi"}, &st)
+	if err == nil {
+		t.Fatal("a batch with a failed file must fail")
+	}
+	log := e.waitCMLog("upload complete 1 2")
+	if !strings.Contains(log, "upload begin 1 2 files") {
+		t.Fatalf("log misses the begun batch: %s", log)
+	}
+	if _, statErr := os.Stat(filepath.Join(e.pluginData(), "cloud", "4321", "baseline.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("a failed push must leave the baseline untouched")
+	}
+
+	e.setCMState("cloud_fail_files", []any{})
+	retried, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-multi-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retried.State != "synced" || retried.Counts.Same != 2 {
+		t.Fatalf("retry = %+v, want both files synced", retried)
+	}
+}
+
+// A rejected completion fails the push and the baseline is NOT written (S2).
+func TestCloudPushCompleteRejected(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	e.pushKnobs(t)
+	if err := os.WriteFile(filepath.Join(install, "saves", "a.sav"), []byte("doomed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.setCMState("cloud_complete_eresult", float64(2))
+
+	var st types.CloudStatus
+	err := e.call("cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-complete-reject"}, &st)
+	if err == nil || !strings.Contains(err.Error(), "complete") {
+		t.Fatalf("err = %v, want the rejected completion", err)
+	}
+	e.waitCMLog("upload complete 1 1")
+	if _, statErr := os.Stat(filepath.Join(e.pluginData(), "cloud", "4321", "baseline.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("a push with rejected completion must not write the baseline")
+	}
+}
+
+// A resolve `local` whose upload fails keeps the choice, and a retry
+// uploads; the success reports the choice (S2, S7).
+func TestCloudResolveLocalFailKeepsChoice(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	write := func(content string) {
+		if err := os.WriteFile(filepath.Join(install, "saves", "c.sav"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("local-version")
+	e.cloudKnobs("%GameInstall%saves/c.sav", "cloud-version", false, 1700000000)
+	e.setCMState("cloud_fail_files", []any{"%GameInstall%saves/c.sav"})
+
+	var st types.CloudStatus
+	err := e.call("cloud.resolve", map[string]any{"id": "4321", "ctx": ctx, "jobId": "resolve-local-fail",
+		"choices": map[string]string{"saves/c.sav": "local"}}, &st)
+	if err == nil {
+		t.Fatal("a resolve whose upload fails must fail")
+	}
+	raw, rerr := os.ReadFile(filepath.Join(e.pluginData(), "cloud", "4321", "baseline.json"))
+	if rerr != nil {
+		t.Fatalf("baseline missing: %v", rerr)
+	}
+	var base struct {
+		Choices map[string]struct {
+			Side string `json:"side"`
+		} `json:"choices"`
+	}
+	if jerr := json.Unmarshal(raw, &base); jerr != nil {
+		t.Fatal(jerr)
+	}
+	if base.Choices["saves/c.sav"].Side != "local" {
+		t.Fatalf("baseline choices = %s, want the kept-local choice", raw)
+	}
+
+	e.setCMState("cloud_fail_files", []any{})
+	// The kept choice replays on the next push: the retry uploads it.
+	retried, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-after-failed-resolve"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retried.State != "synced" || retried.Counts.Same != 1 {
+		t.Fatalf("push retry = %+v, want the kept choice uploaded", retried)
+	}
+}
+
+// A cloud at 5/5 files still accepts a changed save: only the delta counts (S1).
+func TestCloudPushQuotaOverwriteAtFileLimit(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	e.cloudKnobs("%GameInstall%saves/q.sav", "qq", false, 1700000000)
+	if err := os.WriteFile(filepath.Join(install, "saves", "q.sav"), []byte("qq"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	same, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same.State != "synced" {
+		t.Fatalf("status = %+v, want the baseline recorded", same)
+	}
+	if err := os.WriteFile(filepath.Join(install, "saves", "q.sav"), []byte("qqx"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.setCMState("cloud_quota", map[string]any{
+		"used_files": float64(5), "max_files": float64(5),
+		"used_bytes": float64(100), "max_bytes": float64(1000),
+	})
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-overwrite"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.State != "synced" || pushed.Counts.Same != 1 {
+		t.Fatalf("push = %+v, want the overwrite accepted", pushed)
+	}
+}
+
+// Block drops that say POST go out as POST (F1).
+func TestCloudPushPostBlocks(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	e.pushKnobs(t)
+	e.setCMState("cloud_post_blocks", true)
+	if err := os.WriteFile(filepath.Join(install, "saves", "a.sav"), []byte("via-post"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-post"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.State != "synced" {
+		t.Fatalf("push = %+v", pushed)
+	}
+	if log := e.waitCMLog("upload complete 1 1"); !strings.Contains(log, "upload http POST %GameInstall%saves/a.sav 8") {
+		t.Fatalf("log misses the POST block: %s", log)
+	}
+}
+
+// A block carrying explicit_body_data sends those exact bytes (F1).
+func TestCloudPushExplicitBody(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	e.pushKnobs(t)
+	content := "explicit-bytes"
+	e.setCMState("cloud_explicit", map[string]any{
+		"%GameInstall%saves/e.sav": map[string]any{
+			"body": base64.StdEncoding.EncodeToString([]byte(content)), "post": true,
+		},
+	})
+	if err := os.WriteFile(filepath.Join(install, "saves", "e.sav"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-explicit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.State != "synced" {
+		t.Fatalf("push = %+v", pushed)
+	}
+	log := e.waitCMLog("upload complete 1 1")
+	if !strings.Contains(log, "upload http POST %GameInstall%saves/e.sav") {
+		t.Fatalf("log misses the explicit POST block: %s", log)
+	}
+	if err := os.Remove(filepath.Join(install, "saves", "e.sav")); err != nil {
+		t.Fatal(err)
+	}
+	back, err := e.cloudCall(t, "cloud.pull", map[string]any{"id": "4321", "ctx": ctx, "jobId": "pull-after-explicit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.State != "synced" {
+		t.Fatalf("pull = %+v", back)
+	}
+	if got, _ := os.ReadFile(filepath.Join(install, "saves", "e.sav")); string(got) != content {
+		t.Fatalf("downloaded = %q, want the explicit bytes", got)
+	}
+}
+
+// Blocks arriving out of order reassemble by offset, and the commit hash
+// verifies the bytes (F1).
+func TestCloudPushShuffledBlocks(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	e.pushKnobs(t)
+	e.setCMState("cloud_split_blocks", true)
+	e.setCMState("cloud_shuffle_blocks", true)
+	content := "shuffle-me-0123456789"
+	if err := os.WriteFile(filepath.Join(install, "saves", "a.sav"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-shuffle"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.State != "synced" {
+		t.Fatalf("push = %+v", pushed)
+	}
+	if err := os.Remove(filepath.Join(install, "saves", "a.sav")); err != nil {
+		t.Fatal(err)
+	}
+	back, err := e.cloudCall(t, "cloud.pull", map[string]any{"id": "4321", "ctx": ctx, "jobId": "pull-after-shuffle"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.State != "synced" {
+		t.Fatalf("pull = %+v", back)
+	}
+	if got, _ := os.ReadFile(filepath.Join(install, "saves", "a.sav")); string(got) != content {
+		t.Fatalf("downloaded = %q, want the reassembled bytes", got)
+	}
+}
+
+// The change number moving between the listing and the batch begin uploads
+// nothing: the batch completes with failure and the push answers "try
+// again" (S3).
+func TestCloudPushChangeMoved(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	e.pushKnobs(t)
+	e.setCMState("cloud_begin_bump", true)
+	if err := os.WriteFile(filepath.Join(install, "saves", "a.sav"), []byte("stale-list"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-bump"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.State != "error" || !strings.Contains(pushed.Message, "try again") {
+		t.Fatalf("push = %+v, want the try-again result", pushed)
+	}
+	log := e.waitCMLog("upload complete 1 2")
+	if strings.Contains(log, "upload begin-file") || strings.Contains(log, "upload http") {
+		t.Fatalf("a moved change number must upload nothing: %s", log)
+	}
+	if _, statErr := os.Stat(filepath.Join(e.pluginData(), "cloud", "4321", "baseline.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("a moved change number must leave the baseline untouched")
 	}
 }
