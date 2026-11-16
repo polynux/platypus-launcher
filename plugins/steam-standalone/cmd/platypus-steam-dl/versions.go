@@ -558,15 +558,26 @@ func runVersions(ctx context.Context, req request) error {
 	}
 	// A stored password may open branches PICS hides: resolve each one
 	// through its private section so the list shows it unlocked. A
-	// refused or stale secret stays unlisted here; the install names it.
+	// refused password is reported by name so the plugin drops it; a
+	// transport failure keeps the branch listed as unlocked with no
+	// build id, and the install names any other failure.
+	var refused []string
 	for _, name := range sortedKeys(req.BranchPasswords) {
 		if pw := req.BranchPasswords[name]; pw != "" && findBranch(branches, name) == nil {
-			if bi, err := privateBranchInfo(cm, kv, req.AppID, toks[req.AppID], name, pw); err == nil {
+			bi, err := privateBranchInfo(cm, kv, req.AppID, toks[req.AppID], name, pw)
+			if err == nil {
 				branches = append(branches, *bi)
+				continue
 			}
+			var wpe wrongPasswordError
+			if errors.As(err, &wpe) {
+				refused = append(refused, name)
+				continue
+			}
+			branches = append(branches, branchInfo{Name: name, PwdRequired: true, Manifests: map[uint32]uint64{}})
 		}
 	}
-	emit(map[string]any{"type": "result", "branches": branches})
+	emit(map[string]any{"type": "result", "branches": branches, "refused": refused})
 	return nil
 }
 
@@ -614,11 +625,11 @@ func runUnlock(ctx context.Context, req request) error {
 		return err
 	}
 	// Call success alone is not an unlock: the response lists the
-	// branches the password opened. A valid password for another branch
-	// still names no branch here, so say so instead of failing silently.
+	// branches the password opened. Anything else is a wrong password
+	// or an unknown branch name.
 	if _, ok := keys[req.Branch]; ok {
 		emit(map[string]any{"type": "result", "unlocked": true})
 		return nil
 	}
-	return fmt.Errorf("the password didn't open a %q branch for app %d (check the branch name)", req.Branch, req.AppID)
+	return fmt.Errorf("wrong password or unknown branch name %q for app %d", req.Branch, req.AppID)
 }

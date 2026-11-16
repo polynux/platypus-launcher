@@ -166,6 +166,29 @@ func TestSteamVersionsInstallBuild(t *testing.T) {
 	}
 }
 
+// A build on a listed locked branch resolves through its private section
+// too: the PICS listing names the branch but carries no plain gid.
+func TestSteamVersionsInstallBuildListed(t *testing.T) {
+	e := setup(t)
+	e.login()
+	e.setCMState("appinfo", versionsAppinfo(e.fix.GID))
+	e.setCMState("private_beta", privateBetaSection(e.fix.GID))
+
+	var unlocked map[string]any
+	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "beta", "password": "beta-pw-7"}, &unlocked); err != nil {
+		t.Fatalf("unlock: %v", err)
+	}
+	var size plugins.InstallSize
+	if err := e.call("game.installSize", map[string]any{
+		"id": "4321", "target": map[string]any{"build": "200"},
+	}, &size); err != nil {
+		t.Fatalf("installSize for build 200 on the listed locked branch: %v", err)
+	}
+	if size.DiskBytes != int64(e.fix.DiskBytes) {
+		t.Fatalf("size = %+v, want disk=%d", size, e.fix.DiskBytes)
+	}
+}
+
 // A branch key the section doesn't honour fails the install without
 // dropping the stored password: only a refused password drops it.
 func TestSteamVersionsKeyMismatchKeepsPassword(t *testing.T) {
@@ -246,6 +269,12 @@ func TestSteamVersionsInstallNoBranchMeta(t *testing.T) {
 		if _ = json.Unmarshal(raw, &installed); installed["4321"]["channel"] == "beta" {
 			if arch, _ := installed["4321"]["archiveRef"].(map[string]any); arch != nil {
 				if depots, _ := arch["depots"].(map[string]any); depots["11"] == fmt.Sprint(e.fix.GID) {
+					// The unknown tip compares to nothing: no update,
+					// and never a fallback to public.
+					list := e.versionsList(map[string]any{"id": "4321"})
+					if list["updateAvailable"] != false {
+						t.Fatalf("updateAvailable without a tip: %+v", list["updateAvailable"])
+					}
 					return
 				}
 			}
@@ -255,6 +284,69 @@ func TestSteamVersionsInstallNoBranchMeta(t *testing.T) {
 			t.Fatalf("no beta install recorded: %s", raw)
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// A refused stored password is dropped by the list itself: the branch
+// comes back locked, with no build id and no update against public.
+func TestSteamVersionsListRefusedPassword(t *testing.T) {
+	e := setup(t)
+	e.login()
+	e.setCMState("appinfo", hiddenBranchAppinfo(e.fix.GID))
+	e.setCMState("private_beta", privateBetaSection(e.fix.GID))
+	e.setCMState("beta_branches", []string{"beta"})
+
+	var unlocked map[string]any
+	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "beta", "password": "beta-pw-7"}, &unlocked); err != nil {
+		t.Fatalf("unlock: %v", err)
+	}
+	e.setCMState("beta_password_eresult", 5)
+	list := e.versionsList(map[string]any{"id": "4321"})
+	beta := channelByID(t, list, "beta")
+	if beta["requires"] != "password" || beta["unlocked"] != false {
+		t.Fatalf("beta = %+v, want a locked skeleton", beta)
+	}
+	if beta["buildId"] != "" {
+		t.Fatalf("beta = %+v, want no build id", beta)
+	}
+	raw, _ := os.ReadFile(filepath.Join(e.pluginData(), "beta_passwords.json"))
+	if strings.Contains(string(raw), "beta-pw-7") {
+		t.Fatalf("refused password kept by list: %s", raw)
+	}
+}
+
+// A transport failure keeps the hidden branch listed as unlocked with no
+// build id; an installed game on it reports no update, never public.
+func TestSteamVersionsListTransportKeepsBranch(t *testing.T) {
+	e := setup(t)
+	e.login()
+	e.setCMState("appinfo", hiddenBranchAppinfo(e.fix.GID))
+	e.setCMState("private_beta", privateBetaSection(e.fix.GID))
+	e.setCMState("beta_branches", []string{"beta"})
+
+	var unlocked map[string]any
+	if err := e.call("versions.unlock", map[string]any{"id": "4321", "channel": "beta", "password": "beta-pw-7"}, &unlocked); err != nil {
+		t.Fatalf("unlock: %v", err)
+	}
+	if err := e.call("game.install", map[string]any{
+		"id": "4321", "jobId": "versions-transport-list", "installDir": e.folder,
+		"target": map[string]any{"channel": "beta"},
+	}, nil); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	e.waitInstalled("4321", "200")
+	e.setCMState("drop_beta", true)
+	list := e.versionsList(map[string]any{"id": "4321"})
+	beta := channelByID(t, list, "beta")
+	if beta["unlocked"] != true || beta["buildId"] != "" {
+		t.Fatalf("beta = %+v, want unlocked with no build id", beta)
+	}
+	if list["updateAvailable"] != false {
+		t.Fatalf("updateAvailable over a dead CM: %+v", list["updateAvailable"])
+	}
+	raw, _ := os.ReadFile(filepath.Join(e.pluginData(), "beta_passwords.json"))
+	if !strings.Contains(string(raw), "beta-pw-7") {
+		t.Fatalf("stored password dropped on a transport error: %s", raw)
 	}
 }
 
@@ -589,6 +681,11 @@ func TestSteamVersionsRefusedPasswordDropped(t *testing.T) {
 		"id": "4321", "target": map[string]any{"channel": "beta"},
 	}, &size); err == nil || !strings.Contains(err.Error(), "wrong branch password") {
 		t.Fatalf("refused size err = %v, want the wrong-password error", err)
+	}
+	// The size check drops the refused secret on its own: read the store
+	// right here, before any install runs.
+	if raw, _ := os.ReadFile(filepath.Join(e.pluginData(), "beta_passwords.json")); strings.Contains(string(raw), "beta-pw-7") {
+		t.Fatalf("refused password kept by installSize: %s", raw)
 	}
 	if err := e.call("game.install", map[string]any{
 		"id": "4321", "jobId": "versions-refused", "installDir": e.folder,

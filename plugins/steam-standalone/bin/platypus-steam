@@ -2058,8 +2058,9 @@ def drop_refused_password(app, req, branch=""):
     """Drop the stored beta password when Steam refused the one this
     install tried: the explicit branch_password when set, else the stored
     one for the channel. An explicitly typed password that failed leaves
-    the store alone, and so does a channel that sent nothing."""
-    stored = (beta_passwords().get(app) or {})
+    the store alone, and so does a channel that sent nothing. The compare
+    and the delete hold installed_lock together, so a concurrent unlock
+    can't slip a new secret between them."""
     channel = branch
     if not channel:
         target = req.get("target") or {}
@@ -2071,8 +2072,18 @@ def drop_refused_password(app, req, branch=""):
         return
     sent = req.get("branch_passwords") or {}
     tried = req.get("branch_password") or sent.get(channel)
-    if tried is not None and stored.get(channel) == tried:
-        drop_beta_password(app, channel)
+    if tried is None:
+        return
+    with installed_lock:
+        pws = load_state("beta_passwords.json", {})
+        if (pws.get(app) or {}).get(channel) == tried:
+            app_pws = pws[app]
+            del app_pws[channel]
+            if app_pws:
+                pws[app] = app_pws
+            else:
+                del pws[app]
+            save_state("beta_passwords.json", pws)
 
 
 def dl_request(params, extra=None):
@@ -2221,7 +2232,9 @@ def install_size(params):
 
 def versions_branches(app):
     """PICS branches for the app via platypus-steam-dl, or raise. Stored
-    passwords ride along so branches PICS hides come back unlocked."""
+    passwords ride along so branches PICS hides come back unlocked. Names
+    the helper refused are dropped and come back as locked skeletons, so
+    the unlock form and the no-public-fallback rule still see them."""
     req = dl_request({"id": app})
     stored = (beta_passwords().get(app) or {})
     if stored:
@@ -2229,6 +2242,10 @@ def versions_branches(app):
     result = dl_run("versions", req,
                     label="Steam versions", err_code=-32002)
     branches = result.get("branches") or []
+    for name in result.get("refused") or []:
+        drop_beta_password(app, name)
+        if not any(b.get("name") == name for b in branches):
+            branches.append({"name": name, "build_id": "", "pwd_required": True, "manifests": {}})
     if not branches:
         raise RPCError("Steam returned no versions for app {}".format(app), -32002)
     return branches
@@ -2306,6 +2323,11 @@ def versions_list(params):
                 ch = find_branch(channels, pinned["id"])
                 if ch is not None:
                     want = ch.get("buildId") or ""
+        # A channel whose tip has no build id (a hidden branch whose
+        # section carried no metadata) can't be compared: report no
+        # update rather than a permanent one.
+        if not want and (not isinstance(pinned, dict) or pinned.get("kind") != "build"):
+            want = installed_build
         update_available = installed_build != want
     return {
         "channels": channels, "builds": builds,
@@ -3820,7 +3842,7 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.17.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.18.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],

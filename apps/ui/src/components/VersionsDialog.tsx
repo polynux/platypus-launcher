@@ -234,13 +234,6 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
               </div>
             </section>
           )}
-          {passwordFeature && (
-            <section className="mt-5">
-              <MonoLabel className="mb-1.5">{t('gameOps:versions.unlockBranchKicker')}</MonoLabel>
-              <UnlockBranchForm game={game} onUnlocked={() => load(false)} onNotify={onNotify} />
-            </section>
-          )}
-
           {info.builds.length > 0 && (
             <section className="mt-5">
               <MonoLabel className="mb-1.5">{t('gameOps:versions.buildsKicker')}</MonoLabel>
@@ -254,6 +247,12 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
                   />
                 ))}
               </div>
+            </section>
+          )}
+          {passwordFeature && (
+            <section className="mt-5">
+              <MonoLabel className="mb-1.5">{t('gameOps:versions.unlockBranchKicker')}</MonoLabel>
+              <UnlockBranchForm game={game} onUnlocked={() => load(false)} onNotify={onNotify} />
             </section>
           )}
 
