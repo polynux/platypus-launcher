@@ -162,6 +162,70 @@ func gameInstallUFS() string {
 	return `"ufs" { "savefiles" { "0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" } } }`
 }
 
+// Coverage is the pull filter's rule: same root after overrides, under the
+// rule path, matching the pattern. Platforms don't matter (one cloud name
+// serves every OS), and neither does `recursive` (the pattern decides).
+func TestCloudNameCovered(t *testing.T) {
+	ufs := parseCloudRules(mustParseKV(t, superhotUFS))
+	native := superhotCtx("/home/u")
+	proton := cloudContext{OS: "windows", Home: "/home/u", InstallDir: "/games/x",
+		PrefixDir: "/prefixes/game", WinUser: "steamuser"}
+	for _, tc := range []struct {
+		name    string
+		covered bool
+	}{
+		{"%WinAppDataLocalLow%SUPERHOT_Team/SUPERHOT/super.hot", true},
+		{"%WinAppDataLocalLow%SUPERHOT_Team/SUPERHOT/settings.cfg", true},
+		// Right root, outside the rule path: the official client's own
+		// files or another game's folder.
+		{"%WinAppDataLocalLow%SUPERHOT_Team/Other/super.hot", false},
+		{"%WinAppDataLocalLow%SUPERHOT_Team/SUPERHOT/super.txt", false},
+		{"%WinAppDataLocalLow%SUPERHOT_Team/SUPERHOTs/super.hot", false},
+		// Another root, even if a local path could be guessed.
+		{"%GameInstall%SUPERHOT_Team/SUPERHOT/super.hot", false},
+		{"no-root-at-all", false},
+		{"%WinAppDataLocalLow%", false},
+	} {
+		if got := cloudNameCovered(tc.name, ufs, native, 0); got != tc.covered {
+			t.Errorf("native %q covered = %v, want %v", tc.name, got, tc.covered)
+		}
+		if got := cloudNameCovered(tc.name, ufs, proton, 0); got != tc.covered {
+			t.Errorf("proton %q covered = %v, want %v", tc.name, got, tc.covered)
+		}
+	}
+	// Hades: WinMyDocuments with only a MacOS override. The Linux OS has no
+	// override, so the rule and the name keep the same root and the name is
+	// covered even though it can't be placed here (coverage is about the
+	// rule, placement is mapCloudName's job).
+	hades := parseCloudRules(mustParseKV(t, `"ufs" {
+		"savefiles" { "0" { "root" "WinMyDocuments" "path" "Saved Games/Hades" "pattern" "Profile*.sav" } }
+		"rootoverrides" { "0" { "os" "MacOS" "root" "WinMyDocuments" "useinstead" "MacAppSupport" } }
+	}`))
+	name := "%WinMyDocuments%Saved Games/Hades/Profile0.sav"
+	if !cloudNameCovered(name, hades, proton, 0) || !cloudNameCovered(name, hades, native, 0) {
+		t.Fatal("Hades' rule must cover its save (the MacOS override is another OS's)")
+	}
+}
+
+// A recursive rule owns its subdirectories, and a rule path with the
+// account id only covers the expanded spelling.
+func TestCloudNameCoveredRecursiveAndSteamID(t *testing.T) {
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" {
+		"savefiles" { "0" { "root" "GameInstall" "path" "saves/{64BitSteamID}" "pattern" "*.sav" "recursive" "1" } }
+	}`))
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: "/games/x"}
+	const id = 76561198000000000
+	if !cloudNameCovered("%GameInstall%saves/76561198000000000/deep/a.sav", ufs, ctx, id) {
+		t.Fatal("a recursive rule must cover nested saves")
+	}
+	if cloudNameCovered("%GameInstall%saves/76561198000000000/deep/a.txt", ufs, ctx, id) {
+		t.Fatal("the pattern still decides")
+	}
+	if cloudNameCovered("%GameInstall%saves/123/a.sav", ufs, ctx, id) {
+		t.Fatal("another account's folder is not this rule's")
+	}
+}
+
 func writeLocal(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -295,6 +359,28 @@ func TestCompareCloudSameThenChanged(t *testing.T) {
 	files, _ := compareCloud(list, local, ufs, ctx, 0, base)
 	if len(files) != 1 || files[0].Want != "download" {
 		t.Fatalf("changed only in the cloud must download: %+v", files)
+	}
+}
+
+// A cloud name no rule covers is unmapped and never becomes a plan file,
+// even though its root maps: the untouched local file stays untouched.
+func TestCompareCloudDropsUncoveredNames(t *testing.T) {
+	dir := t.TempDir()
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, gameInstallUFS()))
+	writeLocal(t, filepath.Join(dir, "config", "settings.ini"), "local")
+	list := []cloudFile{
+		listed("%GameInstall%saves/a.sav", "a", 100),
+		listed("%GameInstall%saves/notes.txt", "b", 100),
+		listed("%GameInstall%config/settings.ini", "c", 100),
+	}
+	base := &cloudBaseline{Files: map[string]cloudBaselineFile{}}
+	files, unmapped := compareCloud(list, scanLocal(ufs, ctx, 0), ufs, ctx, 0, base)
+	if unmapped != 2 {
+		t.Fatalf("unmapped = %d, want 2", unmapped)
+	}
+	if len(files) != 1 || files[0].Rel != "saves/a.sav" || files[0].Want != "download" {
+		t.Fatalf("files = %+v", files)
 	}
 }
 
