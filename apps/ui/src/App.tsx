@@ -720,17 +720,20 @@ export function AppContent() {
       : action === 'resume' ? LauncherApi.resumeJob
       : LauncherApi.discardJob;
     Effect.runPromise(call(id)).catch((err) => {
-      const job = action === 'retry' ? jobs.find((j) => j.id === id) : undefined;
+      // Retry and Resume (of a canceled job) both re-run the terms gate.
+      const job = action === 'retry' || action === 'resume' ? jobs.find((j) => j.id === id) : undefined;
       const login = job?.source ? loginActionFor(err, job.source, t('gameOps:install.logIn')) : null;
       if (login) {
         toastNotify.error(coreErrMsg(err), { action: login });
         return;
       }
-      // A retry refused for unaccepted terms offers the terms dialog itself:
-      // accepting there lets the next retry go through.
+      // A retry refused for unaccepted terms offers the terms dialog itself,
+      // and runs the same action again once the user accepts.
       const game = job ? games.find((g) => g.id === job.game_id) : undefined;
       const review = game ? acceptTermsActionFor(err, t('gameOps:install.reviewTerms'), () => {
-        void ensureTerms(game).catch((e2) => notify(coreErrMsg(e2), 'err'));
+        void ensureTerms(game)
+          .then((ok) => { if (ok) jobAction(action, id); })
+          .catch((e2) => notify(coreErrMsg(e2), 'err'));
       }) : null;
       if (review) toastNotify.error(coreErrMsg(err), { action: review });
       else notify(coreErrMsg(err), 'err');

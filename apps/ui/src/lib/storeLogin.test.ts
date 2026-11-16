@@ -1,3 +1,4 @@
+import type React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { acceptTermsActionFor, isTermsLoginError, loginActionFor, openStoreLogin, setStoreLoginOpener } from './storeLogin';
 
@@ -32,7 +33,7 @@ describe('loginActionFor', () => {
     setStoreLoginOpener(open);
     const action = loginActionFor(coded('terms.needsLogin'), 'echo', 'Log in');
     expect(action?.label).toBe('Log in');
-    action?.onClick();
+    action?.onClick({} as React.MouseEvent<HTMLButtonElement>);
     expect(open).toHaveBeenCalledWith('echo');
   });
 });
@@ -53,7 +54,7 @@ describe('acceptTermsActionFor', () => {
     const review = vi.fn();
     const action = acceptTermsActionFor(coded('terms.acceptFirst'), 'Review terms', review);
     expect(action?.label).toBe('Review terms');
-    action?.onClick();
+    action?.onClick({} as React.MouseEvent<HTMLButtonElement>);
     expect(review).toHaveBeenCalled();
   });
 });
