@@ -579,9 +579,10 @@ All four answer a `CloudStatus` that describes the state **after** the call:
 - `message` is written for people and shown as is. For `unsupported` it is the reason ("no Auto-Cloud rules",
   "encrypted cloud files", "saves go through the Steamworks API"); Platypus never invents one.
 - `counts` tallies files; `unmapped` counts cloud files that aren't part of the game's save locations
-  (no save rule covers the name, or it can't be placed on this device) or that the store marks for other
-  platforms than this launch's `os` (a save tagged Windows-only is not synced on a native Linux launch).
-  Those files are never downloaded or uploaded.
+  for this launch: no save rule covers the name, it can't be placed on this device, or the store's rules
+  leave this launch's `os` out (a save location only declared for Windows, on a native Linux launch).
+  Those files are never downloaded or uploaded. A per-file platform tag a store carries is not a reason to
+  skip a file; the plugin's own rules decide, the same way they decide what the local scan sees.
 - `conflicts` lists each file changed on both sides, or with no record of a common ancestor. Platypus never
   chooses for the user and never sends a `choices` path the last status did not list.
 - `checkedAt` is when the comparison ran (unix seconds). `backupDir` is where replaced local files were

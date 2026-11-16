@@ -540,10 +540,10 @@ func TestCompareCloudDropsUncoveredNames(t *testing.T) {
 	}
 }
 
-// platforms_to_sync is the SDK's ERemoteStoragePlatform mask: the rule's
-// platforms block decides what an upload offers, and a listing's field 6
-// decides whether this device syncs the file at all. 0 and All are every
-// platform, so an absent field never hides a save.
+// platforms_to_sync is the SDK's ERemoteStoragePlatform mask. A save rule's
+// platforms block decides whether its locations exist on this OS (the local
+// scan and the cloud-name coverage), and the mask an upload offers; the
+// per-file field 6 only informs an update, it never filters a download.
 func TestCloudPlatformMasks(t *testing.T) {
 	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
 		"0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" "platforms" { "Windows" "1" } }
@@ -567,57 +567,73 @@ func TestCloudPlatformMasks(t *testing.T) {
 			t.Errorf("%s mask = %#x, want %#x", tc.rule, got, tc.want)
 		}
 	}
+	// The scan and the coverage test use the same applicability rule.
+	if cloudRuleApplies(ufs.Rules[0], "linux") {
+		t.Error("a Windows-tagged rule must not apply on linux")
+	}
+	if !cloudRuleApplies(ufs.Rules[0], "windows") || !cloudRuleApplies(ufs.Rules[1], "linux") {
+		t.Error("a matching tag (or no tag) must apply")
+	}
 	for _, tc := range []struct {
-		mask uint32
-		os   string
-		want bool
+		ruleMask, remote uint32
+		hasRemote        bool
+		os               string
+		want             uint32
 	}{
-		{0, "linux", true},
-		{0, "windows", true},
-		{cloudPlatformAll, "linux", true},
-		{1, "windows", true},
-		{1, "linux", false},
-		{8, "linux", true},
-		{8, "windows", false},
-		{9, "linux", true},
-		{9, "windows", true},
+		{cloudPlatformAll, 0, false, "linux", cloudPlatformAll}, // new file, untagged rule
+		{cloudPlatformWindows, 0, false, "windows", 1},          // new file, tagged rule
+		{cloudPlatformAll, 1, true, "linux", 9},                 // untagged update widens with this OS
+		{cloudPlatformAll, 8, true, "windows", 9},               // ... whichever OS is running
+		{cloudPlatformAll, 0, true, "linux", cloudPlatformAll},  // missing field stays all
+		{cloudPlatformAll, cloudPlatformAll, true, "linux", cloudPlatformAll},
+		{cloudPlatformLinux | cloudPlatformWindows, 1, true, "windows", 9}, // tagged rule wins
 	} {
-		if got := cloudPlatformSynced(tc.mask, tc.os); got != tc.want {
-			t.Errorf("mask %#x on %s = %v, want %v", tc.mask, tc.os, got, tc.want)
+		if got := cloudUploadPlatforms(tc.ruleMask, tc.remote, tc.hasRemote, tc.os); got != tc.want {
+			t.Errorf("upload mask rule=%#x remote=%#x listed=%v %s = %#x, want %#x",
+				tc.ruleMask, tc.remote, tc.hasRemote, tc.os, got, tc.want)
 		}
 	}
 }
 
-// A cloud file whose platforms_to_sync leaves this OS out is not compared: it
-// counts unmapped ("not synced on this device") and its name stays reserved,
-// so a same-named local file never uploads over another platform's save.
-func TestCompareCloudSkipsOtherPlatforms(t *testing.T) {
+// An untagged rule names its save location on this OS, so the cloud file
+// downloads even when its own platforms_to_sync says Windows only: downloads
+// follow the rule, not field 6 (issue #188 review).
+func TestCompareCloudUntaggedRuleDownloadsWindowsTaggedFile(t *testing.T) {
 	dir := t.TempDir()
 	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
 	ufs := parseCloudRules(mustParseKV(t, gameInstallUFS()))
-	writeLocal(t, filepath.Join(dir, "saves", "win.sav"), "win-save")
-	writeLocal(t, filepath.Join(dir, "saves", "both.sav"), "both-save")
 	base := &cloudBaseline{Files: map[string]cloudBaselineFile{}}
-	list := []cloudFile{
-		{CloudName: "%GameInstall%saves/win.sav", SHA: mustSHA("win-save"), Size: 8, MTime: 100, Platforms: 1},
-		{CloudName: "%GameInstall%saves/both.sav", SHA: mustSHA("both-save"), Size: 9, MTime: 100, Platforms: 9},
-		listed("%GameInstall%saves/plain.sav", "plain", 100),
-	}
+	list := []cloudFile{{CloudName: "%GameInstall%saves/a.sav", SHA: mustSHA("a"), Size: 1,
+		MTime: 100, Platforms: 1}}
 	files, unmapped := compareCloud(list, scanLocal(ufs, ctx, 0), ufs, ctx, 0, base)
-	if unmapped != 1 {
-		t.Fatalf("unmapped = %d, want 1", unmapped)
-	}
-	if len(files) != 2 {
-		t.Fatalf("files = %+v, want the all-platform file and the reserved name skipped", files)
-	}
-	for _, f := range files {
-		if f.Rel == "saves/win.sav" {
-			t.Fatalf("a Windows-only cloud file must not compare on Linux: %+v", f)
-		}
+	if unmapped != 0 || len(files) != 1 || files[0].Want != "download" {
+		t.Fatalf("files = %+v unmapped = %d, want the untagged rule's file to download", files, unmapped)
 	}
 }
 
-// Under Proton the context OS is windows, so a Windows-tagged file syncs.
+// A rule tagged for another OS owns no location here: its cloud files count
+// unmapped ("not synced on this device") however their own mask reads, and the
+// name stays reserved, so a local file whose name only differs in case is
+// skipped instead of uploading over another platform's save.
+func TestCompareCloudSkipsOtherPlatforms(t *testing.T) {
+	dir := t.TempDir()
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
+		"0" { "root" "GameInstall" "path" "Saves" "pattern" "*.sav" "platforms" { "Windows" "1" } }
+		"1" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" } } }`))
+	writeLocal(t, filepath.Join(dir, "saves", "win.sav"), "win")
+	base := &cloudBaseline{Files: map[string]cloudBaselineFile{}}
+	// The rule path only differs in case from the listing's spelling, so on a
+	// case-sensitive OS the listing name is not covered by it.
+	list := []cloudFile{{CloudName: "%GameInstall%Saves/win.sav", SHA: mustSHA("win"), Size: 3,
+		MTime: 100, Platforms: cloudPlatformAll}}
+	files, unmapped := compareCloud(list, scanLocal(ufs, ctx, 0), ufs, ctx, 0, base)
+	if unmapped != 1 || len(files) != 0 {
+		t.Fatalf("files = %+v unmapped = %d, want a Windows-only rule's file unmapped on Linux", files, unmapped)
+	}
+}
+
+// Under Proton the context OS is windows, so a Windows-tagged rule syncs.
 func TestCompareCloudProtonSyncsWindowsFiles(t *testing.T) {
 	dir := t.TempDir()
 	ctx := cloudContext{OS: "windows", Home: filepath.Join(dir, "home"), InstallDir: dir,
@@ -633,12 +649,15 @@ func TestCompareCloudProtonSyncsWindowsFiles(t *testing.T) {
 	}
 }
 
-// A new local save uploads with its rule's platforms mask, not All.
+// A new local save uploads with its rule's platforms mask (All when the rule
+// is untagged); several rules matching one file offer every platform either
+// names.
 func TestCompareCloudUploadCarriesRulePlatforms(t *testing.T) {
 	dir := t.TempDir()
 	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
 	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
-		"0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" "platforms" { "0" "Windows" "1" "Linux" } } } }`))
+		"0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" "platforms" { "Linux" "1" } }
+		"1" { "root" "GameInstall" "path" "saves" "pattern" "new.sav" "platforms" { "0" "Windows" "1" "Linux" } } } }`))
 	writeLocal(t, filepath.Join(dir, "saves", "new.sav"), "new")
 	base := &cloudBaseline{Files: map[string]cloudBaselineFile{}}
 	files, unmapped := compareCloud(nil, scanLocal(ufs, ctx, 0), ufs, ctx, 0, base)
@@ -647,6 +666,41 @@ func TestCompareCloudUploadCarriesRulePlatforms(t *testing.T) {
 	}
 	if want := cloudPlatformLinux | cloudPlatformWindows; files[0].Platforms != want {
 		t.Fatalf("upload mask = %#x, want %#x", files[0].Platforms, want)
+	}
+
+	untagged := parseCloudRules(mustParseKV(t, gameInstallUFS()))
+	writeLocal(t, filepath.Join(dir, "saves", "plain.sav"), "plain")
+	files, _ = compareCloud(nil, scanLocal(untagged, ctx, 0), untagged, ctx, 0, base)
+	var got uint32
+	for _, f := range files {
+		if f.Rel == "saves/plain.sav" {
+			got = f.Platforms
+		}
+	}
+	if got != cloudPlatformAll {
+		t.Fatalf("untagged rule mask = %#x, want All", got)
+	}
+}
+
+// An update keeps what the cloud already offers when the rule says nothing
+// platform-specific: a 0x1 file gets this OS's bit added, never narrowed.
+func TestCompareCloudUpdateWidensPlatforms(t *testing.T) {
+	dir := t.TempDir()
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, gameInstallUFS()))
+	local := filepath.Join(dir, "saves", "a.sav")
+	writeLocal(t, local, "local-new")
+	base := &cloudBaseline{Files: map[string]cloudBaselineFile{
+		"saves/a.sav": {SHA: shaHex([]byte("cloud-old")), Local: local},
+	}}
+	list := []cloudFile{{CloudName: "%GameInstall%saves/a.sav", SHA: mustSHA("cloud-old"),
+		Size: 9, MTime: 100, Platforms: 1}}
+	files, _ := compareCloud(list, scanLocal(ufs, ctx, 0), ufs, ctx, 0, base)
+	if len(files) != 1 || files[0].Want != "upload" {
+		t.Fatalf("files = %+v, want one upload", files)
+	}
+	if want := cloudPlatformWindows | cloudPlatformLinux; files[0].Platforms != want {
+		t.Fatalf("update mask = %#x, want %#x", files[0].Platforms, want)
 	}
 }
 
@@ -1124,24 +1178,40 @@ func TestScanLocalBackslashRulePath(t *testing.T) {
 	}
 }
 
-// A Windows-tagged rule doesn't describe native Linux's device files, but the
-// cloud name it owns still downloads: coverage ignores platforms, the scan
-// respects them.
-func TestScanLocalSkipsWindowsRuleOnLinux(t *testing.T) {
-	dir := t.TempDir()
-	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
-	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
+// A Windows-tagged rule describes no native-Linux location: the scan finds
+// nothing there and the cloud names it owns are unmapped ("not synced on this
+// device"), while under Proton the same rule applies and compares normally.
+// Coverage follows the rule, not the file's platforms_to_sync (issue #188).
+func TestScanAndCoverageFollowRulePlatforms(t *testing.T) {
+	const rules = `"ufs" { "savefiles" {
 		"0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav"
-		      "platforms" { "0" "Windows" } } } }`))
+		      "platforms" { "0" "Windows" } } } }`
+	cloudName := "%GameInstall%saves/a.sav"
+	base := &cloudBaseline{Files: map[string]cloudBaselineFile{}}
+
+	dir := t.TempDir()
+	native := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, rules))
 	writeLocal(t, filepath.Join(dir, "saves", "local.sav"), "local")
-	if got := scanLocal(ufs, ctx, 0); len(got) != 0 {
+	if got := scanLocal(ufs, native, 0); len(got) != 0 {
 		t.Fatalf("a Windows rule must not scan on linux: %v", got)
 	}
-	cloudName := "%GameInstall%saves/cloud.sav"
-	files, unmapped := compareCloud([]cloudFile{listed(cloudName, "remote", 100)}, scanLocal(ufs, ctx, 0),
-		ufs, ctx, 0, &cloudBaseline{Files: map[string]cloudBaselineFile{}})
-	if unmapped != 0 || len(files) != 1 || files[0].Want != "download" || files[0].CloudName != cloudName {
-		t.Fatalf("the cloud name must still download: unmapped=%d files=%+v", unmapped, files)
+	files, unmapped := compareCloud([]cloudFile{listed(cloudName, "remote", 100)}, scanLocal(ufs, native, 0),
+		ufs, native, 0, base)
+	if unmapped != 1 || len(files) != 0 {
+		t.Fatalf("a Windows rule's cloud name must be unmapped on linux: unmapped=%d files=%+v", unmapped, files)
+	}
+
+	proton := cloudContext{OS: "windows", Home: filepath.Join(dir, "home"), InstallDir: dir,
+		PrefixDir: filepath.Join(dir, "prefix"), WinUser: "steamuser"}
+	if err := os.Remove(filepath.Join(dir, "saves", "local.sav")); err != nil {
+		t.Fatal(err)
+	}
+	writeLocal(t, filepath.Join(dir, "saves", "a.sav"), "remote")
+	files, unmapped = compareCloud([]cloudFile{listed(cloudName, "remote", 100)}, scanLocal(ufs, proton, 0),
+		ufs, proton, 0, base)
+	if unmapped != 0 || len(files) != 1 || files[0].Want != "same" || files[0].CloudName != cloudName {
+		t.Fatalf("the same rule must sync under Proton: unmapped=%d files=%+v", unmapped, files)
 	}
 }
 
@@ -1168,8 +1238,9 @@ func TestCompareCloudNoCaseOnlySiblingUploads(t *testing.T) {
 		{"recursive linux", "linux", recursiveUFS, "saves/Slot1/x.sav", "%GameInstall%saves/slot1/x.sav", 1},
 		{"recursive windows", "windows", recursiveUFS, "saves/Slot1/x.sav", "%GameInstall%saves/slot1/x.sav", 0},
 		// (b) a plain rule whose folder itself is the differing case: on
-		// native Linux the listed name isn't the rule's either.
-		{"plain linux", "linux", plainUFS, "Saves/x.sav", "%GameInstall%saves/x.sav", 2},
+		// native Linux the listed name isn't the rule's either, and the case
+		// twin is skipped as that name's (already counted) save.
+		{"plain linux", "linux", plainUFS, "Saves/x.sav", "%GameInstall%saves/x.sav", 1},
 		{"plain windows", "windows", plainUFS, "Saves/x.sav", "%GameInstall%saves/x.sav", 0},
 	} {
 		dir := t.TempDir()

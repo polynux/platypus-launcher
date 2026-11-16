@@ -124,17 +124,40 @@ func cloudRulePlatforms(platforms map[string]bool) uint32 {
 	return out
 }
 
-// cloudPlatformSynced reports whether a listed file syncs to this launch's OS.
-// 0 and All mean every platform: an absent field never hides a save.
-func cloudPlatformSynced(mask uint32, osName string) bool {
-	if mask == 0 || mask == cloudPlatformAll {
-		return true
-	}
-	bit := cloudPlatformWindows
+// cloudPlatformOSBit is the ERemoteStoragePlatform bit of the OS a launch runs
+// as: windows for a Proton/Wine run, linux for a native one.
+func cloudPlatformOSBit(osName string) uint32 {
 	if osName == "linux" {
-		bit = cloudPlatformLinux
+		return cloudPlatformLinux
 	}
-	return mask&bit != 0
+	return cloudPlatformWindows
+}
+
+// cloudRuleApplies reports whether a save rule names locations that exist on
+// this client OS. The local scan and the cloud-name coverage test share it, so
+// a rule excluded here neither contributes device files nor owns cloud names.
+func cloudRuleApplies(r cloudSaveRule, osName string) bool {
+	return r.Platforms == nil || r.Platforms[strings.ToLower(osName)]
+}
+
+// cloudUploadPlatforms is the platforms_to_sync mask an upload offers. A new
+// file sends its rule's mask (All for an untagged rule). An update of a listed
+// file keeps what the cloud already offers: a tagged rule replaces the mask
+// (that rule says where the save belongs), an untagged one only adds this OS's
+// bit, so a file another platform uploaded is never narrowed. 0 reads as All:
+// the SDK's ERemoteStoragePlatformNone is 0, and treating it as All here is
+// deliberate, so a listing without a mask can't hide or narrow a save.
+func cloudUploadPlatforms(ruleMask, remote uint32, hasRemote bool, osName string) uint32 {
+	if !hasRemote {
+		return ruleMask
+	}
+	if ruleMask != cloudPlatformAll {
+		return ruleMask
+	}
+	if remote == 0 || remote == cloudPlatformAll {
+		return cloudPlatformAll
+	}
+	return remote | cloudPlatformOSBit(osName)
 }
 
 // cloudOverride is one ufs/rootoverrides entry: on a matching client OS the
@@ -403,14 +426,16 @@ func mapCloudName(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID uin
 	return local, cloudRel, true
 }
 
-// cloudNameCovered reports whether some ufs save rule describes a cloud file
-// name: the same root (case-insensitively), under the rule's path, matching
-// its pattern. The comparison works on the cloud's own spelling:
-// rootoverrides only decide where a file lands (mapCloudName), never whether
-// a rule owns it, so a pathtransforms find string that also appears in a file
-// name can't make a save look foreign. Platforms are ignored: one cloud name
-// serves every OS. Pulls and pushes only touch names a rule covers, so a
-// stray name (a game-install or home path no rule lists) can never replace a
+// cloudNameCovered reports whether some ufs save rule for this client OS
+// describes a cloud file name: the same root (case-insensitively), under the
+// rule's path, matching its pattern. The comparison works on the cloud's own
+// spelling: rootoverrides only decide where a file lands (mapCloudName), never
+// whether a rule owns it, so a pathtransforms find string that also appears in
+// a file name can't make a save look foreign. A rule whose platforms block
+// leaves this OS out names locations that don't exist here, so it never covers
+// a name either: a cloud file only such rules own is unmapped (not synced on
+// this device). Pulls and pushes only touch names a rule covers, so a stray
+// name (a game-install or home path no rule lists) can never replace a
 // non-save.
 func cloudNameCovered(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID uint64) bool {
 	root, rel, ok := splitCloudName(cloudName)
@@ -422,6 +447,9 @@ func cloudNameCovered(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID
 	// "My Games/…/SaveData" covers the cloud's "my games/…/savedata".
 	fold := ctx.OS == "windows"
 	for _, r := range ufs.Rules {
+		if !cloudRuleApplies(r, ctx.OS) {
+			continue
+		}
 		if !strings.EqualFold(r.Root, root) {
 			continue
 		}
@@ -657,7 +685,7 @@ func uploadCloudName(sc cloudScanned, list []cloudFile) (root, rel string) {
 func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]cloudScanned {
 	out := map[string]cloudScanned{} // local path -> match
 	for _, r := range ufs.Rules {
-		if r.Platforms != nil && !r.Platforms[strings.ToLower(ctx.OS)] {
+		if !cloudRuleApplies(r, ctx.OS) {
 			continue
 		}
 		dir, ok := ruleSearchDir(r, ufs, ctx, steamID)
@@ -704,7 +732,10 @@ func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]cloud
 					return nil
 				}
 				if match(r.Pattern, rel) {
-					if _, dup := out[p]; !dup {
+					if prev, dup := out[p]; dup {
+						prev.Platforms |= platforms
+						out[p] = prev
+					} else {
 						out[p] = cloudScanned{Rel: joinCloudRel(relBase, filepath.ToSlash(rel)), Root: r.Root, Platforms: platforms}
 					}
 				}
@@ -725,7 +756,10 @@ func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]cloud
 			}
 			if match(r.Pattern, e.Name()) {
 				p := filepath.Join(dir, e.Name())
-				if _, dup := out[p]; !dup {
+				if prev, dup := out[p]; dup {
+					prev.Platforms |= platforms
+					out[p] = prev
+				} else {
 					out[p] = cloudScanned{Rel: joinCloudRel(relBase, e.Name()), Root: r.Root, Platforms: platforms}
 				}
 			}
@@ -764,7 +798,8 @@ type cloudFile struct {
 	Machine   string
 	Persist   uint64 // persist_state: 0 persisted, 1 forgotten, 2 deleted
 	// Platforms is the file's platforms_to_sync bitmask (field 6):
-	// ERemoteStoragePlatform bits, 0 when the listing carries none.
+	// ERemoteStoragePlatform bits, 0 when the listing carries none. It only
+	// informs an update's mask; the save rules decide what syncs here.
 	Platforms uint32
 	Unmapped  bool
 }
@@ -982,8 +1017,9 @@ type cloudPlanFile struct {
 	HasRemote bool
 	LocalInfo cloudLocal
 	Want      string // same|download|upload|conflict
-	// Platforms is the platforms_to_sync mask an upload sends: the matched
-	// rule's platforms, All when it has none.
+	// Platforms is the platforms_to_sync mask an upload sends: a new file
+	// its rule's mask (All when untagged), an update per
+	// cloudUploadPlatforms.
 	Platforms uint32
 }
 
@@ -998,8 +1034,10 @@ type cloudPlanFile struct {
 func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS, ctx cloudContext, steamID uint64, base *cloudBaseline) (files []cloudPlanFile, unmapped int) {
 	byLocal := map[string]*cloudFile{}
 	ordered := []string{}
-	// Names the listing marks for other platforms only: not this device's to
-	// sync, and still reserved so a local file never uploads over them.
+	// Names no rule for this OS covers: another platform's save, not this
+	// device's to sync, and still reserved so a local file never uploads over
+	// them. The save rule decides this, like the local scan, never a file's
+	// own platforms_to_sync (issue #188).
 	var notSynced []string
 	for i := range list {
 		f := &list[i]
@@ -1007,13 +1045,13 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 			unmapped++
 			continue
 		}
-		if !cloudPlatformSynced(f.Platforms, ctx.OS) {
-			notSynced = append(notSynced, f.CloudName)
+		localPath, rel, ok := mapCloudName(f.CloudName, ufs, ctx, steamID)
+		if !ok {
 			unmapped++
 			continue
 		}
-		localPath, rel, ok := mapCloudName(f.CloudName, ufs, ctx, steamID)
-		if !ok || !cloudNameCovered(f.CloudName, ufs, ctx, steamID) {
+		if !cloudNameCovered(f.CloudName, ufs, ctx, steamID) {
+			notSynced = append(notSynced, f.CloudName)
 			unmapped++
 			continue
 		}
@@ -1034,8 +1072,9 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 		seen[lp] = true
 		plat := cloudPlatformAll
 		if sc, ok := local[lp]; ok {
-			plat = sc.Platforms // the rule that matched: what an upload offers
+			plat = sc.Platforms // the rule that matched
 		}
+		plat = cloudUploadPlatforms(plat, f.Platforms, true, ctx.OS)
 		pf := cloudPlanFile{Rel: f.Rel, CloudName: f.CloudName, Local: lp, Remote: *f, HasRemote: true, Platforms: plat}
 		li := statLocal(lp)
 		pf.LocalInfo = li
@@ -1121,6 +1160,8 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 			unmapped++
 			continue
 		}
+		// A new file offers its rule's mask: All when the rule is untagged,
+		// the rule's platforms when it names them.
 		pf := cloudPlanFile{Rel: rel, Local: lp, HasRemote: false,
 			CloudName: name, Platforms: sc.Platforms}
 		pf.LocalInfo = statLocal(lp)
