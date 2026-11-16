@@ -2145,7 +2145,15 @@ def start_job(params, kind):
     if not os.path.isabs(install_dir):
         raise RPCError("installDir is missing or relative; Platypus always sends one")
     # One folder per game under Platypus's install dir, like steamapps/common/<name>.
-    game_dir = os.path.join(install_dir, game_dir_name(app))
+    # An update runs on an existing install and Platypus names that game's own
+    # folder for it (library.list's installPath), so joining again would nest
+    # <game>/<game> on every update. Older cores send the parent folder instead:
+    # keep the join for those.
+    recorded = (load_state("installed.json", {}).get(app) or {}).get("path") or ""
+    if kind != "install" and recorded and os.path.normpath(install_dir) == os.path.normpath(recorded):
+        game_dir = install_dir
+    else:
+        game_dir = os.path.join(install_dir, game_dir_name(app))
     # Platypus resends a job with the same jobId after a crash: run it once. A
     # job that was just paused or canceled is still winding down: wait for it,
     # then start again from what it left on disk.
@@ -2801,7 +2809,7 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.7.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.8.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family"],
             # Password branches are unverified against live Steam (no
