@@ -13,9 +13,9 @@
 //	}
 //
 // Branch defaults to "public". A password branch carries no plain
-// manifests: mergePrivateBranch unlocks its private-beta section with the
-// branch key CheckBetaPassword returned (DepotDownloader flow), and the
-// request code call then carries the branch and its SHA-1 password hash.
+// manifests: privateBranchInfo unlocks its private-beta section with the
+// branch key CheckBetaPassword returned, and the request code call then
+// carries the branch and its SHA-1 password hash.
 package main
 
 import (
@@ -122,7 +122,8 @@ func listMatches(cfg *steam.KV, key, want string) bool {
 }
 
 // betaHash hashes a branch password the way the request-code call wants
-// it (SHA-1 hex, like DepotDownloader's branch_password_hash).
+// it (SHA-1 hex: proven live 2026-11-16, a Valheim public-test manifest
+// downloaded with the SHA-1 of its password).
 func betaHash(password string) string {
 	sum := sha1.Sum([]byte(password))
 	return fmt.Sprintf("%x", sum)

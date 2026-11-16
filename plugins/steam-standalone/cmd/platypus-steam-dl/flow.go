@@ -156,6 +156,29 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 				branches = append(branches, *pbi)
 			}
 		}
+	} else if t := s.req.Target; t != nil && t.Build != "" && t.Channel == "" {
+		// A build with no channel names no branch: resolve every stored
+		// branch PICS hides, so branchForBuild sees the locked ones.
+		// A refused password only fails the install when no branch
+		// holds the build; otherwise the wrong branch is not this one.
+		var firstErr error
+		for _, name := range sortedKeys(s.req.BranchPasswords) {
+			pw := s.req.BranchPasswords[name]
+			if pw == "" || findBranch(branches, name) != nil {
+				continue
+			}
+			pbi, err := privateBranchInfo(s.cm, kv, appID, toks[appID], name, pw)
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			branches = append(branches, *pbi)
+		}
+		if branchForBuild(branches, t.Build) == nil && firstErr != nil {
+			return nil, "", resolvedTarget{}, firstErr
+		}
 	}
 	rt, err := resolveTarget(branches, s.req)
 	if err != nil {

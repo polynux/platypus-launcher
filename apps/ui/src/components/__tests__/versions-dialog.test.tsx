@@ -219,6 +219,48 @@ describe('Channel passwords', () => {
   });
 });
 
+describe('Hidden branch unlock', () => {
+  const pwPlugin = {
+    ...plugin,
+    offers: [{ name: 'versions', on: true, known: true, orchestrated: false, features: { channels: true, builds: true, password: true, manual: true } }],
+  } as StorePlugin;
+  const openPw = (v: VersionInfo = info()) => {
+    api.getGameVersions.mockResolvedValue(v);
+    const onClose = vi.fn(), onChanged = vi.fn(), onNotify = vi.fn();
+    render(<VersionsDialog game={game()} plugin={pwPlugin} onClose={onClose} onChanged={onChanged} onNotify={onNotify} />);
+    return { onClose, onChanged, onNotify };
+  };
+
+  it('stays hidden without the versions password feature', async () => {
+    open();
+    await screen.findByRole('radiogroup', { name: 'Channels' });
+    expect(screen.queryByLabelText('Branch name')).toBeNull();
+  });
+
+  it('unlocks a hidden branch by typed name, then reloads the list', async () => {
+    api.unlockVersionChannel.mockResolvedValue(true);
+    const { onNotify } = openPw();
+    fireEvent.change(await screen.findByLabelText('Branch name'), { target: { value: '  secret-branch ' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 's3cret' } });
+    fireEvent.click(within((screen.getByLabelText('Branch name') as HTMLInputElement).closest('form')!).getByRole('button', { name: 'Unlock' }));
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('secret-branch unlocked'));
+    expect((screen.getByLabelText('Password') as HTMLInputElement).value).toBe(''); // not kept
+    expect((screen.getByLabelText('Branch name') as HTMLInputElement).value).toBe('');
+    expect(document.body.textContent).not.toContain('s3cret');
+    await waitFor(() => expect(api.getGameVersions.mock.calls.length).toBeGreaterThan(1)); // list reloaded
+  });
+
+  it('shows a rejection without reloading', async () => {
+    api.unlockVersionChannel.mockResolvedValue(false);
+    openPw();
+    fireEvent.change(await screen.findByLabelText('Branch name'), { target: { value: 'nope' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'x' } });
+    fireEvent.click(within((screen.getByLabelText('Branch name') as HTMLInputElement).closest('form')!).getByRole('button', { name: 'Unlock' }));
+    expect(await screen.findByText(/wasn’t accepted/)).toBeTruthy();
+    expect(api.getGameVersions.mock.calls.length).toBe(1);
+  });
+});
+
 describe('Pinned game', () => {
   const pinned = () => info({ pinned: { kind: 'build', id: 'b200' }, updateAvailable: true });
 

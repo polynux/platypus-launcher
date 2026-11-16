@@ -395,6 +395,30 @@ func resolveTarget(branches []branchInfo, req request) (resolvedTarget, error) {
 	return resolvedTarget{branch: branch, password: pw, manifests: overrides, build: build, versionName: versionName}, nil
 }
 
+// wrongPasswordError marks a refused beta password: Steam answered the
+// CheckBetaPassword call (or the key opened another branch), as opposed
+// to a dropped connection. Only this error drops the stored secret; a
+// transport error with EResult 0 never does.
+type wrongPasswordError struct {
+	Branch string
+	Err    error
+}
+
+func (e wrongPasswordError) Error() string {
+	return fmt.Sprintf("wrong branch password for %q: %v", e.Branch, e.Err)
+}
+
+// sortedKeys lists a string map's keys in order, so multi-branch work
+// doesn't depend on map iteration order.
+func sortedKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // privateBranchRequest names the explicitly requested branch and its
 // password, if any: the plain branch or the target's channel, mirroring
 // resolveTarget's password lookup. Empty unless both are set.
@@ -427,15 +451,21 @@ func privateBranchRequest(req request) (string, string) {
 func privateBranchInfo(cm *steamcm.Session, kv *steam.KV, appID uint32, token uint64, branch, password string) (*branchInfo, error) {
 	keys, err := cm.CheckBetaPassword(appID, password, 0)
 	if err != nil {
-		return nil, fmt.Errorf("wrong branch password for %q: %w", branch, err)
+		if refused(err) {
+			return nil, wrongPasswordError{Branch: branch, Err: err}
+		}
+		return nil, err
 	}
 	key, ok := keys[branch]
 	if !ok || len(key) == 0 {
-		return nil, fmt.Errorf("wrong branch password for %q: Steam opened another branch", branch)
+		return nil, wrongPasswordError{Branch: branch, Err: fmt.Errorf("Steam opened another branch")}
 	}
 	section, err := cm.PrivateBeta(appID, token, branch, key, 0)
 	if err != nil {
-		return nil, fmt.Errorf("Steam has no %s manifests for app %d: %w", branch, appID, err)
+		if refused(err) {
+			return nil, fmt.Errorf("Steam refused the %s section for app %d: %w", branch, appID, err)
+		}
+		return nil, err
 	}
 	if wrapped := section.Get("privatedepots"); wrapped != nil {
 		section = wrapped
@@ -488,8 +518,15 @@ func versionResult(rt resolvedTarget, depots []fetchedDepot, res map[string]any)
 	for _, d := range depots {
 		manifests[d.ref.DepotID] = d.ref.GID
 	}
+	build := rt.build
+	if build == "" && rt.branch != "" && len(manifests) > 0 {
+		// A private section without branch metadata names no build:
+		// pin the manifest set so the install still records its
+		// channel and a later plain update stays on it.
+		build = manualBuildID(manifests)
+	}
 	res["branch"] = rt.branch
-	res["build"] = rt.build
+	res["build"] = build
 	res["version_name"] = rt.versionName
 	res["manifests"] = manifests
 	return res
@@ -518,6 +555,16 @@ func runVersions(ctx context.Context, req request) error {
 	branches, err := parseBranches(kv)
 	if err != nil {
 		return fmt.Errorf("app %d: %v", req.AppID, err)
+	}
+	// A stored password may open branches PICS hides: resolve each one
+	// through its private section so the list shows it unlocked. A
+	// refused or stale secret stays unlisted here; the install names it.
+	for _, name := range sortedKeys(req.BranchPasswords) {
+		if pw := req.BranchPasswords[name]; pw != "" && findBranch(branches, name) == nil {
+			if bi, err := privateBranchInfo(cm, kv, req.AppID, toks[req.AppID], name, pw); err == nil {
+				branches = append(branches, *bi)
+			}
+		}
 	}
 	emit(map[string]any{"type": "result", "branches": branches})
 	return nil
@@ -567,11 +614,11 @@ func runUnlock(ctx context.Context, req request) error {
 		return err
 	}
 	// Call success alone is not an unlock: the response lists the
-	// branches the password opened. Anything else is not this branch.
+	// branches the password opened. A valid password for another branch
+	// still names no branch here, so say so instead of failing silently.
 	if _, ok := keys[req.Branch]; ok {
 		emit(map[string]any{"type": "result", "unlocked": true})
 		return nil
 	}
-	emit(map[string]any{"type": "result", "unlocked": false})
-	return nil
+	return fmt.Errorf("the password didn't open a %q branch for app %d (check the branch name)", req.Branch, req.AppID)
 }

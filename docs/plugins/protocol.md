@@ -895,7 +895,10 @@ message) for a wrong one. Platypus holds a password only for the length of that
 call: it is never written to a job, the settings or the install history, never
 logged, and a target never names one. A resumed job re-uses the stored unlock.
 When the store later refuses a stored password, the plugin forgets it, so the
-unlock form comes back.
+unlock form comes back. A store may hide a password branch from the channel
+list entirely: `versions.list` shows it only after a stored password unlocks
+it (still `requires: "password"`, now `unlocked`), and the UI offers a
+free-text unlock for the hidden name.
 Don't write the password to your log either. Don't implement the method when the
 store has no passwords: it is optional and the first `-32601` is remembered.
 
