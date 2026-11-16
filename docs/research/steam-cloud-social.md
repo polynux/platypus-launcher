@@ -201,7 +201,9 @@ Terraria (105600)       "ufs": { quota, maxnumfiles } only -> uses the Cloud API
 ```
 
 Fields per `savefiles` entry: `root`, `path` (subdirectory, may contain `{64BitSteamID}` / `{Steam3AccountID}`), `pattern`
-(glob), `recursive` (`"1"`), `platforms` (a sub-block of OS names; **absent = all platforms**). Per `rootoverrides` entry: `root`,
+(glob), `recursive` (`"1"`), `platforms` (a sub-block of OS names, spelled either name-keyed (`"Windows" "1"`) or indexed
+(`"1" "Windows"` — the keys are not OS names — measured on Fallout 4 (377160) and Taiji (1141580)); `"all"` or an absent block
+means all platforms). Per `rootoverrides` entry: `root`,
 `os`, `oscompare`, `useinstead`, `addpath`, `pathtransforms` ({`find`,`replace`}). [src: Valve docs; Madeira parses `root`/`os`/`useinstead`/`addpath`;
 the `pathtransforms` and `oscompare` fields are visible in the mirror data above, and not handled by Madeira]. `quota`/`maxnumfiles`
 also appear. Extra `ufs` keys exist (`hidecloudui`, `ignoreexternalfiles`) [inferred from experience; check against more appinfo samples].
