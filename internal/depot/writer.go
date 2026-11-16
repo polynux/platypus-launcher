@@ -5,6 +5,7 @@ package depot
 import (
 	"crypto/sha1"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -129,13 +130,21 @@ func Verify(m *Manifest, dir string) ([]string, error) {
 			continue
 		}
 		path := filepath.Join(dir, filepath.FromSlash(f.Name))
-		data, err := os.ReadFile(path)
+		fh, err := os.Open(path)
 		if err != nil {
 			bad = append(bad, f.Name)
 			continue
 		}
-		sum := sha1.Sum(data)
-		if string(sum[:]) != string(f.FileHash) {
+		// Stream the hash: verify is user-facing now and a big .pak must
+		// not sit in RAM whole.
+		h := sha1.New()
+		_, err = io.Copy(h, fh)
+		fh.Close()
+		if err != nil {
+			bad = append(bad, f.Name)
+			continue
+		}
+		if string(h.Sum(nil)) != string(f.FileHash) {
 			bad = append(bad, f.Name)
 		}
 	}

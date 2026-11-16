@@ -255,24 +255,61 @@ func runVerify(ctx context.Context, req request) error {
 		return err
 	}
 	combined := installedManifests(depots)
-	bad, err := depot.Verify(combined, req.InstallDir)
-	if err != nil {
-		return err
+	checked := 0
+	for _, f := range combined.Files {
+		if f.IsDir() || f.IsSymlink() {
+			continue
+		}
+		if len(f.FileHash) == 0 || len(f.Chunks) == 0 {
+			continue
+		}
+		checked++
 	}
-	if len(bad) == 0 {
-		emit(map[string]any{"type": "result", "bad": 0, "fixed": 0})
+	// The check hashes one depot after another, reporting each like an
+	// install reports its downloads (phase stays "checking" throughout).
+	onCheck, _, _ := progress(totalBytes(depots))
+	var bad []string
+	var hashed uint64
+	for _, d := range depots {
+		sub, err := depot.Verify(d.man, req.InstallDir)
+		if err != nil {
+			return err
+		}
+		bad = append(bad, sub...)
+		hashed += d.man.TotalSize()
+		onCheck(depot.Progress{DoneBytes: hashed})
+	}
+	// A check (repair:false) only reads: report what differs and stop.
+	// depot.Verify lumps damaged and missing files together; the protocol
+	// reports them apart.
+	damaged, missing := splitBad(req.InstallDir, bad)
+	if !req.Repair || len(bad) == 0 {
+		emit(map[string]any{"type": "result", "checked": checked,
+			"damaged": damaged, "missing": missing, "repaired": 0})
 		return nil
 	}
-	// Re-fetch the chunks of mismatched files only.
+	// Re-fetch the chunks of mismatched files only, with progress over
+	// the bad files' bytes.
+	badSet := map[string]bool{}
+	for _, b := range bad {
+		badSet[b] = true
+	}
+	sizes := map[string]uint64{}
+	for _, f := range combined.Files {
+		sizes[f.Name] = f.Size
+	}
+	var repairTotal uint64
+	for _, b := range bad {
+		repairTotal += sizes[b]
+	}
+	onProg, _, _ := progress(repairTotal)
 	client := depot.NewClient()
-	fixed := 0
+	var base uint64
 	for _, d := range depots {
 		var want []string
 		for _, f := range d.man.Files {
-			for _, b := range bad {
-				if f.Name == b {
-					want = append(want, f.Name)
-				}
+			if badSet[f.Name] {
+				want = append(want, f.Name)
 			}
 		}
 		if len(want) == 0 {
@@ -288,17 +325,42 @@ func runVerify(ctx context.Context, req request) error {
 		sched := depot.NewScheduler(client, depot.SchedulerConfig{InitialConns: seededInitialConns(len(d.hosts), 4, len(sub.UniqueChunks()))})
 		dlErr := sched.DownloadStream(ctx, sub, d.ref.DepotID, d.hosts, d.key, nil, func(id string, data []byte) error {
 			return w.Write(id, data)
-		}, nil)
+		}, withBase(onProg, base))
 		if cErr := w.Close(); dlErr == nil {
 			dlErr = cErr
 		}
 		if dlErr != nil {
 			return dlErr
 		}
-		fixed += len(want)
+		base += sub.TotalSize()
 	}
-	emit(map[string]any{"type": "result", "bad": len(bad), "fixed": fixed})
+	// A repair reports what is still wrong afterwards, and what the run
+	// restored (the files bad before and good now).
+	again, err := depot.Verify(combined, req.InstallDir)
+	if err != nil {
+		return err
+	}
+	restored := len(bad) - len(again)
+	if restored < 0 {
+		restored = 0
+	}
+	damaged, missing = splitBad(req.InstallDir, again)
+	emit(map[string]any{"type": "result", "checked": checked,
+		"damaged": damaged, "missing": missing, "repaired": restored})
 	return nil
+}
+
+// splitBad tells the protocol's damaged files (present but different) apart
+// from its missing ones (gone from the folder).
+func splitBad(dir string, bad []string) (damaged, missing int) {
+	for _, b := range bad {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(b))); os.IsNotExist(err) {
+			missing++
+		} else {
+			damaged++
+		}
+	}
+	return damaged, missing
 }
 
 func countChunks(depots []fetchedDepot) int {
