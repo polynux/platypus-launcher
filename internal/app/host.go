@@ -19,6 +19,11 @@ type Host interface {
 	// path, or "" when the user cancels.
 	OpenFile(FileDialog) (string, error)
 	OpenDirectory(DirectoryDialog) (string, error)
+	// OpenPath opens a file or folder with the OS default handler; OpenURL
+	// opens an http(s) URL in the user's browser. Both belong to the shell:
+	// no desktop opener (xdg-open, start) runs from the core.
+	OpenPath(path string) error
+	OpenURL(url string) error
 }
 
 // FileDialog describes a file picker.
@@ -59,4 +64,12 @@ func (stderrHost) OpenFile(FileDialog) (string, error) {
 
 func (stderrHost) OpenDirectory(DirectoryDialog) (string, error) {
 	return "", errors.New("no window to show a folder picker")
+}
+
+func (stderrHost) OpenPath(string) error {
+	return errors.New("no window to open a file or folder")
+}
+
+func (stderrHost) OpenURL(string) error {
+	return errors.New("no window to open a link")
 }

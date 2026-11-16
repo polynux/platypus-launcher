@@ -400,6 +400,10 @@ func (h *chatClearedHost) OpenDirectory(DirectoryDialog) (string, error) {
 	return "", errors.New("no dialog in tests")
 }
 
+func (h *chatClearedHost) OpenPath(string) error { return nil }
+
+func (h *chatClearedHost) OpenURL(string) error { return nil }
+
 // Logging out clears the account's chats in the open window too (C6): the
 // rows it holds are its own, so the core says they are gone with a dropped
 // event that names the store and no friend.
