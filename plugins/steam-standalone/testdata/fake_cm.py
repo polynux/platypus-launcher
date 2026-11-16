@@ -51,6 +51,14 @@ re-read on every auth poll so tests can approve mid-login):
     auth_poll_eresult   EResult for Poll (e.g. 27 expired, 84; default 1)
     auth_challenge_url  QR challenge URL handed out
     auth_new_challenge_url refreshed QR challenge URL
+    unauth_close_after  seconds after an unauthenticated connection opens
+                        before the fake closes it, normally (1000), once per
+                        server process: the live CM closes every pre-logon
+                        websocket after about a minute whatever it sends
+                        (issue #182). 0 = never.
+    link_details_decoys steamids the fake prepends to every
+                        Player.GetPlayerLinkDetails reply, so the client
+                        must match by steamid instead of accounts[0]
 Every connection appends a line to $FAKE_CM_STATE.log: "connect",
 "logon <steamid>", "heartbeat_reply", "service <jobid>", "logoff" — the Go
 tests read it to assert what the plugin actually did on the wire.
@@ -66,6 +74,7 @@ import json
 import os
 import socket
 import struct
+import threading
 import time
 
 STATE = os.environ["FAKE_CM_STATE"]
@@ -279,47 +288,76 @@ def serve(conn):
     def send(emsg, header, body):
         conn.send_frame(2, pack(emsg, header, body))
 
-    st = load()
-    while True:
+    # Pre-logon socket cap (issue #182): the live CM closes an
+    # unauthenticated websocket after about a minute whatever traffic it
+    # carries, and the login session lives on the server. unauth_close_after
+    # reproduces the drop once per server process; close normally (1000), as
+    # the CM does. Sends from here race the read loop's replies only when
+    # the connection is being closed anyway.
+    started = time.monotonic()
+    stop_watch = threading.Event()
+
+    def shut():
+        conn.close_frame()
         try:
-            opcode, payload = conn.read_frame()
+            conn.sock.shutdown(socket.SHUT_RDWR)
         except OSError:
-            return
-        if opcode == 8:  # close
-            conn.close_frame()
-            return
-        if opcode == 9:  # ping -> pong
-            conn.send_frame(10, payload)
-            continue
-        if opcode != 2 or not payload:
-            continue
-        emsg = struct.unpack_from("<I", payload, 0)[0] & ~PROTO_MASK
-        hlen = struct.unpack_from("<I", payload, 4)[0]
-        hdr = pb_parse(payload[8:8 + hlen])
-        body = payload[8 + hlen:]
-        if emsg == EMSG_CLIENT_HELLO:
-            continue
-        # Phase 6 logins run before any token exists, so Authentication
-        # service calls arrive on an unauthenticated connection (no logon)
-        # as 9804 NonAuthed — never 151. Like the real CM, a 151 here gets
-        # the socket closed normally (1000).
-        if emsg == 9804:  # ServiceMethodCallFromClientNonAuthed
-            target = (hdr.get(12, [b""])[0]).decode() if hdr.get(12) else ""
-            if target.startswith("Authentication."):
-                serve_auth(conn, target, hdr, body, hdr.get(1, [0])[0])
+            pass
+
+    def watchdog():
+        while not stop_watch.wait(0.1):
+            drop = load().get("unauth_close_after") or 0
+            if drop and not drop_fired.get("unauth") and time.monotonic() - started >= drop:
+                drop_fired["unauth"] = True
+                record("unauth_drop")
+                shut()
+                return
+
+    threading.Thread(target=watchdog, daemon=True).start()
+    try:
+        st = load()
+        while True:
+            try:
+                opcode, payload = conn.read_frame()
+            except OSError:
+                return
+            if opcode == 8:  # close
+                conn.close_frame()
+                return
+            if opcode == 9:  # ping -> pong
+                conn.send_frame(10, payload)
                 continue
-        if emsg == 151:  # ServiceMethodCallFromClient
-            record("rejected 151 before logon")
-            conn.close_frame()
-            return
-        if emsg == EMSG_CLIENT_LOGOFF:
-            record("logoff")
-            conn.close_frame()
-            return
-        if emsg == EMSG_CLIENT_LOGON:
-            serve_logged_in(conn, hdr, body, st)
-            return
-        record(f"unexpected {emsg}")
+            if opcode != 2 or not payload:
+                continue
+            emsg = struct.unpack_from("<I", payload, 0)[0] & ~PROTO_MASK
+            hlen = struct.unpack_from("<I", payload, 4)[0]
+            hdr = pb_parse(payload[8:8 + hlen])
+            body = payload[8 + hlen:]
+            if emsg == EMSG_CLIENT_HELLO:
+                continue
+            # Phase 6 logins run before any token exists, so Authentication
+            # service calls arrive on an unauthenticated connection (no logon)
+            # as 9804 NonAuthed — never 151. Like the real CM, a 151 here gets
+            # the socket closed normally (1000).
+            if emsg == 9804:  # ServiceMethodCallFromClientNonAuthed
+                target = (hdr.get(12, [b""])[0]).decode() if hdr.get(12) else ""
+                if target.startswith("Authentication."):
+                    serve_auth(conn, target, hdr, body, hdr.get(1, [0])[0])
+                    continue
+            if emsg == 151:  # ServiceMethodCallFromClient
+                record("rejected 151 before logon")
+                conn.close_frame()
+                return
+            if emsg == EMSG_CLIENT_LOGOFF:
+                record("logoff")
+                conn.close_frame()
+                return
+            if emsg == EMSG_CLIENT_LOGON:
+                serve_logged_in(conn, hdr, body, st)
+                return
+            record(f"unexpected {emsg}")
+    finally:
+        stop_watch.set()
 
 
 def serve_logged_in(conn, hdr, body, st):
@@ -437,7 +475,11 @@ def serve_logged_in(conn, hdr, body, st):
             if not ids:
                 ids = [steamid]
             accounts = b""
-            for want in ids:
+            # Decoys come first, so a client that takes accounts[0] (or
+            # whose request Steam parses differently) resolves the wrong
+            # name.
+            decoys = [int(x) for x in (st.get("link_details_decoys") or [])]
+            for want in decoys + ids:
                 name = personas.get(str(want)) or st.get("persona", "TestPersona")
                 pub = pb_fixed64(1, want) + pb_str(10, name)
                 accounts += pb_msg(1, pb_msg(1, pub))

@@ -164,7 +164,18 @@ def log(level, message):
 
 
 def data_dir():
-    d = os.environ.get("PLATYPUS_PLUGIN_DATA") or os.path.join(os.path.expanduser("~"), ".platypus-steam-standalone")
+    d = os.environ.get("PLATYPUS_PLUGIN_DATA")
+    if not d:
+        # Standalone runs have no core to make the folder private: create it
+        # 0700 (and tighten a pre-fix 0755 one), so the state and tokens
+        # inside are not readable by other local users (issue #181).
+        d = os.path.join(os.path.expanduser("~"), ".platypus-steam-standalone")
+        os.makedirs(d, mode=0o700, exist_ok=True)
+        try:
+            os.chmod(d, 0o700)
+        except OSError:
+            pass
+        return d
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -196,28 +207,13 @@ def load_state(name, default):
 def save_state(name, state):
     """Write via a temp file and rename, so a concurrent reader never sees a
     half-written file (load_state would return the default and a caller could
-    then overwrite everything with it)."""
-    path = state_path(name)
-    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.new"
-    try:
-        with open(tmp, "w") as f:
-            json.dump(state, f)
-        os.replace(tmp, path)
-    finally:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
+    then overwrite everything with it).
 
-
-# Token-bearing files (refresh.token, token.json, steam-access.json) must
-# be 0600: the data dir itself is private, but the tokens are bearer
-# credentials and must not be world-readable. os.open/write-then-chmod
-# covers both new files (umask) and pre-existing 0644 ones (WriteFile
-# keeps the old mode); session.json carries no secret and stays 0644.
-def save_secret(name, state):
-    # Created 0600 from the start (no window at the umask's mode), then
-    # renamed over the old file, which may have been 0644.
+    The file is 0600 from creation (issue #181): the same writer persists
+    token-bearing files (token.json, steam-access.json, family-names.json) and
+    plain state (session.json, installed.json), and os.open keeps the mode
+    independent of the umask. The rename replaces a pre-fix 0644 file, mode
+    and all."""
     path = state_path(name)
     tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.new"
     try:
@@ -352,7 +348,7 @@ def refresh_token():
         st["account"] = account
         st["source"] = [path, os.path.getmtime(path)]
         with token_lock:
-            save_secret("token.json", st)
+            save_state("token.json", st)
             migrate_token(token, account)
         return token
     except OSError:
@@ -380,7 +376,7 @@ def migrate_token(token, account):
             # Do not touch st["source"]: it tracks account.config for the
             # legacy fast path. (An older version stored the refresh.token
             # path here, which never matched account_config() again.)
-            save_secret("token.json", st)
+            save_state("token.json", st)
             if account and not state_user():
                 save_state("session.json", {"account": account})
         except OSError:
@@ -1064,7 +1060,7 @@ def access_token():
                 raise RPCError(f"Steam rejected the stored login key ({e}); log in again",
                                CODE_AUTH_REQUIRED)
             raise RPCError(str(e))
-        save_secret("steam-access.json", {"access_token": token,
+        save_state("steam-access.json", {"access_token": token,
                                          "exp": jwt_exp(token)})
         return token
 
@@ -1086,13 +1082,26 @@ def persona_name(steamid):
         token = access_token()  # cached; opens one CM session if needed
         session = steam_cm.CMSession(int(steamid), refresh_token())
         try:
+            # `repeated uint64 steamids = 1`: one plain varint per id, like
+            # the family name lookup. A nested message here packs to bytes
+            # Steam reads as [8, ...] and the reply order is not ours to
+            # assume, so match the account by its steamid.
             body = session.call("Player.GetPlayerLinkDetails#1",
-                                steam_cm.pb_msg(1, steam_cm.pb_int(1, int(steamid))))
+                                steam_cm.pb_int(1, int(steamid)))
         finally:
             session.logoff()
-        link = steam_cm.pb_parse(steam_cm.pb_parse(body).get(1, [b""])[0])
-        pub = steam_cm.pb_parse(link.get(1, [b""])[0])
-        name = pub.get(10, [b""])[0].decode("utf-8", "replace")  # persona_name
+        name = ""
+        want = int(steamid)
+        for raw in steam_cm.pb_parse(body).get(1, []):
+            try:
+                pub = steam_cm.pb_parse(
+                    steam_cm.pb_parse(raw).get(1, [b""])[0])
+            except Exception:
+                continue
+            if pub.get(1, [0])[0] != want:
+                continue
+            name = pub.get(10, [b""])[0].decode("utf-8", "replace")  # persona_name
+            break
     except Exception:
         return ""
     if name:
@@ -1537,7 +1546,7 @@ def family_member_names(ids, token, steamid, timeout=30):
             with names_lock:
                 known = load_state("family-names.json", {})
                 known.update(found)
-                save_secret("family-names.json", known)
+                save_state("family-names.json", known)
     with names_lock:
         known = load_state("family-names.json", {})
     return {i: known[i] for i in want if known.get(i)}
@@ -1862,7 +1871,7 @@ def save_beta_password(app, channel, password):
         app_pws = pws.get(app) or {}
         app_pws[channel] = password
         pws[app] = app_pws
-        save_secret("beta_passwords.json", pws)
+        save_state("beta_passwords.json", pws)
 
 
 def dl_request(params, extra=None):
@@ -3147,7 +3156,7 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.8.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.10.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime"],

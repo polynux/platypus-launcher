@@ -8,8 +8,8 @@ import (
 
 // Token-bearing files must end up 0600 even when they already exist as
 // 0644: WriteFile keeps the old mode, so storeToken chmods after writing
-// and tokenFromFile tightens on first touch. session.json carries no
-// secret and stays 0644.
+// and tokenFromFile tightens on first touch. session.json is state, also
+// 0600 now (issue #181).
 func TestStoreTokenFiles0600(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PLATYPUS_PLUGIN_DATA", dir)
@@ -22,7 +22,7 @@ func TestStoreTokenFiles0600(t *testing.T) {
 	if err := storeToken(token, "TestUser"); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"refresh.token", "token.json"} {
+	for _, name := range []string{"refresh.token", "token.json", "session.json"} {
 		fi, err := os.Stat(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
@@ -30,9 +30,6 @@ func TestStoreTokenFiles0600(t *testing.T) {
 		if fi.Mode().Perm()&0o077 != 0 {
 			t.Fatalf("%s mode %v, want 0600", name, fi.Mode())
 		}
-	}
-	if _, err := os.Stat(filepath.Join(dir, "session.json")); err != nil {
-		t.Fatalf("session.json: %v", err)
 	}
 	// tokenFromFile tightens a pre-existing 0644 refresh.token on read.
 	os.Chmod(filepath.Join(dir, "refresh.token"), 0o644)

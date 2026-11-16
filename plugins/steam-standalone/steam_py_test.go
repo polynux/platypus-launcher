@@ -87,6 +87,40 @@ print(hs._source_matches(rt, "/h/account.config", 1700000000.5),
 	}
 }
 
+// Plugin state is private (issue #181): a standalone run creates its
+// fallback data dir 0700 (and tightens a pre-fix 0755 one), and save_state
+// writes 0600 over a pre-existing 0644 file.
+func TestSteamStateFilesPrivate(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PLATYPUS_PLUGIN_DATA", "")
+	got := pyRun(t, `
+import os, stat
+d = hs.data_dir()
+print(oct(stat.S_IMODE(os.stat(d).st_mode)))
+`)
+	if got != "0o700" {
+		t.Fatalf("fallback data dir mode %s, want 0o700", got)
+	}
+	dirp := filepath.Join(home, ".platypus-steam-standalone")
+	if err := os.Chmod(dirp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got = pyRun(t, `
+import os, stat
+p = hs.state_path("session.json")
+with open(p, "w") as f:
+    f.write("{}")
+os.chmod(p, 0o644)
+hs.save_state("session.json", {"account": "someone"})
+print(oct(stat.S_IMODE(os.stat(hs.data_dir()).st_mode)),
+      oct(stat.S_IMODE(os.stat(p).st_mode)))
+`)
+	if got != "0o700 0o600" {
+		t.Fatalf("modes %q, want 0o700 0o600", got)
+	}
+}
+
 // STEAM-ART: newer apps (Aniimo 4126040) only have hashed asset paths, so
 // the fixed CDN names 404. resolve_art_assets names the real paths via the
 // keyless GetItems API, preferring the _2x file; numeric asset fields

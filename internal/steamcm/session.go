@@ -29,6 +29,8 @@ type Session struct {
 	licenses  []License
 	pending   [][]byte   // batched messages waiting for the next read
 	mu        sync.Mutex // serialises concurrent service calls (STEAM-5)
+	wmu       sync.Mutex // serialises socket writes (Call + Close)
+	closeOnce sync.Once
 	// authed is false before any logon (DialUnauth): service calls go
 	// out as EMsg 9804 with no steamid/sessionid, like the real
 	// client's pre-logon calls.
@@ -148,12 +150,22 @@ func randInt() (uint64, error) {
 }
 
 func (s *Session) hello() error {
-	return s.conn.WriteMessage(websocket.BinaryMessage,
-		packEMsg(EMsgClientHello, header(0, 0, 0, ""), func() []byte {
-			e := &depot.Enc{}
-			e.Varint(1, ProtocolVersion)
-			return e.Bytes()
-		}()))
+	return s.write(EMsgClientHello, header(0, 0, 0, ""), func() []byte {
+		e := &depot.Enc{}
+		e.Varint(1, ProtocolVersion)
+		return e.Bytes()
+	}())
+}
+
+// write sends one message under the session's write lock: the heartbeat
+// loop and Call share the socket, and a websocket has one writer.
+func (s *Session) write(emsg uint32, hdr, body []byte) error {
+	s.wmu.Lock()
+	defer s.wmu.Unlock()
+	// A write deadline so a wedged socket can't hold wmu forever and
+	// block Close behind it.
+	_ = s.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	return s.conn.WriteMessage(websocket.BinaryMessage, packEMsg(emsg, hdr, body))
 }
 
 func dialOne(ctx context.Context, endpoint string, tls bool, steamID uint64, refreshToken string) (*Session, error) {
@@ -185,9 +197,8 @@ func (s *Session) logon(ctx context.Context, refreshToken string) error {
 		return &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 	}
 	s.jobID++
-	if err := s.conn.WriteMessage(websocket.BinaryMessage,
-		packEMsg(EMsgClientLogon, header(s.steamID, 0, 0, ""),
-			logonBody(refreshToken, s.loginID, machineIDForDial()))); err != nil {
+	if err := s.write(EMsgClientLogon, header(s.steamID, 0, 0, ""),
+		logonBody(refreshToken, s.loginID, machineIDForDial())); err != nil {
 		return &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 	}
 	deadline := time.Now().Add(30 * time.Second)
@@ -245,8 +256,7 @@ func (s *Session) logon(ctx context.Context, refreshToken string) error {
 func (s *Session) sideMessage(emsg uint32, hdr depot.Msg, body []byte) {
 	switch emsg {
 	case EMsgClientHeartBeat:
-		_ = s.conn.WriteMessage(websocket.BinaryMessage,
-			packEMsg(EMsgClientHeartBeat, header(s.steamID, s.sessionID, 0, ""), nil))
+		_ = s.write(EMsgClientHeartBeat, header(s.steamID, s.sessionID, 0, ""), nil)
 	case EMsgClientLicenseList:
 		if m, err := depot.Decode(body); err == nil {
 			for _, l := range m.AllBytes(2) {
@@ -321,8 +331,7 @@ func (s *Session) Call(service string, body []byte, timeout time.Duration) ([]by
 	if !s.authed {
 		emsg = EMsgServiceMethodCallNonAuthed
 	}
-	if err := s.conn.WriteMessage(websocket.BinaryMessage,
-		packEMsg(emsg, hdr, body)); err != nil {
+	if err := s.write(emsg, hdr, body); err != nil {
 		return nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 	}
 	deadline := time.Now().Add(timeout)
@@ -362,9 +371,10 @@ func (s *Session) Call(service string, body []byte, timeout time.Duration) ([]by
 	}
 }
 
-// Send logs off and closes the connection; a dropped close is fine.
+// Close logs off and closes the connection; a dropped close is fine.
 func (s *Session) Close() {
-	_ = s.conn.WriteMessage(websocket.BinaryMessage,
-		packEMsg(EMsgClientLogOff, header(s.steamID, s.sessionID, 0, ""), nil))
-	s.conn.Close()
+	s.closeOnce.Do(func() {
+		_ = s.write(EMsgClientLogOff, header(s.steamID, s.sessionID, 0, ""), nil)
+		s.conn.Close()
+	})
 }

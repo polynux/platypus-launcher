@@ -389,7 +389,8 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
     the persona is only fetched there; both login paths now resolve and
     store it before reporting loggedIn.
   - Token files are 0600 live (`refresh.token`, `token.json`,
-    `steam-access.json`, tightened on touch; `session.json` stays 0644):
+    `steam-access.json`, tightened on touch; since #181 every state file,
+    `session.json` included, is 0600):
     the legacy `account.config` migrated to `refresh.token` on first
     read-only use, and the pre-Go `home/` store was never deleted.
   - Live QR login via the launcher works (dialog closed on scan).
