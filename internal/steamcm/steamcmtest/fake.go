@@ -28,6 +28,10 @@ import (
 type Push struct {
 	EMsg uint32
 	Body []byte
+	// Target sets the header's target_job_name: service notifications
+	// (FriendMessagesClient.IncomingMessage#1, ...) arrive as
+	// EMsgServiceMethodResponse with a target and no jobid_target.
+	Target string
 	// After counts service calls: 0 = right after the logon response,
 	// 1 = after the first service request is received (the push goes
 	// out before that call's reply, so it lands between the client's
@@ -87,6 +91,10 @@ type Config struct {
 	Pushes []Push
 	// ServiceEresult is the EResult stamped on service replies (0 = 1).
 	ServiceEresult int
+	// ServiceHandler answers one service call with a canned reply body
+	// and EResult. When nil the fake mints an access-token reply, like
+	// the existing token-exchange tests need.
+	ServiceHandler func(target string, body []byte) (resp []byte, eresult int)
 }
 
 // Fake is one fake CM server: multiple client connections can be
@@ -338,7 +346,9 @@ func (f *Fake) serve(c *fakeConn) {
 				eres = 1
 			}
 			replyBody := tokenBody(hdr.Int(1))
-			_ = body
+			if cfg.ServiceHandler != nil {
+				replyBody, eres = cfg.ServiceHandler(target, body)
+			}
 			c.write(steamcm.PackEMsg(
 				steamcm.EMsgServiceMethodResponse,
 				steamcm.HeaderReply(steamID, int32(hdr.Int(2)), job, eres),
@@ -351,6 +361,9 @@ func (f *Fake) serve(c *fakeConn) {
 				c.write(websocket.FormatCloseMessage(1000, ""))
 				return
 			}
+		case steamcm.EMsgClientChangeStatus, steamcm.EMsgClientGamesPlayed,
+			steamcm.EMsgClientRequestFriendData:
+			f.record(fmt.Sprintf("emsg %d", emsg))
 		default:
 			f.record(fmt.Sprintf("unexpected %d", emsg))
 		}
@@ -364,7 +377,7 @@ func (f *Fake) sendDue(c *fakeConn, cfg Config, count int, steamID uint64) {
 			continue
 		}
 		f.record(fmt.Sprintf("push %d", p.EMsg))
-		c.write(steamcm.PackEMsg(p.EMsg, steamcm.Header(steamID, 4711, 0, ""), p.Body))
+		c.write(steamcm.PackEMsg(p.EMsg, steamcm.Header(steamID, 4711, 0, p.Target), p.Body))
 	}
 }
 

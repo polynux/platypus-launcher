@@ -304,7 +304,16 @@ func TestConformanceSteamStandalone(t *testing.T) {
     "developers": ["Dev"], "publishers": ["Pub"], "release_date": {"date": "2019-09-20"}}}}
 }`), 0o644)
 	cmState := filepath.Join(t.TempDir(), "cm-state.json")
-	os.WriteFile(cmState, []byte(`{}`), 0o644)
+	// The social/chat checks need friends with persona data and a seeded
+	// conversation; the ids are fake (never a real account).
+	os.WriteFile(cmState, []byte(`{
+  "friends": [{"id": "76561198000000011", "rel": 3}, {"id": "76561198000000012", "rel": 3}],
+  "persona_states": {"76561198000000011": {"name": "Conformance Ana", "state": 1, "app": 4321,
+    "title": "Standalone Game", "seen": 1791398361},
+    "76561198000000012": {"name": "Conformance Bo", "state": 3}},
+  "push_body_after": {"0": ["friends", "personas"]},
+  "chat_history": {"76561198000000011": [{"ts": 1791390000, "ord": 1, "text": "hi"}]},
+  "chat_unread": {"76561198000000011": 1}}`), 0o644)
 	// The fake CM must run while the plugin process does; its port is set
 	// per-run, so it can't come in through Suite.Env. The state path must be
 	// exported here too — Suite.Env applies only at plugin start.

@@ -485,7 +485,7 @@ func (s Suite) Conformance(t *testing.T) {
 		sess.checkOptions(t, game, !s.NoUnknownDetails)
 	}
 	if has("social") {
-		sess.checkSocial(t)
+		sess.checkSocial(t, game.StoreAppID)
 	}
 	if has("chat") && has("social") {
 		sess.checkChat(t)

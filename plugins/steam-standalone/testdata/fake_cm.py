@@ -32,6 +32,19 @@ re-read on every auth poll so tests can approve mid-login):
                     calls, then the socket closes: 34 = the session was
                     replaced, 6 = logged in elsewhere (0 = never)
   kick_after        service calls before the kick (default 0 = after logon)
+  friends           [{"id", "rel"}] scripted ClientFriendsList (rel 3 =
+                    friend; 1 = blocked, 2 = pending request)
+  friends_incr      the same, sent as an incremental list
+  persona_states    {steamid: {name, state, app, title, ava, seen}} scripted
+                    ClientPersonaState (ava = 40 hex chars of avatar_hash)
+  push_body_after   {"<n>": ["friends", "friends_incr", "personas",
+                    "incoming"]} scripted pushes with bodies, before the
+                    n-th service reply ("0" = right after logon)
+  chat_incoming     {"friend", "text", "ts", "ord"} (or a list) incoming
+                    chat notification(s)
+  chat_history      {friendid: [{ts, ord, self, text}]} seeded conversations
+  chat_unread       {friendid: n} unread counts for GetActiveMessageSessions
+  The log records ids, states and counts only, never message text.
   drop_after_logon  when true, the first successful logon is followed by an
                     abrupt close (no close frame), like a dead socket; the
                     drop fires once, the next logon stays up
@@ -100,7 +113,9 @@ EMSG_CLOUD_NOTIFY_APP_STATE_CHANGE = 146
 EMSG_CLIENT_PERSONA_STATE = 766
 EMSG_CLIENT_FRIENDS_LIST = 767
 EMSG_CLIENT_PLAYING_SESSION_STATE = 9600
-
+EMSG_CLIENT_CHANGE_STATUS = 716
+EMSG_CLIENT_GAMES_PLAYED = 742
+EMSG_CLIENT_REQUEST_FRIEND_DATA = 815
 # drop_after_logon fires once per server process.
 drop_fired = {}
 
@@ -388,6 +403,12 @@ def serve_logged_in(conn, hdr, body, st):
     replied_heartbeat = False
     service_calls = 0
 
+    def push_frame(emsg, body, target=""):
+        hdr = pb_int(1, steamid) + pb_int(2, sessionid)
+        if target:
+            hdr += pb_str(12, target)
+        conn.send_frame(2, pack(emsg, hdr, body))
+
     def send_pushes(count):
         for kind in (st.get("push_after") or {}).get(str(count), []):
             emsg = {"friends": 767, "persona": 766, "playing": 9600, "cloud": 146}.get(kind)
@@ -395,6 +416,26 @@ def serve_logged_in(conn, hdr, body, st):
                 continue
             record(f"push {emsg} {kind}")
             conn.send_frame(2, pack(emsg, pb_int(1, steamid) + pb_int(2, sessionid), b""))
+        for kind in (st.get("push_body_after") or {}).get(str(count), []):
+            if kind == "friends":
+                record("push 767 friends")
+                push_frame(767, friends_list_body(st.get("friends") or []))
+            elif kind == "friends_incr":
+                record("push 767 friends_incr")
+                push_frame(767, friends_list_body(st.get("friends_incr") or [], incr=True))
+            elif kind == "personas":
+                record("push 766 personas")
+                push_frame(766, persona_body(st.get("persona_states") or {}))
+            elif kind == "incoming":
+                msgs = st.get("chat_incoming")
+                if isinstance(msgs, dict):
+                    msgs = [msgs]
+                for msg in msgs or []:
+                    record(f"push incoming {msg.get('friend')}")
+                    push_frame(147, incoming_body(msg),
+                               "FriendMessagesClient.IncomingMessage#1")
+
+    seed_chat(st, steamid)
 
     send_pushes(0)
     if st.get("drop_after_logon") and not drop_fired.get("x"):
@@ -437,6 +478,11 @@ def serve_logged_in(conn, hdr, body, st):
         if emsg == EMSG_CLIENT_GET_USER_STATS:
             serve_user_stats(conn, hdr, body, st, steamid, sessionid)
             continue
+        if emsg in (EMSG_CLIENT_CHANGE_STATUS, EMSG_CLIENT_GAMES_PLAYED,
+                    EMSG_CLIENT_REQUEST_FRIEND_DATA):
+            # A raw client message: recorded, never answered.
+            serve_social_raw(emsg, body)
+            continue
         target = (hdr.get(12, [b""])[0]).decode() if hdr.get(12) else ""
         jobid = hdr.get(10, [0])[0]
         if target.startswith("Authentication."):
@@ -455,7 +501,18 @@ def serve_logged_in(conn, hdr, body, st):
         # Pushes scheduled for this call go out BEFORE the reply, so
         # they land between the client's request and the reply it waits
         # for (jobid_target matching must not lose them).
+        service_calls += 1
         send_pushes(service_calls)
+        if target.startswith("FriendMessages."):
+            if serve_friend_messages(conn, target, hdr, body, st, steamid, sessionid):
+                kick = st.get("kick", 0)
+                if kick and service_calls >= st.get("kick_after", 0):
+                    record(f"kick {kick} loginid={loginid}")
+                    conn.send_frame(2, pack(EMSG_CLIENT_LOGGED_OFF,
+                                            pb_int(1, steamid) + pb_int(2, sessionid), pb_int(1, kick)))
+                    conn.close_frame()
+                    return
+                continue
         if target.startswith("Player.GetPlayerLinkDetails") and st.get("hang_link_details"):
             # Test hook: accept the names lookup and never answer, so the
             # plugin's family fetch must ride out a silent CM. Longer than
@@ -481,6 +538,8 @@ def serve_logged_in(conn, hdr, body, st):
             decoys = [int(x) for x in (st.get("link_details_decoys") or [])]
             for want in decoys + ids:
                 name = personas.get(str(want)) or st.get("persona", "TestPersona")
+                if isinstance(name, dict):
+                    name = name.get("name") or st.get("persona", "TestPersona")
                 pub = pb_fixed64(1, want) + pb_str(10, name)
                 accounts += pb_msg(1, pb_msg(1, pub))
             conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
@@ -508,6 +567,144 @@ def serve_logged_in(conn, hdr, body, st):
             conn.close_frame()
             return
 
+# --- friends, persona and chat (protocol 1.6/1.9) ------------------------------
+# Driven by the state file so the plugin tests script lists, pushes and
+# conversations without touching Valve:
+#   friends: [{"id": "7656...", "rel": 3}]      full ClientFriendsList (rel 3
+#            = friend; 1 = blocked, 2 = pending; clan ids filtered by client)
+#   friends_incr: [...]                         the incremental list instead
+#   persona_states: {"<id>": {"name", "state", "app", "title", "ava", "seen"}}
+#            state is the EPersonaState number, app the played appid, ava
+#            40 hex chars of avatar_hash, seen a unix last-seen time
+#   push_body_after: {"<n>": ["friends", "friends_incr", "personas", "incoming"]}
+#            pushes that ride out before the nth service call's reply
+#            (they also work at "0", right after logon)
+#   chat_incoming: {"friend", "text", "ts", "ord"} (or a list of those)
+#   chat_history: {"<friendid>": [{"ts", "ord", "self", "text"}]}
+#   chat_unread: {"<friendid>": n}
+# The log records ids, states and counts only, never message text.
+_chat = {}  # (steamid, friend) -> [{"ts", "ord", "self", "text"}]
+_chat_ts = [1791400100]
+_chat_lock = threading.Lock()
+
+
+def friends_list_body(entries, incr=False):
+    out = b""
+    if incr:
+        out += pb_int(1, 1)
+    for fr in entries:
+        out += pb_msg(2, pb_fixed64(1, int(fr["id"])) + pb_int(2, fr.get("rel", 3)))
+    return out
+
+
+def persona_body(personas):
+    out = b""
+    for fid, p in personas.items():
+        if not isinstance(p, dict):
+            continue
+        f = pb_fixed64(1, int(fid)) + pb_int(2, p.get("state", 1))
+        if p.get("app"):
+            f += pb_int(3, p["app"])
+        if p.get("name"):
+            f += pb_str(15, p["name"])
+        if p.get("ava"):
+            f += pb_str(31, bytes.fromhex(p["ava"]))
+        if p.get("seen"):
+            f += pb_int(47, p["seen"])
+        if p.get("title"):
+            f += pb_str(55, p["title"])
+        out += pb_msg(2, f)
+    return out
+
+
+def incoming_body(msg):
+    e = pb_fixed64(1, int(msg["friend"])) + pb_int(2, msg.get("entry", 1))
+    if msg.get("text"):
+        e += pb_str(4, msg["text"])
+    e += pb_fixed32(5, msg.get("ts", 0)) + pb_int(6, msg.get("ord", 0))
+    return e
+
+
+def seed_chat(st, steamid):
+    with _chat_lock:
+        for fid, conv in (st.get("chat_history") or {}).items():
+            key = (steamid, int(fid))
+            if key not in _chat:
+                _chat[key] = [{"ts": m["ts"], "ord": m["ord"],
+                               "self": bool(m.get("self")), "text": m["text"]}
+                              for m in conv]
+
+
+def serve_social_raw(emsg, body):
+    """A raw client message (716/742/815): recorded, never answered."""
+    if emsg == EMSG_CLIENT_CHANGE_STATUS:
+        record(f"status {pb_parse(body).get(1, [0])[0]}")
+    elif emsg == EMSG_CLIENT_GAMES_PLAYED:
+        apps = []
+        for raw in pb_parse(body).get(1, []):
+            apps.append(str(pb_parse(raw).get(2, [0])[0]))
+        record("games_played " + (",".join(apps) if apps else "none"))
+    elif emsg == EMSG_CLIENT_REQUEST_FRIEND_DATA:
+        record(f"friend_data {len(pb_parse(body).get(2, []))}")
+
+
+def serve_friend_messages(conn, target, hdr, body, st, steamid, sessionid):
+    """FriendMessages service calls. Returns True when handled."""
+    jobid = hdr.get(10, [0])[0]
+
+    def reply(resp_body, eresult=1):
+        conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                                pb_int(1, steamid) + pb_int(2, sessionid)
+                                + pb_fixed64(11, jobid) + pb_int(13, eresult),
+                                resp_body))
+
+    if target == "FriendMessages.SendMessage#1":
+        m = pb_parse(body)
+        friend = m.get(1, [0])[0]
+        record(f"send {friend}")
+        with _chat_lock:
+            _chat_ts[0] += 1
+            key = (steamid, friend)
+            conv = _chat.setdefault(key, [])
+            ord = (conv[-1]["ord"] + 1) if conv else 1
+            conv.append({"ts": _chat_ts[0], "ord": ord, "self": True,
+                         "text": m.get(3, [b""])[0].decode("utf-8", "replace")})
+            ts = _chat_ts[0]
+        reply(pb_int(2, ts) + pb_int(3, ord))
+        return True
+    if target == "FriendMessages.GetRecentMessages#1":
+        m = pb_parse(body)
+        friend = m.get(2, [0])[0]
+        limit = m.get(3, [50])[0] or 50
+        recent = bool(m.get(4, [0])[0])
+        tl, ol = m.get(8, [0])[0], m.get(9, [0])[0]
+        with _chat_lock:
+            conv = [mm for mm in _chat.get((steamid, friend), [])]
+        if not recent:
+            conv = [mm for mm in conv if mm["ts"] < tl or (mm["ts"] == tl and mm["ord"] < ol)]
+        more = len(conv) > limit
+        out = b""
+        for mm in conv[-limit:]:
+            acct = (steamid if mm["self"] else friend) & 0xFFFFFFFF
+            out += pb_msg(1, pb_int(1, acct) + pb_int(2, mm["ts"])
+                          + pb_str(3, mm["text"]) + pb_int(4, mm["ord"]))
+        if more:
+            out += pb_int(4, 1)
+        reply(out)
+        return True
+    if target == "FriendMessages.GetActiveMessageSessions#1":
+        out = b""
+        for fid, n in (st.get("chat_unread") or {}).items():
+            if n:
+                out += pb_msg(1, pb_int(1, int(fid) & 0xFFFFFFFF) + pb_int(4, n))
+        reply(out)
+        return True
+    if target == "FriendMessages.AckMessage#1":
+        m = pb_parse(body)
+        record(f"ack {m.get(1, [0])[0]} {m.get(2, [0])[0]}")
+        reply(b"")
+        return True
+    return False
 
 # --- user stats (achievements) ------------------------------------------------
 # Driven by the state file's "userstats" map so the plugin tests control the
@@ -847,6 +1044,18 @@ def serve_auth(conn, target, hdr, body, steamid):
     return False
 
 
+def serve_conn(sock):
+    try:
+        serve(Conn(sock))
+    except OSError:
+        pass
+    finally:
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+
 def main():
     srv = socket.socket()
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -862,12 +1071,10 @@ def main():
         except socket.timeout:
             continue
         srv.settimeout(None)
-        try:
-            serve(Conn(sock))
-        except OSError:
-            pass
-        finally:
-            sock.close()
+        # Connections run in parallel: a persistent social session holds
+        # its socket while one-shot calls (auth, stats, downloads) come
+        # and go on theirs, the way the real CM serves them.
+        threading.Thread(target=serve_conn, args=(sock,), daemon=True).start()
 
 
 if __name__ == "__main__":

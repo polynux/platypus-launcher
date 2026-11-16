@@ -22,6 +22,9 @@ const (
 	EMsgClientPersonaState          = 766
 	EMsgClientFriendsList           = 767
 	EMsgClientPlayingSessionState   = 9600
+	EMsgClientRequestFriendData     = 815
+	EMsgClientChangeStatus          = 716
+	EMsgClientGamesPlayed           = 742
 	EMsgServiceMethodResponse       = 147
 	EMsgServiceMethodCallFromClient = 151
 	// Unauthenticated service calls (before any logon) go out as 9804,

@@ -23,8 +23,10 @@ var (
 // checkSocial holds a plugin offering `social` to the request and snapshot
 // shapes: a bad status or a bad playing id is -32602, social.state answers the
 // documented keys, a friend has an id, a name and a known state, and
-// setPlaying takes a store game id or null.
-func (s *Session) checkSocial(t *testing.T) {
+// setPlaying takes a store game id or null. gameID is the picked library
+// game's store id: a store with numeric ids (Steam's appids) can't take the
+// fixture name another store uses.
+func (s *Session) checkSocial(t *testing.T, gameID string) {
 	t.Helper()
 	s.wantCode("social.setStatus", map[string]any{}, jsonrpc.CodeInvalidParams)
 	s.wantCode("social.setStatus", map[string]any{"state": "lurking"}, jsonrpc.CodeInvalidParams)
@@ -64,8 +66,8 @@ func (s *Session) checkSocial(t *testing.T) {
 	if err := s.call("social.setPlaying", map[string]any{"id": nil}, nil); err != nil {
 		t.Fatalf("social.setPlaying null: %v", err)
 	}
-	if err := s.call("social.setPlaying", map[string]any{"id": "tiny"}, nil); err != nil {
-		t.Fatalf("social.setPlaying tiny: %v", err)
+	if err := s.call("social.setPlaying", map[string]any{"id": gameID}, nil); err != nil {
+		t.Fatalf("social.setPlaying %q: %v", gameID, err)
 	}
 	if err := s.call("social.setPlaying", map[string]any{"id": nil}, nil); err != nil {
 		t.Fatalf("social.setPlaying null: %v", err)

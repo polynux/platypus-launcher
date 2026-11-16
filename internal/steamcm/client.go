@@ -620,6 +620,51 @@ func (c *Client) Call(service string, body []byte, timeout time.Duration) ([]byt
 	}
 }
 
+// Send writes one raw client message (ClientChangeStatus,
+// ClientGamesPlayed, ClientRequestFriendData, ...): the CM answers such
+// messages with pushes, not with a reply the caller waits for.
+func (c *Client) Send(emsg uint32, body []byte) error {
+	c.mu.Lock()
+	if c.state != StateOnline || c.conn == nil {
+		st := c.state
+		c.mu.Unlock()
+		return &CMError{Msg: "Steam session is " + st.String()}
+	}
+	conn := c.conn
+	c.mu.Unlock()
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if err := conn.WriteMessage(websocket.BinaryMessage,
+		packEMsg(emsg, header(c.steamID, c.sessionID, 0, ""), body)); err != nil {
+		return &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+	}
+	return nil
+}
+
+// Notify makes one service call without waiting for its reply, for the
+// FriendMessages methods that return NoResponse (AckMessage): the reply,
+// if any, lands in the push handlers like any other unsolicited message.
+func (c *Client) Notify(service string, body []byte) error {
+	c.mu.Lock()
+	if c.state != StateOnline || c.conn == nil {
+		st := c.state
+		c.mu.Unlock()
+		return &CMError{Msg: "Steam session is " + st.String() + "; not sending " + service}
+	}
+	c.jobID++
+	job := c.jobID
+	hdr := header(c.steamID, c.sessionID, job, service)
+	conn := c.conn
+	c.mu.Unlock()
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if err := conn.WriteMessage(websocket.BinaryMessage,
+		packEMsg(EMsgServiceMethodCallFromClient, hdr, body)); err != nil {
+		return &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+	}
+	return nil
+}
+
 // Close logs off and ends the session. Idempotent, and safe to call
 // from anywhere at any point in the connect/reconnect cycle: it waits
 // for run() to actually return, so after Close there is no goroutine

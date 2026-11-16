@@ -1372,6 +1372,10 @@ def library_list(_params):
     for entry in out:
         if entry["id"] in overrides:
             entry.update(overrides[entry["id"]])
+    # The friends list links a game the friend plays when it is in this
+    # library (protocol 1.6); refreshed on every listing.
+    LIBRARY_IDS.clear()
+    LIBRARY_IDS.update(e["id"] for e in out)
     return {"games": out}
 
 
@@ -3150,16 +3154,305 @@ def job_discard(params):
     return {}
 
 
-# --- dispatch --------------------------------------------------------------
+# --- social and chat (protocol 1.6/1.9) -------------------------------------
+# Friends list, own status and one-to-one chat over one long-lived CM
+# session. The session lives in platypus-steam-dl (the `social`
+# subcommand, plan D1): this file starts it on social.start, stops it on
+# social.stop, and turns its stdout lines into the protocol's
+# social.*/chat.* notifications. Message text is passed through to core
+# and never logged.
+SOCIAL_STATES = ("online", "away", "busy", "snooze", "invisible")
+
+social_lock = threading.Lock()
+social_proc = None  # the live helper: {"proc", "pending", "next", "last_conn", "stopping"}
+social_pending_playing = None  # setPlaying while the friends are off
+LIBRARY_IDS = set()  # store ids from the last library.list, for game links
+
+
+def social_game(g):
+    """A helper game {appid, title} to the protocol's {id?, title}."""
+    appid = str((g or {}).get("appid") or "")
+    title = str((g or {}).get("title") or "")
+    if appid and (appid in LIBRARY_IDS or appid in load_state("installed.json", {})):
+        ref = {"id": f"p.steam-standalone.{appid}"}
+        if title:
+            ref["title"] = title
+        return ref
+    if title:
+        return {"title": title}
+    if appid:
+        return {"title": f"App {appid}"}
+    return None
+
+
+def social_map_friend(f):
+    out = {"id": str(f.get("id") or ""), "name": str(f.get("name") or ""),
+           "state": str(f.get("state") or "offline")}
+    if f.get("avatarUrl"):
+        out["avatarUrl"] = f["avatarUrl"]
+    g = social_game(f.get("game") or {})
+    if g is not None:
+        out["game"] = g
+    if f.get("lastSeen"):
+        out["lastSeen"] = f["lastSeen"]
+    return out
+
+
+def social_spawn_locked(status):
+    """Start the helper; callers hold social_lock. Needs a login."""
+    global social_proc
+    if not logged_in():
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
+    token = refresh_token()
+    try:
+        proc = subprocess.Popen([dl_bin(), "social"], stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, bufsize=1, env=dict(os.environ))
+    except FileNotFoundError:
+        raise RPCError("platypus-steam-dl is missing; reinstall the plugin")
+    rec = {"proc": proc, "pending": {}, "next": 1,
+           "last_conn": "connecting", "stopping": False}
+    try:
+        proc.stdin.write(json.dumps({"refresh_token": token, "status": status}) + "\n")
+        proc.stdin.flush()
+    except (BrokenPipeError, OSError):
+        raise RPCError("the Steam friends session failed to start")
+    social_proc = rec
+    threading.Thread(target=social_reader, args=(rec,), daemon=True).start()
+    return rec
+
+
+def social_reader(rec):
+    """Route the helper's stdout: replies to their waiter, events to core."""
+    global social_proc
+    for line in rec["proc"].stdout:
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(msg, dict):
+            continue
+        if "id" in msg:
+            with social_lock:
+                box = rec["pending"].pop(msg["id"], None)
+            if box is not None:
+                box["reply"] = msg
+                box["ev"].set()
+        elif msg.get("event"):
+            social_notify_event(rec, msg["event"], msg.get("params") or {})
+    with social_lock:
+        dead = social_proc is rec
+        stopping = rec["stopping"]
+        if dead:
+            social_proc = None
+    # A helper that died on its own leaves the subscription stale: say
+    # offline so the UI reflects it (a replaced/loggedOut session already
+    # said so itself, and an explicit stop needs no word).
+    if dead and not stopping and rec["last_conn"] not in ("replaced", "loggedOut"):
+        notify("social.connection", {"state": "offline"})
+
+
+def social_notify_event(rec, event, params):
+    if event == "connection":
+        rec["last_conn"] = params.get("state") or "offline"
+        notify("social.connection", {"state": rec["last_conn"]})
+    elif event == "self":
+        notify("social.self", params)
+    elif event == "friends":
+        notify("social.friends", {"full": bool(params.get("full")),
+                                  "friends": [social_map_friend(f) for f in params.get("friends") or []]})
+    elif event == "message":
+        notify("chat.message", params)
+    elif event == "typing":
+        notify("chat.typing", params)
+    elif event == "unread":
+        notify("chat.unread", params)
+
+
+def social_call_rec(rec, op, params=None, timeout=30):
+    """One helper round trip on a known-live record."""
+    with social_lock:
+        rid = rec["next"]
+        rec["next"] += 1
+        box = {"ev": threading.Event()}
+        rec["pending"][rid] = box
+        line = json.dumps({"id": rid, "op": op, "params": params or {}}) + "\n"
+        try:
+            rec["proc"].stdin.write(line)
+            rec["proc"].stdin.flush()
+        except (BrokenPipeError, OSError):
+            rec["pending"].pop(rid, None)
+            raise RPCError("the Steam friends session is not running", -32000)
+    if not box["ev"].wait(timeout):
+        with social_lock:
+            rec["pending"].pop(rid, None)
+        raise RPCError("Steam didn't answer in time", -32000)
+    reply = box.get("reply") or {}
+    err = reply.get("error") or {}
+    if err:
+        raise RPCError(err.get("message") or "the store refused the request",
+                       err.get("code") or -32000)
+    return reply.get("result") or {}
+
+
+def social_ensure():
+    """A live, synced session, starting one (with the saved status) when
+    needed. Chat and status changes imply the friends are on: opening a
+    conversation right after social.stop must work, not fail. The initial
+    sync runs here so the friends exist before the chat call does."""
+    with social_lock:
+        rec = social_proc
+        if rec is None or rec["proc"].poll() is not None:
+            saved = load_state("social.json", {})
+            status = saved.get("status") or "invisible"
+            if status not in SOCIAL_STATES:
+                status = "invisible"
+            rec = social_spawn_locked(status)
+    social_call_rec(rec, "waitReady", {}, timeout=40)
+    return rec
+
+
+def social_mapped_snapshot(snap):
+    return {"connection": snap.get("connection") or {"state": "offline"},
+            "self": snap.get("self") or {},
+            "friends": [social_map_friend(f) for f in snap.get("friends") or []]}
+
+
+def social_start(_params):
+    global social_pending_playing
+    with social_lock:
+        rec = social_proc
+        if rec is None or rec["proc"].poll() is not None:
+            saved = load_state("social.json", {})
+            status = saved.get("status") or "invisible"
+            if status not in SOCIAL_STATES:
+                status = "invisible"
+            rec = social_spawn_locked(status)
+        pending = social_pending_playing
+    snap = social_call_rec(rec, "waitReady", {}, timeout=45)
+    notify("social.connection", (snap.get("connection") or {"state": "online"}))
+    if snap.get("self"):
+        notify("social.self", snap["self"])
+    notify("social.friends", {"full": True,
+                              "friends": [social_map_friend(f) for f in snap.get("friends") or []]})
+    if pending is not None:
+        with social_lock:
+            social_pending_playing = None
+        try:
+            social_call_rec(rec, "setPlaying", {"id": pending}, timeout=20)
+        except RPCError:
+            pass
+    return {}
+
+
+def social_stop(_params):
+    with social_lock:
+        global social_proc
+        rec = social_proc
+        social_proc = None
+        if rec is None:
+            return {}
+        rec["stopping"] = True
+    # A clean stop logs the session off; a wedged helper is terminated.
+    try:
+        social_call_rec(rec, "stop", {}, timeout=10)
+    except RPCError:
+        pass
+    stop_proc(rec["proc"], grace=3)
+    return {}
+
+
+def social_cleanup():
+    """Stop the helper at plugin exit, with no notifications."""
+    with social_lock:
+        global social_proc
+        rec = social_proc
+        social_proc = None
+        if rec is None:
+            return
+        rec["stopping"] = True
+    try:
+        social_call_rec(rec, "stop", {}, timeout=5)
+    except RPCError:
+        pass
+    try:
+        stop_proc(rec["proc"], grace=2)
+    except Exception:
+        pass
+
+
+def social_state(_params):
+    with social_lock:
+        rec = social_proc
+        if rec is None or rec["proc"].poll() is not None:
+            return {"connection": {"state": "offline"}, "friends": []}
+    return social_mapped_snapshot(social_call_rec(rec, "state", {}, timeout=15))
+
+
+def social_set_status(params):
+    state = ((params or {}).get("state") or "")
+    if state not in SOCIAL_STATES:
+        raise RPCError(f"invalid params: state {state!r} is not a status", -32602)
+    social_call_rec(social_ensure(), "setStatus", {"state": state}, timeout=20)
+    save_state("social.json", {"status": state})
+    return {}
+
+
+def social_set_playing(params):
+    pid = (params or {}).get("id", None)
+    if pid is not None and not isinstance(pid, str):
+        raise RPCError("invalid params: id must be a store game id or null", -32602)
+    with social_lock:
+        rec = social_proc
+        if rec is None or rec["proc"].poll() is not None:
+            # Core replays the running game when the friends turn on.
+            global social_pending_playing
+            social_pending_playing = pid
+            return {}
+    social_call_rec(rec, "setPlaying", {"id": pid}, timeout=20)
+    return {}
+
+
+def chat_history(params):
+    friend = str((params or {}).get("friendId") or "")
+    if not friend:
+        raise RPCError("invalid params: friendId is required", -32602)
+    return social_call_rec(social_ensure(), "history", {"friendId": friend,
+                                   "before": (params or {}).get("before") or "",
+                                   "limit": (params or {}).get("limit") or 50},
+                       timeout=40)
+
+
+def chat_send(params):
+    friend = str((params or {}).get("friendId") or "")
+    text = (params or {}).get("text") or ""
+    client_id = (params or {}).get("clientId") or ""
+    if not friend or not text or not client_id:
+        raise RPCError("invalid params: friendId, text and clientId are required", -32602)
+    return social_call_rec(social_ensure(), "send", {"friendId": friend, "text": text, "clientId": client_id},
+                       timeout=40)
+
+
+def chat_mark_read(params):
+    friend = str((params or {}).get("friendId") or "")
+    up_to = str((params or {}).get("upTo") or "")
+    if not friend or not up_to:
+        raise RPCError("invalid params: friendId and upTo are required", -32602)
+    return social_call_rec(social_ensure(), "markRead", {"friendId": friend, "upTo": up_to}, timeout=20)
+
+
+def chat_unread_counts(_params):
+    return social_call_rec(social_ensure(), "unreadCounts", {}, timeout=20)
+
 
 def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.10.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.11.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
-                             "verify", "achievements", "playtime"],
+                             "verify", "achievements", "playtime", "social", "chat"],
             # Password branches are unverified against live Steam (no
             # encryptedmanifests decryption yet): listed locked, unlock
             # kept but unadvertised.
@@ -3265,6 +3558,15 @@ METHODS = {
     "family.setPreferredCopy": family_set_preferred_copy,
     "game.saveContext": game_save_context,
     "game.clientStatus": game_client_status,
+    "social.start": social_start,
+    "social.stop": social_stop,
+    "social.state": social_state,
+    "social.setStatus": social_set_status,
+    "social.setPlaying": social_set_playing,
+    "chat.history": chat_history,
+    "chat.send": chat_send,
+    "chat.markRead": chat_mark_read,
+    "chat.unreadCounts": chat_unread_counts,
 }
 
 
@@ -3309,6 +3611,7 @@ def main():
         procs = [j.get("proc") for j in jobs.values()]
     for p in procs:
         stop_proc(p, grace=5)
+    social_cleanup()
 
 
 if __name__ == "__main__":
