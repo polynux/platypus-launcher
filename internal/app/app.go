@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"os"
 	"os/exec"
@@ -1134,26 +1133,14 @@ func (a *App) isCustomLaunch(game types.Game) bool {
 	return a.isCustomGameID(game.ID)
 }
 
-// hasShebang says whether the file starts with "#!", so a shell can run it
-// whatever its name.
-func hasShebang(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	buf := make([]byte, 2)
-	n, _ := io.ReadFull(f, buf)
-	return n == 2 && buf[0] == '#' && buf[1] == '!'
-}
-
 // prepareCustomLaunch builds the launch for a sideloaded game (issue #47):
 // native games run directly with no runner and no Wine prefix (GameMode,
 // MangoHud and Gamescope still wrap them), Windows games go through the
 // runner as before. The working directory defaults to the binary's folder.
-// A .sh script without the execute bit runs through /bin/sh; any other
-// native binary without it fails with a clear error instead of a raw exec
-// failure (the UI offers to set the bit first).
+// A script without the execute bit runs through the host's interpreter
+// (issue #81: the POSIX shell on Unix, cmd.exe or PowerShell on Windows); any
+// other native binary without it fails with a clear error instead of a raw
+// exec failure (the UI offers to set the bit first).
 func (a *App) prepareCustomLaunch(game types.Game, preview bool) (*prepared, error) {
 	if !game.Native {
 		dir := game.Settings.WorkingDir
@@ -1170,13 +1157,19 @@ func (a *App) prepareCustomLaunch(game types.Game, preview bool) (*prepared, err
 	executable := st.Mode().Perm()&0o111 != 0
 	command := game.Executable
 	args := []string{}
-	if !executable && (strings.EqualFold(filepath.Ext(game.Executable), ".sh") || hasShebang(game.Executable)) {
-		command = "/bin/sh"
-		args = append(args, game.Executable)
-	} else if !executable {
-		return nil, apperr.New("sideload.notExecutable",
-			fmt.Sprintf("%s is not executable; make it executable or it can't start", game.Executable),
-			map[string]string{"executable": game.Executable})
+	if !executable {
+		target, isScript, err := runner.ScriptCommand(game.Executable)
+		if err != nil {
+			return nil, apperr.New("sideload.scriptUnsupported", err.Error(),
+				map[string]string{"executable": game.Executable})
+		}
+		if !isScript {
+			return nil, apperr.New("sideload.notExecutable",
+				fmt.Sprintf("%s is not executable; make it executable or it can't start", game.Executable),
+				map[string]string{"executable": game.Executable})
+		}
+		command = target.Exe
+		args = append(args, target.Args...)
 	}
 	dir := game.Settings.WorkingDir
 	if dir == "" && game.Executable != "" {
