@@ -83,4 +83,9 @@ playing right now is marked in use: the in-use list comes from one
 `FamilyGroupsClient.NotifyRunningApps`), and a failed read leaves copies
 marked free rather than breaking the listing. While every copy of a
 borrowed game is in use, the launch is refused (`game.launchSpec` answers
-`-32002` naming the player); a free copy launches.
+`-32002` naming the player); a free copy launches. While the friends
+session runs (`social.start`), the plugin also watches that push for the
+owner taking a borrowed game back: when the owner starts the copy the user
+is playing, it sends `family.warning` once, naming the owner (no
+`secondsLeft`: Steam gives no deadline in these messages). With the
+friends session off there is no warning.

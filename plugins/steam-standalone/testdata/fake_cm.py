@@ -687,11 +687,12 @@ def serve_family_groups(conn, target, hdr, body, st, steamid, sessionid):
     jobid = hdr.get(10, [0])[0]
     if target == "FamilyGroups.GetFamilyGroupForUser#1":
         # The helper sends steamid as a uint64 varint (field 1), like the
-        # group id: assert the wire shape the helper must use live.
+        # group id: assert the wire shape the helper must use live. A bad
+        # shape answers no group, so a wrong request can't subscribe.
         wtype = pb_wire(body).get(1)
         ok = wtype == 0 and pb_parse(body).get(1, [0])[0] == steamid
         record("family foruser ok" if ok else f"family foruser BAD wire={wtype}")
-        group_id = int(st.get("family_group_id") or 0)
+        group_id = int(st.get("family_group_id") or 0) if ok else 0
         resp_body = pb_int(1, group_id) if group_id else b""
         push = None
     elif target == "FamilyGroups.GetFamilyGroup#1":

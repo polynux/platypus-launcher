@@ -374,6 +374,24 @@ func useSocialFake(t *testing.T, cfg steamcmtest.Config) *steamcmtest.Fake {
 	return f
 }
 
+// familySubscribeHandler answers the social session's startup family
+// subscribe (GetFamilyGroupForUser + GetFamilyGroup) with a group but no
+// running list, so the subscribe costs exactly two service calls and the
+// scripted push schedules stay put; everything else goes to the chat fake.
+func familySubscribeHandler(cf *chatFake) func(string, []byte) ([]byte, int) {
+	return func(target string, body []byte) ([]byte, int) {
+		switch target {
+		case "FamilyGroups.GetFamilyGroupForUser#1":
+			e := &depot.Enc{}
+			e.Varint(1, 424242)
+			return e.Bytes(), 1
+		case "FamilyGroups.GetFamilyGroup#1":
+			return []byte{}, 1
+		}
+		return cf.handler(target, body)
+	}
+}
+
 func friendIDs(v any) []string {
 	m := v.(map[string]any)
 	ids := []string{}
@@ -398,12 +416,14 @@ func TestSocialFriendsFullAndIncremental(t *testing.T) {
 	incr := friendsListBody(true, friendEntry(testF3, 3))
 	incrPersona := personaBody(personaSpec{id: testF3, state: 3, name: "Cy Okafor"})
 	f := useSocialFake(t, steamcmtest.Config{
-		ServiceHandler: cf.handler,
+		ServiceHandler: familySubscribeHandler(cf),
 		Pushes: []steamcmtest.Push{
 			{EMsg: steamcm.EMsgClientFriendsList, Body: full},
 			{EMsg: steamcm.EMsgClientPersonaState, Body: persona},
-			{EMsg: steamcm.EMsgClientFriendsList, Body: incr, After: 1},
-			{EMsg: steamcm.EMsgClientPersonaState, Body: incrPersona, After: 1},
+			// After counts every service call, including the session's
+			// two family subscribe calls at startup.
+			{EMsg: steamcm.EMsgClientFriendsList, Body: incr, After: 3},
+			{EMsg: steamcm.EMsgClientPersonaState, Body: incrPersona, After: 3},
 		},
 	})
 	_ = f
@@ -521,10 +541,12 @@ func socialTestPushes() []steamcmtest.Push {
 	return []steamcmtest.Push{
 		{EMsg: steamcm.EMsgClientFriendsList, Body: full},
 		{EMsg: steamcm.EMsgClientPersonaState, Body: persona},
+		// After counts every service call, including the session's two
+		// family subscribe calls at startup.
 		{EMsg: steamcm.EMsgServiceMethodResponse, Target: "FriendMessagesClient.IncomingMessage#1",
-			Body: incomingBody(testF2, 1, "hey", 1791400000, 7, false), After: 2},
+			Body: incomingBody(testF2, 1, "hey", 1791400000, 7, false), After: 4},
 		{EMsg: steamcm.EMsgServiceMethodResponse, Target: "FriendMessagesClient.IncomingMessage#1",
-			Body: incomingBody(testF2, 2, "", 1791400001, 0, false), After: 3},
+			Body: incomingBody(testF2, 2, "", 1791400001, 0, false), After: 5},
 	}
 }
 
@@ -544,7 +566,7 @@ func TestSocialChatRoundTrip(t *testing.T) {
 	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
 		unread: map[uint64]int{testF2: 3},
 		names:  map[uint64]string{}}
-	f := useSocialFake(t, steamcmtest.Config{ServiceHandler: cf.handler, Pushes: socialTestPushes()})
+	f := useSocialFake(t, steamcmtest.Config{ServiceHandler: familySubscribeHandler(cf), Pushes: socialTestPushes()})
 	_ = f
 	p := startSocial(t, "")
 	waitReadyReply(p, 1)
@@ -638,7 +660,7 @@ func TestSocialChatRoundTrip(t *testing.T) {
 	if len(hist.Messages) != 1 || hist.Messages[0].ID != sent.ID || hist.Messages[0].From != "self" {
 		t.Fatalf("history = %s", hraw)
 	}
-	// The scripted incoming message (After 2) rode in before this reply.
+	// The scripted incoming message (After 4) rode in before this reply.
 	var incoming *socialLine
 	for i := range evs {
 		if evs[i].Event == "message" {
@@ -660,7 +682,7 @@ func TestSocialChatRoundTrip(t *testing.T) {
 	if im.FriendID != "76561198000000003" || im.Message.From != im.FriendID || im.Message.SentAt != 1791400000*1000 {
 		t.Fatalf("incoming = %s", incoming.Params)
 	}
-	// The typing notice (After 3) arrives around the next call.
+	// The typing notice (After 5) arrives around the next call.
 	p.send("history", map[string]any{"friendId": "76561198000000003"}, 33)
 	_, evs2 := p.nextReply(33, 15*time.Second)
 	typed := false
@@ -738,23 +760,25 @@ func TestSocialLocalEcho(t *testing.T) {
 	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
 		unread: map[uint64]int{}, names: map[uint64]string{}}
 	f := useSocialFake(t, steamcmtest.Config{
-		ServiceHandler: cf.handler,
+		ServiceHandler: familySubscribeHandler(cf),
 		Pushes: []steamcmtest.Push{
 			{EMsg: steamcm.EMsgClientFriendsList, Body: friendsListBody(false, friendEntry(testF1, 3))},
 			{EMsg: steamcm.EMsgClientPersonaState, Body: personaBody(
 				personaSpec{id: testF1, state: 1, name: "Ana Ruiz"},
 				personaSpec{id: testSelfID, state: 1, name: "Self Player"})},
 			// The first send gets ts 1, ord 1: this echo lands
-			// mid-call and is dropped before core has the id.
+			// mid-call and is dropped before core has the id. After counts
+			// every service call, including the session's two family
+			// subscribe calls at startup.
 			{EMsg: steamcm.EMsgServiceMethodResponse, Target: "FriendMessagesClient.IncomingMessage#1",
-				Body: incomingBody(testF1, 1, "hello", 1, 1, true), After: 1},
+				Body: incomingBody(testF1, 1, "hello", 1, 1, true), After: 3},
 			// The same echo after the reply matches the confirmed
 			// send and is dropped too.
 			{EMsg: steamcm.EMsgServiceMethodResponse, Target: "FriendMessagesClient.IncomingMessage#1",
-				Body: incomingBody(testF1, 1, "hello", 1, 1, true), After: 2},
+				Body: incomingBody(testF1, 1, "hello", 1, 1, true), After: 4},
 			// An echo from our other device arrives as from self.
 			{EMsg: steamcm.EMsgServiceMethodResponse, Target: "FriendMessagesClient.IncomingMessage#1",
-				Body: incomingBody(testF1, 1, "elsewhere", 1791399999, 9, true), After: 3},
+				Body: incomingBody(testF1, 1, "elsewhere", 1791399999, 9, true), After: 5},
 		},
 	})
 	_ = f
@@ -928,14 +952,16 @@ func TestSocialReplacedStopsLoop(t *testing.T) {
 	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
 		unread: map[uint64]int{}, names: map[uint64]string{}}
 	f := useSocialFake(t, steamcmtest.Config{
-		ServiceHandler: cf.handler,
+		ServiceHandler: familySubscribeHandler(cf),
 		Pushes: []steamcmtest.Push{
 			{EMsg: steamcm.EMsgClientFriendsList, Body: friendsListBody(false, friendEntry(testF1, 3))},
 			{EMsg: steamcm.EMsgClientPersonaState, Body: personaBody(
 				personaSpec{id: testF1, state: 1, name: "Ana Ruiz"},
 				personaSpec{id: testSelfID, state: 1, name: "Self Player"})},
 		},
-		Kick: 6, KickAfter: 1,
+		// KickAfter counts every service call, including the session's two
+		// family subscribe calls at startup; history is the third.
+		Kick: 6, KickAfter: 3,
 	})
 	_ = f
 	p := startSocial(t, "")
@@ -1002,15 +1028,16 @@ func TestSocialPlayingBlocked(t *testing.T) {
 	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
 		unread: map[uint64]int{}, names: map[uint64]string{}}
 	f := useSocialFake(t, steamcmtest.Config{
-		ServiceHandler: cf.handler,
+		ServiceHandler: familySubscribeHandler(cf),
 		Pushes: []steamcmtest.Push{
 			{EMsg: steamcm.EMsgClientFriendsList, Body: friendsListBody(false, friendEntry(testF1, 3))},
 			{EMsg: steamcm.EMsgClientPersonaState, Body: personaBody(
 				personaSpec{id: testF1, state: 1, name: "Ana Ruiz"},
 				personaSpec{id: testSelfID, state: 1, name: "Self Player"})},
 			{EMsg: steamcm.EMsgClientPlayingSessionState, Body: playingBody(true, 999)},
-			// The slot frees on the next service call.
-			{EMsg: steamcm.EMsgClientPlayingSessionState, Body: playingBody(false, 0), After: 1},
+			// The slot frees on the next service call after the session's
+			// two family subscribe calls at startup.
+			{EMsg: steamcm.EMsgClientPlayingSessionState, Body: playingBody(false, 0), After: 3},
 		},
 	})
 	p := startSocial(t, "")
@@ -1037,4 +1064,141 @@ func TestSocialPlayingBlocked(t *testing.T) {
 		t.Fatalf("no report after unblock: %v", f.Events())
 	}
 	p.stop(4)
+}
+
+// The social session subscribes to the family running list after logon
+// (issue #178, take-back warning): GetFamilyGroupForUser for the group id,
+// then GetFamilyGroup with send_running_apps, and the NotifyRunningApps
+// push arrives as a familyRunning event with the decoded pairs.
+func TestSocialFamilyRunningEvent(t *testing.T) {
+	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
+		unread: map[uint64]int{}, names: map[uint64]string{}}
+	f := useSocialFake(t, steamcmtest.Config{
+		ServiceHandler: familySubscribeHandler(cf),
+		Pushes: []steamcmtest.Push{
+			{EMsg: steamcm.EMsgClientFriendsList, Body: friendsListBody(false, friendEntry(testF1, 3))},
+			{EMsg: steamcm.EMsgClientPersonaState, Body: personaBody(
+				personaSpec{id: testF1, state: 1, name: "Ana Ruiz"},
+				personaSpec{id: testSelfID, state: 1, name: "Self Player"})},
+			{EMsg: steamcm.EMsgCloudNotifyAppStateChange, Target: notifyRunningApps,
+				Body:  familyRunningBody(424242, [3]uint64{5001, testSelfID, 76561199}, [3]uint64{5001, 76561199, 76561199}),
+				After: 2},
+		},
+	})
+	p := startSocial(t, "none")
+	params := p.nextEvent("familyRunning", 15*time.Second)
+	var got struct {
+		Running []struct {
+			AppID  uint32 `json:"appid"`
+			Player string `json:"player"`
+			Owner  string `json:"owner"`
+		} `json:"running"`
+	}
+	if err := json.Unmarshal(params, &got); err != nil {
+		t.Fatalf("familyRunning params: %v", err)
+	}
+	if len(got.Running) != 2 || got.Running[0].AppID != 5001 ||
+		got.Running[0].Player != "76561198000000001" || got.Running[0].Owner != "76561199" ||
+		got.Running[1].Player != "76561199" || got.Running[1].Owner != "76561199" {
+		t.Fatalf("familyRunning = %s", params)
+	}
+	if !f.WaitFor(10*time.Second, func(evs []string) bool {
+		var forUser, group int
+		for _, e := range evs {
+			switch e {
+			case "service FamilyGroups.GetFamilyGroupForUser#1":
+				forUser++
+			case "service FamilyGroups.GetFamilyGroup#1":
+				group++
+			}
+		}
+		return forUser >= 1 && group >= 1
+	}) {
+		t.Fatalf("no family subscribe on the wire: %v", f.Events())
+	}
+	p.stop(2)
+}
+
+// A reconnect re-asks for the running-apps push: Steam only pushes to a
+// session that asked with send_running_apps.
+func TestSocialFamilyRunningResubscribes(t *testing.T) {
+	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
+		unread: map[uint64]int{}, names: map[uint64]string{}}
+	f := useSocialFake(t, steamcmtest.Config{
+		ServiceHandler: familySubscribeHandler(cf),
+		DropAfter:      300 * time.Millisecond,
+	})
+	p := startSocial(t, "none")
+	if !f.WaitFor(15*time.Second, func(evs []string) bool {
+		n := 0
+		for _, e := range evs {
+			if e == "service FamilyGroups.GetFamilyGroupForUser#1" {
+				n++
+			}
+		}
+		return n >= 2
+	}) {
+		t.Fatalf("no family re-ask after reconnect: %v", f.Events())
+	}
+	p.stop(2)
+}
+
+// familyRunningBody encodes one NotifyRunningApps push: field 1 the family
+// group, one field-2 entry {1: appid, 3: {1: player, 2: owner}} per app.
+func familyRunningBody(groupID uint64, pairs ...[3]uint64) []byte {
+	byApp := map[uint64][][3]uint64{}
+	var order []uint64
+	for _, pr := range pairs {
+		if _, ok := byApp[pr[0]]; !ok {
+			order = append(order, pr[0])
+		}
+		byApp[pr[0]] = append(byApp[pr[0]], pr)
+	}
+	b := &depot.Enc{}
+	b.Varint(1, groupID)
+	for _, app := range order {
+		en := &depot.Enc{}
+		en.Varint(1, app)
+		for _, pr := range byApp[app] {
+			p := &depot.Enc{}
+			p.Fixed64(1, pr[1])
+			p.Fixed64(2, pr[2])
+			en.BytesField(3, p.Bytes())
+		}
+		b.BytesField(2, en.Bytes())
+	}
+	return b.Bytes()
+}
+
+// The family subscribe never gates the session: a CM that stays silent on
+// the FamilyGroups calls still lets social.start through promptly (each
+// subscribe call times out on its own, behind the startup).
+func TestSocialFamilySubscribeNeverBlocks(t *testing.T) {
+	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
+		unread: map[uint64]int{}, names: map[uint64]string{}}
+	f := useSocialFake(t, steamcmtest.Config{
+		ServiceHandler: func(target string, body []byte) ([]byte, int) {
+			if strings.HasPrefix(target, "FamilyGroups.") {
+				select {} // Steam stays silent: the subscribe timeouts fire instead
+			}
+			return cf.handler(target, body)
+		},
+		Pushes: []steamcmtest.Push{
+			{EMsg: steamcm.EMsgClientFriendsList, Body: friendsListBody(false, friendEntry(testF1, 3))},
+			{EMsg: steamcm.EMsgClientPersonaState, Body: personaBody(
+				personaSpec{id: testF1, state: 1, name: "Ana Ruiz"},
+				personaSpec{id: testSelfID, state: 1, name: "Self Player"})},
+		},
+	})
+	_ = f
+	p := startSocial(t, "none")
+	start := time.Now()
+	waitReadyReply(p, 1)
+	// A gated startup would sit out at least one 5 s subscribe timeout
+	// first (the silent fake stalls GetFamilyGroupForUser, so the second
+	// call is never reached): anything near that means it blocked.
+	if dt := time.Since(start); dt > 3*time.Second {
+		t.Fatalf("social.start took %v with a silent family read, want under 3 s", dt)
+	}
+	p.stop(2)
 }
