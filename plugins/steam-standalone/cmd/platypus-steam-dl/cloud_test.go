@@ -80,19 +80,35 @@ func TestParseCloudRulesAPIOnly(t *testing.T) {
 	}
 }
 
-// Real appinfo indexes the platforms block (`"1" "Windows"`, Fallout 4 and
-// Taiji): its values are the OS names. Reading the keys made the scan skip
-// every tagged rule on every OS, so those saves downloaded but never
-// uploaded (#187).
+// appinfo spells the platforms block both ways: indexed (`"1" "Windows"`,
+// measured on Fallout 4 and Taiji) and name-keyed (`"Windows" "1"`). The OS
+// names are what matter; an empty block means all platforms.
 func TestParseCloudRulesPlatforms(t *testing.T) {
-	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
-		"0" { "root" "WinMyDocuments" "path" "/My Games/Fallout4/Saves" "pattern" "*.fos"
-		      "platforms" { "1" "Windows" } } } }`))
-	if len(ufs.Rules) != 1 {
-		t.Fatalf("rules = %+v", ufs.Rules)
-	}
-	if p := ufs.Rules[0].Platforms; !p["windows"] || p["linux"] {
-		t.Fatalf("platforms = %+v, want Windows only", p)
+	for _, tc := range []struct {
+		name  string
+		block string
+		want  map[string]bool
+	}{
+		{"indexed", `"platforms" { "1" "Windows" }`, map[string]bool{"windows": true}},
+		{"name-keyed", `"platforms" { "Windows" "1" }`, map[string]bool{"windows": true}},
+		{"mixed", `"platforms" { "0" "Linux" "Windows" "1" }`, map[string]bool{"linux": true, "windows": true}},
+		{"empty", `"platforms" { }`, nil},
+	} {
+		ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
+			"0" { "root" "WinMyDocuments" "path" "/My Games/Fallout4/Saves" "pattern" "*.fos"
+			      `+tc.block+` } } }`))
+		if len(ufs.Rules) != 1 {
+			t.Fatalf("%s: rules = %+v", tc.name, ufs.Rules)
+		}
+		p := ufs.Rules[0].Platforms
+		if len(p) != len(tc.want) {
+			t.Fatalf("%s: platforms = %+v, want %+v", tc.name, p, tc.want)
+		}
+		for osName := range tc.want {
+			if !p[osName] {
+				t.Fatalf("%s: platforms = %+v, want %+v", tc.name, p, tc.want)
+			}
+		}
 	}
 }
 
@@ -335,6 +351,32 @@ func TestCloudNameCoveredRecursiveAndSteamID(t *testing.T) {
 	}
 	if cloudNameCovered("%LinuxHome%.config/game/1/a.cfg", ufs, ctx, id) {
 		t.Fatal("another account id is not this rule's")
+	}
+}
+
+// A rule path the scan refuses names no directory, so it can't cover a cloud
+// file either: the name is unmapped instead of downloaded somewhere guessed.
+func TestCloudNameCoveredRejectsUnscannablePath(t *testing.T) {
+	dir := t.TempDir()
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
+		"0" { "root" "GameInstall" "path" "../evil" "pattern" "*.sav" }
+		"1" { "root" "GameInstall" "path" "C:/saves" "pattern" "*.sav" } } }`))
+	for _, r := range ufs.Rules {
+		if _, ok := ruleSearchDir(r, ufs, ctx, 0); ok {
+			t.Fatalf("rule path %q must be refused by the scan", r.Path)
+		}
+	}
+	for _, name := range []string{"%GameInstall%../evil/a.sav", "%GameInstall%C:/saves/a.sav"} {
+		if cloudNameCovered(name, ufs, ctx, 0) {
+			t.Fatalf("%q must not be covered", name)
+		}
+	}
+	list := []cloudFile{listed("%GameInstall%../evil/a.sav", "v1", 100),
+		listed("%GameInstall%C:/saves/b.sav", "v2", 100)}
+	files, unmapped := compareCloud(list, nil, ufs, ctx, 0, &cloudBaseline{Files: map[string]cloudBaselineFile{}})
+	if unmapped != 2 || len(files) != 0 {
+		t.Fatalf("unscannable rules must leave their names unmapped: unmapped=%d files=%+v", unmapped, files)
 	}
 }
 
@@ -775,9 +817,43 @@ func TestScanLocalRootCase(t *testing.T) {
 	if !found || sc.Rel != "save1.sav" {
 		t.Fatalf("scan = %v", scanLocal(ufs, ctx, 0))
 	}
-	name := "%" + sc.Root + "%" + sc.Rel
-	if lp, _, ok := mapCloudName(name, ufs, ctx, 0); !ok || lp != save {
-		t.Fatalf("upload name %q must map back, got %q, %v", name, lp, ok)
+	// With no listing to copy from, the documented spelling names the file.
+	files, _ := compareCloud(nil, scanLocal(ufs, ctx, 0), ufs, ctx, 0,
+		&cloudBaseline{Files: map[string]cloudBaselineFile{}})
+	if len(files) != 1 || files[0].CloudName != "%GameInstall%save1.sav" {
+		t.Fatalf("new save = %+v, want the documented root spelling", files)
+	}
+	if lp, _, ok := mapCloudName(files[0].CloudName, ufs, ctx, 0); !ok || lp != save {
+		t.Fatalf("upload name %q must map back, got %q, %v", files[0].CloudName, lp, ok)
+	}
+}
+
+// New upload names follow the cloud's own spellings: a listed entry's root
+// casing wins over the documented one, and a listed file in the same folder
+// lends its folder casing (the Windows client writes "my games/fallout4/saves/").
+func TestUploadCloudName(t *testing.T) {
+	listed := func(name string) []cloudFile { return []cloudFile{{CloudName: name}} }
+	for _, tc := range []struct {
+		name      string
+		sc        cloudScanned
+		list      []cloudFile
+		root, rel string
+	}{
+		{"documented root", cloudScanned{Rel: "save1.sav", Root: "gameinstall"}, nil,
+			"GameInstall", "save1.sav"},
+		{"listed root casing", cloudScanned{Rel: "save1.sav", Root: "gameinstall"},
+			listed("%gameInstall%old.sav"), "gameInstall", "save1.sav"},
+		{"listed folder casing", cloudScanned{Rel: "My Games/Fallout4/Saves/x.fos", Root: "WinMyDocuments"},
+			listed("%WinMyDocuments%my games/fallout4/saves/save1.fos"),
+			"WinMyDocuments", "my games/fallout4/saves/x.fos"},
+		{"other folder untouched", cloudScanned{Rel: "My Games/Fallout4/Saves/x.fos", Root: "WinMyDocuments"},
+			listed("%WinMyDocuments%Other/Save/save1.fos"),
+			"WinMyDocuments", "My Games/Fallout4/Saves/x.fos"},
+	} {
+		root, rel := uploadCloudName(tc.sc, tc.list)
+		if root != tc.root || rel != tc.rel {
+			t.Errorf("%s: got root %q rel %q, want root %q rel %q", tc.name, root, rel, tc.root, tc.rel)
+		}
 	}
 }
 
@@ -809,7 +885,7 @@ func TestCompareCloudFalloutRoundTrip(t *testing.T) {
 			up = &files[i]
 		}
 	}
-	const wantName = "%WinMyDocuments%My Games/Fallout4/Saves/x.fos"
+	const wantName = "%WinMyDocuments%my games/fallout4/saves/x.fos" // the listed folder's casing
 	if unmapped != 0 || up == nil || up.CloudName != wantName {
 		t.Fatalf("new save = %+v (unmapped %d), want upload %q", files, unmapped, wantName)
 	}
@@ -827,6 +903,143 @@ func TestCompareCloudFalloutRoundTrip(t *testing.T) {
 		if f.Want != "same" {
 			t.Fatalf("re-upload loop: %+v", files)
 		}
+	}
+}
+
+// A file the cloud already lists uploads under the listing's exact name: the
+// server keys it by that spelling, not by the rule's.
+func TestCompareCloudKeepsListedName(t *testing.T) {
+	dir := t.TempDir()
+	prefix := filepath.Join(dir, "prefix")
+	docs := filepath.Join(prefix, "drive_c", "users", "steamuser", "Documents")
+	ctx := cloudContext{OS: "windows", Home: filepath.Join(dir, "home"), InstallDir: filepath.Join(dir, "install"),
+		PrefixDir: prefix, WinUser: "steamuser"}
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
+		"0" { "root" "WinMyDocuments" "path" "/My Games/Fallout4/Saves" "pattern" "*.fos" } } }`))
+	save := filepath.Join(docs, "My Games", "Fallout4", "Saves", "Save1.FOS")
+	writeLocal(t, save, "edited")
+	cloudName := "%WinMyDocuments%my games/fallout4/saves/Save1.FOS"
+	base := &cloudBaseline{Files: map[string]cloudBaselineFile{
+		"my games/fallout4/saves/Save1.FOS": {SHA: shaHex([]byte("v1")), Local: save},
+	}}
+	files, unmapped := compareCloud([]cloudFile{listed(cloudName, "v1", 100)}, scanLocal(ufs, ctx, 0), ufs, ctx, 0, base)
+	if unmapped != 0 || len(files) != 1 || files[0].Want != "upload" || files[0].CloudName != cloudName {
+		t.Fatalf("files = %+v (unmapped %d), want the listing's name", files, unmapped)
+	}
+}
+
+// The name a new file uploads under is the baseline key, so a later edit
+// compares as an upload of that file instead of a conflict with it.
+func TestCompareCloudNewFileBaselineAfterUpload(t *testing.T) {
+	dir := t.TempDir()
+	prefix := filepath.Join(dir, "prefix")
+	docs := filepath.Join(prefix, "drive_c", "users", "steamuser", "Documents")
+	ctx := cloudContext{OS: "windows", Home: filepath.Join(dir, "home"), InstallDir: filepath.Join(dir, "install"),
+		PrefixDir: prefix, WinUser: "steamuser"}
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
+		"0" { "root" "WinMyDocuments" "path" "/My Games/Fallout4/Saves" "pattern" "*.fos" } } }`))
+	save := filepath.Join(docs, "My Games", "Fallout4", "Saves", "save1.fos")
+	writeLocal(t, save, "v1")
+	listedName := "%WinMyDocuments%my games/fallout4/saves/save1.fos"
+	base := &cloudBaseline{Files: map[string]cloudBaselineFile{}}
+	files, _ := compareCloud([]cloudFile{listed(listedName, "v1", 100)}, scanLocal(ufs, ctx, 0), ufs, ctx, 0, base)
+	if len(files) != 1 || files[0].Want != "same" {
+		t.Fatalf("pulled state = %+v", files)
+	}
+	base.Files[files[0].Rel] = cloudBaselineFile{SHA: shaHex([]byte("v1")), Size: 2, Local: save}
+	newSave := filepath.Join(docs, "My Games", "Fallout4", "Saves", "x.fos")
+	writeLocal(t, newSave, "new")
+	files, _ = compareCloud([]cloudFile{listed(listedName, "v1", 100)}, scanLocal(ufs, ctx, 0), ufs, ctx, 0, base)
+	var up *cloudPlanFile
+	for i := range files {
+		if files[i].Want == "upload" {
+			up = &files[i]
+		}
+	}
+	if up == nil || up.Rel != "my games/fallout4/saves/x.fos" {
+		t.Fatalf("new save = %+v", files)
+	}
+	sent := up.CloudName
+	base.Files[up.Rel] = cloudBaselineFile{SHA: shaHex([]byte("new")), Size: 3, Local: up.Local} // pushFiles' record
+	writeLocal(t, newSave, "new2")
+	files, unmapped := compareCloud([]cloudFile{listed(listedName, "v1", 100), listed(sent, "new", 101)},
+		scanLocal(ufs, ctx, 0), ufs, ctx, 0, base)
+	if unmapped != 0 || len(files) != 2 {
+		t.Fatalf("later status: unmapped=%d files=%+v", unmapped, files)
+	}
+	for _, f := range files {
+		if f.Rel == "my games/fallout4/saves/x.fos" && f.Want != "upload" {
+			t.Fatalf("a clean edit must upload, not conflict: %+v", f)
+		}
+	}
+}
+
+// A rule path carrying a backslash names the same subdirectories: the scan
+// normalises it, coverage follows, and the name maps back.
+func TestScanLocalBackslashRulePath(t *testing.T) {
+	dir := t.TempDir()
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
+		"0" { "root" "GameInstall" "path" "a\\b/saves" "pattern" "*.sav" } } }`))
+	save := filepath.Join(dir, "a", "b", "saves", "x.sav")
+	writeLocal(t, save, "v1")
+	sc, found := scanLocal(ufs, ctx, 0)[save]
+	if !found || sc.Rel != "a/b/saves/x.sav" {
+		t.Fatalf("scan = %v", scanLocal(ufs, ctx, 0))
+	}
+	name := "%" + sc.Root + "%" + sc.Rel
+	if !cloudNameCovered(name, ufs, ctx, 0) {
+		t.Fatalf("%q must be covered", name)
+	}
+	if lp, _, ok := mapCloudName(name, ufs, ctx, 0); !ok || lp != save {
+		t.Fatalf("map %q = %q, %v", name, lp, ok)
+	}
+}
+
+// A Windows-tagged rule doesn't describe native Linux's device files, but the
+// cloud name it owns still downloads: coverage ignores platforms, the scan
+// respects them.
+func TestScanLocalSkipsWindowsRuleOnLinux(t *testing.T) {
+	dir := t.TempDir()
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
+		"0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav"
+		      "platforms" { "0" "Windows" } } } }`))
+	writeLocal(t, filepath.Join(dir, "saves", "local.sav"), "local")
+	if got := scanLocal(ufs, ctx, 0); len(got) != 0 {
+		t.Fatalf("a Windows rule must not scan on linux: %v", got)
+	}
+	cloudName := "%GameInstall%saves/cloud.sav"
+	files, unmapped := compareCloud([]cloudFile{listed(cloudName, "remote", 100)}, scanLocal(ufs, ctx, 0),
+		ufs, ctx, 0, &cloudBaseline{Files: map[string]cloudBaselineFile{}})
+	if unmapped != 0 || len(files) != 1 || files[0].Want != "download" || files[0].CloudName != cloudName {
+		t.Fatalf("the cloud name must still download: unmapped=%d files=%+v", unmapped, files)
+	}
+}
+
+// A borrowed folder spelling that only another OS's case rules accept falls
+// back to the rule's own spelling: native Linux keeps "Saves" though the
+// cloud lists "saves/", and the new file still uploads.
+func TestCompareCloudBorrowedCaseFallsBack(t *testing.T) {
+	dir := t.TempDir()
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
+		"0" { "root" "GameInstall" "path" "Saves" "pattern" "*.sav" } } }`))
+	save := filepath.Join(dir, "Saves", "x.sav")
+	writeLocal(t, save, "new")
+	list := []cloudFile{listed("%GameInstall%saves/old.sav", "old", 100)}
+	files, unmapped := compareCloud(list, scanLocal(ufs, ctx, 0), ufs, ctx, 0,
+		&cloudBaseline{Files: map[string]cloudBaselineFile{}})
+	var up *cloudPlanFile
+	for i := range files {
+		if files[i].Want == "upload" {
+			up = &files[i]
+		}
+	}
+	// The listed lowercase entry is unmapped on case-sensitive native Linux
+	// (pre-existing), but the new file still uploads under the rule's casing.
+	if unmapped != 1 || up == nil || up.CloudName != "%GameInstall%Saves/x.sav" {
+		t.Fatalf("files = %+v (unmapped %d), want the rule's spelling", files, unmapped)
 	}
 }
 

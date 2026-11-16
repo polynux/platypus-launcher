@@ -142,14 +142,26 @@ func parseCloudRules(kv *steam.KV) *cloudUFS {
 		}
 		r := cloudSaveRule{Root: root, Path: path, Pattern: pattern,
 			Recursive: s.String("recursive") == "1"}
+		// The block appears both ways in appinfo: indexed ("1" "Windows",
+		// measured on Fallout 4/Taiji) and name-keyed ("Windows" "1"). Read
+		// keys and values, ignore index tokens; an empty block means all
+		// platforms, so Platforms stays nil.
 		if plats := s.Get("platforms"); plats != nil && len(plats.Children) > 0 {
-			// The block is indexed ("1" "Windows"), not a map of OS names:
-			// reading the keys skipped every tagged rule on every OS.
-			r.Platforms = map[string]bool{}
-			for _, v := range plats.Children {
-				if name := strings.TrimSpace(v.Value); name != "" {
-					r.Platforms[strings.ToLower(name)] = true
+			set := map[string]bool{}
+			for k, v := range plats.Children {
+				for _, name := range []string{k, v.Value} {
+					name = strings.TrimSpace(name)
+					if name == "" {
+						continue
+					}
+					if _, err := strconv.Atoi(name); err == nil {
+						continue // an index, not an OS name
+					}
+					set[strings.ToLower(name)] = true
 				}
+			}
+			if len(set) > 0 {
+				r.Platforms = set
 			}
 		}
 		out.Rules = append(out.Rules, r)
@@ -350,6 +362,18 @@ func cloudNameCovered(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID
 			continue
 		}
 		prefix := rulePathParts(substituteSteamID(r.Path, steamID))
+		// A rule path the scan refuses ("..", ":") names no directory, so it
+		// can't own a cloud file either.
+		bad := false
+		for _, p := range prefix {
+			if p == ".." || strings.ContainsAny(p, `:\`) {
+				bad = true
+				break
+			}
+		}
+		if bad {
+			continue
+		}
 		if len(parts) <= len(prefix) {
 			continue
 		}
@@ -477,6 +501,65 @@ func joinCloudRel(base, name string) string {
 type cloudScanned struct {
 	Rel  string
 	Root string
+}
+
+// canonicalRootSpellings are the root tokens docs/research/steam-cloud-social.md
+// §1.4 records. appinfo sometimes spells a rule's root differently
+// ("gameinstall" for GameInstall), and a new file must upload under the
+// spelling the cloud uses.
+var canonicalRootSpellings = map[string]string{
+	"gameinstall":         "GameInstall",
+	"winmydocuments":      "WinMyDocuments",
+	"winappdatalocal":     "WinAppDataLocal",
+	"winappdataroaming":   "WinAppDataRoaming",
+	"winsavedgames":       "WinSavedGames",
+	"winappdatalocallow":  "WinAppDataLocalLow",
+	"steamclouddocuments": "SteamCloudDocuments",
+	"linuxhome":           "LinuxHome",
+	"linuxxdgdatahome":    "LinuxXdgDataHome",
+	"linuxxdgconfighome":  "LinuxXdgConfigHome",
+	"machome":             "MacHome",
+	"macappsupport":       "MacAppSupport",
+	"macdocuments":        "MacDocuments",
+}
+
+// uploadCloudName names a new local file the way the cloud does: the root
+// token of a listed entry with the same root (else the documented spelling),
+// and the folder's casing from a listed entry in the same folder (the Windows
+// client writes "my games/fallout4/saves/"). The returned rel is the
+// cloud-relative part the name carries, so the baseline keys the spelling the
+// next listing echoes instead of the rule's.
+func uploadCloudName(sc cloudScanned, list []cloudFile) (root, rel string) {
+	root, rel = sc.Root, sc.Rel
+	if canon, ok := canonicalRootSpellings[strings.ToLower(root)]; ok {
+		root = canon
+	}
+	parts := splitRel(rel)
+	folder := parts[:len(parts)-1]
+	for _, f := range list {
+		lroot, lrel, ok := splitCloudName(f.CloudName)
+		if !ok {
+			continue
+		}
+		if strings.EqualFold(lroot, sc.Root) {
+			root = lroot
+		}
+		lp := splitRel(lrel)
+		if len(folder) == 0 || len(lp) != len(parts) {
+			continue
+		}
+		same := true
+		for i := range folder {
+			if !strings.EqualFold(lp[i], folder[i]) {
+				same = false
+				break
+			}
+		}
+		if same {
+			rel = strings.Join(lp[:len(folder)], "/") + "/" + parts[len(parts)-1]
+		}
+	}
+	return root, rel
 }
 
 // scanLocal finds the device files matching the rules: match by local path.
@@ -876,13 +959,24 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 	}
 	// Local files the cloud never listed: upload candidates when nothing is
 	// recorded, conflicts when the baseline proves the cloud deleted them.
+	// A new file takes the cloud's own root and folder spelling, so the name
+	// reuses the entries around it instead of the rule's casing.
 	for lp, sc := range local {
 		if seen[lp] {
 			continue
 		}
-		pf := cloudPlanFile{Rel: sc.Rel, Local: lp, HasRemote: false,
-			CloudName: "%" + sc.Root + "%" + sc.Rel}
-		if !cloudNameCovered(pf.CloudName, ufs, ctx, steamID) {
+		root, rel := uploadCloudName(sc, list)
+		name := "%" + root + "%" + rel
+		if !cloudNameCovered(name, ufs, ctx, steamID) {
+			// A borrowed folder spelling can be the wrong case for a
+			// case-sensitive rule (another machine's lowercase entry): the
+			// rule's own spelling still names the file.
+			root, rel = uploadCloudName(sc, nil)
+			name = "%" + root + "%" + rel
+		}
+		pf := cloudPlanFile{Rel: rel, Local: lp, HasRemote: false,
+			CloudName: name}
+		if !cloudNameCovered(name, ufs, ctx, steamID) {
 			// The invariant every upload obeys: the name must be one a rule
 			// covers. The scan builds names from the rule's own parts, so
 			// this catches a rule the coverage check would drop.
@@ -893,9 +987,9 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 		if !pf.LocalInfo.Found {
 			continue
 		}
-		if b, known := base.Files[sc.Rel]; known && b.Local == lp && b.SHA != "" {
+		if b, known := base.Files[rel]; known && b.Local == lp && b.SHA != "" {
 			pf.Want = "conflict" // was synced, now gone from the cloud: ask
-			if ch, ok := base.Choices[sc.Rel]; ok && ch.Side == "local" &&
+			if ch, ok := base.Choices[rel]; ok && ch.Side == "local" &&
 				ch.LocalSHA == hex.EncodeToString(pf.LocalInfo.SHA[:]) {
 				// The user already kept this device's copy and the cloud
 				// side is unverifiable (the name is gone): replay the
@@ -2038,7 +2132,10 @@ func (e *cloudEnv) pushFiles(ctx context.Context, req request, files []cloudPlan
 	}
 	// Full success: the cloud holds these bytes now, so the baseline learns
 	// them (dropping kept-local choices) and the files count as same. The
-	// caller saves through saveIfDirty; failures return above untouched.
+	// key is f.Rel, the cloud-relative part of the name the batch sent
+	// (compareCloud names a new file the cloud's way), so the next listing
+	// keys the same file identically. The caller saves through saveIfDirty;
+	// failures return above untouched.
 	for _, d := range done {
 		f := &files[d.idx]
 		e.base.Files[f.Rel] = cloudBaselineFile{SHA: hex.EncodeToString(d.sha[:]), Size: d.size, Local: f.Local}
