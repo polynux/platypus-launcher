@@ -16,8 +16,12 @@ import (
 type chatBackend struct{ a *App }
 
 // Offers: the plugin runs, has initialized, and offers chat with social right
-// now. Chat needs the friends list, so a plugin offering only chat gets none.
+// now. Chat needs the friends list, so a plugin offering only chat, or whose
+// friends list the user switched off, gets none (issue #185).
 func (b chatBackend) Offers(ctx context.Context, pluginID string) bool {
+	if !b.a.settings.SocialEnabled(pluginID) {
+		return false
+	}
 	if _, err := b.a.plugins.Initialize(ctx, pluginID); err != nil {
 		return false
 	}
@@ -57,15 +61,16 @@ func (a *App) chatCleared(id string) {
 	a.host.Emit("chat", chat.Event{View: chat.View{Plugin: id}, Dropped: true})
 }
 
-// chatPlugins are the ready plugins that offer chat.
+// chatPlugins are the ready plugins that offer chat with social still on.
 func (a *App) chatPlugins() []string {
 	var ids []string
 	if a.plugins == nil {
 		return ids
 	}
 	for _, p := range a.plugins.Plugins() {
-		if p.Status == plugins.StatusReady && a.plugins.Has(p.Manifest.ID, "chat") {
-			ids = append(ids, p.Manifest.ID)
+		id := p.Manifest.ID
+		if p.Status == plugins.StatusReady && a.plugins.Has(id, "chat") && a.plugins.Has(id, "social") && a.settings.SocialEnabled(id) {
+			ids = append(ids, id)
 		}
 	}
 	return ids
@@ -159,6 +164,9 @@ func (a *App) refreshChatUnread(pluginID string) {
 	if a.chat == nil || a.plugins == nil {
 		return
 	}
+	if !a.settings.SocialEnabled(pluginID) {
+		return
+	}
 	if _, err := a.plugins.Initialize(a.ctx, pluginID); err != nil {
 		return
 	}
@@ -200,15 +208,16 @@ func (a *App) chatNotify(id, method string, params json.RawMessage) bool {
 }
 
 // chatSpoken says whether a store is running, initialized, at protocol 1.9 or
-// later, and offers both chat and social: the same as chatBackend.Offers, but
-// without starting the plugin.
+// later, offers both chat and social, and keeps its friends list on: the same
+// as chatBackend.Offers, but without starting the plugin.
 func (a *App) chatSpoken(id string) bool {
 	if a.plugins == nil {
 		return false
 	}
 	rt := a.plugins.Runtime(id)
 	return rt.Initialized && rt.Speaks(plugins.Version{Major: 1, Minor: 9}) &&
-		slices.Contains(rt.Capabilities, "chat") && slices.Contains(rt.Capabilities, "social")
+		slices.Contains(rt.Capabilities, "chat") && slices.Contains(rt.Capabilities, "social") &&
+		a.settings.SocialEnabled(id)
 }
 
 // chatFriend says whether a friend is on a store's list.

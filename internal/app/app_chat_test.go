@@ -244,6 +244,47 @@ func TestChatNeedsSocial(t *testing.T) {
 	}
 }
 
+// Switching a store's friends list off switches chat off with it: no chat
+// method reaches the plugin, badges and alerts leave the store out, and
+// switching the list back on brings chat back (issue #185).
+func TestChatOffWhenSocialIsSwitchedOff(t *testing.T) {
+	t.Parallel()
+	a, _ := chatEnv(t)
+	if err := a.SetSocialEnabled("echo", false); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(a.chatPlugins(), "echo") {
+		t.Fatal("chatPlugins lists a store whose friends list is off")
+	}
+	a.refreshChatUnread("echo")
+	if _, err := a.ChatOpen("echo", chatAna); err == nil {
+		t.Fatal("chat opened with the friends list off")
+	}
+	if err := a.ChatSend("echo", chatAna, "hi"); err == nil {
+		t.Fatal("chat sent with the friends list off")
+	}
+	if n := echoCallCount(t, a, "chat.unreadCounts") + echoCallCount(t, a, "chat.history"); n != 0 {
+		t.Fatalf("the plugin received %d chat calls with the friends list off", n)
+	}
+	if got := a.ChatUnread(); len(got) != 0 {
+		t.Fatalf("ChatUnread lists %d conversations with the friends list off", len(got))
+	}
+	if _, ok := a.ChatAlerts()["echo"]; ok {
+		t.Fatal("a store with the friends list off is listed for chat alerts")
+	}
+
+	if err := a.SetSocialEnabled("echo", true); err != nil {
+		t.Fatal(err)
+	}
+	a.refreshChatUnread("echo")
+	if n := echoCallCount(t, a, "chat.unreadCounts"); n != 1 {
+		t.Fatalf("chat.unreadCounts reached echo %d times after switching the friends list back on, want 1", n)
+	}
+	if _, err := a.ChatOpen("echo", chatAna); err != nil {
+		t.Fatalf("chat did not come back with the friends list: %v", err)
+	}
+}
+
 // A plugin that doesn't offer the chat capability at runtime gets no chat
 // method, even with social on.
 func TestChatOffWhenTheCapabilityIsOff(t *testing.T) {
@@ -468,6 +509,22 @@ func TestChatNotificationsAreGated(t *testing.T) {
 		a.chatNotify("echo", chat.NoteMessage, msg(chatAna))
 		if n := len(sink.evs); n == 0 {
 			t.Fatal("a friend's message from a 1.9 store was dropped")
+		}
+	})
+	t.Run("friends list off", func(t *testing.T) {
+		a, sink := chatEnv(t)
+		if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
+			t.Fatal(err)
+		}
+		waitSocial(t, "the friend list", func() bool { return a.chatFriend("echo", chatAna) })
+		if err := a.SetSocialEnabled("echo", false); err != nil {
+			t.Fatal(err)
+		}
+		if !a.chatNotify("echo", chat.NoteMessage, msg(chatAna)) {
+			t.Fatal("a chat notification was not claimed")
+		}
+		if n := len(sink.evs); n != 0 {
+			t.Fatalf("a store with the friends list off reached the manager: %d events", n)
 		}
 	})
 }
