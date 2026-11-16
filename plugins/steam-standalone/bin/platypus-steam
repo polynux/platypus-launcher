@@ -3162,18 +3162,23 @@ def job_discard(params):
 # social.*/chat.* notifications. Message text is passed through to core
 # and never logged.
 SOCIAL_STATES = ("online", "away", "busy", "snooze", "invisible")
+# The status a fresh session goes online with. Invisible until the presence
+# aggregation live check passes (issue #7); the user will then decide
+# between Invisible and Online.
+SOCIAL_DEFAULT_STATUS = "invisible"
 
 social_lock = threading.Lock()
 social_proc = None  # the live helper: {"proc", "pending", "next", "last_conn", "stopping"}
 social_pending_playing = None  # setPlaying while the friends are off
+social_tombstone = None  # "replaced"/"loggedOut": the store ended the session; only social.start clears it
 LIBRARY_IDS = set()  # store ids from the last library.list, for game links
 
 
-def social_game(g):
+def social_game(g, installed):
     """A helper game {appid, title} to the protocol's {id?, title}."""
     appid = str((g or {}).get("appid") or "")
     title = str((g or {}).get("title") or "")
-    if appid and (appid in LIBRARY_IDS or appid in load_state("installed.json", {})):
+    if appid and (appid in LIBRARY_IDS or appid in installed):
         ref = {"id": f"p.steam-standalone.{appid}"}
         if title:
             ref["title"] = title
@@ -3185,17 +3190,22 @@ def social_game(g):
     return None
 
 
-def social_map_friend(f):
+def social_map_friend(f, installed):
     out = {"id": str(f.get("id") or ""), "name": str(f.get("name") or ""),
            "state": str(f.get("state") or "offline")}
     if f.get("avatarUrl"):
         out["avatarUrl"] = f["avatarUrl"]
-    g = social_game(f.get("game") or {})
+    g = social_game(f.get("game") or {}, installed)
     if g is not None:
         out["game"] = g
     if f.get("lastSeen"):
         out["lastSeen"] = f["lastSeen"]
     return out
+
+
+def social_map_friends(fs):
+    installed = load_state("installed.json", {})
+    return [social_map_friend(f, installed) for f in fs or []]
 
 
 def social_spawn_locked(status):
@@ -3205,13 +3215,15 @@ def social_spawn_locked(status):
         raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
     token = refresh_token()
     try:
+        # stderr stays out of the JSON stream: a helper traceback lands in
+        # the plugin's own stderr, which core captures in its logs.
         proc = subprocess.Popen([dl_bin(), "social"], stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                stdout=subprocess.PIPE,
                                 text=True, bufsize=1, env=dict(os.environ))
     except FileNotFoundError:
         raise RPCError("platypus-steam-dl is missing; reinstall the plugin")
     rec = {"proc": proc, "pending": {}, "next": 1,
-           "last_conn": "connecting", "stopping": False}
+           "last_conn": "connecting", "stopping": False, "fatal": None}
     try:
         proc.stdin.write(json.dumps({"refresh_token": token, "status": status}) + "\n")
         proc.stdin.flush()
@@ -3233,6 +3245,12 @@ def social_reader(rec):
         if not isinstance(msg, dict):
             continue
         if "id" in msg:
+            if msg["id"] == 0 and msg.get("error"):
+                # A startup failure (a rejected token answers -32001):
+                # remember it and fail every waiter with it at EOF.
+                with social_lock:
+                    rec["fatal"] = msg["error"]
+                continue
             with social_lock:
                 box = rec["pending"].pop(msg["id"], None)
             if box is not None:
@@ -3241,10 +3259,20 @@ def social_reader(rec):
         elif msg.get("event"):
             social_notify_event(rec, msg["event"], msg.get("params") or {})
     with social_lock:
+        global social_tombstone
         dead = social_proc is rec
         stopping = rec["stopping"]
         if dead:
             social_proc = None
+        err = rec.get("fatal") or {"code": -32000,
+                                    "message": "the Steam friends session ended"}
+        pending = rec["pending"]
+        rec["pending"] = {}
+        if dead and not stopping and rec["last_conn"] in ("replaced", "loggedOut"):
+            social_tombstone = rec["last_conn"]
+    for box in pending.values():
+        box["reply"] = {"error": err}
+        box["ev"].set()
     # A helper that died on its own leaves the subscription stale: say
     # offline so the UI reflects it (a replaced/loggedOut session already
     # said so itself, and an explicit stop needs no word).
@@ -3255,7 +3283,8 @@ def social_reader(rec):
 def social_notify_event(rec, event, params):
     if event == "connection":
         rec["last_conn"] = params.get("state") or "offline"
-        notify("social.connection", {"state": rec["last_conn"]})
+        if not rec.get("stopping"):
+            notify("social.connection", {"state": rec["last_conn"]})
     elif event == "self":
         notify("social.self", params)
     elif event == "friends":
@@ -3272,6 +3301,11 @@ def social_notify_event(rec, event, params):
 def social_call_rec(rec, op, params=None, timeout=30):
     """One helper round trip on a known-live record."""
     with social_lock:
+        if rec.get("fatal"):
+            raise RPCError(rec["fatal"].get("message") or "the Steam friends session failed",
+                           rec["fatal"].get("code") or -32000)
+        if rec["proc"].poll() is not None:
+            raise RPCError("the Steam friends session ended", -32000)
         rid = rec["next"]
         rec["next"] += 1
         box = {"ev": threading.Event()}
@@ -3303,11 +3337,9 @@ def social_ensure():
     with social_lock:
         rec = social_proc
         if rec is None or rec["proc"].poll() is not None:
-            saved = load_state("social.json", {})
-            status = saved.get("status") or "invisible"
-            if status not in SOCIAL_STATES:
-                status = "invisible"
-            rec = social_spawn_locked(status)
+            if social_tombstone in ("replaced", "loggedOut"):
+                raise RPCError("the Steam friends session ended (%s)" % social_tombstone, -32000)
+            rec = social_spawn_locked(social_default_status())
     social_call_rec(rec, "waitReady", {}, timeout=40)
     return rec
 
@@ -3318,16 +3350,19 @@ def social_mapped_snapshot(snap):
             "friends": [social_map_friend(f) for f in snap.get("friends") or []]}
 
 
+def social_default_status():
+    saved = load_state("social.json", {})
+    status = saved.get("status") or SOCIAL_DEFAULT_STATUS
+    return status if status in SOCIAL_STATES else SOCIAL_DEFAULT_STATUS
+
+
 def social_start(_params):
-    global social_pending_playing
+    global social_pending_playing, social_tombstone
     with social_lock:
         rec = social_proc
         if rec is None or rec["proc"].poll() is not None:
-            saved = load_state("social.json", {})
-            status = saved.get("status") or "invisible"
-            if status not in SOCIAL_STATES:
-                status = "invisible"
-            rec = social_spawn_locked(status)
+            social_tombstone = None
+            rec = social_spawn_locked(social_default_status())
         pending = social_pending_playing
     snap = social_call_rec(rec, "waitReady", {}, timeout=45)
     notify("social.connection", (snap.get("connection") or {"state": "online"}))
@@ -3402,6 +3437,12 @@ def social_set_playing(params):
     pid = (params or {}).get("id", None)
     if pid is not None and not isinstance(pid, str):
         raise RPCError("invalid params: id must be a store game id or null", -32602)
+    if pid:
+        # Client-mode games run under the real client, which reports
+        # what they play itself; Platypus stays out of the way.
+        ig = load_state("installed.json", {}).get(pid) or {}
+        if ig.get("mode") == "client":
+            return {}
     with social_lock:
         rec = social_proc
         if rec is None or rec["proc"].poll() is not None:
@@ -3442,7 +3483,13 @@ def chat_mark_read(params):
 
 
 def chat_unread_counts(_params):
-    return social_call_rec(social_ensure(), "unreadCounts", {}, timeout=20)
+    # The snapshot only reflects a running session; never start one for
+    # badges alone.
+    with social_lock:
+        rec = social_proc
+        if rec is None or rec["proc"].poll() is not None:
+            return {"counts": []}
+    return social_call_rec(rec, "unreadCounts", {}, timeout=20)
 
 
 def initialize(params):

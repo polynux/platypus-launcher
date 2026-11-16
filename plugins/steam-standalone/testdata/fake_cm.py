@@ -40,8 +40,9 @@ re-read on every auth poll so tests can approve mid-login):
   push_body_after   {"<n>": ["friends", "friends_incr", "personas",
                     "incoming"]} scripted pushes with bodies, before the
                     n-th service reply ("0" = right after logon)
-  chat_incoming     {"friend", "text", "ts", "ord"} (or a list) incoming
-                    chat notification(s)
+  chat_incoming     {"friend", "text", "ts", "ord", "entry", "local_echo"}
+                    (or a list) incoming chat notification(s); entry 2 is
+                    typing, local_echo marks our own send coming back
   chat_history      {friendid: [{ts, ord, self, text}]} seeded conversations
   chat_unread       {friendid: n} unread counts for GetActiveMessageSessions
   The log records ids, states and counts only, never message text.
@@ -593,7 +594,9 @@ def serve_logged_in(conn, hdr, body, st):
 #   push_body_after: {"<n>": ["friends", "friends_incr", "personas", "incoming"]}
 #            pushes that ride out before the nth service call's reply
 #            (they also work at "0", right after logon)
-#   chat_incoming: {"friend", "text", "ts", "ord"} (or a list of those)
+#   chat_incoming: {"friend", "text", "ts", "ord", "entry", "local_echo"}
+#            (or a list of those); entry 2 is typing, local_echo is our
+#            own send coming back
 #   chat_history: {"<friendid>": [{"ts", "ord", "self", "text"}]}
 #   chat_unread: {"<friendid>": n}
 # The log records ids, states and counts only, never message text.
@@ -636,6 +639,8 @@ def incoming_body(msg):
     if msg.get("text"):
         e += pb_str(4, msg["text"])
     e += pb_fixed32(5, msg.get("ts", 0)) + pb_int(6, msg.get("ord", 0))
+    if msg.get("local_echo"):
+        e += pb_int(7, 1)
     return e
 
 

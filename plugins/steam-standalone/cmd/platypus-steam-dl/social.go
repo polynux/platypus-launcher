@@ -28,7 +28,7 @@
 //
 // Stdout carries replies ({"id": N, "result": ...} or {"id": N, "error":
 // {"code", "message"}}) and push events ({"event": "connection|self|
-// friends|message|typing|unread", "params": ...}). Message text is never
+// friends|message|typing", "params": ...}). Message text is never
 // logged; only counts and ids reach any log.
 package main
 
@@ -72,6 +72,11 @@ var stateToPersona = map[string]uint64{
 // requestFriendDataFlags asks for everything node-steam-user's getPersonas
 // asks for except Metadata (32), which SteamKit marks removed.
 const requestFriendDataFlags = 1 | 2 | 4 | 8 | 16 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096 | 8192 | 16384
+
+// defaultSocialStatus is the persona a fresh session reports. Invisible
+// until the presence-aggregation live check passes (issue #7); the user
+// will then decide between Invisible and Online.
+const defaultSocialStatus = "invisible"
 
 const (
 	// readyTimeout bounds the initial sync waitReady answers with.
@@ -136,11 +141,22 @@ type socialSession struct {
 	playingSent    uint32
 	blocked        bool
 	playingApp     uint32
-	unread         map[uint64]int
 	sent           map[string]sentMsg
-	ready          chan struct{}
-	readyOnce      sync.Once
-	outMu          sync.Mutex
+	// inSend counts the in-flight SendMessage calls per friend, so our
+	// own echo is dropped before core has the send's id to dedupe by.
+	inSend map[uint64]int
+	// sentEcho marks confirmed sends (friend/id) whose echo is dropped.
+	sentEcho map[string]bool
+	// requested tracks ids a ClientRequestFriendData already asked for,
+	// so the waitReady loop doesn't re-ask every poll.
+	requested map[uint64]bool
+	ready     chan struct{}
+	readyOnce sync.Once
+	// readyDone remembers the first waitReady finished; later calls
+	// answer immediately. A reconnect's full list still merges and the
+	// monitor still resyncs around it.
+	readyDone bool
+	outMu     sync.Mutex
 }
 
 func runSocial(ctx context.Context) error {
@@ -163,7 +179,7 @@ func runSocial(ctx context.Context) error {
 	}
 	status := req.Status
 	if status == "" {
-		status = "invisible"
+		status = defaultSocialStatus
 	}
 	if status != "none" {
 		if _, ok := stateToPersona[status]; !ok {
@@ -172,16 +188,27 @@ func runSocial(ctx context.Context) error {
 		}
 	}
 	s := &socialSession{
-		status:  status,
-		friends: map[uint64]*friendInfo{},
-		unread:  map[uint64]int{},
-		sent:    map[string]sentMsg{},
-		ready:   make(chan struct{}),
+		status:    status,
+		friends:   map[uint64]*friendInfo{},
+		sent:      map[string]sentMsg{},
+		inSend:    map[uint64]int{},
+		sentEcho:  map[string]bool{},
+		requested: map[uint64]bool{},
+		ready:     make(chan struct{}),
 	}
+	s.selfID, _ = steamcm.SteamIDFromToken(token)
 	cfg := steamcm.ClientConfig{
 		RefreshToken: token,
 		Role:         steamcm.LoginRoleSocial,
 		MachineID:    steamcm.StableMachineID(os.Getenv("PLATYPUS_PLUGIN_DATA")),
+		// Handlers ride on the config so pushes batched with the
+		// logon response are routed, not dropped.
+		OnPush: map[uint32]func(depot.Msg, []byte){
+			steamcm.EMsgClientFriendsList:         func(_ depot.Msg, body []byte) { s.onFriendsList(body) },
+			steamcm.EMsgClientPersonaState:        func(_ depot.Msg, body []byte) { s.onPersonaState(body) },
+			steamcm.EMsgClientPlayingSessionState: func(_ depot.Msg, body []byte) { s.onPlayingState(body) },
+			steamcm.EMsgServiceMethodResponse:     func(hdr depot.Msg, body []byte) { s.onService(hdr, body) },
+		},
 	}
 	c, err := steamcm.Connect(ctx, cfg)
 	if err != nil {
@@ -193,20 +220,10 @@ func runSocial(ctx context.Context) error {
 		return err
 	}
 	s.client = c
-	s.selfID, _ = steamcm.SteamIDFromToken(token)
-	s.client.On(steamcm.EMsgClientFriendsList, func(hdr depot.Msg, body []byte) { s.onFriendsList(body) })
-	s.client.On(steamcm.EMsgClientPersonaState, func(hdr depot.Msg, body []byte) { s.onPersonaState(body) })
-	s.client.On(steamcm.EMsgClientPlayingSessionState, func(hdr depot.Msg, body []byte) { s.onPlayingState(body) })
-	s.client.On(steamcm.EMsgServiceMethodResponse, func(hdr depot.Msg, body []byte) { s.onService(hdr, body) })
-	// Handlers register before Connect by contract, but Connect's first
-	// logon absorbs pre-response pushes; the CM sends the friends list
-	// after the logon response, so nothing is lost. Reconnects come
-	// through run()'s fresh logons the same way.
 
 	// Reconnects resend what the session needs; the monitor also reports
 	// connection changes and ends the process on replaced/loggedOut.
-	resynced := false
-	go s.monitor(ctx, &resynced)
+	go s.monitor(ctx)
 
 	if s.status != "none" {
 		if err := s.sendStatus(s.status); err != nil {
@@ -239,7 +256,7 @@ func runSocial(ctx context.Context) error {
 // tests stub it so a kicked session doesn't kill the test binary.
 var socialExit = os.Exit
 
-func (s *socialSession) monitor(ctx context.Context, resynced *bool) {
+func (s *socialSession) monitor(ctx context.Context) {
 	last := steamcm.StateOnline
 	t := time.NewTicker(250 * time.Millisecond)
 	defer t.Stop()
@@ -258,10 +275,9 @@ func (s *socialSession) monitor(ctx context.Context, resynced *bool) {
 		case steamcm.StateReconnecting:
 			s.emit("connection", map[string]any{"state": "reconnecting"})
 		case steamcm.StateOnline:
-			if *resynced {
-				s.resync()
-			}
-			*resynced = true
+			// Every return to Online restores what the drop may have
+			// lost: own status, persona for every known friend, game.
+			s.resync()
 			s.emit("connection", map[string]any{"state": "online"})
 		case steamcm.StateReplaced:
 			s.emit("connection", map[string]any{"state": "replaced"})
@@ -400,6 +416,14 @@ func (s *socialSession) sendPlayingLocked(appID uint32, force bool) error {
 		s.mu.Unlock()
 		return nil
 	}
+	// A push that arrived with the logon batch runs before Connect
+	// returns, so s.client isn't set yet: the monitor's resync and the
+	// waitReady loop send it once the session exists.
+	cl := s.client
+	if cl == nil {
+		s.mu.Unlock()
+		return nil
+	}
 	s.playingSent = appID
 	s.mu.Unlock()
 	e := &depot.Enc{}
@@ -408,7 +432,7 @@ func (s *socialSession) sendPlayingLocked(appID uint32, force bool) error {
 		g.Fixed64(2, uint64(appID))
 		e.MsgField(1, g)
 	}
-	return s.client.Send(steamcm.EMsgClientGamesPlayed, e.Bytes())
+	return cl.Send(steamcm.EMsgClientGamesPlayed, e.Bytes())
 }
 
 // onFriendsList handles ClientFriendsList (767): full replaces, incremental
@@ -422,15 +446,29 @@ func (s *socialSession) onFriendsList(body []byte) {
 	s.mu.Lock()
 	if !incr {
 		s.friends = map[uint64]*friendInfo{}
+		s.requested = map[uint64]bool{}
 	}
 	var fresh []uint64
+	removed := false
 	for _, raw := range m.AllBytes(2) {
 		fm, err := depot.Decode(raw)
 		if err != nil {
 			continue
 		}
 		id := fm.Int(1)
-		if id == 0 || fm.Int(2) != 3 || steamIDType(id) != 1 {
+		if id == 0 || steamIDType(id) != 1 {
+			continue
+		}
+		if fm.Int(2) != 3 {
+			// An incremental drop for a known id removes it; a
+			// full list simply omits it.
+			if incr {
+				if _, ok := s.friends[id]; ok {
+					delete(s.friends, id)
+					delete(s.requested, id)
+					removed = true
+				}
+			}
 			continue
 		}
 		if _, ok := s.friends[id]; !ok {
@@ -443,16 +481,30 @@ func (s *socialSession) onFriendsList(body []byte) {
 	// Persona for new ids (plus our own, for the self name/avatar).
 	req := append(append([]uint64{}, fresh...), s.selfID)
 	var out []map[string]any
-	if incr {
+	switch {
+	case removed:
+		out = s.friendsLocked()
+	case incr:
 		for _, id := range fresh {
 			out = append(out, renderFriend(s.friends[id]))
 		}
-	} else {
+	default:
 		out = s.friendsLocked()
 	}
+	cl := s.client
+	full := !incr || removed
+	if cl != nil {
+		for _, id := range req {
+			s.requested[id] = true
+		}
+	}
 	s.mu.Unlock()
-	_ = s.client.Send(steamcm.EMsgClientRequestFriendData, requestFriendData(req))
-	s.emit("friends", map[string]any{"full": !incr, "friends": out})
+	// A push batched with the logon response runs before Connect
+	// returns (s.client unset); waitReady asks for the same data.
+	if cl != nil {
+		_ = cl.Send(steamcm.EMsgClientRequestFriendData, requestFriendData(req))
+	}
+	s.emit("friends", map[string]any{"full": full, "friends": out})
 }
 
 // friendsLocked renders the whole list, oldest id first.
@@ -603,6 +655,11 @@ func (s *socialSession) onPlayingState(body []byte) {
 }
 
 // onService routes service notifications: incoming chat messages and typing.
+// A notification with local_echo set is our own send coming back: it is
+// dropped while the send is still in flight (core has no id to dedupe by
+// yet) or when it matches a send this session confirmed, and otherwise
+// reported as sent by us (another of our devices). Local echoes never
+// touch unread counts.
 func (s *socialSession) onService(hdr depot.Msg, body []byte) {
 	if string(hdr.Bytes(12)) != "FriendMessagesClient.IncomingMessage#1" {
 		return
@@ -616,26 +673,38 @@ func (s *socialSession) onService(hdr depot.Msg, body []byte) {
 		return
 	}
 	entry := m.Int(2)
-	text := string(m.Bytes(4))
-	ts := int64(m.Int(5))
-	ord := m.Int(6)
 	fid := strconv.FormatUint(friend, 10)
-	if entry == 2 || text == "" {
+	if entry == 2 {
 		s.emit("typing", map[string]any{"friendId": fid})
 		return
 	}
+	if entry != 1 {
+		return
+	}
+	text := string(m.Bytes(4))
+	if plain := m.Bytes(8); len(plain) > 0 {
+		text = string(plain) // message_no_bbcode when present
+	}
+	ts := int64(m.Int(5))
+	ord := m.Int(6)
 	id := fmt.Sprintf("%d-%d", ts, ord)
-	s.mu.Lock()
-	s.unread[friend]++
-	n := s.unread[friend]
-	s.mu.Unlock()
+	from := fid
+	if m.Int(7) != 0 {
+		s.mu.Lock()
+		_, inFlight := s.inSend[friend]
+		_, confirmed := s.sentEcho[fid+"/"+id]
+		s.mu.Unlock()
+		if inFlight || confirmed {
+			return
+		}
+		from = "self"
+	}
 	s.emit("message", map[string]any{
 		"friendId": fid,
 		"message": map[string]any{
-			"id": id, "from": fid, "text": text, "sentAt": ts * 1000,
+			"id": id, "from": from, "text": text, "sentAt": ts * 1000,
 		},
 	})
-	s.emit("unread", map[string]any{"friendId": fid, "count": n})
 }
 
 func avatarURL(hash []byte) string {
@@ -656,8 +725,20 @@ func (s *socialSession) selfLocked() map[string]any {
 
 // waitReady blocks until the friends list arrived and every known friend
 // has persona data (or readyTimeout passes), backfills missing names from
-// Player.GetPlayerLinkDetails, and answers the initial snapshot.
+// Player.GetPlayerLinkDetails, and answers the initial snapshot. Later
+// calls answer immediately: the first sync is done.
 func (s *socialSession) waitReady() (map[string]any, *socialError) {
+	s.mu.Lock()
+	if s.readyDone {
+		snap := map[string]any{
+			"connection": map[string]any{"state": connState(s.client.State())},
+			"self":       s.selfLocked(),
+			"friends":    s.friendsLocked(),
+		}
+		s.mu.Unlock()
+		return snap, nil
+	}
+	s.mu.Unlock()
 	select {
 	case <-s.ready:
 	case <-time.After(readyTimeout):
@@ -666,19 +747,40 @@ func (s *socialSession) waitReady() (map[string]any, *socialError) {
 	for {
 		s.mu.Lock()
 		pending := 0
-		for _, f := range s.friends {
+		var ask []uint64
+		for id, f := range s.friends {
 			if !f.hasData {
 				pending++
+				if !s.requested[id] {
+					ask = append(ask, id)
+				}
 			}
 		}
+		if s.selfName == "" && !s.requested[s.selfID] {
+			ask = append(ask, s.selfID)
+		}
 		done := s.gotList && pending == 0
+		cl := s.client
+		if cl != nil {
+			for _, id := range ask {
+				s.requested[id] = true
+			}
+		}
 		s.mu.Unlock()
+		// The list push batched with the logon may have run before
+		// Connect returned (no request went out); ask here.
+		if cl != nil && len(ask) > 0 {
+			_ = cl.Send(steamcm.EMsgClientRequestFriendData, requestFriendData(ask))
+		}
 		if done || time.Now().After(deadline) {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	s.backfillNames()
+	s.mu.Lock()
+	s.readyDone = true
+	s.mu.Unlock()
 	return s.snapshot(), nil
 }
 
@@ -749,9 +851,23 @@ func (s *socialSession) snapshot() map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return map[string]any{
-		"connection": map[string]any{"state": "online"},
+		"connection": map[string]any{"state": connState(s.client.State())},
 		"self":       s.selfLocked(),
 		"friends":    s.friendsLocked(),
+	}
+}
+
+// connState maps the session state to the protocol's connection states.
+func connState(st steamcm.ClientState) string {
+	switch st {
+	case steamcm.StateOnline:
+		return "online"
+	case steamcm.StateReconnecting:
+		return "reconnecting"
+	case steamcm.StateReplaced:
+		return "replaced"
+	default:
+		return "offline"
 	}
 }
 
@@ -925,6 +1041,12 @@ func (s *socialSession) opSend(raw json.RawMessage) (map[string]any, *socialErro
 		s.mu.Unlock()
 		return map[string]any{"id": first.id, "sentAt": first.sentAt}, nil
 	}
+	// Bound the dedupe tables; a clientId older than the cap sends twice.
+	if len(s.sent) > 2000 {
+		s.sent = map[string]sentMsg{}
+		s.sentEcho = map[string]bool{}
+	}
+	s.inSend[friend]++
 	s.mu.Unlock()
 	e := &depot.Enc{}
 	e.Fixed64(1, friend)
@@ -933,6 +1055,13 @@ func (s *socialSession) opSend(raw json.RawMessage) (map[string]any, *socialErro
 	e.Varint(5, 1) // echo_to_sender
 	e.Str(8, p.ClientID)
 	resp, err := s.client.Call("FriendMessages.SendMessage#1", e.Bytes(), 30*time.Second)
+	s.mu.Lock()
+	if n := s.inSend[friend] - 1; n <= 0 {
+		delete(s.inSend, friend)
+	} else {
+		s.inSend[friend] = n
+	}
+	s.mu.Unlock()
 	if err != nil {
 		return nil, socialCallErr(err)
 	}
@@ -945,6 +1074,7 @@ func (s *socialSession) opSend(raw json.RawMessage) (map[string]any, *socialErro
 	sentAt := int64(ts) * 1000
 	s.mu.Lock()
 	s.sent[p.ClientID] = sentMsg{id: id, sentAt: sentAt}
+	s.sentEcho[p.FriendID+"/"+id] = true
 	s.mu.Unlock()
 	return map[string]any{"id": id, "sentAt": sentAt}, nil
 }
@@ -972,9 +1102,6 @@ func (s *socialSession) opMarkRead(raw json.RawMessage) (map[string]any, *social
 	if err := s.client.Notify("FriendMessages.AckMessage#1", e.Bytes()); err != nil {
 		return nil, &socialError{Code: codeStoreError, Message: shortSocialErr(err)}
 	}
-	s.mu.Lock()
-	s.unread[friend] = 0
-	s.mu.Unlock()
 	return map[string]any{}, nil
 }
 

@@ -4,7 +4,10 @@
 package steam_test
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -293,6 +296,13 @@ func TestSteamSocialReplaced(t *testing.T) {
 	// No reconnect fight: the helper ended instead of logging on again, so
 	// a fresh start is exactly one more logon.
 	before := strings.Count(e.cmLog(), "logon ")
+	// The tombstone holds: chat stays down instead of spawning a session
+	// behind a replaced one.
+	e.wantSocialCode("chat.history", map[string]any{"friendId": socialF1}, -32000)
+	if n := strings.Count(e.cmLog(), "logon "); n != before {
+		t.Fatalf("chat spawned a session after replaced: %d logons", n)
+	}
+	// Only social.start clears it.
 	if err := e.call("social.start", map[string]any{}, nil); err != nil {
 		t.Fatalf("social.start again: %v", err)
 	}
@@ -302,5 +312,48 @@ func TestSteamSocialReplaced(t *testing.T) {
 	after := strings.Count(e.cmLog(), "logon ")
 	if after != before+1 {
 		t.Fatalf("logons went %d -> %d, want exactly one more", before, after)
+	}
+}
+
+// A rejected token fails fast with auth-required, not after a 45 s wait.
+func TestSteamSocialBadToken(t *testing.T) {
+	e := setup(t)
+	for knob, value := range socialKnobs() {
+		e.setCMState(knob, value)
+	}
+	e.login()
+	e.library()
+	e.setCMState("logon_eresult", 27)
+	start := time.Now()
+	err := e.call("social.start", map[string]any{}, nil)
+	if err == nil || e.rpcCode(err) != -32001 {
+		t.Fatalf("social.start with a dead token: %v", err)
+	}
+	if dt := time.Since(start); dt > 30*time.Second {
+		t.Fatalf("auth failure took %v", dt)
+	}
+}
+
+// Client-mode games run under the real client, which reports what they
+// play itself: setPlaying for one sends nothing.
+func TestSteamSocialClientModeSkipsPlaying(t *testing.T) {
+	e := setupSocial(t)
+	if err := e.call("social.start", map[string]any{}, nil); err != nil {
+		t.Fatalf("social.start: %v", err)
+	}
+	installed, _ := json.Marshal(map[string]any{"4321": map[string]any{"path": "/tmp/steam-4321",
+		"title": "Standalone Game", "mode": "client", "version": "1"}})
+	if err := os.WriteFile(filepath.Join(e.pluginData(), "installed.json"), installed, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.call("social.setPlaying", map[string]any{"id": "4321"}, nil); err != nil {
+		t.Fatalf("setPlaying: %v", err)
+	}
+	time.Sleep(time.Second)
+	if log := e.cmLog(); strings.Contains(log, "games_played") {
+		t.Fatalf("reported a client-mode game: %s", log)
+	}
+	if err := e.call("social.stop", map[string]any{}, nil); err != nil {
+		t.Fatalf("social.stop: %v", err)
 	}
 }

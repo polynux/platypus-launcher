@@ -102,7 +102,7 @@ func playingBody(blocked bool, app uint32) []byte {
 	return e.Bytes()
 }
 
-func incomingBody(friend uint64, entry uint64, text string, ts, ord uint64) []byte {
+func incomingBody(friend uint64, entry uint64, text string, ts, ord uint64, localEcho bool) []byte {
 	e := &depot.Enc{}
 	e.Fixed64(1, friend)
 	e.Varint(2, entry)
@@ -111,6 +111,9 @@ func incomingBody(friend uint64, entry uint64, text string, ts, ord uint64) []by
 	}
 	e.Fixed32(5, uint32(ts))
 	e.Varint(6, ord)
+	if localEcho {
+		e.Varint(7, 1)
+	}
 	return e.Bytes()
 }
 
@@ -519,9 +522,9 @@ func socialTestPushes() []steamcmtest.Push {
 		{EMsg: steamcm.EMsgClientFriendsList, Body: full},
 		{EMsg: steamcm.EMsgClientPersonaState, Body: persona},
 		{EMsg: steamcm.EMsgServiceMethodResponse, Target: "FriendMessagesClient.IncomingMessage#1",
-			Body: incomingBody(testF2, 1, "hey", 1791400000, 7), After: 2},
+			Body: incomingBody(testF2, 1, "hey", 1791400000, 7, false), After: 2},
 		{EMsg: steamcm.EMsgServiceMethodResponse, Target: "FriendMessagesClient.IncomingMessage#1",
-			Body: incomingBody(testF2, 2, "", 1791400001, 0), After: 3},
+			Body: incomingBody(testF2, 2, "", 1791400001, 0, false), After: 3},
 	}
 }
 
@@ -728,6 +731,128 @@ func TestSocialChatRoundTrip(t *testing.T) {
 	}
 }
 
+// Our own send echoed back (local_echo) is dropped while the send is in
+// flight and when it matches the confirmed send; an unmatched echo (sent
+// from another of our devices) arrives as from self, with no unread.
+func TestSocialLocalEcho(t *testing.T) {
+	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
+		unread: map[uint64]int{}, names: map[uint64]string{}}
+	f := useSocialFake(t, steamcmtest.Config{
+		ServiceHandler: cf.handler,
+		Pushes: []steamcmtest.Push{
+			{EMsg: steamcm.EMsgClientFriendsList, Body: friendsListBody(false, friendEntry(testF1, 3))},
+			{EMsg: steamcm.EMsgClientPersonaState, Body: personaBody(
+				personaSpec{id: testF1, state: 1, name: "Ana Ruiz"},
+				personaSpec{id: testSelfID, state: 1, name: "Self Player"})},
+			// The first send gets ts 1, ord 1: this echo lands
+			// mid-call and is dropped before core has the id.
+			{EMsg: steamcm.EMsgServiceMethodResponse, Target: "FriendMessagesClient.IncomingMessage#1",
+				Body: incomingBody(testF1, 1, "hello", 1, 1, true), After: 1},
+			// The same echo after the reply matches the confirmed
+			// send and is dropped too.
+			{EMsg: steamcm.EMsgServiceMethodResponse, Target: "FriendMessagesClient.IncomingMessage#1",
+				Body: incomingBody(testF1, 1, "hello", 1, 1, true), After: 2},
+			// An echo from our other device arrives as from self.
+			{EMsg: steamcm.EMsgServiceMethodResponse, Target: "FriendMessagesClient.IncomingMessage#1",
+				Body: incomingBody(testF1, 1, "elsewhere", 1791399999, 9, true), After: 3},
+		},
+	})
+	_ = f
+	p := startSocial(t, "")
+	waitReadyReply(p, 1)
+
+	hasEvent := func(evs []socialLine, kind string) *socialLine {
+		for i := range evs {
+			if evs[i].Event == kind {
+				return &evs[i]
+			}
+		}
+		return nil
+	}
+	p.send("send", map[string]any{"friendId": "76561198000000002", "text": "hello", "clientId": "c1"}, 30)
+	sraw, evs := p.nextReply(30, 15*time.Second)
+	var sent struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(sraw, &sent)
+	if sent.ID != "1-1" {
+		t.Fatalf("send = %s", sraw)
+	}
+	if m := hasEvent(evs, "message"); m != nil {
+		t.Fatalf("in-flight echo shown: %s", m.Params)
+	}
+	p.send("history", map[string]any{"friendId": "76561198000000002"}, 31)
+	_, evs = p.nextReply(31, 15*time.Second)
+	if m := hasEvent(evs, "message"); m != nil {
+		t.Fatalf("matched echo shown: %s", m.Params)
+	}
+	p.send("history", map[string]any{"friendId": "76561198000000002"}, 32)
+	_, evs = p.nextReply(32, 15*time.Second)
+	incoming := hasEvent(evs, "message")
+	if incoming == nil {
+		t.Fatalf("unmatched echo missing among %d events", len(evs))
+	}
+	var im struct {
+		FriendID string `json:"friendId"`
+		Message  struct {
+			ID     string `json:"id"`
+			From   string `json:"from"`
+			Text   string `json:"text"`
+			SentAt int64  `json:"sentAt"`
+		} `json:"message"`
+	}
+	json.Unmarshal(incoming.Params, &im)
+	if im.Message.From != "self" || im.Message.ID != "1791399999-9" || im.Message.Text != "elsewhere" {
+		t.Fatalf("echo = %s", incoming.Params)
+	}
+	if u := hasEvent(evs, "unread"); u != nil {
+		t.Fatalf("echo raised unread: %s", u.Params)
+	}
+	p.stop(33)
+}
+
+// A later waitReady answers immediately: the first sync is remembered, so
+// the names lookup runs once no matter how often the plugin asks.
+func TestSocialWaitReadyOnce(t *testing.T) {
+	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
+		unread: map[uint64]int{}, names: map[uint64]string{}}
+	f := useSocialFake(t, steamcmtest.Config{
+		ServiceHandler: cf.handler,
+		Pushes: []steamcmtest.Push{
+			{EMsg: steamcm.EMsgClientFriendsList, Body: friendsListBody(false, friendEntry(testF1, 3))},
+			// No persona: the first waitReady times out and backfills
+			// the name over Player.GetPlayerLinkDetails.
+		},
+	})
+	p := startSocial(t, "")
+	waitReadyReply(p, 1)
+	calls := 0
+	for _, e := range f.Events() {
+		if strings.HasPrefix(e, "service Player.GetPlayerLinkDetails") {
+			calls++
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("lookups after first waitReady = %d, want 1", calls)
+	}
+	start := time.Now()
+	p.send("waitReady", nil, 2)
+	p.nextReply(2, 10*time.Second)
+	if dt := time.Since(start); dt > 5*time.Second {
+		t.Fatalf("second waitReady took %v", dt)
+	}
+	calls = 0
+	for _, e := range f.Events() {
+		if strings.HasPrefix(e, "service Player.GetPlayerLinkDetails") {
+			calls++
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("lookups after second waitReady = %d, want 1", calls)
+	}
+	p.stop(3)
+}
+
 func TestSocialReconnectRerequests(t *testing.T) {
 	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
 		unread: map[uint64]int{}, names: map[uint64]string{}}
@@ -748,17 +873,52 @@ func TestSocialReconnectRerequests(t *testing.T) {
 	if friends, _ := snap["friends"].([]any); len(friends) != 1 {
 		t.Fatalf("friends = %v", friends)
 	}
-	// The drop reconnects on its own; the second logon re-requests data.
+	// The drop reconnects on its own; the second logon re-requests data
+	// and resyncs the status and the (empty) playing report.
 	if !f.WaitFor(10*time.Second, func(evs []string) bool {
-		n := 0
+		var e815, e716, e742 int
 		for _, e := range evs {
-			if e == "emsg 815" {
-				n++
+			switch e {
+			case "emsg 815":
+				e815++
+			case "emsg 716":
+				e716++
+			case "emsg 742":
+				e742++
 			}
 		}
-		return n >= 2
+		return e815 >= 2 && e716 >= 2 && e742 >= 1
 	}) {
-		t.Fatalf("no re-request after reconnect: %v", f.Events())
+		t.Fatalf("no resync after reconnect: %v", f.Events())
+	}
+	p.stop(2)
+}
+
+// A friends list batched in the same Multi as the logon response must
+// arrive: the handlers are registered before the first logon, and the
+// batch remainder is routed once online.
+func TestSocialBatchedLogonBatch(t *testing.T) {
+	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
+		unread: map[uint64]int{}, names: map[uint64]string{}}
+	f := useSocialFake(t, steamcmtest.Config{
+		ServiceHandler: cf.handler,
+		Pushes: []steamcmtest.Push{
+			{EMsg: steamcm.EMsgClientFriendsList, Body: friendsListBody(false, friendEntry(testF1, 3))},
+			{EMsg: steamcm.EMsgClientPersonaState, Body: personaBody(
+				personaSpec{id: testF1, state: 1, name: "Ana Ruiz"},
+				personaSpec{id: testSelfID, state: 1, name: "Self Player"})},
+		},
+		BatchLogon: true,
+	})
+	_ = f
+	p := startSocial(t, "")
+	snap := waitReadyReply(p, 1)
+	friends, _ := snap["friends"].([]any)
+	if len(friends) != 1 {
+		t.Fatalf("friends = %v", friends)
+	}
+	if name := friends[0].(map[string]any)["name"]; name != "Ana Ruiz" {
+		t.Fatalf("batched persona missing: %v", friends)
 	}
 	p.stop(2)
 }

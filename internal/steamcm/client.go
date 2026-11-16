@@ -65,6 +65,10 @@ type ClientConfig struct {
 	// CallTimeout is Call's default when timeout == 0 (30s, like
 	// Session.Call).
 	CallTimeout time.Duration
+	// OnPush registers handlers before the first logon, so pushes that
+	// arrive with the logon response (the friends list is server-pushed
+	// once per logon) are never missed.
+	OnPush map[uint32]func(hdr depot.Msg, body []byte)
 }
 
 // Client is one persistent logon session to one CM. All methods are
@@ -160,6 +164,9 @@ func Connect(ctx context.Context, cfg ClientConfig) (*Client, error) {
 		stop:     make(chan struct{}),
 		done:     make(chan struct{}),
 	}
+	for emsg, fn := range cfg.OnPush {
+		c.handlers[emsg] = []func(depot.Msg, []byte){fn}
+	}
 	c.logonCtx, c.logonCancel = context.WithCancel(context.Background())
 	conn, sessionID, hbSeconds, err := c.dialAndLogon(c.logonCtx)
 	if err != nil {
@@ -199,7 +206,7 @@ func (c *Client) dialAndLogon(ctx context.Context) (*websocket.Conn, int32, uint
 			errs = append(errs, endpoint+": "+err.Error())
 			continue
 		}
-		sessionID, hb, lerr := c.logonOn(conn, cfgToken(c.cfg))
+		sessionID, hb, rest, lerr := c.logonOn(conn, cfgToken(c.cfg))
 		if lerr != nil {
 			conn.Close()
 			if ce, ok := lerr.(*CMError); ok && ce.EResult != 0 {
@@ -207,6 +214,16 @@ func (c *Client) dialAndLogon(ctx context.Context) (*websocket.Conn, int32, uint
 			}
 			errs = append(errs, endpoint+": "+lerr.Error())
 			continue
+		}
+		// The batch after the response (first pushes batched with it)
+		// goes to the handlers, which Connect seeded from OnPush before
+		// the first logon. A taken kick in the batch ends the slot.
+		for _, m := range rest {
+			c.route(m.emsg, m.hdr, m.body)
+		}
+		if c.State() == StateReplaced {
+			conn.Close()
+			return nil, 0, 0, c.Err()
 		}
 		return conn, sessionID, hb, nil
 	}
@@ -228,16 +245,25 @@ func (c *Client) dialAndLogon(ctx context.Context) (*websocket.Conn, int32, uint
 
 func cfgToken(cfg ClientConfig) string { return cfg.RefreshToken }
 
-// logonOn sends hello+logon on conn and waits for the logon response,
-// absorbing pushes the way Session.logon does.
-func (c *Client) logonOn(conn *websocket.Conn, refreshToken string) (int32, uint64, error) {
+// logonMsg is one message that arrived with the logon response batch.
+type logonMsg struct {
+	emsg uint32
+	hdr  depot.Msg
+	body []byte
+}
+
+// logonOn sends hello+logon on conn and waits for the logon response. The
+// rest of the batch after the response (a Multi envelope routinely carries
+// the first pushes with it) comes back with it; dialAndLogon routes those
+// to the handlers once the client is online.
+func (c *Client) logonOn(conn *websocket.Conn, refreshToken string) (int32, uint64, []logonMsg, error) {
 	if err := conn.WriteMessage(websocket.BinaryMessage,
 		packEMsg(EMsgClientHello, header(0, 0, 0, ""), func() []byte {
 			e := &depot.Enc{}
 			e.Varint(1, ProtocolVersion)
 			return e.Bytes()
 		}())); err != nil {
-		return 0, 0, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+		return 0, 0, nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 	}
 	machine := c.cfg.MachineID
 	if len(machine) == 0 {
@@ -246,56 +272,66 @@ func (c *Client) logonOn(conn *websocket.Conn, refreshToken string) (int32, uint
 	if err := conn.WriteMessage(websocket.BinaryMessage,
 		packEMsg(EMsgClientLogon, header(c.steamID, 0, 0, ""),
 			logonBody(refreshToken, c.loginID, machine))); err != nil {
-		return 0, 0, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+		return 0, 0, nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 	}
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		if time.Now().After(deadline) {
-			return 0, 0, &CMError{Msg: "Steam didn't answer the CM logon within 30 seconds"}
+			return 0, 0, nil, &CMError{Msg: "Steam didn't answer the CM logon within 30 seconds"}
 		}
 		if err := conn.SetReadDeadline(deadline); err != nil {
-			return 0, 0, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+			return 0, 0, nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 		}
 		op, data, err := conn.ReadMessage()
 		if err != nil {
-			return 0, 0, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+			return 0, 0, nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 		}
 		if op != websocket.BinaryMessage {
 			continue
 		}
 		emsg, hdr, body, err := unpackEMsg(data)
 		if err != nil {
-			return 0, 0, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+			return 0, 0, nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 		}
 		if emsg == EMsgMulti {
 			inner, err := multiUnwrap(body)
 			if err != nil {
-				return 0, 0, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+				return 0, 0, nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 			}
+			var rest []logonMsg
+			var sid int32
+			var hb uint64
+			found := false
 			for _, m := range inner {
 				iemsg, ihdr, ibody, err := unpackEMsg(m)
 				if err != nil {
-					return 0, 0, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+					return 0, 0, nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 				}
 				if iemsg == 751 {
-					sid, hb, lerr := parseLogonResponse(ihdr, ibody)
+					var lerr error
+					sid, hb, lerr = parseLogonResponse(ihdr, ibody)
 					if lerr != nil {
-						return 0, 0, lerr
+						return 0, 0, nil, lerr
 					}
-					return sid, hb, nil
+					found = true
+					continue
 				}
+				rest = append(rest, logonMsg{iemsg, ihdr, ibody})
+			}
+			if found {
+				return sid, hb, rest, nil
 			}
 			continue
 		}
 		if emsg == 751 {
 			sid, hb, lerr := parseLogonResponse(hdr, body)
 			if lerr != nil {
-				return 0, 0, lerr
+				return 0, 0, nil, lerr
 			}
-			return sid, hb, nil
+			return sid, hb, nil, nil
 		}
-		// Anything else before the response (licence list, ...): ignore
-		// here; the server resends what matters after logon.
+		// Anything else before the response (licence list, ...): the
+		// server resends what matters after logon.
 	}
 }
 
