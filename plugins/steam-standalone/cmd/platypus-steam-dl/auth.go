@@ -28,6 +28,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -143,7 +144,46 @@ func qrArt(challengeURL string) string {
 	return strings.Join(rows, "\n")
 }
 
+// qrLoginDeadline is the whole QR login budget: Steam expires the auth
+// session and hands out new challenge URLs in between.
+const qrLoginDeadline = 5 * time.Minute
+
+// qrReconnects bounds socket-drop recoveries in one QR login. Each one
+// shows the user a new code, so a flapping CM fails instead of spinning.
+const qrReconnects = 3
+
+// runAuthQR polls one QR login; if the CM socket dies under it (the
+// heartbeats in steamcm should prevent that, but a network blip or a CM
+// restart still can) it starts a fresh session, which emits a new qr
+// event — the dialog redraws instead of the login failing.
 func runAuthQR(ctx context.Context, req authRequest) error {
+	deadline := time.Now().Add(qrLoginDeadline)
+	var err error
+	for attempt := 0; attempt <= qrReconnects; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
+		}
+		err = runAuthQRSession(ctx, deadline)
+		if err == nil || !dropped(err) {
+			return err
+		}
+	}
+	return err
+}
+
+// dropped reports an error no Steam EResult answered: a dead socket, a
+// silent CM, an unreachable CM list. Only those get a reconnect; a
+// refusal Steam answered (rate limit, expired session) never does.
+func dropped(err error) bool {
+	var ce *steamcm.CMError
+	return errors.As(err, &ce) && ce.EResult == 0
+}
+
+func runAuthQRSession(ctx context.Context, deadline time.Time) error {
 	cm, err := steamcm.DialUnauth(ctx)
 	if err != nil {
 		return err
@@ -156,7 +196,6 @@ func runAuthQR(ctx context.Context, req authRequest) error {
 	art := qrArt(qr.ChallengeURL)
 	emit(map[string]any{"type": "qr", "challenge_url": qr.ChallengeURL, "qr_art": art})
 	clientID, requestID := qr.ClientID, qr.RequestID
-	deadline := time.Now().Add(5 * time.Minute)
 	interval := time.Duration(qr.Interval * float32(time.Second))
 	if interval <= 0 {
 		interval = 5 * time.Second
@@ -282,9 +321,10 @@ func runAuthPassword(ctx context.Context, req authRequest, replies <-chan authCo
 // storeToken persists the login where both the Python plugin and the Go
 // downloader find it: refresh.token (0600, raw JWT), token.json (same
 // keys the plugin already uses, plus steamid) and session.json (same
-// account shape, no secret so 0644 is fine). Token files are chmodded
-// after writing because WriteFile keeps a pre-existing 0644 mode. It
-// emits the result line for the plugin to forward.
+// account shape). Every file is 0600 (issue #181): the same writer also
+// runs standalone, where no core made the folder private. Files are
+// chmodded after writing because WriteFile keeps a pre-existing 0644 mode.
+// It emits the result line for the plugin to forward.
 func storeToken(refreshToken, account string) error {
 	if refreshToken == "" {
 		return fmt.Errorf("Steam issued no login token")
@@ -297,7 +337,7 @@ func storeToken(refreshToken, account string) error {
 		account = fmt.Sprintf("%d", steamID)
 	}
 	dir := dataDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(dir, "refresh.token"), []byte(refreshToken+"\n"), 0o600); err != nil {
@@ -325,9 +365,10 @@ func storeToken(refreshToken, account string) error {
 	}
 	_ = os.Chmod(filepath.Join(dir, "token.json"), 0o600)
 	sf, _ := json.Marshal(map[string]string{"account": account})
-	if err := os.WriteFile(filepath.Join(dir, "session.json"), sf, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "session.json"), sf, 0o600); err != nil {
 		return err
 	}
+	_ = os.Chmod(filepath.Join(dir, "session.json"), 0o600)
 	emit(map[string]any{"type": "result", "account": account, "steamid": steamID})
 	return nil
 }

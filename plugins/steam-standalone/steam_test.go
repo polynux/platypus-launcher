@@ -534,20 +534,21 @@ func TestSteamAuth(t *testing.T) {
 	}
 }
 
-// Token-bearing files must end up 0600 even when they already exist as
-// 0644 (pre-fix saves): the login overwrites refresh.token/token.json
-// through the Go helper (chmod after write) and library.list writes and
-// re-touches steam-access.json through the plugin (save_secret/tighten).
-// session.json carries no secret and stays 0644.
+// Token-bearing and plain state files must end up 0600 even when they
+// already exist as 0644 (pre-fix saves): the login overwrites
+// refresh.token/token.json/session.json through the Go helper (chmod after
+// write) and library.list writes and re-touches steam-access.json through
+// the plugin (save_state/tighten). Plugin state is private now (#181).
 func TestSteamTokenFiles0600(t *testing.T) {
 	e := setup(t)
 	e.setCMState("auth_guard", "email")
-	// Pre-create the token files world-readable; the flows below must
+	// Pre-create the state files world-readable; the flows below must
 	// tighten them.
 	os.WriteFile(filepath.Join(e.pluginData(), "refresh.token"), []byte("stale\n"), 0o644)
 	os.WriteFile(filepath.Join(e.pluginData(), "token.json"), []byte(`{"refresh_token":"stale"}`), 0o644)
+	os.WriteFile(filepath.Join(e.pluginData(), "session.json"), []byte(`{}`), 0o644)
 	e.login()
-	for _, name := range []string{"refresh.token", "token.json"} {
+	for _, name := range []string{"refresh.token", "token.json", "session.json"} {
 		fi, err := os.Stat(filepath.Join(e.pluginData(), name))
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
@@ -574,9 +575,6 @@ func TestSteamTokenFiles0600(t *testing.T) {
 	if fi, _ := os.Stat(filepath.Join(e.pluginData(), "steam-access.json")); fi.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("steam-access.json mode after cached read %v, want 0600", fi.Mode())
 	}
-	if _, err := os.Stat(filepath.Join(e.pluginData(), "session.json")); err != nil {
-		t.Fatalf("session.json: %v", err)
-	}
 }
 
 // The first auth.status right after a login already shows the display
@@ -592,6 +590,24 @@ func TestSteamPersonaAtLogin(t *testing.T) {
 	}
 	if st.User != "TestPersona" {
 		t.Fatalf("want persona TestPersona right after login, got %q", st.User)
+	}
+}
+
+// persona_name sends one plain varint steamid (issue #180: a nested
+// message was read as a packed list) and matches the account by steamid.
+// The fake prepends a decoy account, so taking accounts[0] resolves the
+// wrong name.
+func TestSteamPersonaMatchesSteamID(t *testing.T) {
+	e := setup(t)
+	e.setCMState("link_details_decoys", []any{76561199})
+	e.setCMState("personas", map[string]any{"76561199": "DecoyPersona"})
+	e.login()
+	var st types.AuthStatus
+	if err := e.call("auth.status", nil, &st); err != nil || !st.LoggedIn {
+		t.Fatalf("status: %+v, %v", st, err)
+	}
+	if st.User != "TestPersona" {
+		t.Fatalf("persona must match the requested steamid, got %q", st.User)
 	}
 }
 
@@ -1009,6 +1025,81 @@ func TestSteamQRAuth(t *testing.T) {
 	e.setCMState("auth_qr_approved", true)
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
 		t.Fatalf("second qr complete: %+v, %v", st, err)
+	}
+}
+
+// The pre-logon CM socket heartbeats (issue #182): the fake closes an
+// unauthenticated connection that sends no ClientHeartBeat after 4 s
+// instead of the live CM's minute, and the login must stay pending
+// through that window and still complete.
+func TestSteamQRHeartbeat(t *testing.T) {
+	t.Setenv("PLATYPUS_STEAM_HEARTBEAT_SECONDS", "1")
+	e := setup(t)
+	e.setCMState("unauth_idle_close", 4)
+	var pr types.AuthPrompt
+	if err := e.call("auth.begin", nil, &pr); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	checkQRArt(t, pr.QR)
+	// Outlive the fake's idle window between polls.
+	time.Sleep(5500 * time.Millisecond)
+	var st types.AuthStatus
+	if err := e.call("auth.status", nil, &st); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if st.LoggedIn || st.QR == "" {
+		t.Fatalf("QR login after the idle window: %+v\nCM log: %s", st, e.cmLog())
+	}
+	e.setCMState("auth_qr_approved", true)
+	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
+		t.Fatalf("qr complete after idle window: %+v, %v", st, err)
+	}
+	e.waitCMLog("heartbeat_unauth")
+	if log := e.cmLog(); strings.Contains(log, "unauth_idle_close") {
+		t.Fatalf("fake closed the session despite heartbeats: %s", log)
+	}
+}
+
+// A CM socket that drops mid-poll must not end the QR login: the helper
+// reconnects, begins a new session and emits a fresh qr event, so the
+// dialog redraws the new code instead of failing (issue #182).
+func TestSteamQRReconnectReemitsCode(t *testing.T) {
+	t.Setenv("PLATYPUS_STEAM_HEARTBEAT_SECONDS", "1")
+	e := setup(t)
+	var pr types.AuthPrompt
+	if err := e.call("auth.begin", nil, &pr); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	checkQRArt(t, pr.QR)
+	first := pr.QR
+	// The reconnected session gets a new challenge, and the fake drops the
+	// current socket after 2 s even though it heartbeats.
+	e.setCMState("auth_challenge_url", "https://steamcommunity.com/qr/RECONNECTED")
+	e.setCMState("unauth_close_after", 2)
+	var st types.AuthStatus
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if err := e.call("auth.status", nil, &st); err != nil {
+			t.Fatalf("status: %v", err)
+		}
+		if st.LoggedIn {
+			t.Fatal("status claims logged in before any approval")
+		}
+		if st.QR != "" && st.QR != first {
+			break // the reconnected session's art
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no fresh QR after the drop; CM log: %s", e.cmLog())
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	checkQRArt(t, st.QR)
+	if log := e.cmLog(); strings.Count(log, "service Authentication.BeginAuthSessionViaQR#1") < 2 {
+		t.Fatalf("want a second QR session after the drop: %s", log)
+	}
+	e.setCMState("auth_qr_approved", true)
+	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
+		t.Fatalf("qr complete after reconnect: %+v, %v", st, err)
 	}
 }
 
