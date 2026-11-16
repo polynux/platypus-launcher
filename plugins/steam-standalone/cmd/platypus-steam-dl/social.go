@@ -6,10 +6,10 @@
 //
 // Stdin starts with one request line:
 //
-//	{"refresh_token": "...", "status": "invisible"}
+//	{"refresh_token": "...", "status": "online"}
 //
 // status is the own persona sent after logon (online|away|busy|snooze|
-// invisible, default invisible); "none" stays passive and never sends
+// invisible, default online); "none" stays passive and never sends
 // ClientChangeStatus, so a read-only live check can read the friends list
 // without changing what friends see. The token may be omitted when the
 // plugin data dir holds one (tokenFromFile).
@@ -73,10 +73,9 @@ var stateToPersona = map[string]uint64{
 // asks for except Metadata (32), which SteamKit marks removed.
 const requestFriendDataFlags = 1 | 2 | 4 | 8 | 16 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096 | 8192 | 16384
 
-// defaultSocialStatus is the persona a fresh session reports. Invisible
-// until the presence-aggregation live check passes (issue #7); the user
-// will then decide between Invisible and Online.
-const defaultSocialStatus = "invisible"
+// defaultSocialStatus is the persona a fresh session reports: Online, as
+// the Steam client does (user decision, issue #7).
+const defaultSocialStatus = "online"
 
 const (
 	// readyTimeout bounds the initial sync waitReady answers with.

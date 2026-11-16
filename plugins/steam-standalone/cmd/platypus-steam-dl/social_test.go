@@ -459,7 +459,7 @@ func TestSocialFriendsFullAndIncremental(t *testing.T) {
 	if f2.Name != "Bo Lindqvist" || f2.State != "offline" || f2.LastSeen != 1791398000 {
 		t.Fatalf("F2 = %+v", f2)
 	}
-	if snap.Self.Name != "Self Player" || snap.Self.State != "invisible" {
+	if snap.Self.Name != "Self Player" || snap.Self.State != "online" {
 		t.Fatalf("self = %+v", snap.Self)
 	}
 	// The scripted incremental pushes rode in on the backfill lookup; the

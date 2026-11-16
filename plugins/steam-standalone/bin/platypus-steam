@@ -3162,10 +3162,9 @@ def job_discard(params):
 # social.*/chat.* notifications. Message text is passed through to core
 # and never logged.
 SOCIAL_STATES = ("online", "away", "busy", "snooze", "invisible")
-# The status a fresh session goes online with. Invisible until the presence
-# aggregation live check passes (issue #7); the user will then decide
-# between Invisible and Online.
-SOCIAL_DEFAULT_STATUS = "invisible"
+# The status a fresh session goes online with, as the Steam client does
+# (user decision, issue #7). The user can pick another with social.setStatus.
+SOCIAL_DEFAULT_STATUS = "online"
 
 social_lock = threading.Lock()
 social_proc = None  # the live helper: {"proc", "pending", "next", "last_conn", "stopping"}
