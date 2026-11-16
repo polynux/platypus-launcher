@@ -52,8 +52,8 @@
     "upload_other": "{{count}} to upload",
     "conflict_one": "{{count}} in conflict",
     "conflict_other": "{{count}} in conflict",
-    "unmapped_one": "{{count}} not placed on this device",
-    "unmapped_other": "{{count}} not placed on this device"
+    "unmapped_one": "{{count}} not synced on this device",
+    "unmapped_other": "{{count}} not synced on this device"
   },
   "setting": {
     "description": "Whether Platypus syncs each store's save files to its cloud. Each game can override its store's choice on its page.",
