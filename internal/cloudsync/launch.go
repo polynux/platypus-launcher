@@ -352,8 +352,14 @@ func (c *Orchestrator) postExit(jctx context.Context, j *job, g Game, cc types.C
 		c.dropPending(g.ID, j.id)
 		return
 	}
-	c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvPushed, Status: &res, JobID: j.id,
-		Message: fmt.Sprintf("Saved %d file%s to the cloud", st.Counts.Upload, plural(st.Counts.Upload)), Done: int64(st.Counts.Upload)})
+	uploaded := st.Counts.Upload - res.Counts.Upload
+	if uploaded == 0 {
+		c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvSkipped, Status: &res, JobID: j.id,
+			Message: "Not uploaded: " + res.Message})
+	} else {
+		c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvPushed, Status: &res, JobID: j.id,
+			Message: fmt.Sprintf("Saved %d file%s to the cloud", uploaded, plural(uploaded)), Done: int64(uploaded)})
+	}
 	c.dropPending(g.ID, j.id)
 }
 

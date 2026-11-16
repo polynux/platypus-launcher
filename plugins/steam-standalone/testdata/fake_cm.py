@@ -43,12 +43,6 @@ re-read on every auth poll so tests can approve mid-login):
     auth_guard          "none", "email", "totp" or "confirm" (default "none")
     auth_expected_code  code Update accepts (default "ABC12" for email,
                         "123456" for totp)
-    auth_qr_approved    set true to approve a QR login, like the phone would
-    auth_mobile_approved set true to approve a password mobile confirmation
-    auth_qr_refresh     first QR poll returns a new challenge URL, like
-                        Steam expiring it
-    auth_begin_eresult  EResult for Begin (e.g. 84 rate-limit; default 1)
-    auth_poll_eresult   EResult for Poll (e.g. 27 expired, 84; default 1)
     auth_challenge_url  QR challenge URL handed out
     auth_new_challenge_url refreshed QR challenge URL
     unauth_close_after  seconds after an unauthenticated connection opens
@@ -59,6 +53,18 @@ re-read on every auth poll so tests can approve mid-login):
     link_details_decoys steamids the fake prepends to every
                         Player.GetPlayerLinkDetails reply, so the client
                         must match by steamid instead of accounts[0]
+  Cloud saves (Auto-Cloud listings + downloads, issue #6):
+    cloud_changelist  {"current_change_number": N, "is_only_delta": bool,
+                       "path_prefixes": [...], "machine_names": [...],
+                       "files": [{"name", "sha" (hex), "time", "size",
+                                  "persist" (0/1/2), "prefix", "machine"}]}
+    cloud_files       {"%Root%rel": {"body": b64} | {"zip": {entry: b64}} |
+                       {"deleted": true} | {"encrypted": true, ...},
+                       "sha" (hex, default sha of served bytes),
+                       "time", "raw_size" (default len), "wire_size"}
+# Downloads ride plain HTTP on localhost: the fake prints "http <port>" as
+# its second stdout line and serves /cloud/<appid>/<name>; url_host in the
+# ClientFileDownload reply points at it. No Valve network.
 Every connection appends a line to $FAKE_CM_STATE.log: "connect",
 "logon <steamid>", "heartbeat_reply", "service <jobid>", "logoff" — the Go
 tests read it to assert what the plugin actually did on the wire.
@@ -76,6 +82,8 @@ import socket
 import struct
 import threading
 import time
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 STATE = os.environ["FAKE_CM_STATE"]
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -443,6 +451,12 @@ def serve_logged_in(conn, hdr, body, st):
             if serve_auth(conn, target, hdr, body, steamid):
                 continue
         record(f"service {target}")
+        if target == "Cloud.GetAppFileChangelist#1":
+            serve_cloud_changelist(conn, hdr, st, steamid, sessionid)
+            continue
+        if target == "Cloud.ClientFileDownload#1":
+            serve_cloud_download(conn, hdr, body, st, steamid, sessionid)
+            continue
         if target == "ContentServerDirectory.GetServersForSteamPipe#1":
             serve_servers(conn, hdr, body, st, steamid, sessionid)
             continue
@@ -693,6 +707,104 @@ def serve_cdn_token(conn, hdr, body, st, steamid, sessionid):
                             pb_str(1, st.get("cdn_token", "cdn-token")) + pb_int(2, exp)))
 
 
+# --- Cloud saves (Auto-Cloud listings + downloads, issue #6) -----------------
+# Knobs are documented at the top (cloud_changelist, cloud_files). Downloads
+# ride plain HTTP on localhost; HTTP_PORT is set in main().
+
+HTTP_PORT = 0
+
+
+def serve_cloud_changelist(conn, hdr, st, steamid, sessionid):
+    jobid = hdr.get(10, [0])[0]
+    cl = st.get("cloud_changelist") or {}
+    resp = pb_int(1, cl.get("current_change_number", 0))
+    for f in cl.get("files") or []:
+        entry = pb_str(1, f.get("name", ""))
+        entry += pb_str(2, bytes.fromhex(f.get("sha", "00" * 20)))
+        entry += pb_int(3, f.get("time", 0)) + pb_int(4, f.get("size", 0))
+        entry += pb_int(5, f.get("persist", 0))
+        entry += pb_int(7, f.get("prefix", 0)) + pb_int(8, f.get("machine", 0))
+        resp += pb_msg(2, entry)
+    if cl.get("is_only_delta"):
+        resp += pb_int(3, 1)
+    for p in cl.get("path_prefixes") or []:
+        resp += pb_str(4, p)
+    for m in cl.get("machine_names") or []:
+        resp += pb_str(5, m)
+    conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                            content_hdr(steamid, sessionid, jobid), resp))
+
+
+def cloud_served_bytes(spec):
+    """The (wire, raw) byte pair a cloud_files entry serves: a zip dict
+    packs one entry (stored or deflate), anything else serves as is."""
+    import io
+    import zipfile
+    if "zip" in spec:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, b64 in spec["zip"].items():
+                zf.writestr(name, base64.b64decode(b64))
+        first = next(iter(spec["zip"].values()), "")
+        return buf.getvalue(), base64.b64decode(first)
+    return base64.b64decode(spec.get("body", "")), base64.b64decode(spec.get("body", ""))
+
+
+def serve_cloud_download(conn, hdr, body, st, steamid, sessionid):
+    jobid = hdr.get(10, [0])[0]
+    req = pb_parse(body)
+    name = ((req.get(2, [b""])[0]).decode() if req.get(2) else "")
+    spec = (st.get("cloud_files") or {}).get(name)
+    if spec is None:
+        conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                                content_hdr(steamid, sessionid, jobid, 2), b""))
+        return
+    wire, raw = cloud_served_bytes(spec)
+    sha = bytes.fromhex(spec["sha"]) if spec.get("sha") else hashlib.sha1(raw).digest()
+    import urllib.parse
+    resp = pb_int(2, spec.get("wire_size", len(wire)))
+    resp += pb_int(3, spec.get("raw_size", len(raw)))
+    resp += pb_str(4, sha) + pb_int(5, spec.get("time", 0))
+    if spec.get("deleted"):
+        resp += pb_int(6, 1)
+    resp += pb_str(7, "127.0.0.1:%d" % HTTP_PORT)
+    resp += pb_str(8, "/cloud/%d/%s" % (req.get(1, [0])[0], urllib.parse.quote(name, safe="")))
+    resp += pb_int(9, 0)
+    if spec.get("encrypted"):
+        resp += pb_int(11, 1)
+    conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                            content_hdr(steamid, sessionid, jobid), resp))
+
+
+class CloudHTTPHandler(BaseHTTPRequestHandler):
+    """Plain-HTTP file drops for ClientFileDownload tests (no Valve
+    network): GET /cloud/<appid>/<quoted cloud name> serves the entry's
+    wire bytes from a fresh state read, like the real CDN would."""
+
+    def do_GET(self):
+        import urllib.parse
+        parts = urllib.parse.urlparse(self.path).path.split("/", 3)
+        if len(parts) != 4 or parts[1] != "cloud":
+            self.send_response(404)
+            self.end_headers()
+            return
+        name = urllib.parse.unquote(parts[3])
+        spec = (load().get("cloud_files") or {}).get(name)
+        if spec is None or spec.get("deleted"):
+            self.send_response(404)
+            self.end_headers()
+            return
+        wire, _raw = cloud_served_bytes(spec)
+        record("http %s" % name)
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(wire)))
+        self.end_headers()
+        self.wfile.write(wire)
+
+    def log_message(self, *args):
+        pass
+
+
 # --- authentication RPCs (phase 6 logins, no Valve network) ---------------
 # Field numbers from steammessages_auth.steamclient.proto; EResults ride
 # the service header like other calls. The RSA key below is a throwaway
@@ -848,11 +960,16 @@ def serve_auth(conn, target, hdr, body, steamid):
 
 
 def main():
+    global HTTP_PORT
+    httpd = HTTPServer(("127.0.0.1", 0), CloudHTTPHandler)
+    HTTP_PORT = httpd.server_address[1]
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
     srv = socket.socket()
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(("127.0.0.1", 0))
     srv.listen(4)
     print(srv.getsockname()[1], flush=True)
+    print("http %d" % HTTP_PORT, flush=True)
     while True:
         if not os.path.exists(STATE):
             return  # state file removed: test is done
