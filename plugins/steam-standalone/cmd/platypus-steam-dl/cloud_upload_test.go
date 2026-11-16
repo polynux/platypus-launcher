@@ -82,7 +82,7 @@ func TestCloudAppBuildID(t *testing.T) {
 }
 
 // A local-only save names the %rule-root% cloud file a later listing
-// carries, so push and status agree on it.
+// carries, so push and status agree on it (real path: scan + compare).
 func TestUploadCloudNameLocalOnly(t *testing.T) {
 	home := t.TempDir()
 	install := filepath.Join(home, "install")
@@ -101,11 +101,14 @@ func TestUploadCloudNameLocalOnly(t *testing.T) {
 	if files[0].CloudName != "%GameInstall%saves/new.sav" {
 		t.Fatalf("cloud name = %q", files[0].CloudName)
 	}
+	if back, _, ok := mapCloudName(files[0].CloudName, ufs, ctx, 0); !ok || back != files[0].Local {
+		t.Fatalf("round trip = %q, %v", back, ok)
+	}
 }
 
 // With a root override (SUPERHOT on native Linux), the upload name keeps
-// the rule's own root: mapping it back through the override must land on
-// the same local file (B2).
+// the rule's own root: scan + compare must file it under the platform-
+// independent name, and mapping that name back lands on the same file.
 func TestUploadCloudNameRoundTripsOverride(t *testing.T) {
 	home := t.TempDir()
 	ufs := parseCloudRules(mustParseKV(t, superhotUFS))
@@ -113,14 +116,40 @@ func TestUploadCloudNameRoundTripsOverride(t *testing.T) {
 	local := filepath.Join(home, ".config", "unity3d", "SUPERHOT_Team", "SUPERHOT", "super.hot")
 	writeLocal(t, local, "fresh")
 	const name = "%WinAppDataLocalLow%SUPERHOT_Team/SUPERHOT/super.hot"
-	mapped, rel, ok := mapCloudName(name, ufs, ctx, 0)
-	if !ok || mapped != local {
-		t.Fatalf("map = %q, %v, want %q", mapped, ok, local)
+	files, _ := compareCloud(nil, scanLocal(ufs, ctx, 0), ufs, ctx, 0,
+		&cloudBaseline{Files: map[string]cloudBaselineFile{}})
+	if len(files) != 1 {
+		t.Fatalf("files = %+v", files)
 	}
-	if got := uploadCloudName(ufs, ctx, 0, local, rel); got != name {
-		t.Fatalf("upload name = %q, want %q", got, name)
+	up := &files[0]
+	if up.Want != "upload" || up.CloudName != name || up.Rel != "SUPERHOT_Team/SUPERHOT/super.hot" {
+		t.Fatalf("upload = %+v, want %q", up, name)
 	}
 	if back, _, ok := mapCloudName(name, ufs, ctx, 0); !ok || back != local {
+		t.Fatalf("round trip = %q, %v", back, ok)
+	}
+}
+
+// Two rules covering one directory with different roots, matching different
+// patterns: the file uploads under the root of the rule whose pattern
+// matched, not the first rule covering the directory.
+func TestUploadCloudNameOverlappingRoots(t *testing.T) {
+	home := t.TempDir()
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
+		"0" { "root" "GameInstall" "path" "saves" "pattern" "*.cfg" }
+		"1" { "root" "LinuxHome" "path" "install/saves" "pattern" "*.sav" } } }`))
+	ctx := cloudContext{OS: "linux", Home: home, InstallDir: filepath.Join(home, "install")}
+	local := filepath.Join(home, "install", "saves", "game.sav")
+	writeLocal(t, local, "sav")
+	got := scanLocal(ufs, ctx, 0)
+	if len(got) != 1 || got[local].Root != "LinuxHome" {
+		t.Fatalf("scan = %+v, want the *.sav rule's root", got)
+	}
+	files, _ := compareCloud(nil, got, ufs, ctx, 0, &cloudBaseline{Files: map[string]cloudBaselineFile{}})
+	if len(files) != 1 || files[0].CloudName != "%LinuxHome%install/saves/game.sav" {
+		t.Fatalf("files = %+v", files)
+	}
+	if back, _, ok := mapCloudName(files[0].CloudName, ufs, ctx, 0); !ok || back != local {
 		t.Fatalf("round trip = %q, %v", back, ok)
 	}
 }

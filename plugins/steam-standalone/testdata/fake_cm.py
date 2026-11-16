@@ -80,25 +80,26 @@ re-read on every auth poll so tests can approve mid-login):
                        (absent = unlimited)
     cloud_split_blocks  true: every uploaded file gets two blocks, so the
                        client must honor block_offset/block_length
-    cloud_post_blocks   true: block drops say POST (http_method 3)
+    cloud_post_blocks   true: block drops say POST (http_method 3, else 4)
     cloud_shuffle_blocks  true: block drops come in reverse offset order;
                        the store assembles by offset, not arrival order
     cloud_explicit      {"<name>": {"body": b64, "post": bool}}: the block
                        carries its own explicit_body_data (POST by default)
     cloud_fail_files    ["<name>", ...]: begin-file and commit refuse these
                        files (mid-batch failure)
+    cloud_encrypt_files  ["<name>", ...]: begin-file wants the file
+                       encrypted (client must refuse and report failure)
+    cloud_no_blocks     true: begin-file answers no block requests; the
+                       file commits directly
+    cloud_bad_method    true: block drops say HTTP method 1 (refused)
     cloud_begin_bump    true: the begin reply's change number moves past the
                        listing's (S3 race)
     cloud_complete_eresult  eresult for the complete reply (default 1);
                        2 fails the push at completion
-    cloud_upload_hang   true: the block endpoint reads the bytes and never
-                       answers (cancel test)
-    cloud_upload_eresult  eresult for begin-file/commit replies (default 1);
-                       2 fails the batch mid-flight
 # Downloads ride plain HTTP on localhost: the fake prints "http <port>" as
 # its second stdout line and serves /cloud/<appid>/<name>; url_host in the
 # ClientFileDownload reply points at it. Uploaded blocks ride the same
-# server at /upload/<appid>/<batch>/<name>. No Valve network.
+# server at /upload/<appid>/<batch>/<offset>/<name>. No Valve network.
 The server prints its port on stdout, serves connections one after another
 and exits when its state file disappears.
 """
@@ -1145,7 +1146,7 @@ def serve_upload_begin(conn, hdr, body, st, steamid, sessionid):
         _cloud["batches"][batch] = {"appid": req.get(1, [0])[0],
                                     "names": names, "machine": machine, "done": None}
         cur = _cloud["change"]
-        if cur is None:
+        if cur is None or base > cur:
             cur = base
         if st.get("cloud_begin_bump"):
             cur = max(cur, base) + 1
@@ -1154,19 +1155,19 @@ def serve_upload_begin(conn, hdr, body, st, steamid, sessionid):
     resp = pb_int(1, batch) + pb_int(4, _cloud["change"])
     conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
                             content_hdr(steamid, sessionid, jobid), resp))
-
-
 def _upload_spans(st, size, name):
+    if st.get("cloud_no_blocks"):
+        return []
+    meth = 1 if st.get("cloud_bad_method") else (3 if st.get("cloud_post_blocks") else 4)
     explicit = (st.get("cloud_explicit") or {}).get(name)
     if explicit is not None:
         spans = [(0, size, base64.b64decode(explicit.get("body", "")),
-                  3 if explicit.get("post", True) else 2)]
+                  3 if explicit.get("post", True) else 4)]
     elif st.get("cloud_split_blocks") and size > 1:
         half = size // 2
-        spans = [(0, half, None, 3 if st.get("cloud_post_blocks") else 2),
-                 (half, size - half, None, 3 if st.get("cloud_post_blocks") else 2)]
+        spans = [(0, half, None, meth), (half, size - half, None, meth)]
     else:
-        spans = [(0, size, None, 3 if st.get("cloud_post_blocks") else 2)]
+        spans = [(0, size, None, meth)]
     if st.get("cloud_shuffle_blocks"):
         spans = spans[::-1]
     return spans
@@ -1182,15 +1183,21 @@ def serve_upload_begin_file(conn, hdr, body, st, steamid, sessionid):
     eres = st.get("cloud_upload_eresult", 1)
     if name in _fail_names(st):
         eres = 2
+    if name in (st.get("cloud_encrypt_files") or []):
+        resp = pb_int(1, 1)
+        conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                                content_hdr(steamid, sessionid, jobid), resp))
+        return
     with _cloud_lock:
         known = batch in _cloud["batches"]
-        if known and eres == 1:
+        in_batch = known and name in _cloud["batches"][batch]["names"]
+        if known and in_batch and eres == 1:
             _cloud["chunks"][(batch, name)] = {
                 "appid": req.get(1, [0])[0], "size": size,
                 "sha": req.get(4, [b""])[0], "time": req.get(5, [0])[0],
                 "spans": [(off, ln) for off, ln, _body, _m in _upload_spans(st, size, name)],
-                "parts": []}
-    if not known:
+                "parts": {}}
+    if not known or not in_batch:
         eres = 2
     if eres != 1:
         conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
@@ -1198,9 +1205,12 @@ def serve_upload_begin_file(conn, hdr, body, st, steamid, sessionid):
         return
     import urllib.parse
     host = "127.0.0.1:%d" % HTTP_PORT
-    path = "/upload/%d/%d/%s" % (req.get(1, [0])[0], batch, urllib.parse.quote(name, safe=""))
     resp = b""
     for offset, length, explicit, method in _upload_spans(st, size, name):
+        # Each block gets its own path carrying its offset: identity, not
+        # arrival order, decides where the bytes land.
+        path = "/upload/%d/%d/%d/%s" % (req.get(1, [0])[0], batch, offset,
+                                        urllib.parse.quote(name, safe=""))
         blk = pb_str(1, host) + pb_str(2, path) + pb_int(3, 0) + pb_int(4, method)
         blk += pb_msg(5, pb_str(1, "X-Fake-Block") + pb_str(2, "1"))
         blk += pb_int(6, offset) + pb_int(7, length)
@@ -1230,7 +1240,7 @@ def serve_upload_commit(conn, hdr, body, st, steamid, sessionid):
         eres = 2
     if not ok or batch is None:
         eres = 2
-    assembled, match = None, False
+    assembled = None
     if eres == 1:
         with _cloud_lock:
             staged = _cloud["chunks"].pop((batch, name))
@@ -1239,16 +1249,15 @@ def serve_upload_commit(conn, hdr, body, st, steamid, sessionid):
         # shuffled blocks still reassemble. Anything off fails the commit.
         if len(staged["parts"]) == len(staged["spans"]):
             buf = bytearray(staged["size"])
-            match = True
-            for (off, ln), part in zip(staged["spans"], staged["parts"]):
-                if len(part) != ln or off + ln > staged["size"]:
-                    match = False
+            ok_parts = True
+            for off, ln in staged["spans"]:
+                part = staged["parts"].get(off)
+                if part is None or len(part) != ln or off + ln > staged["size"]:
+                    ok_parts = False
                     break
                 buf[off:off + ln] = part
-            if match and hashlib.sha1(bytes(buf)).digest() == staged["sha"]:
+            if ok_parts and hashlib.sha1(bytes(buf)).digest() == staged["sha"]:
                 assembled = bytes(buf)
-            else:
-                match = False
         if assembled is None:
             eres = 2
             record(f"upload commit {name} sha mismatch")
@@ -1261,7 +1270,9 @@ def serve_upload_commit(conn, hdr, body, st, steamid, sessionid):
             _cloud["uploads"][(staged["appid"], name)] = {
                 "body": assembled, "sha": staged["sha"],
                 "time": staged["time"], "size": staged["size"], "machine": machine}
-        record(f"upload commit {name} {len(assembled)} bytes")
+        record(f"upload commit {name} ok=1 {len(assembled)} bytes")
+    else:
+        record(f"upload commit {name} ok={ok} refused")
     conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
                             content_hdr(steamid, sessionid, jobid, eres),
                             pb_int(1, 1) if eres == 1 else b""))
@@ -1337,22 +1348,22 @@ class CloudHTTPHandler(BaseHTTPRequestHandler):
         self._upload()
 
     def _upload(self):
-        """One upload block: stored by arrival order under (batch, name),
-        the way serial block PUTs land. A hang knob reads the bytes first
-        so the batch stays begun for the cancel test."""
+        """One upload block: stored under its path offset, so identity —
+        not arrival order — decides where the bytes land. A hang knob reads
+        the bytes first so the batch stays begun for the cancel test."""
         import urllib.parse
-        parts = urllib.parse.urlparse(self.path).path.split("/", 4)
-        if len(parts) != 5 or parts[1] != "upload":
+        parts = urllib.parse.urlparse(self.path).path.split("/", 5)
+        if len(parts) != 6 or parts[1] != "upload":
             self.send_response(404)
             self.end_headers()
             return
         try:
-            appid, batch = int(parts[2]), int(parts[3])
+            appid, batch, offset = int(parts[2]), int(parts[3]), int(parts[4])
         except ValueError:
             self.send_response(404)
             self.end_headers()
             return
-        name = urllib.parse.unquote(parts[4])
+        name = urllib.parse.unquote(parts[5])
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
         with _cloud_lock:
@@ -1371,7 +1382,7 @@ class CloudHTTPHandler(BaseHTTPRequestHandler):
         with _cloud_lock:
             staged = _cloud["chunks"].get((batch, name))
             if staged is not None:
-                staged["parts"].append(body)
+                staged["parts"][offset] = body
         self.send_response(200)
         self.send_header("Content-Length", "0")
         self.end_headers()

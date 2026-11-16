@@ -514,9 +514,9 @@ func TestScanLocalRecursiveAndPlatforms(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("recursive scan must find only the matching save: %v", got)
 	}
-	for lp, rel := range got {
-		if !strings.HasSuffix(lp, filepath.Join("saves", "deep", "a.sav")) || rel != "saves/deep/a.sav" {
-			t.Fatalf("scan = %q -> %q", lp, rel)
+	for lp, sc := range got {
+		if !strings.HasSuffix(lp, filepath.Join("saves", "deep", "a.sav")) || sc.Rel != "saves/deep/a.sav" {
+			t.Fatalf("scan = %q -> %+v", lp, sc)
 		}
 	}
 }

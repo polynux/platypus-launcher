@@ -531,3 +531,187 @@ func TestCloudPushChangeMoved(t *testing.T) {
 		t.Fatalf("a moved change number must leave the baseline untouched")
 	}
 }
+
+// A stored `local` choice replays on a later push even when the cloud no
+// longer lists the file: the upload recreates it under its recorded name.
+func TestCloudPushHonoursKeptLocalOnDeletedCloudFile(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	write := func(content string) {
+		if err := os.WriteFile(filepath.Join(install, "saves", "c.sav"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("local-version")
+	e.cloudKnobs("%GameInstall%saves/c.sav", "cloud-version", false, 1700000000)
+	e.setCMState("cloud_fail_files", []any{"%GameInstall%saves/c.sav"})
+	var st types.CloudStatus
+	err := e.call("cloud.resolve", map[string]any{"id": "4321", "ctx": ctx, "jobId": "resolve-local-fail",
+		"choices": map[string]string{"saves/c.sav": "local"}}, &st)
+	if err == nil {
+		t.Fatal("a resolve whose upload fails must fail")
+	}
+	// The cloud drops the file while the choice is kept.
+	e.setCMState("cloud_changelist", map[string]any{"current_change_number": float64(8)})
+	e.setCMState("cloud_files", map[string]any{})
+	e.setCMState("cloud_fail_files", []any{})
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-kept-deleted"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.State != "synced" || pushed.Counts.Same != 1 {
+		t.Fatalf("push = %+v, want the kept choice uploaded", pushed)
+	}
+	if err := os.Remove(filepath.Join(install, "saves", "c.sav")); err != nil {
+		t.Fatal(err)
+	}
+	back, err := e.cloudCall(t, "cloud.pull", map[string]any{"id": "4321", "ctx": ctx, "jobId": "pull-after-kept"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.State != "synced" {
+		t.Fatalf("pull = %+v", back)
+	}
+	if got, _ := os.ReadFile(filepath.Join(install, "saves", "c.sav")); string(got) != "local-version" {
+		t.Fatalf("downloaded = %q, want the recreated cloud copy", got)
+	}
+}
+
+// A 0-byte file whose begin-file answers no block requests commits
+// directly.
+func TestCloudPushEmptyFileNoBlocks(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	e.pushKnobs(t)
+	e.setCMState("cloud_no_blocks", true)
+	if err := os.WriteFile(filepath.Join(install, "saves", "empty.sav"), []byte{}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-empty"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.State != "synced" || pushed.Counts.Same != 1 {
+		t.Fatalf("push = %+v", pushed)
+	}
+	log := e.waitCMLog("upload complete 1 1")
+	if strings.Contains(log, "upload http") {
+		t.Fatalf("no blocks means no HTTP: %s", log)
+	}
+	if err := os.Remove(filepath.Join(install, "saves", "empty.sav")); err != nil {
+		t.Fatal(err)
+	}
+	back, err := e.cloudCall(t, "cloud.pull", map[string]any{"id": "4321", "ctx": ctx, "jobId": "pull-after-empty"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.State != "synced" {
+		t.Fatalf("pull = %+v", back)
+	}
+	if got, _ := os.ReadFile(filepath.Join(install, "saves", "empty.sav")); len(got) != 0 {
+		t.Fatalf("downloaded = %q, want the empty file", got)
+	}
+}
+
+// A block drop naming an unknown HTTP method is refused, never guessed.
+func TestCloudPushBadMethodRefused(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	e.pushKnobs(t)
+	e.setCMState("cloud_bad_method", true)
+	if err := os.WriteFile(filepath.Join(install, "saves", "a.sav"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var st types.CloudStatus
+	err := e.call("cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-bad-method"}, &st)
+	if err == nil || !strings.Contains(err.Error(), "HTTP method 1") {
+		t.Fatalf("err = %v, want the refused method", err)
+	}
+	e.waitCMLog("upload complete 1 2")
+	if _, statErr := os.Stat(filepath.Join(e.pluginData(), "cloud", "4321", "baseline.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("a refused method must leave the baseline untouched")
+	}
+}
+
+// An encrypted begin-file answer is refused and reported with
+// transfer_succeeded=false before the batch completes with failure.
+func TestCloudPushEncryptRefused(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	e.pushKnobs(t)
+	e.setCMState("cloud_encrypt_files", []any{"%GameInstall%saves/a.sav"})
+	if err := os.WriteFile(filepath.Join(install, "saves", "a.sav"), []byte("secret?no"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var st types.CloudStatus
+	err := e.call("cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-encrypt"}, &st)
+	if err == nil || !strings.Contains(err.Error(), "encrypted") {
+		t.Fatalf("err = %v, want the encrypt refusal", err)
+	}
+	log := e.waitCMLog("upload complete 1 2")
+	if !strings.Contains(log, "upload commit %GameInstall%saves/a.sav ok=0 refused") {
+		t.Fatalf("log misses the failed-file report: %s", log)
+	}
+	if _, statErr := os.Stat(filepath.Join(e.pluginData(), "cloud", "4321", "baseline.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("a refused upload must leave the baseline untouched")
+	}
+}
+
+// A Windows-rooted rule uploads under its own root through the Linux
+// override, and the next status reads it back as same (SUPERHOT shape).
+func TestCloudPushWinRootOverride(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, _ := e.cloudCtx(t)
+	home := ctx["home"].(string)
+	e.setCMState("appinfo_4321", `"appinfo"
+{
+	"appid"		"4321"
+	"common" { "name" "Standalone Game" "type" "Game" }
+	"ufs"
+	{
+		"quota" "524288"
+		"maxnumfiles" "5"
+		"savefiles"
+		{
+			"0" { "root" "WinAppDataLocalLow" "path" "SUPERHOT_Team/SUPERHOT" "pattern" "*.hot" }
+		}
+		"rootoverrides"
+		{
+			"0" { "os" "Linux" "oscompare" "=" "root" "WinAppDataLocalLow" "useinstead" "LinuxHome"
+				"pathtransforms" { "0" { "find" "SUPERHOT_Team/SUPERHOT" "replace" ".config/unity3d/SUPERHOT_Team/SUPERHOT" } } }
+		}
+	}
+}`)
+	e.setCMState("cloud_changelist", map[string]any{"current_change_number": float64(5)})
+	e.setCMState("cloud_files", map[string]any{})
+	local := filepath.Join(home, ".config", "unity3d", "SUPERHOT_Team", "SUPERHOT", "super.hot")
+	if err := os.MkdirAll(filepath.Dir(local), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(local, []byte("fresh"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-winroot"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.State != "synced" || pushed.Counts.Same != 1 {
+		t.Fatalf("push = %+v", pushed)
+	}
+	log := e.waitCMLog("upload complete 1 1")
+	if !strings.Contains(log, "upload begin-file 1 %WinAppDataLocalLow%SUPERHOT_Team/SUPERHOT/super.hot 1 blocks") {
+		t.Fatalf("log misses the platform-independent name: %s", log)
+	}
+	fresh, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.State != "synced" || fresh.Counts.Same != 1 {
+		t.Fatalf("status after push = %+v", fresh)
+	}
+}
