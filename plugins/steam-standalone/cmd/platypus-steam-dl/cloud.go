@@ -380,10 +380,17 @@ func ruleSearchDir(r cloudSaveRule, ufs *cloudUFS, ctx cloudContext, steamID uin
 	return filepath.Join(append([]string{base}, parts...)...), true
 }
 
+// joinCloudRel joins a rule path with a found name: an empty rule path means
+// the root itself, never a stray leading slash.
+func joinCloudRel(base, name string) string {
+	if base == "" {
+		return name
+	}
+	return base + "/" + name
+}
+
 // scanLocal finds the device files matching the rules: rel (cloud-style path)
 // by local path. Symlinked directories are not descended into (a Proton
-// Documents link must not pull the host home into the walk); anything
-// escaping the search dir is skipped.
 func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]string {
 	out := map[string]string{} // local path -> cloud rel
 	for _, r := range ufs.Rules {
@@ -413,14 +420,16 @@ func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]strin
 				if d.Type()&os.ModeSymlink != 0 {
 					return nil
 				}
+				if strings.HasPrefix(d.Name(), ".platypus-cloud-") {
+					return nil // our own half-written temp files: never saves
+				}
 				rel, err := filepath.Rel(dir, p)
 				if err != nil {
 					return nil
 				}
 				if matchCloudPattern(r.Pattern, rel) {
-					cloudRel := relBase + "/" + filepath.ToSlash(rel)
 					if _, dup := out[p]; !dup {
-						out[p] = cloudRel
+						out[p] = joinCloudRel(relBase, filepath.ToSlash(rel))
 					}
 				}
 				return nil
@@ -435,10 +444,13 @@ func scanLocal(ufs *cloudUFS, ctx cloudContext, steamID uint64) map[string]strin
 			if e.IsDir() || e.Type()&os.ModeSymlink != 0 {
 				continue
 			}
+			if strings.HasPrefix(e.Name(), ".platypus-cloud-") {
+				continue // our own half-written temp files: never saves
+			}
 			if ok, _ := filepath.Match(r.Pattern, e.Name()); ok {
 				p := filepath.Join(dir, e.Name())
 				if _, dup := out[p]; !dup {
-					out[p] = relBase + "/" + e.Name()
+					out[p] = joinCloudRel(relBase, e.Name())
 				}
 			}
 		}
@@ -507,6 +519,9 @@ func fetchChangelist(cm *steamcm.Session, appID uint32, timeout time.Duration) (
 			MTime:   int64(fm.Int(3)),
 			Persist: fm.Int(5),
 		}
+		if f.Persist == 1 {
+			continue // forgotten by the cloud: not ours to sync
+		}
 		name := string(fm.Bytes(1))
 		if i := int(fm.Int(7)); i >= 0 && i < len(prefixes) {
 			f.CloudName = string(prefixes[i]) + name
@@ -526,6 +541,10 @@ func fetchChangelist(cm *steamcm.Session, appID uint32, timeout time.Duration) (
 type cloudBaselineFile struct {
 	SHA  string `json:"sha"`
 	Size uint32 `json:"size"`
+	// Local is the resolved local path this entry was recorded for. An
+	// entry counts only when it still equals the current resolved path,
+	// so a native<->Proton switch never reads the other side's record.
+	Local string `json:"local,omitempty"`
 }
 
 type cloudChoice struct {
@@ -589,10 +608,10 @@ func saveBaseline(appID uint32, b *cloudBaseline) error {
 	return os.Rename(tmpName, filepath.Join(dir, "baseline.json"))
 }
 
-// jobResultPath maps a jobId to its cached result file. Ids outside the
-// safe set hash to a fixed name (collisions across games would return the
-// wrong result, so the hash covers the app id too).
-func jobResultPath(appID uint32, jobID string) string {
+// safeJobName maps a jobId to a fixed cache file name. Ids outside the safe
+// set hash to a fixed name (collisions across games would return the wrong
+// result, so the hash covers the app id too).
+func safeJobName(appID uint32, jobID string) string {
 	safe := len(jobID) > 0 && len(jobID) <= 64
 	for _, r := range jobID {
 		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '.') {
@@ -600,12 +619,15 @@ func jobResultPath(appID uint32, jobID string) string {
 			break
 		}
 	}
-	name := jobID
-	if !safe {
-		sum := sha1.Sum([]byte(strconv.FormatUint(uint64(appID), 10) + "\x00" + jobID))
-		name = "h-" + hex.EncodeToString(sum[:])
+	if safe {
+		return jobID
 	}
-	return filepath.Join(cloudJobsDir(), name+".json")
+	sum := sha1.Sum([]byte(strconv.FormatUint(uint64(appID), 10) + "\x00" + jobID))
+	return "h-" + hex.EncodeToString(sum[:])
+}
+
+func jobResultPath(appID uint32, jobID string) string {
+	return filepath.Join(cloudJobsDir(), safeJobName(appID, jobID)+".json")
 }
 
 func loadJobResult(appID uint32, jobID string) (json.RawMessage, bool) {
@@ -682,8 +704,11 @@ type cloudPlanFile struct {
 
 // compareCloud groups the listing by resolved local path (issue #6 L2: one
 // file synced from two machines compares once — the latest entry wins) and
-// decides per file against the baseline (D6). Local-only files matching the
-// rules are upload candidates; cloud names nobody maps are unmapped.
+// decides per file against the baseline (D6). A baseline entry counts only
+// for the local path it was recorded for, so a native<->Proton switch
+// compares fresh instead of misreading the other side. Local-only files
+// matching the rules are upload candidates; cloud names nobody maps are
+// unmapped.
 func compareCloud(list []cloudFile, local map[string]string, ufs *cloudUFS, ctx cloudContext, steamID uint64, base *cloudBaseline) (files []cloudPlanFile, unmapped int) {
 	byLocal := map[string]*cloudFile{}
 	ordered := []string{}
@@ -718,19 +743,16 @@ func compareCloud(list []cloudFile, local map[string]string, ufs *cloudUFS, ctx 
 		pf.LocalInfo = li
 		remoteSHA := hex.EncodeToString(f.SHA)
 		b, known := base.Files[f.Rel]
+		known = known && b.Local == lp
 		switch {
 		case f.Persist == 2 && !li.Found:
 			pf.Want = "same" // deleted in the cloud, already gone here
 		case f.Persist == 2:
 			pf.Want = "conflict" // deleted in the cloud, still here: ask
-		case !li.Found && !known:
-			pf.Want = "download" // first sync: nothing local to lose
-		case !li.Found && b.SHA == remoteSHA:
-			pf.Want = "upload" // deleted here after the last sync
-		case !li.Found:
-			pf.Want = "conflict" // deleted here, changed there: ask
-		case hex.EncodeToString(li.SHA[:]) == remoteSHA:
+		case li.Found && hex.EncodeToString(li.SHA[:]) == remoteSHA:
 			pf.Want = "same"
+		case !li.Found:
+			pf.Want = "download" // nothing local to lose; cloud deletes are forbidden
 		case !known:
 			pf.Want = "conflict" // no common ancestor: ask
 		case b.SHA == hex.EncodeToString(li.SHA[:]):
@@ -746,9 +768,8 @@ func compareCloud(list []cloudFile, local map[string]string, ufs *cloudUFS, ctx 
 		}
 		files = append(files, pf)
 	}
-	// Local files the cloud never listed: upload candidates when the
-	// baseline proves they are new, conflicts when the baseline proves the
-	// cloud deleted them (no record = conflict, the safe default).
+	// Local files the cloud never listed: upload candidates when nothing is
+	// recorded, conflicts when the baseline proves the cloud deleted them.
 	for lp, rel := range local {
 		if seen[lp] {
 			continue
@@ -758,7 +779,7 @@ func compareCloud(list []cloudFile, local map[string]string, ufs *cloudUFS, ctx 
 		if !pf.LocalInfo.Found {
 			continue
 		}
-		if b, known := base.Files[rel]; known && b.SHA != "" {
+		if b, known := base.Files[rel]; known && b.Local == lp && b.SHA != "" {
 			pf.Want = "conflict" // was synced, now gone from the cloud: ask
 		} else {
 			pf.Want = "upload"
@@ -767,6 +788,33 @@ func compareCloud(list []cloudFile, local map[string]string, ufs *cloudUFS, ctx 
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Rel < files[j].Rel })
 	return files, unmapped
+}
+
+// noteSame records every file identical on both sides in the baseline, so a
+// later change on one side compares as download/upload instead of conflict.
+// Callers save through saveIfDirty; status included (it writes only the
+// plugin's private baseline, never save files).
+func (e *cloudEnv) noteSame(files []cloudPlanFile) {
+	for _, f := range files {
+		if f.Want != "same" || !f.HasRemote || f.Remote.Persist == 2 {
+			continue
+		}
+		if b, ok := e.base.Files[f.Rel]; ok && b.Local == f.Local && b.SHA == hex.EncodeToString(f.Remote.SHA) {
+			continue
+		}
+		e.base.Files[f.Rel] = cloudBaselineFile{SHA: hex.EncodeToString(f.Remote.SHA), Size: f.Remote.Size, Local: f.Local}
+		e.dirty = true
+	}
+}
+
+// saveIfDirty writes the baseline when this run learned something (same
+// files recorded, downloads written, choices kept). One write per run.
+func (e *cloudEnv) saveIfDirty() error {
+	if !e.dirty {
+		return nil
+	}
+	e.dirty = false
+	return saveBaseline(e.appID, e.base)
 }
 
 // --- CloudStatus ------------------------------------------------------------
@@ -855,6 +903,7 @@ func detectSteamClient() *cloudStatusClient {
 	for _, dir := range []string{
 		filepath.Join(home, ".steam"),
 		filepath.Join(home, ".local", "share", "Steam"),
+		filepath.Join(home, ".var", "app", "com.valvesoftware.Steam", ".steam"),
 	} {
 		raw, err := os.ReadFile(filepath.Join(dir, "steam.pid"))
 		if err != nil {
@@ -881,7 +930,6 @@ func detectSteamClient() *cloudStatusClient {
 // downloadInfo is a ClientFileDownload#1 answer: where the bytes are and how
 // to check them.
 type downloadInfo struct {
-	WireSize  uint32
 	RawSize   uint32
 	SHA       []byte
 	Time      int64
@@ -906,8 +954,8 @@ func clientFileDownload(cm *steamcm.Session, appID uint32, cloudName string, tim
 		return nil, fmt.Errorf("decoding the cloud download: %w", err)
 	}
 	out := &downloadInfo{
-		WireSize: uint32(m.Int(2)), RawSize: uint32(m.Int(3)),
-		SHA: m.Bytes(4), Time: int64(m.Int(5)),
+		RawSize: uint32(m.Int(3)),
+		SHA:     m.Bytes(4), Time: int64(m.Int(5)),
 		Deleted: m.Int(6) != 0,
 		Host:    string(m.Bytes(7)), Path: string(m.Bytes(8)),
 		HTTPS:     m.Int(9) != 0,
@@ -928,10 +976,10 @@ func clientFileDownload(cm *steamcm.Session, appID uint32, cloudName string, tim
 // per write call, 256 MB per file; live saves are KBs).
 const maxCloudFile = 256 << 20
 
-// fetchCloudBytes GETs the file body and returns the raw (unzipped) bytes:
-// a body starting with PK\x03\x04, or whose wire size differs from the raw
-// size, is a single-entry zip (stored or deflate), unpacked then SHA-1
-// verified against the listing before anything is written.
+// fetchCloudBytes GETs the file body and returns the raw bytes: a body whose
+// SHA-1 already matches the listing is used as is, otherwise it is tried as
+// a single-entry zip (stored or deflate) and SHA-1 verified after unpacking.
+// A mismatch fails before anything is written.
 func fetchCloudBytes(ctx context.Context, dl *downloadInfo) ([]byte, error) {
 	if dl.Encrypted {
 		return nil, fmt.Errorf("encrypted cloud file: refusing")
@@ -966,31 +1014,31 @@ func fetchCloudBytes(ctx context.Context, dl *downloadInfo) ([]byte, error) {
 	if len(body) > maxCloudFile {
 		return nil, fmt.Errorf("the cloud file is bigger than %d bytes", maxCloudFile)
 	}
-	raw := body
-	if len(body) >= 4 && bytes.Equal(body[:4], []byte("PK\x03\x04")) || uint32(len(body)) != dl.RawSize && dl.RawSize != 0 {
-		zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
-		if err != nil {
-			return nil, fmt.Errorf("unpacking the cloud file: %w", err)
-		}
-		if len(zr.File) != 1 {
-			return nil, fmt.Errorf("the cloud archive holds %d files, want 1", len(zr.File))
-		}
-		zf := zr.File[0]
-		if zf.FileInfo().IsDir() || zf.UncompressedSize64 > maxCloudFile {
-			return nil, fmt.Errorf("the cloud archive entry is not a plain file")
-		}
-		rc, err := zf.Open()
-		if err != nil {
-			return nil, fmt.Errorf("unpacking the cloud file: %w", err)
-		}
-		raw, err = io.ReadAll(io.LimitReader(rc, maxCloudFile+1))
-		rc.Close()
-		if err != nil {
-			return nil, fmt.Errorf("unpacking the cloud file: %w", err)
-		}
-		if len(raw) > maxCloudFile {
-			return nil, fmt.Errorf("the cloud file is bigger than %d bytes", maxCloudFile)
-		}
+	if sum := sha1.Sum(body); bytes.Equal(sum[:], dl.SHA) {
+		return body, nil
+	}
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		return nil, fmt.Errorf("the cloud file failed its SHA-1 check: nothing was written")
+	}
+	if len(zr.File) != 1 {
+		return nil, fmt.Errorf("the cloud archive holds %d files, want 1", len(zr.File))
+	}
+	zf := zr.File[0]
+	if zf.FileInfo().IsDir() || zf.UncompressedSize64 > maxCloudFile {
+		return nil, fmt.Errorf("the cloud archive entry is not a plain file")
+	}
+	rc, err := zf.Open()
+	if err != nil {
+		return nil, fmt.Errorf("unpacking the cloud file: %w", err)
+	}
+	raw, err := io.ReadAll(io.LimitReader(rc, maxCloudFile+1))
+	rc.Close()
+	if err != nil {
+		return nil, fmt.Errorf("unpacking the cloud file: %w", err)
+	}
+	if len(raw) > maxCloudFile {
+		return nil, fmt.Errorf("the cloud file is bigger than %d bytes", maxCloudFile)
 	}
 	if sum := sha1.Sum(raw); !bytes.Equal(sum[:], dl.SHA) {
 		return nil, fmt.Errorf("the cloud file failed its SHA-1 check: nothing was written")
@@ -998,21 +1046,38 @@ func fetchCloudBytes(ctx context.Context, dl *downloadInfo) ([]byte, error) {
 	return raw, nil
 }
 
+// backupRootFor names the run's own backup folder (timestamp + job id), so
+// one pull or resolve leaves one folder behind instead of one per file.
+func backupRootFor(appID uint32, jobID string) string {
+	return filepath.Join(dataDir(), "cloud-backups", strconv.FormatUint(uint64(appID), 10),
+		time.Now().UTC().Format("20060102-150405")+"-"+safeJobName(appID, jobID))
+}
+
+// backupLocal copies the local file into the run's backup folder, preserving
+// its rel path (so a platform switch stays told apart) and its mtime.
+func (e *cloudEnv) backupLocal(local, rel string) error {
+	if e.backupRoot == "" {
+		e.backupRoot = backupRootFor(e.appID, e.jobID)
+	}
+	dst := filepath.Join(e.backupRoot, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		return err
+	}
+	if err := copyFile(dst, local); err != nil {
+		return err
+	}
+	e.backedUp = true
+	return nil
+}
+
 // writeCloudFile backs up a replaced local file, then writes the download
-// atomically and stamps the cloud mtime. The backup preserves the rel path
-// so a platform switch (native <-> Proton) can be told apart.
-func writeCloudFile(appID uint32, local, rel string, raw []byte, mtime int64) (backedUp bool, err error) {
+// atomically and stamps the cloud mtime.
+func (e *cloudEnv) writeCloudFile(local, rel string, raw []byte, mtime int64) (backedUp bool, err error) {
 	if st, err := os.Stat(local); err == nil && !st.IsDir() {
-		backupRoot := filepath.Join(dataDir(), "cloud-backups", strconv.FormatUint(uint64(appID), 10), time.Now().UTC().Format("20060102-150405"))
-		dst := filepath.Join(backupRoot, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-			return false, err
-		}
-		if err := copyFile(dst, local); err != nil {
+		if err := e.backupLocal(local, rel); err != nil {
 			return false, err
 		}
 		backedUp = true
-		pruneBackups(appID, 5)
 	}
 	if err := os.MkdirAll(filepath.Dir(local), 0o755); err != nil {
 		return backedUp, err
@@ -1052,6 +1117,10 @@ func copyFile(dst, src string) error {
 		return err
 	}
 	defer in.Close()
+	st, err := in.Stat()
+	if err != nil {
+		return err
+	}
 	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
@@ -1061,7 +1130,12 @@ func copyFile(dst, src string) error {
 		out.Close()
 		return err
 	}
-	return out.Close()
+	if err := out.Close(); err != nil {
+		return err
+	}
+	ts := st.ModTime()
+	_ = os.Chtimes(dst, ts, ts)
+	return nil
 }
 
 // latestBackupDir reports the app's backup dir once it holds a backup, so
@@ -1097,26 +1171,25 @@ func pruneBackups(appID uint32, keep int) {
 
 // --- ops --------------------------------------------------------------------
 
-// cloudRequest is the stdin request for the cloud subcommand.
-type cloudRequest struct {
-	Op      string            `json:"op"`
-	Ctx     cloudContext      `json:"ctx"`
-	Choices map[string]string `json:"choices"`
-	HasCtx  bool
-}
-
 type cloudEnv struct {
 	cm      *steamcm.Session
 	appID   uint32
+	jobID   string
 	steamID uint64
 	ctx     cloudContext
 	ufs     *cloudUFS
 	base    *cloudBaseline
 	timeout time.Duration
+	// dirty marks an updated baseline the run must save (every exit path
+	// saves once through saveIfDirty). backupRoot is the run's own backup
+	// folder, created on first use.
+	dirty      bool
+	backupRoot string
+	backedUp   bool
 }
 
 // prepareCloud logs on, reads appinfo ufs and validates the context. Status
-// stays fully read-only; pull/resolve load the baseline they update.
+// writes no save file; pull/resolve record the baseline they update.
 func prepareCloud(ctx context.Context, req request, op string, rawCtx json.RawMessage) (*cloudEnv, error) {
 	if req.AppID == 0 {
 		return nil, fmt.Errorf("app_id is missing")
@@ -1138,7 +1211,7 @@ func prepareCloud(ctx context.Context, req request, op string, rawCtx json.RawMe
 	if err != nil {
 		return nil, err
 	}
-	env := &cloudEnv{cm: cm, appID: req.AppID, ctx: cc, base: loadBaseline(req.AppID), timeout: 30 * time.Second}
+	env := &cloudEnv{cm: cm, appID: req.AppID, jobID: req.JobID, ctx: cc, base: loadBaseline(req.AppID), timeout: 30 * time.Second}
 	env.steamID = cm.SteamID()
 	toks, err := cm.PICSAccessTokens([]uint32{req.AppID}, nil, 0)
 	if err != nil {
@@ -1175,26 +1248,41 @@ func (e *cloudEnv) cloudCompare(ctx context.Context) ([]cloudPlanFile, int, erro
 	return files, unmapped, nil
 }
 
-func unsupportedStatus(reason string) map[string]any {
-	return map[string]any{
+func unsupportedStatus(reason string, cl *cloudStatusClient) map[string]any {
+	st := map[string]any{
 		"state": "unsupported", "message": reason,
 		"counts":    cloudStatusCounts{},
 		"conflicts": []cloudStatusConflict{},
 		"checkedAt": time.Now().Unix(),
 	}
+	if cl != nil {
+		st["client"] = cl
+	}
+	return st
 }
 
-func offlineStatus(err error) map[string]any {
-	return map[string]any{
+func offlineStatus(err error, cl *cloudStatusClient) map[string]any {
+	st := map[string]any{
 		"state": "offline", "message": fmt.Sprintf("Steam couldn't be reached: %v", err),
 		"counts":    cloudStatusCounts{},
 		"conflicts": []cloudStatusConflict{},
 		"checkedAt": time.Now().Unix(),
 	}
+	if cl != nil {
+		st["client"] = cl
+	}
+	return st
 }
 
-// runCloudStatus compares both sides. Read-only: no file written, nothing
-// uploaded — not even the baseline.
+func noRulesReason(ufs *cloudUFS) string {
+	if ufs.HasUFS {
+		return "this game's saves go through the Steamworks API, which Platypus can't sync from outside the game"
+	}
+	return "this game declares no Auto-Cloud save locations"
+}
+
+// runCloudStatus compares both sides. It writes no save file and uploads
+// nothing; it records agreed files in the plugin's private baseline only.
 func runCloudStatus(ctx context.Context, req request, rawCtx json.RawMessage) error {
 	env, err := prepareCloud(ctx, req, "status", rawCtx)
 	if err != nil {
@@ -1202,11 +1290,7 @@ func runCloudStatus(ctx context.Context, req request, rawCtx json.RawMessage) er
 	}
 	defer env.close()
 	if !env.ufs.HasRules {
-		reason := "this game declares no Auto-Cloud save locations"
-		if env.ufs.HasUFS {
-			reason = "this game's saves go through the Steamworks API, which Platypus can't sync from outside the game"
-		}
-		emit(map[string]any{"type": "result", "status": unsupportedStatus(reason)})
+		emit(map[string]any{"type": "result", "status": unsupportedStatus(noRulesReason(env.ufs), detectSteamClient())})
 		return nil
 	}
 	files, unmapped, err := env.cloudCompare(ctx)
@@ -1214,14 +1298,18 @@ func runCloudStatus(ctx context.Context, req request, rawCtx json.RawMessage) er
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		emit(map[string]any{"type": "result", "status": offlineStatus(err)})
+		emit(map[string]any{"type": "result", "status": offlineStatus(err, detectSteamClient())})
 		return nil
 	}
-	emit(map[string]any{"type": "result", "status": buildStatus(req.AppID, files, unmapped, cloudMessage(files))})
+	env.noteSame(files)
+	if err := env.saveIfDirty(); err != nil {
+		return err
+	}
+	emit(map[string]any{"type": "result", "status": buildStatus(req.AppID, files, unmapped, cloudMessage(files, unmapped))})
 	return nil
 }
 
-func cloudMessage(files []cloudPlanFile) string {
+func cloudMessage(files []cloudPlanFile, unmapped int) string {
 	var dl, up, cf int
 	for _, f := range files {
 		switch f.Want {
@@ -1233,15 +1321,22 @@ func cloudMessage(files []cloudPlanFile) string {
 			cf++
 		}
 	}
+	var suffix string
+	if unmapped > 0 {
+		suffix = fmt.Sprintf(" %d cloud file(s) can't be placed on this device.", unmapped)
+	}
 	switch {
 	case cf > 0:
-		return fmt.Sprintf("%d file(s) changed on this device and in the cloud.", cf)
+		return fmt.Sprintf("%d file(s) changed on this device and in the cloud.", cf) + suffix
 	case dl > 0 && up > 0:
-		return fmt.Sprintf("%d file(s) waiting to download, %d waiting to upload.", dl, up)
+		return fmt.Sprintf("%d file(s) waiting to download. Uploading saves isn't enabled yet.", dl) + suffix
 	case dl > 0:
-		return fmt.Sprintf("%d file(s) waiting to download.", dl)
+		return fmt.Sprintf("%d file(s) waiting to download.", dl) + suffix
 	case up > 0:
-		return fmt.Sprintf("%d file(s) waiting to upload.", up)
+		return "Uploading saves isn't enabled yet." + suffix
+	}
+	if suffix != "" {
+		return "saves are in sync." + suffix
 	}
 	return "saves are in sync."
 }
@@ -1253,9 +1348,30 @@ func reportProgress(appID uint32, jobID, phase string, done, total int) {
 		"app_id": appID, "job_id": jobID, "done": done, "total": total})
 }
 
+// takeCloudDeletion backs up the local file, removes it and drops its
+// baseline entry: a resolve-remote on a file the cloud deleted.
+func (e *cloudEnv) takeCloudDeletion(f *cloudPlanFile) error {
+	if f.LocalInfo.Found {
+		if err := e.backupLocal(f.Local, f.Rel); err != nil {
+			return err
+		}
+		if err := os.Remove(f.Local); err != nil {
+			return err
+		}
+	}
+	delete(e.base.Files, f.Rel)
+	delete(e.base.Choices, f.Rel)
+	e.dirty = true
+	f.Want = "same"
+	return nil
+}
+
 // pullFiles downloads every download-wanted file (or the remote choices),
 // verifies SHA-1 before writing, backs up replaced locals, and records only
-// actually written files in the baseline.
+// actually written files in the baseline. A resolve-remote on a file the
+// cloud deleted backs up the local file, removes it and drops its baseline
+// entry instead of downloading. The baseline saves once per run through the
+// caller's deferred saveIfDirty.
 func (e *cloudEnv) pullFiles(ctx context.Context, req request, files []cloudPlanFile, only map[string]bool) (int, error) {
 	var want []int
 	for i := range files {
@@ -1275,31 +1391,40 @@ func (e *cloudEnv) pullFiles(ctx context.Context, req request, files []cloudPlan
 		}
 		reportProgress(req.AppID, req.JobID, "download", n, len(want))
 		f := &files[i]
+		if f.Remote.Persist == 2 {
+			// The listing already says deleted: take the cloud deletion
+			// without a download call, with a backup of what was here.
+			// Only a resolve-remote reaches this path.
+			if err := e.takeCloudDeletion(f); err != nil {
+				return n, err
+			}
+			continue
+		}
 		dl, err := clientFileDownload(e.cm, e.appID, f.CloudName, e.timeout)
 		if err != nil {
 			return n, callErr("cloud download", err)
 		}
 		if dl.Deleted {
-			f.Want = "same" // deleted in the cloud and already gone here
+			// The download itself reports an explicit delete: same
+			// handling as the listing flag above.
+			if err := e.takeCloudDeletion(f); err != nil {
+				return n, err
+			}
 			continue
 		}
 		raw, err := fetchCloudBytes(ctx, dl)
 		if err != nil {
 			return n, err
 		}
-		if _, err := writeCloudFile(e.appID, f.Local, f.Rel, raw, dl.Time); err != nil {
+		if _, err := e.writeCloudFile(f.Local, f.Rel, raw, dl.Time); err != nil {
 			return n, err
 		}
-		e.base.Files[f.Rel] = cloudBaselineFile{SHA: hex.EncodeToString(dl.SHA), Size: dl.RawSize}
+		e.base.Files[f.Rel] = cloudBaselineFile{SHA: hex.EncodeToString(dl.SHA), Size: dl.RawSize, Local: f.Local}
 		delete(e.base.Choices, f.Rel)
+		e.dirty = true
 		f.Want = "same"
 	}
 	reportProgress(req.AppID, req.JobID, "download", len(want), len(want))
-	if len(want) > 0 {
-		if err := saveBaseline(e.appID, e.base); err != nil {
-			return len(want), err
-		}
-	}
 	return len(want), nil
 }
 
@@ -1339,6 +1464,7 @@ func (e *cloudEnv) applyChoices(files []cloudPlanFile, choices map[string]string
 		e.base.Choices[path] = cloudChoice{Side: "local", LocalSHA: localSHA,
 			CloudSHA: hex.EncodeToString(f.Remote.SHA)}
 		f.Want = "upload"
+		e.dirty = true // the choice must survive through saveIfDirty
 	}
 	return remote, nil
 }
@@ -1355,20 +1481,18 @@ func runCloudPull(ctx context.Context, req request, rawCtx json.RawMessage, rawC
 		return err
 	}
 	defer env.close()
+	defer env.saveIfDirty() // every exit path keeps what was written (item 5)
 	if !env.ufs.HasRules {
-		reason := "this game declares no Auto-Cloud save locations"
-		if env.ufs.HasUFS {
-			reason = "this game's saves go through the Steamworks API, which Platypus can't sync from outside the game"
-		}
-		return finishJob(req, unsupportedStatus(reason))
+		return finishJob(req, unsupportedStatus(noRulesReason(env.ufs), detectSteamClient()))
 	}
 	files, unmapped, err := env.cloudCompare(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return finishJob(req, offlineStatus(err))
+		return finishJob(req, offlineStatus(err, detectSteamClient()))
 	}
+	env.noteSame(files)
 	var only map[string]bool
 	if len(rawChoices) > 0 && string(rawChoices) != "null" {
 		var choices map[string]string
@@ -1388,12 +1512,10 @@ func runCloudPull(ctx context.Context, req request, rawCtx json.RawMessage, rawC
 		return err
 	}
 	reportProgress(req.AppID, req.JobID, "check", 1, 1)
-	if len(only) > 0 {
-		if err := saveBaseline(env.appID, env.base); err != nil {
-			return err
-		}
+	if env.backedUp {
+		pruneBackups(env.appID, 5)
 	}
-	return finishJob(req, buildStatus(req.AppID, files, unmapped, cloudMessage(files)))
+	return finishJob(req, buildStatus(req.AppID, files, unmapped, cloudMessage(files, unmapped)))
 }
 
 // runCloudPush computes the status without uploading anything: uploads wait
@@ -1409,29 +1531,34 @@ func runCloudPush(ctx context.Context, req request, rawCtx json.RawMessage) erro
 	}
 	defer env.close()
 	if !env.ufs.HasRules {
-		reason := "this game declares no Auto-Cloud save locations"
-		if env.ufs.HasUFS {
-			reason = "this game's saves go through the Steamworks API, which Platypus can't sync from outside the game"
-		}
-		return finishJob(req, unsupportedStatus(reason))
+		return finishJob(req, unsupportedStatus(noRulesReason(env.ufs), detectSteamClient()))
 	}
 	files, unmapped, err := env.cloudCompare(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return finishJob(req, offlineStatus(err))
+		return finishJob(req, offlineStatus(err, detectSteamClient()))
 	}
-	st := buildStatus(req.AppID, files, unmapped, cloudMessage(files))
-	if st["state"] == "pending" {
-		for _, f := range files {
-			if f.Want == "upload" {
-				st["message"] = "Uploading saves isn't enabled yet."
-				break
-			}
+	return finishJob(req, buildStatus(req.AppID, files, unmapped, cloudMessage(files, unmapped)))
+}
+
+// parseChoices reads resolve choices before any CM work: shapes are refused
+// without a listing, paths once the comparison exists.
+func parseChoices(rawChoices json.RawMessage) (map[string]string, error) {
+	var choices map[string]string
+	if len(rawChoices) == 0 || string(rawChoices) == "null" {
+		return nil, fmt.Errorf("invalid params: choices are required")
+	}
+	if err := json.Unmarshal(rawChoices, &choices); err != nil {
+		return nil, fmt.Errorf("invalid params: choices must be an object")
+	}
+	for path, side := range choices {
+		if side != "local" && side != "remote" {
+			return nil, fmt.Errorf("invalid params: choice for %q must be local or remote", path)
 		}
 	}
-	return finishJob(req, st)
+	return choices, nil
 }
 
 // runCloudResolve settles the listed conflicts: remote downloads with a
@@ -1441,32 +1568,37 @@ func runCloudResolve(ctx context.Context, req request, rawCtx json.RawMessage, r
 		emit(map[string]any{"type": "result", "status": json.RawMessage(raw)})
 		return nil
 	}
-	var choices map[string]string
-	if len(rawChoices) == 0 || string(rawChoices) == "null" {
-		return fmt.Errorf("invalid params: choices are required")
-	}
-	if err := json.Unmarshal(rawChoices, &choices); err != nil {
-		return fmt.Errorf("invalid params: choices must be an object")
+	choices, err := parseChoices(rawChoices)
+	if err != nil {
+		return err
 	}
 	env, err := prepareCloud(ctx, req, "resolve", rawCtx)
 	if err != nil {
 		return err
 	}
 	defer env.close()
+	defer env.saveIfDirty() // every exit path keeps choices and downloads
 	if !env.ufs.HasRules {
-		reason := "this game declares no Auto-Cloud save locations"
-		if env.ufs.HasUFS {
-			reason = "this game's saves go through the Steamworks API, which Platypus can't sync from outside the game"
+		// No rules means no conflicts: any choice path is refused here,
+		// before the unsupported answer. Offline stays offline below.
+		if len(choices) > 0 {
+			paths := make([]string, 0, len(choices))
+			for path := range choices {
+				paths = append(paths, path)
+			}
+			sort.Strings(paths)
+			return fmt.Errorf("invalid params: %q is not a conflict", paths[0])
 		}
-		return finishJob(req, unsupportedStatus(reason))
+		return finishJob(req, unsupportedStatus(noRulesReason(env.ufs), detectSteamClient()))
 	}
 	files, unmapped, err := env.cloudCompare(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return finishJob(req, offlineStatus(err))
+		return finishJob(req, offlineStatus(err, detectSteamClient()))
 	}
+	env.noteSame(files)
 	only, err := env.applyChoices(files, choices)
 	if err != nil {
 		return err
@@ -1479,10 +1611,10 @@ func runCloudResolve(ctx context.Context, req request, rawCtx json.RawMessage, r
 		return err
 	}
 	reportProgress(req.AppID, req.JobID, "check", 1, 1)
-	if err := saveBaseline(env.appID, env.base); err != nil {
-		return err
+	if env.backedUp {
+		pruneBackups(env.appID, 5)
 	}
-	return finishJob(req, buildStatus(req.AppID, files, unmapped, cloudMessage(files)))
+	return finishJob(req, buildStatus(req.AppID, files, unmapped, cloudMessage(files, unmapped)))
 }
 
 // finishJob emits the result and records it for the repeated jobId.

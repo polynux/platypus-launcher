@@ -188,7 +188,8 @@ func mustSHA(s string) []byte {
 
 // Two entries for one local path (issue #6 L2: Megabonk lists 4 entries
 // across two machine/prefix variants) compare once, latest winning; the
-// rest of the matrix covers every compare state.
+// rest of the matrix covers every compare state. Baseline entries carry
+// the local path they were recorded for.
 func TestCompareCloudStates(t *testing.T) {
 	dir := t.TempDir()
 	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
@@ -197,24 +198,28 @@ func TestCompareCloudStates(t *testing.T) {
 	writeLocal(t, filepath.Join(dir, "saves", "conflict.sav"), "local-version")
 	writeLocal(t, filepath.Join(dir, "saves", "upload.sav"), "new-local")
 	writeLocal(t, filepath.Join(dir, "saves", "localonly.sav"), "brand-new")
+	writeLocal(t, filepath.Join(dir, "saves", "stale.sav"), "same")
+	at := func(name string) string { return filepath.Join(dir, "saves", name) }
 	base := &cloudBaseline{Files: map[string]cloudBaselineFile{
-		"saves/same.sav":     {SHA: shaHex([]byte("same"))},
-		"saves/upload.sav":   {SHA: shaHex([]byte("same"))},
-		"saves/download.sav": {SHA: shaHex([]byte("same"))},
-		"saves/deleted.sav":  {SHA: shaHex([]byte("same"))},
+		"saves/same.sav":     {SHA: shaHex([]byte("same")), Local: at("same.sav")},
+		"saves/upload.sav":   {SHA: shaHex([]byte("same")), Local: at("upload.sav")}, // cloud == baseline
+		"saves/download.sav": {SHA: shaHex([]byte("same")), Local: at("download.sav")},
+		"saves/deleted.sav":  {SHA: shaHex([]byte("same")), Local: at("deleted.sav")},
+		"saves/stale.sav":    {SHA: shaHex([]byte("same")), Local: at("elsewhere.sav")}, // other side's record
 	}}
 	list := []cloudFile{
 		listed("%GameInstall%saves/same.sav", "same", 100),
-		listed("%GameInstall%saves/conflict.sav", "cloud-version", 100),
-		listed("%GameInstall%saves/upload.sav", "same", 100),        // cloud == baseline, local changed
-		listed("%GameInstall%saves/download.sav", "cloud-new", 100), // local == gone? no: local missing
+		listed("%GameInstall%saves/upload.sav", "same", 100), // cloud == baseline, local changed
+		listed("%GameInstall%saves/download.sav", "cloud-new", 100),
 		listed("%GameInstall%saves/deleted.sav", "same", 100),
+		listed("%GameInstall%saves/stale.sav", "same", 100),
+		listed("%GameInstall%saves/conflict.sav", "cloud-version", 100),
 		{CloudName: "%GameInstall%saves/dup.sav", SHA: mustSHA("old"), Size: 3, MTime: 50},
 		{CloudName: "%GameInstall%saves/dup.sav", SHA: mustSHA("new"), Size: 3, MTime: 150},
 		{CloudName: "%WinMyDocuments%elsewhere/x.sav", SHA: mustSHA("x"), Size: 1},
 	}
-	_ = os.Remove(filepath.Join(dir, "saves", "download.sav"))
-	_ = os.Remove(filepath.Join(dir, "saves", "deleted.sav"))
+	_ = os.Remove(at("download.sav"))
+	_ = os.Remove(at("deleted.sav"))
 	local := scanLocal(ufs, ctx, 0)
 	files, unmapped := compareCloud(list, local, ufs, ctx, 0, base)
 	if unmapped != 1 {
@@ -224,8 +229,9 @@ func TestCompareCloudStates(t *testing.T) {
 		"saves/same.sav":      "same",
 		"saves/conflict.sav":  "conflict", // no baseline record: ask
 		"saves/upload.sav":    "upload",
-		"saves/download.sav":  "conflict", // deleted here, changed there: ask
-		"saves/deleted.sav":   "upload",   // deleted here after the last sync
+		"saves/download.sav":  "download", // missing locally: nothing to lose
+		"saves/deleted.sav":   "download", // deleted here, unchanged there: restore
+		"saves/stale.sav":     "same",     // local matches cloud; other side's record ignored
 		"saves/dup.sav":       "download", // latest entry wins; no baseline
 		"saves/localonly.sav": "upload",
 	}
@@ -236,6 +242,59 @@ func TestCompareCloudStates(t *testing.T) {
 		if want[f.Rel] != f.Want {
 			t.Errorf("%s = %s, want %s", f.Rel, f.Want, want[f.Rel])
 		}
+	}
+}
+
+// A native<->Proton switch never misreads the other side's record: the
+// baseline entry for the old local path doesn't turn the new side's
+// differing file into an upload.
+func TestCompareCloudPlatformSwitch(t *testing.T) {
+	dir := t.TempDir()
+	native := cloudContext{OS: "linux", Home: filepath.Join(dir, "home"), InstallDir: filepath.Join(dir, "install")}
+	prefix := filepath.Join(dir, "prefix")
+	proton := cloudContext{OS: "windows", Home: filepath.Join(dir, "home"), InstallDir: filepath.Join(dir, "install"),
+		PrefixDir: prefix, WinUser: "steamuser"}
+	ufs := parseCloudRules(mustParseKV(t, superhotUFS))
+	cloudName := "%WinAppDataLocalLow%SUPERHOT_Team/SUPERHOT/super.hot"
+	nativeLocal, _, ok := mapCloudName(cloudName, ufs, native, 0)
+	if !ok {
+		t.Fatal("SUPERHOT must map natively")
+	}
+	protonLocal, _, ok := mapCloudName(cloudName, ufs, proton, 0)
+	if !ok {
+		t.Fatal("SUPERHOT must map under Proton")
+	}
+	if nativeLocal == protonLocal {
+		t.Fatal("the switch must move the file")
+	}
+	writeLocal(t, protonLocal, "proton-save")
+	old := &cloudBaseline{Files: map[string]cloudBaselineFile{
+		"SUPERHOT_Team/SUPERHOT/super.hot": {SHA: shaHex([]byte("native-save")), Local: nativeLocal},
+	}}
+	list := []cloudFile{{CloudName: cloudName, SHA: mustSHA("native-save"), Size: 11, MTime: 100}}
+	local := scanLocal(ufs, proton, 0)
+	files, _ := compareCloud(list, local, ufs, proton, 0, old)
+	if len(files) != 1 || files[0].Want != "conflict" {
+		t.Fatalf("the other side's record must not decide: %+v", files)
+	}
+}
+
+// All same, then the cloud changes: the new listing downloads instead of
+// conflicting, because the baseline proves the local side is unchanged.
+func TestCompareCloudSameThenChanged(t *testing.T) {
+	dir := t.TempDir()
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, gameInstallUFS()))
+	writeLocal(t, filepath.Join(dir, "saves", "a.sav"), "v1")
+	at := filepath.Join(dir, "saves", "a.sav")
+	base := &cloudBaseline{Files: map[string]cloudBaselineFile{
+		"saves/a.sav": {SHA: shaHex([]byte("v1")), Local: at},
+	}}
+	list := []cloudFile{listed("%GameInstall%saves/a.sav", "v2", 200)}
+	local := scanLocal(ufs, ctx, 0)
+	files, _ := compareCloud(list, local, ufs, ctx, 0, base)
+	if len(files) != 1 || files[0].Want != "download" {
+		t.Fatalf("changed only in the cloud must download: %+v", files)
 	}
 }
 
@@ -348,9 +407,11 @@ func TestFetchCloudBytesEncryptedRefused(t *testing.T) {
 
 func TestWriteCloudFileBackupAndMtime(t *testing.T) {
 	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	env := &cloudEnv{appID: 4321, jobID: "job-1", base: loadBaseline(4321)}
 	local := filepath.Join(t.TempDir(), "saves", "a.sav")
 	writeLocal(t, local, "old")
-	backedUp, err := writeCloudFile(4321, local, "saves/a.sav", []byte("new"), 1700000000)
+	before, _ := os.Stat(local)
+	backedUp, err := env.writeCloudFile(local, "saves/a.sav", []byte("new"), 1700000000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,12 +430,22 @@ func TestWriteCloudFileBackupAndMtime(t *testing.T) {
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("backups = %v, %v", entries, err)
 	}
-	if got, _ := os.ReadFile(filepath.Join(backupRoot, entries[0].Name(), "saves", "a.sav")); string(got) != "old" {
-		t.Fatalf("backup = %q", got)
+	// One run leaves one backup folder, named with the timestamp and job.
+	if !strings.Contains(entries[0].Name(), "job-1") {
+		t.Fatalf("backup dir = %q", entries[0].Name())
+	}
+	got, err := os.ReadFile(filepath.Join(backupRoot, entries[0].Name(), "saves", "a.sav"))
+	if err != nil || string(got) != "old" {
+		t.Fatalf("backup = %q, %v", got, err)
+	}
+	// The backup keeps the original mtime.
+	bst, _ := os.Stat(filepath.Join(backupRoot, entries[0].Name(), "saves", "a.sav"))
+	if !bst.ModTime().Equal(before.ModTime()) {
+		t.Fatalf("backup mtime = %v, want %v", bst.ModTime(), before.ModTime())
 	}
 	// A fresh file (nothing to replace) writes without a backup.
 	fresh := filepath.Join(t.TempDir(), "saves", "b.sav")
-	backedUp, err = writeCloudFile(4321, fresh, "saves/b.sav", []byte("b"), 1700000000)
+	backedUp, err = env.writeCloudFile(fresh, "saves/b.sav", []byte("b"), 1700000000)
 	if err != nil || backedUp {
 		t.Fatalf("fresh write: backedUp=%v err=%v", backedUp, err)
 	}
@@ -470,5 +541,73 @@ func TestPruneBackupsKeepsLatest(t *testing.T) {
 	entries, _ := os.ReadDir(root)
 	if len(entries) != 2 || entries[0].Name() != "20240102-000000" {
 		t.Fatalf("entries = %v", entries)
+	}
+}
+
+// A truncated body matches neither the listing SHA nor a zip: nothing is
+// written and the pull fails.
+func TestFetchCloudBytesTruncated(t *testing.T) {
+	srv := serveBytes([]byte("short"))
+	defer srv.Close()
+	dl := &downloadInfo{Host: strings.TrimPrefix(srv.URL, "http://"),
+		Path: "/f", SHA: mustSHA("the whole save"), RawSize: 100}
+	if _, err := fetchCloudBytes(context.Background(), dl); err == nil {
+		t.Fatal("a truncated body must fail before anything is written")
+	}
+}
+
+// noteSame records agreed files with the resolved local path; saveIfDirty
+// writes once and stays quiet afterwards.
+func TestNoteSameAndSaveIfDirty(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	env := &cloudEnv{appID: 4321, base: loadBaseline(4321)}
+	local := filepath.Join(t.TempDir(), "saves", "a.sav")
+	writeLocal(t, local, "v1")
+	files := []cloudPlanFile{{Rel: "saves/a.sav", Local: local, Want: "same",
+		HasRemote: true, Remote: cloudFile{SHA: mustSHA("v1"), Size: 2}}}
+	env.noteSame(files)
+	if !env.dirty {
+		t.Fatal("recording a same file must dirty the baseline")
+	}
+	if err := env.saveIfDirty(); err != nil {
+		t.Fatal(err)
+	}
+	if env.dirty {
+		t.Fatal("a save must clear the dirty flag")
+	}
+	reloaded := loadBaseline(4321)
+	got := reloaded.Files["saves/a.sav"]
+	if got.SHA != shaHex([]byte("v1")) || got.Local != local {
+		t.Fatalf("baseline = %+v", got)
+	}
+	// Nothing new learned: no write.
+	env.noteSame(files)
+	if env.dirty {
+		t.Fatal("an already recorded file must not dirty the baseline")
+	}
+}
+
+func TestJoinCloudRel(t *testing.T) {
+	if got := joinCloudRel("", "a.sav"); got != "a.sav" {
+		t.Fatalf("empty rule path: %q", got)
+	}
+	if got := joinCloudRel("saves", "a.sav"); got != "saves/a.sav" {
+		t.Fatalf("join: %q", got)
+	}
+}
+
+func TestParseChoices(t *testing.T) {
+	if _, err := parseChoices(nil); err == nil {
+		t.Fatal("missing choices must be refused")
+	}
+	if _, err := parseChoices(json.RawMessage(`"x"`)); err == nil {
+		t.Fatal("non-object choices must be refused")
+	}
+	if _, err := parseChoices(json.RawMessage(`{"a": "sideways"}`)); err == nil {
+		t.Fatal("a bad choice value must be refused")
+	}
+	got, err := parseChoices(json.RawMessage(`{"a": "remote", "b": "local"}`))
+	if err != nil || got["a"] != "remote" || got["b"] != "local" {
+		t.Fatalf("choices = %+v, %v", got, err)
 	}
 }

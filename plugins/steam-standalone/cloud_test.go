@@ -391,3 +391,133 @@ func TestCloudPullEncrypted(t *testing.T) {
 		t.Fatal("a refused download must write nothing")
 	}
 }
+
+// Resolve remote on a file the cloud deleted: the local file is backed up
+// and removed, its baseline entry dropped — no conflict loop afterwards.
+func TestCloudResolveRemoteOnDeleted(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	write := func(content string) {
+		if err := os.MkdirAll(filepath.Join(install, "saves"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(install, "saves", "d.sav"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("doomed-local")
+	e.setCMState("appinfo_4321", cloudUFSAppInfo)
+	e.setCMState("cloud_changelist", map[string]any{
+		"current_change_number": 7,
+		"path_prefixes":         []any{"%GameInstall%saves/"},
+		"machine_names":         []any{"test-machine"},
+		"files": []any{map[string]any{
+			"name": "d.sav", "sha": cloudSHA("x"),
+			"time": float64(1700000000), "size": float64(1),
+			"persist": float64(2), "prefix": float64(0), "machine": float64(0),
+		}},
+	})
+	st, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != "conflict" {
+		t.Fatalf("deleted in the cloud but present here must ask: %+v", st)
+	}
+	resolved, err := e.cloudCall(t, "cloud.resolve", map[string]any{"id": "4321", "ctx": ctx, "jobId": "resolve-deleted",
+		"choices": map[string]string{"saves/d.sav": "remote"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.State != "synced" {
+		t.Fatalf("resolve remote on a deletion = %+v", resolved)
+	}
+	if _, err := os.Stat(filepath.Join(install, "saves", "d.sav")); !os.IsNotExist(err) {
+		t.Fatal("taking the cloud deletion must remove the local file")
+	}
+	if resolved.BackupDir == "" {
+		t.Fatal("a removed local file must be backed up first")
+	}
+	st, err = e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != "synced" {
+		t.Fatalf("no conflict loop afterwards: %+v", st)
+	}
+}
+
+// Forgotten cloud entries (persist_state 1) are not ours to sync: the local
+// file counts as its own upload candidate instead of a conflict.
+func TestCloudForgottenEntrySkipped(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	if err := os.MkdirAll(filepath.Join(install, "saves"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(install, "saves", "f.sav"), []byte("local"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.setCMState("appinfo_4321", cloudUFSAppInfo)
+	e.setCMState("cloud_changelist", map[string]any{
+		"current_change_number": 7,
+		"path_prefixes":         []any{"%GameInstall%saves/"},
+		"machine_names":         []any{"test-machine"},
+		"files": []any{map[string]any{
+			"name": "f.sav", "sha": cloudSHA("other"),
+			"time": float64(1700000000), "size": float64(5),
+			"persist": float64(1), "prefix": float64(0), "machine": float64(0),
+		}},
+	})
+	st, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != "pending" || st.Counts.Upload != 1 {
+		t.Fatalf("a forgotten entry must not conflict: %+v", st)
+	}
+}
+
+// Resolve on a game without rules refuses every choice path before the
+// unsupported answer; an empty choice set stays unsupported.
+func TestCloudResolveWithoutRules(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, _ := e.cloudCtx(t)
+	e.setCMState("appinfo_4321", `"appinfo" { "appid" "4321" "common" { "name" "Standalone Game" } }`)
+	var st types.CloudStatus
+	err := e.call("cloud.resolve", map[string]any{"id": "4321", "ctx": ctx, "jobId": "resolve-norules",
+		"choices": map[string]string{"a.sav": "remote"}}, &st)
+	if e.rpcCode(err) != -32602 {
+		t.Fatalf("a choice path with no rules: want -32602, got %v", err)
+	}
+	st, err = e.cloudCall(t, "cloud.resolve", map[string]any{"id": "4321", "ctx": ctx, "jobId": "resolve-norules-empty",
+		"choices": map[string]string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != "unsupported" {
+		t.Fatalf("empty choices with no rules = %+v", st)
+	}
+}
+
+// A client-mode game syncs itself through the real client: Platypus answers
+// unsupported without touching the saves.
+func TestCloudClientModeUnsupported(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	data, _ := json.Marshal(map[string]any{"4321": map[string]any{"mode": "client", "path": install}})
+	if err := os.WriteFile(filepath.Join(e.pluginData(), "installed.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != "unsupported" || !strings.Contains(st.Message, "Steam syncs this game itself") {
+		t.Fatalf("client-mode game = %+v", st)
+	}
+}

@@ -2922,11 +2922,29 @@ def cloud_check(params, need_job):
     return app, app_id, ctx, job_id
 
 
+def cloud_unsupported(reason):
+    """A cloud answer that runs no helper: the shape plugtest checks."""
+    return {"state": "unsupported", "message": reason,
+            "counts": {"same": 0, "download": 0, "upload": 0, "conflict": 0, "unmapped": 0},
+            "conflicts": [], "checkedAt": int(time.time())}
+
+
+def installed_mode(app):
+    """The launch mode of an installed game (launch_spec reads the same
+    record): only client-mode games can start through the real client."""
+    return (load_state("installed.json", {}).get(app) or {}).get("mode") or ""
+
+
 def cloud_run(op, app, app_id, ctx, job_id, choices, label):
     """One platypus-steam-dl cloud run: returns its status dict. Progress
     lines become cloud.progress notifications; the proc is tracked under
     the jobId so job.cancel stops it, and a repeated jobId answers from
     the helper's cached result."""
+    mode = installed_mode(app)
+    if mode == "client":
+        # Steam syncs this game itself when it starts it: Platypus never
+        # touches its saves.
+        return cloud_unsupported("Steam syncs this game itself when it starts it")
     token = refresh_token()
     if not token:
         raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
@@ -2944,42 +2962,51 @@ def cloud_run(op, app, app_id, ctx, job_id, choices, label):
     if job_id is not None:
         with jobs_lock:
             jobs[job_id] = {"id": app_id, "proc": proc}
-    try:
-        proc.stdin.write(json.dumps(req) + "\n")
-        proc.stdin.close()
-    except (BrokenPipeError, OSError):
-        pass
     import collections as _collections
     text = _collections.deque(maxlen=20)
     result = None
-    for line in proc.stdout:
-        line = line.rstrip()
-        text.append(line)
+    try:
         try:
-            msg = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(msg, dict):
-            continue
-        if msg.get("type") == "progress":
-            notify("cloud.progress", {"id": app, "jobId": job_id,
-                                      "phase": msg.get("phase") or "check",
-                                      "done": msg.get("done") or 0,
-                                      "total": msg.get("total") or 0})
-        elif msg.get("type") == "result":
-            result = msg.get("status")
-        elif msg.get("type") == "error":
-            if msg.get("code") == "auth-required":
-                raise RPCError(tr("need_login_expired"), CODE_AUTH_REQUIRED)
-            message = msg.get("message") or tail(line)
-            if message.startswith("invalid params"):
-                raise RPCError(message, -32602)
-            raise RPCError("{}: {}".format(label, message), -32000)
-    rc = proc.wait()
+            proc.stdin.write(json.dumps(req) + "\n")
+            proc.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+        for line in proc.stdout:
+            line = line.rstrip()
+            text.append(line)
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("type") == "progress":
+                notify("cloud.progress", {"id": app, "jobId": job_id,
+                                          "phase": msg.get("phase") or "check",
+                                          "done": msg.get("done") or 0,
+                                          "total": msg.get("total") or 0})
+            elif msg.get("type") == "result":
+                result = msg.get("status")
+            elif msg.get("type") == "error":
+                if msg.get("code") == "auth-required":
+                    raise RPCError(tr("need_login_expired"), CODE_AUTH_REQUIRED)
+                message = msg.get("message") or tail(line)
+                if message.startswith("invalid params"):
+                    raise RPCError(message, -32602)
+                raise RPCError("{}: {}".format(label, message), -32000)
+    finally:
+        with jobs_lock:
+            jobs.pop(job_id, None)
+        try:
+            proc.wait()
+        except Exception:
+            pass
     if result is None:
         raise RPCError("{}: {}".format(label, tail("\n".join(text))), -32000)
-    if rc != 0:
-        raise RPCError("{}: {}".format(label, tail("\n".join(text))), -32000)
+    # The helper reports the store client running; only a client-mode game
+    # can actually start through it.
+    if isinstance(result, dict) and isinstance(result.get("client"), dict):
+        result["client"]["canLaunch"] = (mode == "client")
     return result
 
 
