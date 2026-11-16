@@ -255,6 +255,18 @@ async function startCore(): Promise<Core> {
     });
     return r.canceled ? '' : (r.filePaths[0] ?? '');
   });
+  // Opening a file, folder or link (issue #84): the core asks, the OS answers.
+  // No desktop opener (xdg-open, start) runs in the core.
+  c.handlers.set('host.openPath', async (p) => {
+    if (typeof p !== 'string' || p === '') throw new Error('refused: not a path');
+    const err = await shell.openPath(p);
+    if (err) throw new Error(err);
+  });
+  c.handlers.set('host.openURL', async (p) => {
+    const url = webURL(p);
+    if (!url) throw new Error('refused: not an http(s) URL');
+    await shell.openExternal(url);
+  });
   await c.initialize();
   // The core resolves the effective locale from the setting plus these
   // desktop languages (issue #39, phase 4). Best-effort: an old core

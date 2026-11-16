@@ -118,6 +118,16 @@ func (h coreHost) OpenDirectory(d app.DirectoryDialog) (string, error) {
 	return path, err
 }
 
+// OpenPath and OpenURL are the shell's default handler and browser: the
+// core never runs a desktop opener itself.
+func (h coreHost) OpenPath(path string) error {
+	return h.srv.Call(context.Background(), "host.openPath", path, nil)
+}
+
+func (h coreHost) OpenURL(url string) error {
+	return h.srv.Call(context.Background(), "host.openURL", url, nil)
+}
+
 type artServer struct{ url, token string }
 
 // serveArt serves the store plugins' local art (including the bundled Steam

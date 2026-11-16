@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -604,10 +603,8 @@ func (a *App) OpenGameFolder(game types.Game) error {
 			fmt.Sprintf("%s has no folder Platypus can open", game.Title),
 			map[string]string{"title": game.Title})
 	}
-	cmd := exec.Command("xdg-open", dir)
-	if err := cmd.Start(); err != nil {
+	if err := a.host.OpenPath(dir); err != nil {
 		return apperr.Wrap("storage.openFailed", err, map[string]string{"title": game.Title})
 	}
-	go func() { _ = cmd.Wait() }()
 	return nil
 }

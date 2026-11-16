@@ -10,7 +10,7 @@ Desktop main ──spawn──> platypus-core (Go, the App without a window)
    │  stdin/stdout: JSON-RPC 2.0, one object per line (internal/corerpc)
    │   requests  → App's exported methods, positional JSON args
    │   notifications ← events ("event" {name, data})
-   │   requests  ← dialog.openFile / dialog.openDirectory
+   │   requests  ← dialog.openFile / dialog.openDirectory / host.openPath / host.openURL
    │  stderr: the core's log, shown in the terminal
    │
    ├─ preload (sandboxed): window.platypus = { invoke, on, openExternal }
@@ -137,9 +137,10 @@ containers; a normal desktop does not need it.)
 
 ## Pieces
 
-- `internal/app/host.go`: the `Host` interface (events, log, dialogs).
-  The core (`cmd/platypus-core`) sends events as notifications and dialogs
-  as requests to the shell.
+- `internal/app/host.go`: the `Host` interface (events, log, dialogs, and
+  opening a file, folder or link with the OS handler). The core
+  (`cmd/platypus-core`) sends events as notifications and these as requests
+  to the shell; no `xdg-open`/`start` runs from the core (issue #84).
 - `internal/corerpc`: reflection dispatch of `*App`'s exported methods;
   `initialize {protocol}` handshake (core protocol 1.0: same major, shell minor
   ≤ core minor); the App starts while `initialize` answers.

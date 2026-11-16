@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"time"
 
 	"platypus/internal/apperr"
@@ -124,10 +123,8 @@ func (a *App) OpenCrashLog(game types.Game) error {
 	if path == "" {
 		return apperr.New("crash.noLog", fmt.Sprintf("%s has no failed launch to show", game.Title), map[string]string{"title": game.Title})
 	}
-	cmd := exec.Command("xdg-open", path)
-	if err := cmd.Start(); err != nil {
+	if err := a.host.OpenPath(path); err != nil {
 		return apperr.Wrap("crash.openLogFailed", err, map[string]string{"title": game.Title})
 	}
-	go func() { _ = cmd.Wait() }()
 	return nil
 }

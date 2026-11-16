@@ -62,6 +62,10 @@ func (h *diskHost) OpenFile(FileDialog) (string, error) { return "", nil }
 
 func (h *diskHost) OpenDirectory(DirectoryDialog) (string, error) { return "", nil }
 
+func (h *diskHost) OpenPath(string) error { return nil }
+
+func (h *diskHost) OpenURL(string) error { return nil }
+
 func (h *diskHost) count() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -384,8 +388,7 @@ func TestDiskUsageNoScanBeforeFirstView(t *testing.T) {
 }
 
 // OpenGameFolder refuses a game with no folder it could open, with a code
-// the UI translates. Opening a real folder shells out to xdg-open, like
-// OpenPluginsFolder, so no test does that here.
+// the UI translates. The host paths are covered in host_test.go.
 func TestOpenGameFolderWithoutFolderFailsCoded(t *testing.T) {
 	t.Parallel()
 	e := scanEnv(t)

@@ -45,6 +45,10 @@ func (h *sessionEventHost) OpenDirectory(DirectoryDialog) (string, error) {
 	return "", errors.New("no dialog in tests")
 }
 
+func (h *sessionEventHost) OpenPath(string) error { return nil }
+
+func (h *sessionEventHost) OpenURL(string) error { return nil }
+
 func (h *sessionEventHost) snapshot() []types.SessionEvent {
 	h.mu.Lock()
 	defer h.mu.Unlock()

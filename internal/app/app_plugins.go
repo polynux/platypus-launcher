@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -372,12 +371,7 @@ func (a *App) OpenPluginsFolder() error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	cmd := exec.Command("xdg-open", dir)
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	go func() { _ = cmd.Wait() }()
-	return nil
+	return a.host.OpenPath(dir)
 }
 
 func (a *App) authCall(id, method string, params, result any) error {

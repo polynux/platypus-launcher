@@ -49,6 +49,10 @@ func (h *authEventHost) OpenDirectory(DirectoryDialog) (string, error) {
 	return "", errors.New("no dialog in tests")
 }
 
+func (h *authEventHost) OpenPath(string) error { return nil }
+
+func (h *authEventHost) OpenURL(string) error { return nil }
+
 func (h *authEventHost) authEvents() []types.AuthEvent {
 	h.mu.Lock()
 	defer h.mu.Unlock()
