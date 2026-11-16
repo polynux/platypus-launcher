@@ -1588,12 +1588,14 @@ func cloudClientID() uint64 {
 	return binary.LittleEndian.Uint64(sum[:8])
 }
 
-// cloudMachineName names this device for the upload batch.
+// cloudMachineName names this device for the upload batch: the hostname
+// plus a short Platypus tag, so Steam's conflict dialogs on other devices
+// say both which machine and which launcher wrote the save.
 func cloudMachineName() string {
 	if h, err := os.Hostname(); err == nil && h != "" {
-		return h
+		return h + " (Platy)"
 	}
-	return "platypus"
+	return "Platypus"
 }
 
 // checkCloudQuota refuses the upload before anything is named when the
@@ -1914,13 +1916,13 @@ func (e *cloudEnv) pushFiles(ctx context.Context, req request, files []cloudPlan
 		}
 		return err
 	}
-	// S3: the cloud moved since the listing this run compared. Complete
-	// with failure and let the caller answer "try again", uploading
-	// nothing.
-	if begun != e.change {
-		// Numbers only, no paths or tokens: the live test tells whether
-		// real Steam numbers the batch with the current change or the
-		// next one.
+	// S3: beginning a batch moves the app to the next change number and
+	// answers it (live check, 2026-11-16: listing 1 -> batch 2), so a
+	// quiet cloud answers listing + 1. Anything else means another batch
+	// landed since the listing this run compared: complete with failure
+	// and let the caller answer "try again", uploading nothing.
+	if begun != e.change+1 {
+		// Numbers only, no paths or tokens.
 		fmt.Fprintf(os.Stderr, "cloud upload: listing change %d, batch change %d\n", e.change, begun)
 		_ = e.completeUploadBatch(batch, false)
 		return errCloudChanged

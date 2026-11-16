@@ -92,8 +92,8 @@ re-read on every auth poll so tests can approve mid-login):
     cloud_no_blocks     true: begin-file answers no block requests; the
                        file commits directly
     cloud_bad_method    true: block drops say HTTP method 1 (refused)
-    cloud_begin_bump    true: the begin reply's change number moves past the
-                       listing's (S3 race)
+    cloud_begin_bump    true: another batch lands between the listing and
+                       begin, so begin answers listing + 2 (S3 race)
     cloud_complete_eresult  eresult for the complete reply (default 1);
                        2 fails the push at completion
 # Downloads ride plain HTTP on localhost: the fake prints "http <port>" as
@@ -1148,8 +1148,11 @@ def serve_upload_begin(conn, hdr, body, st, steamid, sessionid):
         cur = _cloud["change"]
         if cur is None or base > cur:
             cur = base
-        if st.get("cloud_begin_bump"):
-            cur = max(cur, base) + 1
+        # Like real Steam (live check, 2026-11-16): beginning a batch
+        # moves the app to the next change number and answers it, so a
+        # quiet cloud answers listing + 1. The bump knob plays another
+        # device's batch landing first.
+        cur += 2 if st.get("cloud_begin_bump") else 1
         _cloud["change"] = cur
     record(f"upload begin {batch} {len(names)} files")
     resp = pb_int(1, batch) + pb_int(4, _cloud["change"])
@@ -1266,7 +1269,6 @@ def serve_upload_commit(conn, hdr, body, st, steamid, sessionid):
             base = (st.get("cloud_changelist") or {}).get("current_change_number", 0)
             if _cloud["change"] is None:
                 _cloud["change"] = base
-            _cloud["change"] += 1
             _cloud["uploads"][(staged["appid"], name)] = {
                 "body": assembled, "sha": staged["sha"],
                 "time": staged["time"], "size": staged["size"], "machine": machine}
