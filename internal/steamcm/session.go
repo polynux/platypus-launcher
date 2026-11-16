@@ -43,6 +43,10 @@ type License struct {
 // Licenses returns the licence list the CM sent after logon.
 func (s *Session) Licenses() []License { return s.licenses }
 
+// SteamID returns the account id this session logged on as (the {64BitSteamID}
+// cloud paths expand to; the low 32 bits are the {Steam3AccountID}).
+func (s *Session) SteamID() uint64 { return s.steamID }
+
 // cmCandidates lists WebSocket CM endpoints: the PLATYPUS_STEAM_CM_SERVER
 // test hook ("host:port", plain ws) or Valve's directory (best load first).
 func cmCandidates(ctx context.Context) ([]string, bool, error) {

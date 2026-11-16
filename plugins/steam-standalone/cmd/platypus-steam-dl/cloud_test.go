@@ -1,0 +1,474 @@
+// Cloud saves, read + pull side: mapper, compare and transfer unit tests.
+// No Valve network: listings are synthetic, downloads ride httptest (loopback
+// only, like the repo's fast set demands).
+package main
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"crypto/sha1"
+	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"platypus/internal/steam"
+)
+
+func mustParseKV(t *testing.T, src string) *steam.KV {
+	t.Helper()
+	kv, err := steam.ParseKV(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return kv
+}
+
+// The SUPERHOT ufs block, as recorded in docs/research/steam-cloud-social.md
+// §1.4: two savefiles rules and the Mac/Linux root overrides.
+const superhotUFS = `"ufs"
+{
+	"quota"		"524288"
+	"maxnumfiles"		"5"
+	"savefiles"
+	{
+		"0" { "root" "WinAppDataLocalLow" "path" "SUPERHOT_Team/SUPERHOT" "pattern" "*.hot" }
+		"1" { "root" "WinAppDataLocalLow" "path" "SUPERHOT_Team/SUPERHOT" "pattern" "*.cfg" }
+	}
+	"rootoverrides"
+	{
+		"0" { "os" "MacOS" "oscompare" "=" "root" "WinAppDataLocalLow" "useinstead" "MacAppSupport"
+			"pathtransforms" { "0" { "find" "SUPERHOT_Team/SUPERHOT" "replace" "unity.SUPERHOT_Team.SUPERHOT" } } }
+		"1" { "os" "Linux" "oscompare" "=" "root" "WinAppDataLocalLow" "useinstead" "LinuxHome"
+			"pathtransforms" { "0" { "find" "SUPERHOT_Team/SUPERHOT" "replace" ".config/unity3d/SUPERHOT_Team/SUPERHOT" } } }
+	}
+}`
+
+func TestParseCloudRulesSUPERHOT(t *testing.T) {
+	ufs := parseCloudRules(mustParseKV(t, superhotUFS))
+	if !ufs.HasUFS || !ufs.HasRules {
+		t.Fatalf("SUPERHOT ufs must parse as rules: %+v", ufs)
+	}
+	if len(ufs.Rules) != 2 || len(ufs.Overrides) != 2 {
+		t.Fatalf("want 2 rules and 2 overrides, got %+v", ufs)
+	}
+	if ufs.Rules[0].Root != "WinAppDataLocalLow" || ufs.Rules[0].Pattern != "*.hot" {
+		t.Fatalf("first rule: %+v", ufs.Rules[0])
+	}
+	ov := ufs.Overrides[1]
+	if ov.OS != "Linux" || ov.UseInstead != "LinuxHome" || len(ov.Find) != 1 || ov.Replace[0] != ".config/unity3d/SUPERHOT_Team/SUPERHOT" {
+		t.Fatalf("linux override: %+v", ov)
+	}
+}
+
+func TestParseCloudRulesAPIOnly(t *testing.T) {
+	// Terraria (105600): quota only, no savefiles — the Steamworks API
+	// storage the plugin can't sync from outside the game.
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "quota" "100000" "maxnumfiles" "10" }`))
+	if !ufs.HasUFS || ufs.HasRules {
+		t.Fatalf("quota-only ufs is API storage, not rules: %+v", ufs)
+	}
+	if parseCloudRules(mustParseKV(t, `"depots" {}`)).HasUFS {
+		t.Fatal("no ufs section must parse as absent")
+	}
+}
+
+func superhotCtx(home string) cloudContext {
+	return cloudContext{OS: "linux", Home: home, InstallDir: filepath.Join(home, "install")}
+}
+
+func TestMapCloudNameNative(t *testing.T) {
+	ufs := parseCloudRules(mustParseKV(t, superhotUFS))
+	got, rel, ok := mapCloudName("%WinAppDataLocalLow%SUPERHOT_Team/SUPERHOT/super.hot", ufs, superhotCtx("/home/u"), 0)
+	if !ok {
+		t.Fatal("SUPERHOT cloud name must map on native linux")
+	}
+	if want := "/home/u/.config/unity3d/SUPERHOT_Team/SUPERHOT/super.hot"; got != want {
+		t.Fatalf("local = %q, want %q", got, want)
+	}
+	if rel != "SUPERHOT_Team/SUPERHOT/super.hot" {
+		t.Fatalf("rel = %q", rel)
+	}
+}
+
+func TestMapCloudNameProton(t *testing.T) {
+	ufs := parseCloudRules(mustParseKV(t, superhotUFS))
+	ctx := cloudContext{OS: "windows", Home: "/home/u", InstallDir: "/games/x",
+		PrefixDir: "/prefixes/game", WinUser: "steamuser"}
+	got, _, ok := mapCloudName("%WinAppDataLocalLow%SUPERHOT_Team/SUPERHOT/super.hot", ufs, ctx, 0)
+	if !ok {
+		t.Fatal("SUPERHOT cloud name must map under Proton")
+	}
+	if want := "/prefixes/game/drive_c/users/steamuser/AppData/LocalLow/SUPERHOT_Team/SUPERHOT/super.hot"; got != want {
+		t.Fatalf("local = %q, want %q", got, want)
+	}
+}
+
+func TestMapCloudNameTraversalRefused(t *testing.T) {
+	ufs := parseCloudRules(mustParseKV(t, superhotUFS))
+	ctx := superhotCtx("/home/u")
+	for _, name := range []string{
+		"%WinAppDataLocalLow%../../evil",
+		"%WinAppDataLocalLow%SUPERHOT_Team/../evil",
+		"%WinAppDataLocalLow%/absolute",
+		"%WinAppDataLocalLow%C:/evil",
+		"%WinAppDataLocalLow%" + strings.Repeat("a/", 33) + "x",
+		"no-root-at-all",
+		"%Unclosed",
+	} {
+		if _, _, ok := mapCloudName(name, ufs, ctx, 0); ok {
+			t.Fatalf("%q must be refused", name)
+		}
+	}
+}
+
+func TestMapCloudNameUnmappedRoots(t *testing.T) {
+	// Hades: WinMyDocuments with only a MacOS override — native Linux has no
+	// mapping, so the cloud file counts as unmapped instead of landing in a
+	// guessed folder.
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" {
+		"savefiles" { "0" { "root" "WinMyDocuments" "path" "Saved Games/Hades" "pattern" "Profile*.sav" } }
+		"rootoverrides" { "0" { "os" "MacOS" "root" "WinMyDocuments" "useinstead" "MacAppSupport" } }
+	}`))
+	if _, _, ok := mapCloudName("%WinMyDocuments%Saved Games/Hades/Profile0.sav", ufs, superhotCtx("/home/u"), 0); ok {
+		t.Fatal("WinMyDocuments without a Linux override must not map on native linux")
+	}
+}
+
+func TestMapCloudNameSteamIDSubstitution(t *testing.T) {
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" {
+		"savefiles" { "0" { "root" "GameInstall" "path" "saves/{64BitSteamID}" "pattern" "*.sav" } }
+	}`))
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: "/games/x"}
+	got, rel, ok := mapCloudName("%GameInstall%saves/{64BitSteamID}/a.sav", ufs, ctx, 76561198000000000)
+	if !ok {
+		t.Fatal("steamid paths must map")
+	}
+	if want := "/games/x/saves/76561198000000000/a.sav"; got != want {
+		t.Fatalf("local = %q, want %q", got, want)
+	}
+	if !strings.Contains(rel, "76561198000000000") {
+		t.Fatalf("rel = %q", rel)
+	}
+}
+
+func gameInstallUFS() string {
+	return `"ufs" { "savefiles" { "0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" } } }`
+}
+
+func writeLocal(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func shaHex(b []byte) string {
+	sum := sha1.Sum(b)
+	return hex.EncodeToString(sum[:])
+}
+
+func listed(name string, content string, mtime int64) cloudFile {
+	return cloudFile{CloudName: name, SHA: mustSHA(content), Size: uint32(len(content)), MTime: mtime}
+}
+
+func mustSHA(s string) []byte {
+	sum := sha1.Sum([]byte(s))
+	return sum[:]
+}
+
+// Two entries for one local path (issue #6 L2: Megabonk lists 4 entries
+// across two machine/prefix variants) compare once, latest winning; the
+// rest of the matrix covers every compare state.
+func TestCompareCloudStates(t *testing.T) {
+	dir := t.TempDir()
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, gameInstallUFS()))
+	writeLocal(t, filepath.Join(dir, "saves", "same.sav"), "same")
+	writeLocal(t, filepath.Join(dir, "saves", "conflict.sav"), "local-version")
+	writeLocal(t, filepath.Join(dir, "saves", "upload.sav"), "new-local")
+	writeLocal(t, filepath.Join(dir, "saves", "localonly.sav"), "brand-new")
+	base := &cloudBaseline{Files: map[string]cloudBaselineFile{
+		"saves/same.sav":     {SHA: shaHex([]byte("same"))},
+		"saves/upload.sav":   {SHA: shaHex([]byte("same"))},
+		"saves/download.sav": {SHA: shaHex([]byte("same"))},
+		"saves/deleted.sav":  {SHA: shaHex([]byte("same"))},
+	}}
+	list := []cloudFile{
+		listed("%GameInstall%saves/same.sav", "same", 100),
+		listed("%GameInstall%saves/conflict.sav", "cloud-version", 100),
+		listed("%GameInstall%saves/upload.sav", "same", 100),        // cloud == baseline, local changed
+		listed("%GameInstall%saves/download.sav", "cloud-new", 100), // local == gone? no: local missing
+		listed("%GameInstall%saves/deleted.sav", "same", 100),
+		{CloudName: "%GameInstall%saves/dup.sav", SHA: mustSHA("old"), Size: 3, MTime: 50},
+		{CloudName: "%GameInstall%saves/dup.sav", SHA: mustSHA("new"), Size: 3, MTime: 150},
+		{CloudName: "%WinMyDocuments%elsewhere/x.sav", SHA: mustSHA("x"), Size: 1},
+	}
+	_ = os.Remove(filepath.Join(dir, "saves", "download.sav"))
+	_ = os.Remove(filepath.Join(dir, "saves", "deleted.sav"))
+	local := scanLocal(ufs, ctx, 0)
+	files, unmapped := compareCloud(list, local, ufs, ctx, 0, base)
+	if unmapped != 1 {
+		t.Fatalf("unmapped = %d, want 1", unmapped)
+	}
+	want := map[string]string{
+		"saves/same.sav":      "same",
+		"saves/conflict.sav":  "conflict", // no baseline record: ask
+		"saves/upload.sav":    "upload",
+		"saves/download.sav":  "conflict", // deleted here, changed there: ask
+		"saves/deleted.sav":   "upload",   // deleted here after the last sync
+		"saves/dup.sav":       "download", // latest entry wins; no baseline
+		"saves/localonly.sav": "upload",
+	}
+	if len(files) != len(want) {
+		t.Fatalf("files = %+v, want %d entries", files, len(want))
+	}
+	for _, f := range files {
+		if want[f.Rel] != f.Want {
+			t.Errorf("%s = %s, want %s", f.Rel, f.Want, want[f.Rel])
+		}
+	}
+}
+
+func TestCompareCloudDeletedInCloud(t *testing.T) {
+	dir := t.TempDir()
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, gameInstallUFS()))
+	writeLocal(t, filepath.Join(dir, "saves", "gone.sav"), "still-here")
+	base := &cloudBaseline{Files: map[string]cloudBaselineFile{}}
+	list := []cloudFile{{CloudName: "%GameInstall%saves/gone.sav", SHA: mustSHA("x"), Size: 1, Persist: 2}}
+	local := scanLocal(ufs, ctx, 0)
+	files, _ := compareCloud(list, local, ufs, ctx, 0, base)
+	if len(files) != 1 || files[0].Want != "conflict" {
+		t.Fatalf("deleted in cloud but present here must ask: %+v", files)
+	}
+}
+
+func TestBuildStatusShapes(t *testing.T) {
+	files := []cloudPlanFile{{Rel: "a", Want: "same"}, {Rel: "b", Want: "download"}}
+	st := buildStatus(1, files, 0, "x")
+	if st["state"] != "pending" {
+		t.Fatalf("state = %v", st["state"])
+	}
+	counts := st["counts"].(cloudStatusCounts)
+	if counts.Same != 1 || counts.Download != 1 {
+		t.Fatalf("counts = %+v", counts)
+	}
+	st = buildStatus(1, []cloudPlanFile{{Rel: "a", Want: "conflict", Remote: cloudFile{MTime: 5}}}, 0, "x")
+	if st["state"] != "conflict" {
+		t.Fatalf("state = %v", st["state"])
+	}
+	if conflicts := st["conflicts"].([]cloudStatusConflict); len(conflicts) != 1 || conflicts[0].Path != "a" {
+		t.Fatalf("conflicts = %+v", st["conflicts"])
+	}
+	st = buildStatus(1, []cloudPlanFile{{Rel: "a", Want: "same"}}, 0, "ok")
+	if st["state"] != "synced" || st["conflicts"].([]cloudStatusConflict) == nil {
+		t.Fatalf("synced status must carry an (empty) conflicts list: %+v", st)
+	}
+}
+
+func zipBody(t *testing.T, name, content string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	f, err := w.Create(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func serveBytes(body []byte) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(body)
+	}))
+}
+
+func TestFetchCloudBytesPlain(t *testing.T) {
+	srv := serveBytes([]byte("save-data"))
+	defer srv.Close()
+	dl := &downloadInfo{Host: strings.TrimPrefix(srv.URL, "http://"),
+		Path: "/f", SHA: mustSHA("save-data"), RawSize: 9}
+	raw, err := fetchCloudBytes(context.Background(), dl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "save-data" {
+		t.Fatalf("raw = %q", raw)
+	}
+}
+
+func TestFetchCloudBytesZip(t *testing.T) {
+	inner := "zipped-save"
+	body := zipBody(t, "save.sav", inner)
+	srv := serveBytes(body)
+	defer srv.Close()
+	dl := &downloadInfo{Host: strings.TrimPrefix(srv.URL, "http://"),
+		Path: "/f", SHA: mustSHA(inner), RawSize: uint32(len(inner))}
+	raw, err := fetchCloudBytes(context.Background(), dl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != inner {
+		t.Fatalf("raw = %q", raw)
+	}
+}
+
+func TestFetchCloudBytesBadSHAWritesNothing(t *testing.T) {
+	srv := serveBytes([]byte("tampered"))
+	defer srv.Close()
+	dl := &downloadInfo{Host: strings.TrimPrefix(srv.URL, "http://"),
+		Path: "/f", SHA: mustSHA("original"), RawSize: 8}
+	if _, err := fetchCloudBytes(context.Background(), dl); err == nil {
+		t.Fatal("a SHA mismatch must fail before anything is written")
+	}
+}
+
+func TestFetchCloudBytesEncryptedRefused(t *testing.T) {
+	dl := &downloadInfo{Encrypted: true, Host: "x", Path: "/f"}
+	if _, err := fetchCloudBytes(context.Background(), dl); err == nil {
+		t.Fatal("encrypted files must be refused")
+	}
+}
+
+func TestWriteCloudFileBackupAndMtime(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	local := filepath.Join(t.TempDir(), "saves", "a.sav")
+	writeLocal(t, local, "old")
+	backedUp, err := writeCloudFile(4321, local, "saves/a.sav", []byte("new"), 1700000000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !backedUp {
+		t.Fatal("replacing a local file must back it up")
+	}
+	if got, _ := os.ReadFile(local); string(got) != "new" {
+		t.Fatalf("local = %q", got)
+	}
+	st, _ := os.Stat(local)
+	if st.ModTime().Unix() != 1700000000 {
+		t.Fatalf("mtime = %v", st.ModTime())
+	}
+	backupRoot := filepath.Join(os.Getenv("PLATYPUS_PLUGIN_DATA"), "cloud-backups", "4321")
+	entries, err := os.ReadDir(backupRoot)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("backups = %v, %v", entries, err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(backupRoot, entries[0].Name(), "saves", "a.sav")); string(got) != "old" {
+		t.Fatalf("backup = %q", got)
+	}
+	// A fresh file (nothing to replace) writes without a backup.
+	fresh := filepath.Join(t.TempDir(), "saves", "b.sav")
+	backedUp, err = writeCloudFile(4321, fresh, "saves/b.sav", []byte("b"), 1700000000)
+	if err != nil || backedUp {
+		t.Fatalf("fresh write: backedUp=%v err=%v", backedUp, err)
+	}
+}
+
+func TestApplyChoices(t *testing.T) {
+	env := &cloudEnv{appID: 1, base: &cloudBaseline{Files: map[string]cloudBaselineFile{}}}
+	files := []cloudPlanFile{
+		{Rel: "a.sav", Want: "conflict", Local: "/x/a.sav", LocalInfo: cloudLocal{Found: true, Size: 1}, Remote: cloudFile{SHA: mustSHA("r")}},
+	}
+	remote, err := env.applyChoices(files, map[string]string{"a.sav": "remote"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !remote["a.sav"] || files[0].Want != "download" {
+		t.Fatalf("remote choice must download: %+v %v", files, remote)
+	}
+	files[0].Want = "conflict"
+	if _, err := env.applyChoices(files, map[string]string{"a.sav": "local"}); err != nil {
+		t.Fatal(err)
+	}
+	if files[0].Want != "upload" || env.base.Choices["a.sav"].Side != "local" {
+		t.Fatalf("local choice must defer to the push phase: %+v", files)
+	}
+	if _, err := env.applyChoices(files, map[string]string{"nope.sav": "remote"}); err == nil {
+		t.Fatal("a choice for an unlisted path must be refused")
+	}
+	if _, err := env.applyChoices(files, map[string]string{"a.sav": "sideways"}); err == nil {
+		t.Fatal("a bad choice value must be refused")
+	}
+}
+
+func TestJobResultPath(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	saveJobResult(1, "conf-pull", json.RawMessage(`{"a":1}`))
+	raw, ok := loadJobResult(1, "conf-pull")
+	if !ok || string(raw) != `{"a":1}` {
+		t.Fatalf("job cache round trip: %q %v", raw, ok)
+	}
+	if _, ok := loadJobResult(1, "nope"); ok {
+		t.Fatal("a missing job must miss")
+	}
+	// Unsafe ids hash instead of escaping the jobs dir.
+	saveJobResult(1, "../../evil", json.RawMessage(`{}`))
+	matches, _ := filepath.Glob(filepath.Join(cloudJobsDir(), "*.json"))
+	for _, m := range matches {
+		if rel, _ := filepath.Rel(cloudJobsDir(), m); strings.Contains(rel, "..") || strings.ContainsRune(rel, '/') {
+			t.Fatalf("job cache escaped: %q", m)
+		}
+	}
+}
+
+func TestScanLocalRecursiveAndPlatforms(t *testing.T) {
+	dir := t.TempDir()
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" {
+		"savefiles" {
+			"0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" "recursive" "1" }
+			"1" { "root" "GameInstall" "path" "winsaves" "pattern" "*.sav"
+			       "platforms" { "Windows" "1" } }
+		} }`))
+	writeLocal(t, filepath.Join(dir, "saves", "deep", "a.sav"), "a")
+	writeLocal(t, filepath.Join(dir, "saves", "b.txt"), "b")
+	writeLocal(t, filepath.Join(dir, "winsaves", "c.sav"), "c")
+	got := scanLocal(ufs, ctx, 0)
+	if len(got) != 1 {
+		t.Fatalf("recursive scan must find only the matching save: %v", got)
+	}
+	for lp, rel := range got {
+		if !strings.HasSuffix(lp, filepath.Join("saves", "deep", "a.sav")) || rel != "saves/deep/a.sav" {
+			t.Fatalf("scan = %q -> %q", lp, rel)
+		}
+	}
+}
+
+func TestDetectSteamClientAbsent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if detectSteamClient() != nil {
+		t.Fatal("no pid file must mean no client")
+	}
+}
+
+func TestPruneBackupsKeepsLatest(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	root := filepath.Join(os.Getenv("PLATYPUS_PLUGIN_DATA"), "cloud-backups", "7")
+	for _, d := range []string{"20240101-000000", "20240102-000000", "20240103-000000"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	pruneBackups(7, 2)
+	entries, _ := os.ReadDir(root)
+	if len(entries) != 2 || entries[0].Name() != "20240102-000000" {
+		t.Fatalf("entries = %v", entries)
+	}
+}

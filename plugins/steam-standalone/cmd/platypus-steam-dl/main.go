@@ -2,7 +2,7 @@
 // plugin, replacing DepotDownloader for installs and logins. It speaks
 // one subcommand per argv:
 //
-//	platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth
+//	platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud
 //
 // The request (app id, branch, dirs, and the refresh token) arrives as one
 // JSON object on stdin — the token never goes in argv (visible in
@@ -29,7 +29,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud")
 	}
 	if os.Args[1] == "auth" {
 		if err := runAuth(context.Background()); err != nil {
@@ -51,6 +51,22 @@ func main() {
 	}
 	if req.RefreshToken == "" {
 		fatal("auth-required", "log in to Steam first")
+	}
+	if os.Args[1] == "cloud" {
+		// STEAM-12: SIGINT (job.cancel) cancels the context, so an
+		// in-flight download aborts and the baseline keeps only files
+		// actually written.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		if runErr := runCloud(ctx, req, req.Op, req.Ctx, req.Choices); runErr != nil {
+			if ce, ok := runErr.(cmErr); ok && ce.auth {
+				emit(map[string]any{"type": "error", "code": "auth-required", "message": ce.msg})
+			} else {
+				emit(map[string]any{"type": "error", "code": "error", "message": runErr.Error()})
+			}
+			os.Exit(1)
+		}
+		return
 	}
 	// STEAM-12: SIGINT (job.cancel) cancels the context instead of killing
 	// immediately, so DownloadStream aborts and the deferred flusher saves
@@ -99,6 +115,11 @@ type request struct {
 	Target          *versionTarget    `json:"target"`
 	InstallDir      string            `json:"install_dir"`
 	JobID           string            `json:"job_id"`
+	// Op is the cloud subcommand (status|pull|push|resolve); Ctx the
+	// CloudContext and Choices the resolve paths, for the cloud op only.
+	Op      string          `json:"op"`
+	Ctx     json.RawMessage `json:"ctx"`
+	Choices json.RawMessage `json:"choices"`
 }
 
 type cmErr struct {
