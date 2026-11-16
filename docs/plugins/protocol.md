@@ -1039,8 +1039,8 @@ redeem.submit { code }   -> { message, titles?: ["…"] }
 ## Family (1.8)
 
 The `family` capability is the store's family group: its members, the games they lend
-to the user, and a warning while a borrowed game is in use. Steam is the first store
-with one; the others leave the capability out.
+to the user, and a warning while the owner is taking a borrowed game back. Steam is
+the first store with one; the others leave the capability out.
 
 ```
 family.members         {}                 -> [Member]          # a list, no params needed

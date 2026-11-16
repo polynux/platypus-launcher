@@ -73,3 +73,14 @@ files, shown on the game page:
 Detection between 2 and 3 can't be perfect by inspection. The plugin tries
 direct first; if the game dies within seconds of launch, retrying marks it
 "needs client" (the game page offers this) and mode 3 is used from then on.
+
+## Steam Families
+
+Borrowed games list who they are shared by, and when several members lend
+the same game the copies each name their owner. A copy someone else is
+playing right now is marked in use: the in-use list comes from one
+`platypus-steam-dl family-running` CM read per family fetch (Steam pushes
+`FamilyGroupsClient.NotifyRunningApps`), and a failed read leaves copies
+marked free rather than breaking the listing. While every copy of a
+borrowed game is in use, the launch is refused (`game.launchSpec` answers
+`-32002` naming the player); a free copy launches.

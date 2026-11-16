@@ -29,7 +29,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running")
 	}
 	if os.Args[1] == "auth" {
 		if err := runAuth(context.Background()); err != nil {
@@ -97,8 +97,10 @@ func main() {
 		runErr = runVersions(ctx, req)
 	case "unlock":
 		runErr = runUnlock(ctx, req)
+	case "family-running":
+		runErr = runFamilyRunning(ctx, req)
 	default:
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running")
 	}
 	if runErr != nil {
 		if ce, ok := runErr.(cmErr); ok && ce.auth {
@@ -131,6 +133,10 @@ type request struct {
 	Op      string          `json:"op"`
 	Ctx     json.RawMessage `json:"ctx"`
 	Choices json.RawMessage `json:"choices"`
+	// FamilyGroupID skips the ForUser lookup for the family-running read
+	// when the caller already knows the group (the plugin's Web API
+	// fetch does); zero means look it up over the CM.
+	FamilyGroupID uint64 `json:"family_group_id"`
 }
 
 type cmErr struct {
