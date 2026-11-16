@@ -57,7 +57,7 @@ import { useVariant } from './lib/theme';
 import { useGameTone } from './lib/gameTone';
 import type { GameSettingsTab } from './lib/gameSettingsTabs';
 import { notify as toastNotify, type LegacyKind as NoticeKind } from './lib/notify';
-import { loginActionFor, setStoreLoginOpener } from './lib/storeLogin';
+import { acceptTermsActionFor, loginActionFor, setStoreLoginOpener } from './lib/storeLogin';
 import { X } from 'lucide-react';
 import { RouterProvider, useRouter } from '@tanstack/react-router';
 import { createAppRouter, useSetView, useView, viewToLocation } from './router';
@@ -720,9 +720,19 @@ export function AppContent() {
       : action === 'resume' ? LauncherApi.resumeJob
       : LauncherApi.discardJob;
     Effect.runPromise(call(id)).catch((err) => {
-      const source = action === 'retry' ? jobs.find((j) => j.id === id)?.source : undefined;
-      const login = source ? loginActionFor(err, source, t('gameOps:install.logIn')) : null;
-      if (login) toastNotify.error(coreErrMsg(err), { action: login });
+      const job = action === 'retry' ? jobs.find((j) => j.id === id) : undefined;
+      const login = job?.source ? loginActionFor(err, job.source, t('gameOps:install.logIn')) : null;
+      if (login) {
+        toastNotify.error(coreErrMsg(err), { action: login });
+        return;
+      }
+      // A retry refused for unaccepted terms offers the terms dialog itself:
+      // accepting there lets the next retry go through.
+      const game = job ? games.find((g) => g.id === job.game_id) : undefined;
+      const review = game ? acceptTermsActionFor(err, t('gameOps:install.reviewTerms'), () => {
+        void ensureTerms(game).catch((e2) => notify(coreErrMsg(e2), 'err'));
+      }) : null;
+      if (review) toastNotify.error(coreErrMsg(err), { action: review });
       else notify(coreErrMsg(err), 'err');
     });
   };

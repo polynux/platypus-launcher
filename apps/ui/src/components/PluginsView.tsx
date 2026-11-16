@@ -65,13 +65,18 @@ export function PluginsView({ plugins, games = [], warnings, onPlugins, onLibrar
   const data = usePluginsData({ plugins, onPlugins, onLibraryChanged, onNotify });
   const { reviewing, setReviewing, loggingIn, setLoggingIn, auth, busy, storeAuth, refresh, act, uninstalling, setUninstalling, replacing, setReplacing, install, installFile, confirmUninstall } = data;
   // A refused install asks for the login here: open the store's login flow
-  // once the request arrives, then release it so a later visit starts clean.
+  // once the request names a store in the list, then release it so a later
+  // visit starts clean. The list loads after the request can arrive, so an
+  // empty list waits; a store that is still absent after the load toasts
+  // that it isn't available instead of dropping the request silently.
   useEffect(() => {
     if (!loginRequestId) return;
+    if (plugins.length === 0) return;
     const p = plugins.find((x) => x.id === loginRequestId);
     if (p) setLoggingIn(p);
+    else onNotify(t('plugins:auth.unknownStore', { id: loginRequestId }), 'err');
     onLoginOpened?.();
-  }, [loginRequestId, plugins, setLoggingIn, onLoginOpened]);
+  }, [loginRequestId, plugins, setLoggingIn, onLoginOpened, onNotify, t]);
   // One branch per view root (issue #156): the plugins presentation, not the shell.
   const presentation = useVariant('plugins.presentation');
   // The lab's file drop installs plugin zips: the shell exposes the real

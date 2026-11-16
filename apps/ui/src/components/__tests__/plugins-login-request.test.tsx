@@ -79,4 +79,47 @@ describe('PluginsView login request', () => {
     await waitFor(() => expect(authBeginCalls).toContain('echo'));
     expect(onLoginOpened).toHaveBeenCalled();
   });
+
+  it('waits for the plugin list before opening the login', async () => {
+    authBeginCalls.length = 0;
+    const onLoginOpened = vi.fn();
+    const props = {
+      warnings: [],
+      onPlugins: () => {},
+      onLibraryChanged: () => {},
+      onNotify: () => {},
+      loginRequestId: 'echo',
+      onLoginOpened,
+    };
+    const { rerender } = render(<PluginsView plugins={[]} {...props} />);
+    // The list hasn't loaded: nothing opens and the request is kept.
+    const { promise, resolve } = Promise.withResolvers<void>();
+    setTimeout(resolve, 50);
+    await promise;
+    expect(authBeginCalls).not.toContain('echo');
+    expect(onLoginOpened).not.toHaveBeenCalled();
+    rerender(<PluginsView plugins={[plugin('echo')]} {...props} />);
+    await waitFor(() => expect(authBeginCalls).toContain('echo'));
+    expect(onLoginOpened).toHaveBeenCalled();
+  });
+
+  it('toasts when the requested store is absent after the load', async () => {
+    authBeginCalls.length = 0;
+    const onNotify = vi.fn();
+    const onLoginOpened = vi.fn();
+    render(
+      <PluginsView
+        plugins={[plugin('other')]}
+        warnings={[]}
+        onPlugins={() => {}}
+        onLibraryChanged={() => {}}
+        onNotify={onNotify}
+        loginRequestId="echo"
+        onLoginOpened={onLoginOpened}
+      />,
+    );
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(expect.stringMatching(/echo/), 'err'));
+    expect(authBeginCalls).not.toContain('echo');
+    expect(onLoginOpened).toHaveBeenCalled();
+  });
 });

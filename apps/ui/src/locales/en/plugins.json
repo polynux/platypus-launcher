@@ -63,7 +63,8 @@
     "checkDead": "Login check keeps failing. Close and try again.",
     "scannedIt": "I scanned it",
     "qrLabel": "Login QR code",
-    "actionFailed": "Platypus couldn't finish that plugin action."
+    "actionFailed": "Platypus couldn't finish that plugin action.",
+    "unknownStore": "No store named {{id}} is available."
   },
   "notify": {
     "loggedOutOf": "Logged out of {{name}}",

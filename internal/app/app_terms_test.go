@@ -207,6 +207,22 @@ func TestTermsThatNeedALoginRefuseTheInstall(t *testing.T) {
 	}
 }
 
+// The terms read itself carries the login code when the store is logged out,
+// so the install dialog (ensureTerms) can offer the login, not just the gate.
+func TestGetGameTermsNeedsLoginWhenLoggedOut(t *testing.T) {
+	t.Parallel()
+	e := versionsApp(t, termsProtocols, termsCaps)
+	game := licensedGame()
+	e.config(t, map[string]any{"termsAuth": true})
+	_, err := e.a.GetGameTerms(game)
+	if apperr.CodeOf(err) != "terms.needsLogin" {
+		t.Fatalf("GetGameTerms logged out: %v (code %q), want terms.needsLogin", err, apperr.CodeOf(err))
+	}
+	if !plugins.IsAuthRequired(err) {
+		t.Fatalf("GetGameTerms lost the auth code: %v", err)
+	}
+}
+
 // A job saved by an older build predates its terms acceptance: retrying it
 // meets the same gate a new install would, instead of re-queuing silently.
 func TestRetryRerunsTheTermsGate(t *testing.T) {
@@ -257,6 +273,83 @@ func TestRetryRerunsTheTermsGate(t *testing.T) {
 	}
 	if retryErr = e.a.RetryJob(j2.ID); apperr.CodeOf(retryErr) != "terms.needsLogin" {
 		t.Fatalf("retry logged out: %v (code %q), want terms.needsLogin", retryErr, apperr.CodeOf(retryErr))
+	}
+}
+
+// Resuming a canceled install or update meets the same gate as retrying it;
+// resuming a paused one just continues: it was gated when it was queued.
+func TestResumeRerunsTheTermsGateForCanceled(t *testing.T) {
+	t.Parallel()
+	e := versionsApp(t, termsProtocols, termsCaps)
+	game := licensedGame()
+	saved := func() types.Job {
+		t.Helper()
+		j, err := e.a.jobs.AddWithOptions(jobs.KindInstall, game.Source, game.ID, game.StoreAppID,
+			game.Title, filepath.Join(e.root, "Games", "licensed"), nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}
+	// Nothing accepted: resuming a canceled job is refused like a new install.
+	j := saved()
+	if err := e.a.CancelJob(j.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.a.ResumeJob(j.ID); apperr.CodeOf(err) != "terms.acceptFirst" {
+		t.Fatalf("resume canceled unaccepted: %v (code %q), want terms.acceptFirst", err, apperr.CodeOf(err))
+	}
+	// A paused job resumes without the gate.
+	p := saved()
+	if err := e.a.PauseJob(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.a.ResumeJob(p.ID); err != nil {
+		t.Fatalf("resume paused: %v, want the job to continue", err)
+	}
+	e.waitJob(t, p.ID, jobs.StateDone)
+}
+
+// The gate only runs when re-queuing would do something: retrying a finished
+// job is a no-op with no store reads, and a job whose game is gone skips the
+// gate (it fails when it starts either way).
+func TestRequeueGateOnlyRunsWhenItWouldMatter(t *testing.T) {
+	t.Parallel()
+	e := versionsApp(t, termsProtocols, termsCaps)
+	game := licensedGame()
+	terms, err := e.a.GetGameTerms(game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.a.AcceptGameTerms(game, termRefs(terms)); err != nil {
+		t.Fatal(err)
+	}
+	j, err := e.a.jobs.AddWithOptions(jobs.KindInstall, game.Source, game.ID, game.StoreAppID,
+		game.Title, filepath.Join(e.root, "Games", "licensed"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.waitJob(t, j.ID, jobs.StateDone)
+	// Logged out with a finished job: the retry stays a silent no-op.
+	e.config(t, map[string]any{"termsAuth": true})
+	before := e.calls(t)["game.details"]
+	if err := e.a.RetryJob(j.ID); err != nil {
+		t.Fatalf("retry done while logged out: %v, want a no-op", err)
+	}
+	if after := e.calls(t)["game.details"]; after != before {
+		t.Fatalf("retry done read game.details %d times, want no new reads", after-before)
+	}
+	// A canceled job for a game that is gone skips the gate and re-queues.
+	gone, err := e.a.jobs.AddWithOptions(jobs.KindInstall, game.Source, "p.echo.gone",
+		"gone", "Echo Gone", filepath.Join(e.root, "Games", "gone"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.a.CancelJob(gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.a.RetryJob(gone.ID); err != nil {
+		t.Fatalf("retry for a missing game: %v, want the gate skipped", err)
 	}
 }
 

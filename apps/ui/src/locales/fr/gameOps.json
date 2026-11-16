@@ -10,6 +10,7 @@
     "action": "Installer",
     "toFolder": "Installer dans {{folder}}",
     "logIn": "Se connecter",
+    "reviewTerms": "Voir les conditions",
     "queued": "Installation de {{title}} en file d'attente"
   },
   "options": {

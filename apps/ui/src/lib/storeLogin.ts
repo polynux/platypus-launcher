@@ -31,3 +31,12 @@ export function loginActionFor(err: unknown, source: string, label: string): Not
   if (!isTermsLoginError(err)) return null;
   return { label, onClick: () => { openStoreLogin(source); } };
 }
+
+/** The toast action for a terms.acceptFirst refusal: "Review terms" opens
+ *  the game's terms dialog through the install flow's own host
+ *  (lib/termsRequest). Null for anything else, which keeps the plain
+ *  error toast. */
+export function acceptTermsActionFor(err: unknown, label: string, onReview: () => void): NotifyAction | null {
+  if (coreErrorDataOf(err)?.code !== 'terms.acceptFirst') return null;
+  return { label, onClick: () => { onReview(); } };
+}

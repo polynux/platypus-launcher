@@ -49,11 +49,14 @@ beforeEach(() => {
   api.getInstallLocations.mockResolvedValue(places);
   vi.mocked(notify.error).mockReset();
   setStoreLoginOpener(null);
+  api.getGameTerms.mockResolvedValue([]);
 });
 
 describe('InstallDialog terms login', () => {
   it('offers "Log in" when the store needs a login for its terms, opening its login flow', async () => {
-    api.installGameTo.mockRejectedValue(loginError());
+    // The real sequence: the dialog reads the terms first, and the read
+    // itself carries terms.needsLogin (protocol 1.11, "Terms").
+    api.getGameTerms.mockRejectedValue(loginError());
     const open = vi.fn();
     setStoreLoginOpener(open);
     const onNotify = vi.fn();
@@ -61,7 +64,9 @@ describe('InstallDialog terms login', () => {
     await screen.findByRole('radiogroup', { name: 'Install location' });
     fireEvent.click(screen.getByRole('button', { name: 'Install' }));
     await waitFor(() => expect(notify.error).toHaveBeenCalled());
-    // The plain error toast stays off: the action toast explains and offers the login.
+    // Nothing is queued, and the plain error toast stays off: the action
+    // toast explains and offers the login.
+    expect(api.installGameTo).not.toHaveBeenCalled();
     expect(onNotify).not.toHaveBeenCalled();
     const [msg, options] = vi.mocked(notify.error).mock.calls.at(-1) as [string, { action: { label: string; onClick: () => void } }];
     expect(msg).toMatch(/Log in to the store first/);

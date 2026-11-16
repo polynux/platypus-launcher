@@ -10,6 +10,7 @@
     "action": "Install",
     "toFolder": "Install to {{folder}}",
     "logIn": "Log in",
+    "reviewTerms": "Review terms",
     "queued": "Install of {{title}} queued"
   },
   "options": {

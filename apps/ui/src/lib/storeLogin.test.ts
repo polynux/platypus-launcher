@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { isTermsLoginError, loginActionFor, openStoreLogin, setStoreLoginOpener } from './storeLogin';
+import { acceptTermsActionFor, isTermsLoginError, loginActionFor, openStoreLogin, setStoreLoginOpener } from './storeLogin';
 
 function coded(code: string): Error {
   const err = new Error(code);
@@ -32,7 +32,7 @@ describe('loginActionFor', () => {
     setStoreLoginOpener(open);
     const action = loginActionFor(coded('terms.needsLogin'), 'echo', 'Log in');
     expect(action?.label).toBe('Log in');
-    (action?.onClick as () => void)();
+    action?.onClick();
     expect(open).toHaveBeenCalledWith('echo');
   });
 });
@@ -40,5 +40,20 @@ describe('loginActionFor', () => {
 describe('openStoreLogin', () => {
   it('is false with no opener registered', () => {
     expect(openStoreLogin('echo')).toBe(false);
+  });
+});
+
+describe('acceptTermsActionFor', () => {
+  it('offers no action for other errors', () => {
+    expect(acceptTermsActionFor(new Error('no space left'), 'Review terms', () => {})).toBeNull();
+    expect(acceptTermsActionFor(coded('terms.needsLogin'), 'Review terms', () => {})).toBeNull();
+  });
+
+  it('offers "Review terms" for the unaccepted-terms refusal', () => {
+    const review = vi.fn();
+    const action = acceptTermsActionFor(coded('terms.acceptFirst'), 'Review terms', review);
+    expect(action?.label).toBe('Review terms');
+    action?.onClick();
+    expect(review).toHaveBeenCalled();
   });
 });

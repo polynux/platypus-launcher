@@ -44,6 +44,26 @@ func (s *Session) checkTerms(t *testing.T, storeAppID string, raw json.RawMessag
 	}
 }
 
+// checkTermsRequired holds a game known to list terms to the terms read
+// (protocol 1.11, "Terms"): with terms:true the answer carries the terms it
+// lists, and a failure is a loud RPC error (unreadable), never a silent
+// omission — an empty list would read as "nothing to accept".
+func (s *Session) checkTermsRequired(t *testing.T, storeAppID string) {
+	t.Helper()
+	var asked json.RawMessage
+	err := s.call("game.details", map[string]any{"id": storeAppID, "terms": true}, &asked)
+	var rpcErr *jsonrpc.Error
+	if err != nil {
+		if !errors.As(err, &rpcErr) {
+			t.Errorf("game.details with terms:true for a game with terms failed without an RPC error: %v", err)
+		}
+		return
+	}
+	if len(checkTermList(t, "game.details with terms:true", asked)) == 0 {
+		t.Errorf("game.details with terms:true omits the terms of %q: %s", storeAppID, asked)
+	}
+}
+
 // checkTermList holds one game.details answer's terms to their shape (an id
 // and a version, an https url when it has one) and returns the ids it saw.
 func checkTermList(t *testing.T, what string, raw json.RawMessage) map[string]bool {
