@@ -294,24 +294,23 @@ for bad in (b"\x02short", b"\x09k\x00", b"\x01k\x00v"):
 }
 
 // achievements.list joins the schema (names, hidden, icons) with the unlock
-// times and the global percentages; a bare filename is never sent as icon.
+// times and the global percentages; a bare filename maps to the community
+// art path. Hidden counts "0" and "false" as shown, not just 0.
 func TestSteamAchievementsJoin(t *testing.T) {
 	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
 	got := pyRun(t, `
 node = {"stats": {"0": {"type": "ACHIEVEMENTS", "bits": {
     "1": {"name": "A.ONE", "display": {"name": {"english": "One"},
         "desc": {"english": "First"}, "hidden": 0, "icon": "https://cdn/x.png"}},
-    "2": {"name": "A.TWO", "display": {"name": {"english": "Two"},
-        "desc": {}, "hidden": 1, "icon": "two.jpg"}}}}}}
+    "2": {"name": "A.TWO", "display": "broken"},
+    "3": {"name": "A.THREE", "display": {"name": {"english": "Three"},
+        "desc": {"english": "Third"}, "hidden": "yes", "icon": "three.jpg"}},
+    "4": {"name": "A.FOUR", "display": {"name": {}, "desc": "D",
+        "hidden": "0", "icon": 7}}}}}}
 defs = hs.schema_defs("4321", node)
 print([(d["api"], d["bit"], d["name"], d["hidden"], d["icon"]) for d in defs])
 hs.achievement_percents = lambda app: {"A.ONE": 84.1}
-class FakeSession:
-    def __init__(self, *a): pass
-    def logoff(self): pass
-seen = {}
 def fake_stats(app):
-    seen["app"] = app
     return node, {("0", "1"): 1700000000}
 hs.steam_user_stats = fake_stats
 import json
@@ -321,8 +320,9 @@ try:
 except Exception as e:
     print("no-id:", getattr(e, "code", "?"))
 `)
-	want := `[('A.ONE', '1', 'One', False, 'https://cdn/x.png'), ('A.TWO', '2', 'Two', True, 'two.jpg')]
-{"list": [{"description": "First", "globalPercent": 84.1, "hidden": false, "icon": "https://cdn/x.png", "id": "A.ONE", "name": "One", "unlockedAt": 1700000000}, {"description": "", "hidden": true, "id": "A.TWO", "name": "Two"}], "total": 2, "unlocked": 1}
+	icon3 := "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/4321/three.jpg"
+	want := `[('A.ONE', '1', 'One', False, 'https://cdn/x.png'), ('A.TWO', '2', 'A.TWO', False, ''), ('A.THREE', '3', 'Three', True, 'three.jpg'), ('A.FOUR', '4', 'A.FOUR', False, '')]
+{"list": [{"description": "First", "globalPercent": 84.1, "hidden": false, "icon": "https://cdn/x.png", "id": "A.ONE", "name": "One", "unlockedAt": 1700000000}, {"description": "", "hidden": false, "id": "A.TWO", "name": "A.TWO"}, {"description": "Third", "hidden": true, "icon": "` + icon3 + `", "id": "A.THREE", "name": "Three"}, {"description": "", "hidden": false, "id": "A.FOUR", "name": "A.FOUR"}], "total": 4, "unlocked": 1}
 no-id: -32602`
 	if got != want {
 		t.Fatalf("join = %q", got)
@@ -358,13 +358,60 @@ except Exception as e:
 try:
     hs.start_verify({"id": "9999", "installDir": "/g/9999", "jobId": "jv"})
 except Exception as e:
-    print("unknown:", str(e)[:12])
+    print("unknown:", str(e)[:12].rstrip())
+# No manifest pins in the ledger: a repair is refused, a check still starts.
+json.dump({"4321": {"path": "/g/4321", "channel": "beta"}},
+    open(os.path.join(dd, "installed.json"), "w"))
+try:
+    hs.start_verify({"id": "4321", "installDir": "/g/4321", "jobId": "jr", "repair": True})
+except Exception as e:
+    print("pinned:", str(e))
+print(hs.start_verify({"id": "4321", "installDir": "/g/4321", "jobId": "jc"}))
 `)
 	want := `verify checking True {'archiveRef': {'depots': {'11': 4242}}, 'channel': 'beta', 'build': '99'} {'beta': 's3cret'}
 ('job.done', {'jobId': 'jv', 'verify': {'checked': 10, 'damaged': 1, 'missing': 0, 'repaired': 0}})
 rel: -32000
-unknown: app 9999 is`
+unknown: app 9999 is
+pinned: Update the game once to enable repair
+{}`
 	if got != want {
 		t.Fatalf("verify = %q", got)
+	}
+}
+
+// A second start with the same jobId while the first verify still runs is
+// a no-op: one job.done, never two.
+func TestSteamVerifyDuplicateJobId(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+import threading, time
+hs.refresh_token = lambda: "tok"
+hs.notify = lambda m, p: sent.append((m, p))
+sent = []
+release = threading.Event()
+def fake_run(sub, req, job_id=None, game_dir=None, label="", err_code=-32000, phase="downloading"):
+    release.wait(10)
+    return {"checked": 1, "damaged": 0, "missing": 0, "repaired": 0}
+hs.dl_run = fake_run
+import json, os
+dd = os.environ["PLATYPUS_PLUGIN_DATA"]
+json.dump({"4321": {"path": "/g/4321", "channel": "public",
+    "build": "7", "archiveRef": {"depots": {"11": 1}}}},
+    open(os.path.join(dd, "installed.json"), "w"))
+first = threading.Thread(target=hs.start_verify,
+    args=({"id": "4321", "installDir": "/g/4321", "jobId": "jdup"},))
+first.start()
+time.sleep(0.5)
+print(hs.start_verify({"id": "4321", "installDir": "/g/4321", "jobId": "jdup"}))
+release.set()
+first.join()
+# start_verify returns after spawning the worker: wait for its job.done.
+t0 = time.time()
+while time.time() - t0 < 10 and not [p for m, p in sent if m == "job.done"]:
+    time.sleep(0.05)
+print(len([p for m, p in sent if m == "job.done"]))
+`)
+	if got != "{}\n1" {
+		t.Fatalf("duplicate start = %q", got)
 	}
 }

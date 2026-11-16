@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -63,6 +64,8 @@ func seedUserStats(t *testing.T, e *env) {
 			"icon": "https://cdn.steam/ach_first.png", "unlocked": true},
 		map[string]any{"api": "ACH_SECRET", "name": "Secret room", "desc": "Find it.",
 			"hidden": true, "icon": "secret.jpg"},
+		map[string]any{"api": "ACH_PLAIN", "name": "Plain game", "desc": "Just play.",
+			"hidden": "0", "icon": "plain.jpg"},
 	}}}
 	out, _ := json.Marshal(st)
 	if err := os.WriteFile(e.cmState, out, 0o644); err != nil {
@@ -142,10 +145,10 @@ func TestSteamAchievementsList(t *testing.T) {
 	if err := e.call("achievements.list", map[string]any{"id": "4321"}, &res); err != nil {
 		t.Fatalf("achievements.list: %v", err)
 	}
-	if res.Total != 2 || res.Unlocked != 1 || len(res.List) != 2 {
+	if res.Total != 3 || res.Unlocked != 1 || len(res.List) != 3 {
 		t.Fatalf("result = %+v", res)
 	}
-	first, second := res.List[0], res.List[1]
+	first, second, third := res.List[0], res.List[1], res.List[2]
 	if first.ID != "ACH_FIRST" || first.Name != "First steps" || first.Description != "Start something." {
 		t.Fatalf("first = %+v", first)
 	}
@@ -158,8 +161,12 @@ func TestSteamAchievementsList(t *testing.T) {
 	if second.ID != "ACH_SECRET" || !second.Hidden || second.UnlockedAt != 0 {
 		t.Fatalf("second = %+v", second)
 	}
-	if second.Icon != "" || second.GlobalPercent != nil {
-		t.Fatalf("second leaks icon/percent: %+v", second)
+	iconBase := "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/4321/"
+	if second.Icon != iconBase+"secret.jpg" || second.GlobalPercent != nil {
+		t.Fatalf("second icon/percent = %+v", second)
+	}
+	if third.ID != "ACH_PLAIN" || third.Hidden || third.Icon != iconBase+"plain.jpg" {
+		t.Fatalf("string-hidden achievement = %+v", third)
 	}
 
 	// A game the fake CM reports no stats for answers an empty list.
@@ -180,22 +187,11 @@ func TestSteamAchievementsList(t *testing.T) {
 		t.Fatalf("achievements.list without id = %v, want -32602", err)
 	}
 
-	// The schema cache fills in, and the library only flags the game that
-	// has achievements.
-	raw, err := os.ReadFile(filepath.Join(e.pluginData(), "stats-cache.json"))
-	if err != nil {
-		t.Fatalf("no stats cache: %v", err)
-	}
-	var cache map[string]struct {
-		Achievements []struct {
-			API string `json:"api"`
-		} `json:"achievements"`
-	}
-	if err := json.Unmarshal(raw, &cache); err != nil {
-		t.Fatal(err)
-	}
-	if len(cache["4321"].Achievements) != 2 {
-		t.Fatalf("cache = %s", raw)
+	// No stats cache is kept, and the library entry carries no game-level
+	// features: core intersects those with the plugin's capabilities, so
+	// flagging achievements here would silently disable verify and versions.
+	if _, err := os.Stat(filepath.Join(e.pluginData(), "stats-cache.json")); !os.IsNotExist(err) {
+		t.Fatalf("stats cache written: %v", err)
 	}
 	var lib struct {
 		Games []struct {
@@ -206,15 +202,10 @@ func TestSteamAchievementsList(t *testing.T) {
 	if err := e.call("library.list", nil, &lib); err != nil {
 		t.Fatalf("library.list: %v", err)
 	}
-	feats := map[string][]string{}
 	for _, g := range lib.Games {
-		feats[g.ID] = g.Features
-	}
-	if len(feats["4321"]) != 1 || feats["4321"][0] != "achievements" {
-		t.Fatalf("4321 features = %v", feats["4321"])
-	}
-	if len(feats["4322"]) != 0 {
-		t.Fatalf("4322 features = %v, want none", feats["4322"])
+		if len(g.Features) != 0 {
+			t.Fatalf("%s features = %v, want none", g.ID, g.Features)
+		}
 	}
 }
 
@@ -235,7 +226,25 @@ func TestSteamVerifyCheckCorruptRepair(t *testing.T) {
 	if !game.IsInstalled || game.InstallDir == "" {
 		t.Fatalf("not installed: %+v", game)
 	}
-
+	// The fixture PICS carries no branches, so the install records no
+	// version ledger; pin the fixture manifest the way a real install's
+	// ledger pins its build, or every repair is refused.
+	rawLedger, err := os.ReadFile(filepath.Join(e.pluginData(), "installed.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var installed map[string]map[string]any
+	if err := json.Unmarshal(rawLedger, &installed); err != nil {
+		t.Fatal(err)
+	}
+	installed["4321"]["channel"] = "public"
+	installed["4321"]["build"] = "fixture"
+	installed["4321"]["archiveRef"] = map[string]any{"depots": map[string]any{
+		strconv.FormatUint(uint64(e.fix.DepotID), 10): strconv.FormatUint(e.fix.GID, 10)}}
+	outLedger, _ := json.Marshal(installed)
+	if err := os.WriteFile(filepath.Join(e.pluginData(), "installed.json"), outLedger, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	check := func(repair bool) (checked, damaged, missing, repaired int) {
 		t.Helper()
 		v, err := e.q.AddVerify(id, game.ID, game.StoreAppID, game.Title, game.InstallDir, repair)
@@ -288,6 +297,47 @@ func TestSteamVerifyCheckCorruptRepair(t *testing.T) {
 		t.Fatalf("after repair = %d/%d/%d, want clean", c, d, m)
 	}
 
+	// A deleted file reports missing (not damaged); repair restores it.
+	if err := os.Remove(victim); err != nil {
+		t.Fatal(err)
+	}
+	if c, d, m, r := check(false); d != 0 || m != 1 || r != 0 || c <= 0 {
+		t.Fatalf("missing check = %d/%d/%d/%d, want 1 missing", c, d, m, r)
+	}
+	if c, d, m, r := check(true); d != 0 || m != 0 || r != 1 || c <= 0 {
+		t.Fatalf("missing repair = %d/%d/%d/%d, want 1 repaired", c, d, m, r)
+	}
+	if c, d, m, _ := check(false); c <= 0 || d != 0 || m != 0 {
+		t.Fatalf("after missing repair = %d/%d/%d, want clean", c, d, m)
+	}
+
+	// A repair without the ledger's manifest pins is refused (it could
+	// restore the wrong build's files); a check still runs.
+	raw, err := os.ReadFile(filepath.Join(e.pluginData(), "installed.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ledger map[string]map[string]any
+	if err := json.Unmarshal(raw, &ledger); err != nil {
+		t.Fatal(err)
+	}
+	delete(ledger["4321"], "archiveRef")
+	out, _ := json.Marshal(ledger)
+	if err := os.WriteFile(filepath.Join(e.pluginData(), "installed.json"), out, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	v, err := e.q.AddVerify(id, game.ID, game.StoreAppID, game.Title, game.InstallDir, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done := e.waitJob(v.ID); done.State != jobs.StateFailed ||
+		!strings.Contains(done.Error, "Update the game once to enable repair") {
+		t.Fatalf("pinless repair = %+v, want a failed job naming the update", done)
+	}
+	if c, d, m, _ := check(false); c <= 0 || d != 0 || m != 0 {
+		t.Fatalf("pinless check = %d/%d/%d, want clean", c, d, m)
+	}
+
 	// Unknown games and missing params are refused before any work.
 	if err := e.rawCallErr("game.verify",
 		map[string]any{"id": "9999", "installDir": "/tmp/nope", "jobId": "vx"}); err == nil {
@@ -301,9 +351,15 @@ func TestSteamVerifyCheckCorruptRepair(t *testing.T) {
 func TestSteamRelocated(t *testing.T) {
 	e := setup(t)
 	e.login()
-	installed := `{"4321": {"path": "/old/games/g", "dir_name": "g"}}`
+	installed := `{"4321": {"path": "/old/games/g", "dir_name": "g", "executable": "/old/games/g/run.sh"}}`
 	if err := os.WriteFile(filepath.Join(e.pluginData(), "installed.json"), []byte(installed), 0o644); err != nil {
 		t.Fatal(err)
+	}
+
+	// A relative `to` is refused before any record is touched.
+	if err := e.rawCallErr("game.relocated",
+		map[string]any{"id": "4321", "from": "/old/games/g", "to": "g2"}); e.rpcCode(err) != jsonrpc.CodeInvalidParams {
+		t.Fatalf("relocated relative to = %v, want -32602", err)
 	}
 
 	var ok map[string]any
@@ -318,6 +374,9 @@ func TestSteamRelocated(t *testing.T) {
 	}
 	if after["4321"]["path"] != "/new/games/g2" || after["4321"]["dir_name"] != "g2" {
 		t.Fatalf("record = %s", raw)
+	}
+	if after["4321"]["executable"] != "/new/games/g2/run.sh" {
+		t.Fatalf("executable not rebased: %s", raw)
 	}
 
 	// A `from` the record doesn't point at is -32602 and changes nothing.

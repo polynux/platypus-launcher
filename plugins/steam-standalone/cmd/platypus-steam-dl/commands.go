@@ -265,9 +265,19 @@ func runVerify(ctx context.Context, req request) error {
 		}
 		checked++
 	}
-	bad, err := depot.Verify(combined, req.InstallDir)
-	if err != nil {
-		return err
+	// The check hashes one depot after another, reporting each like an
+	// install reports its downloads (phase stays "checking" throughout).
+	onCheck, _, _ := progress(totalBytes(depots))
+	var bad []string
+	var hashed uint64
+	for _, d := range depots {
+		sub, err := depot.Verify(d.man, req.InstallDir)
+		if err != nil {
+			return err
+		}
+		bad = append(bad, sub...)
+		hashed += d.man.TotalSize()
+		onCheck(depot.Progress{DoneBytes: hashed})
 	}
 	// A check (repair:false) only reads: report what differs and stop.
 	// depot.Verify lumps damaged and missing files together; the protocol
@@ -278,15 +288,28 @@ func runVerify(ctx context.Context, req request) error {
 			"damaged": damaged, "missing": missing, "repaired": 0})
 		return nil
 	}
-	// Re-fetch the chunks of mismatched files only.
+	// Re-fetch the chunks of mismatched files only, with progress over
+	// the bad files' bytes.
+	badSet := map[string]bool{}
+	for _, b := range bad {
+		badSet[b] = true
+	}
+	sizes := map[string]uint64{}
+	for _, f := range combined.Files {
+		sizes[f.Name] = f.Size
+	}
+	var repairTotal uint64
+	for _, b := range bad {
+		repairTotal += sizes[b]
+	}
+	onProg, _, _ := progress(repairTotal)
 	client := depot.NewClient()
+	var base uint64
 	for _, d := range depots {
 		var want []string
 		for _, f := range d.man.Files {
-			for _, b := range bad {
-				if f.Name == b {
-					want = append(want, f.Name)
-				}
+			if badSet[f.Name] {
+				want = append(want, f.Name)
 			}
 		}
 		if len(want) == 0 {
@@ -302,13 +325,14 @@ func runVerify(ctx context.Context, req request) error {
 		sched := depot.NewScheduler(client, depot.SchedulerConfig{InitialConns: seededInitialConns(len(d.hosts), 4, len(sub.UniqueChunks()))})
 		dlErr := sched.DownloadStream(ctx, sub, d.ref.DepotID, d.hosts, d.key, nil, func(id string, data []byte) error {
 			return w.Write(id, data)
-		}, nil)
+		}, withBase(onProg, base))
 		if cErr := w.Close(); dlErr == nil {
 			dlErr = cErr
 		}
 		if dlErr != nil {
 			return dlErr
 		}
+		base += sub.TotalSize()
 	}
 	// A repair reports what is still wrong afterwards, and what the run
 	// restored (the files bad before and good now).

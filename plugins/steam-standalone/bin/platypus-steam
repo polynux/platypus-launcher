@@ -1297,7 +1297,6 @@ def library_list(_params):
     games = (data.get("response") or {}).get("games") or []
     persona_name(steamid)  # best effort, for auth.status
     installed = load_state("installed.json", {})
-    known_stats = load_state("stats-cache.json", {}) or {}
     out = []
     deadline = time.time() + STORE_BUDGET
     for g in games:
@@ -1323,10 +1322,6 @@ def library_list(_params):
         # Art needs no Store lookup: always set it, so games past the Store
         # budget (or with no Store entry at all) still show covers.
         entry.update(art_urls(app))
-        # Achievements only for games the stats cache confirms have some:
-        # filling the cache is what achievements.list does, on the game page.
-        if (known_stats.get(app) or {}).get("achievements"):
-            entry["features"] = ["achievements"]
         # Tools, movies, music etc. aren't depot installs Platypus can run.
         app_type = (store.get("type") or "").lower()
         if app_type and app_type not in ("game", "demo", "beta", "application"):
@@ -2140,9 +2135,6 @@ def versions_unlock(params):
 USERSTATS_REQ = 818
 USERSTATS_RESP = 819
 
-# Serializes read-modify-write of stats-cache.json across handler threads.
-stats_lock = threading.RLock()
-
 
 def parse_bin_kv(data):
     """Binary KeyValues (0=subkey, 1=string, 2=int32, 3=float, 7=uint64,
@@ -2199,7 +2191,7 @@ def steam_user_stats(app):
         session.ws.send_binary(steam_cm.pack_emsg(
             USERSTATS_REQ, steam_cm.header(steamid=steamid, sessionid=session.sessionid), body))
         resp = None
-        for emsg, _h, b in session._messages(deadline=time.time() + 30):
+        for emsg, _h, b in session._messages(deadline=time.time() + 20):
             if emsg == USERSTATS_RESP:
                 resp = b
                 break
@@ -2212,7 +2204,10 @@ def steam_user_stats(app):
     if (m.get(2) or [2])[0] != 1:
         return None, {}
     schema = (m.get(4) or [b""])[0]
-    node = parse_bin_kv(schema).get(str(int(app)), {}) if schema else {}
+    try:
+        node = parse_bin_kv(schema).get(str(int(app)), {}) if schema else {}
+    except ValueError:
+        raise RPCError("Steam sent a stats schema Platypus can't read")
     times = {}
     for blk in m.get(6) or []:
         bm = steam_cm.pb_parse(blk)
@@ -2223,11 +2218,6 @@ def steam_user_stats(app):
     return node, times
 
 
-def stats_cached(app):
-    """The cached schema defs for the app, or None when never listed."""
-    with stats_lock:
-        entry = (load_state("stats-cache.json", {}) or {}).get(app)
-    return (entry or {}).get("achievements") if entry else None
 
 
 def schema_defs(app, node):
@@ -2241,7 +2231,9 @@ def schema_defs(app, node):
         gval = stats[gid]
         if not isinstance(gval, dict) or (gval.get("type") or "").upper() != "ACHIEVEMENTS":
             continue
-        bits = gval.get("bits") or {}
+        bits = gval.get("bits")
+        if not isinstance(bits, dict):
+            continue
         for bit in sorted(bits, key=lambda b: (int(b) if b.isdigit() else 1 << 60, b)):
             bval = bits[bit]
             if not isinstance(bval, dict):
@@ -2249,24 +2241,28 @@ def schema_defs(app, node):
             api = bval.get("name") or ""
             if not api:
                 continue
-            disp = bval.get("display") or {}
-            names = disp.get("name") or {}
-            descs = disp.get("desc") or {}
+            disp = bval.get("display")
+            if not isinstance(disp, dict):
+                disp = {}
+            names = disp.get("name")
+            if not isinstance(names, dict):
+                names = {}
+            descs = disp.get("desc")
+            if not isinstance(descs, dict):
+                descs = {}
+            # Real schemas mark hidden with ints, but strings appear in the
+            # wild: only "", "0" and "false" count as shown.
+            icon = disp.get("icon")
             defs.append({
                 "api": api, "gid": gid, "bit": bit,
                 "name": names.get(lang) or names.get("english") or api,
                 "desc": descs.get(lang) or descs.get("english") or "",
-                "hidden": bool(disp.get("hidden", 0)),
-                "icon": disp.get("icon") or "",
+                "hidden": str(disp.get("hidden", 0)).strip().lower() not in ("", "0", "false"),
+                "icon": icon if isinstance(icon, str) else "",
             })
     return defs
 
 
-def save_stats_cache(app, defs):
-    with stats_lock:
-        cache = load_state("stats-cache.json", {}) or {}
-        cache[app] = {"at": int(time.time()), "achievements": defs}
-        save_state("stats-cache.json", cache)
 
 
 def achievement_percents(app):
@@ -2287,6 +2283,9 @@ def achievement_percents(app):
 
 
 def achievements_list(params):
+    # The schema comes from the reply of this call: no cache, so a game page
+    # never shows another game's list and core's per-game features stay
+    # untouched (core intersects them with the plugin's capabilities).
     app = str(params.get("id") or "")
     if not app:
         raise RPCError("invalid params: id is required", -32602)
@@ -2294,26 +2293,22 @@ def achievements_list(params):
         int(app)
     except ValueError:
         raise RPCError("invalid params: id is required", -32602)
-    defs = stats_cached(app)
-    if defs is None:
-        try:
-            node, times = steam_user_stats(app)
-        except steam_cm.CMError as e:
-            raise RPCError(str(e))
-        defs = schema_defs(app, node)
-        save_stats_cache(app, defs)
-    else:
-        try:
-            _node, times = steam_user_stats(app)
-        except steam_cm.CMError as e:
-            raise RPCError(str(e))
+    try:
+        node, times = steam_user_stats(app)
+    except steam_cm.CMError as e:
+        raise RPCError(str(e))
+    defs = schema_defs(app, node)
     percents = achievement_percents(app)
     out, unlocked = [], 0
     for d in defs:
         e = {"id": d["api"], "name": d["name"], "description": d["desc"], "hidden": d["hidden"]}
-        # Schema icons are bare filenames, not CDN URLs: only send a real one.
-        if (d["icon"] or "").startswith("http"):
-            e["icon"] = d["icon"]
+        icon = d["icon"]
+        if icon and not icon.startswith("http"):
+            # Bare schema filenames live under the community art path.
+            icon = ("https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/"
+                    f"{app}/{icon}")
+        if icon:
+            e["icon"] = icon
         ts = times.get((d["gid"], d["bit"]))
         if ts:
             e["unlockedAt"] = ts
@@ -2395,12 +2390,18 @@ def start_verify(params):
     install_dir = params.get("installDir") or ""
     if not os.path.isabs(install_dir):
         raise RPCError("installDir is missing or relative; Platypus always sends one")
-    if app not in load_state("installed.json", {}):
+    installed = load_state("installed.json", {}).get(app)
+    if installed is None:
         raise RPCError(tr("not_installed", app=app))
+    repair = bool(params.get("repair"))
+    if repair and not installed.get("archiveRef"):
+        # Without the ledger's manifest pins a repair would restore the
+        # wrong build's files; a check still reads what is there.
+        raise RPCError("Update the game once to enable repair")
+    # No job meta: a verify writes no staging a discard must clean, and the
+    # game folder itself is never discarded.
     if not claim_job(job_id, {"canceled": False, "id": app, "dir": install_dir, "proc": None}):
         return {}
-    write_job_meta(job_id, {"app": app, "kind": "verify", "dir": install_dir, "installDir": install_dir})
-    repair = bool(params.get("repair"))
     threading.Thread(target=follow_verify, args=(job_id, app, install_dir, repair), daemon=True).start()
     return {}
 
@@ -2429,7 +2430,6 @@ def follow_verify(job_id, app, install_dir, repair=False):
         job = jobs.pop(job_id, {})
     if job.get("canceled"):
         return
-    drop_job_meta(job_id)
     if not isinstance(result, dict) or not any(k in result for k in ("checked", "damaged", "missing", "repaired")):
         notify("job.failed", {"jobId": job_id, "error": "Steam verify returned a bad report"})
         return
@@ -2449,13 +2449,19 @@ def game_relocated(params):
     src, dst = params.get("from") or "", params.get("to") or ""
     if not app or not src or not dst:
         raise RPCError("invalid params: id, from and to are required", -32602)
+    if not os.path.isabs(dst):
+        raise RPCError("invalid params: to must be an absolute path", -32602)
+    nsrc, ndst = os.path.normpath(src), os.path.normpath(dst)
     with installed_lock:
         installed = load_state("installed.json", {})
         entry = installed.get(app)
-        if entry is None or os.path.normpath(entry.get("path") or "") != os.path.normpath(src):
+        if entry is None or os.path.normpath(entry.get("path") or "") != nsrc:
             raise RPCError(f"no install record at {src}", -32602)
         entry["path"] = dst
         entry["dir_name"] = os.path.basename(dst.rstrip("/")) or entry.get("dir_name")
+        exe = os.path.normpath(entry.get("executable") or "")
+        if exe == nsrc or exe.startswith(nsrc + os.sep):
+            entry["executable"] = ndst + exe[len(nsrc):]
         installed[app] = entry
         save_state("installed.json", installed)
     return {}

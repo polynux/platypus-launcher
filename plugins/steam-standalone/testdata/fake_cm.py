@@ -508,7 +508,7 @@ def serve_user_stats(conn, hdr, body, st, steamid, sessionid):
             "display": {
                 "name": {"english": a.get("name", f"Achievement {i}")},
                 "desc": {"english": a.get("desc", "")},
-                "hidden": 1 if a.get("hidden") else 0,
+                "hidden": a.get("hidden", 0),
                 "icon": a.get("icon", ""),
                 "icon_gray": "",
             },
