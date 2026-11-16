@@ -3113,7 +3113,7 @@ def family_takeback_message(owner_name):
     (protocol 1.8): the owner by name, like the launchSpec refusal, or a
     generic fallback when the CM stayed silent about names."""
     if owner_name:
-        return f"Family member {owner_name} started playing this game and is taking it back"
+        return f"Family member {owner_name} is taking this game back"
     return "The owner started playing this game and is taking it back"
 
 
@@ -3176,6 +3176,8 @@ def family_running_event(params):
         family_borrow_seen &= borrowing | owners
         for key in [k for k in family_warned if k not in owners]:
             family_warned.discard(key)
+        # A first push that already shows both the borrowing and the
+        # owner's play warns: the user is being kicked either way.
         takebacks = [k for k in owners if k in family_borrow_seen and k not in family_warned]
         family_warned.update(takebacks)
     for appid, owner in sorted(takebacks):
@@ -3683,7 +3685,12 @@ def social_reader(rec):
                 box["reply"] = msg
                 box["ev"].set()
         elif msg.get("event"):
-            social_notify_event(rec, msg["event"], msg.get("params") or {})
+            # One bad event never stops the routing: the handler is
+            # guarded, and the log names no ids the push may carry.
+            try:
+                social_notify_event(rec, msg["event"], msg.get("params") or {})
+            except Exception:
+                log("warning", "a Steam social event couldn't be handled")
     with social_lock:
         global social_tombstone
         dead = social_proc is rec
@@ -3926,7 +3933,7 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.20.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.19.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],

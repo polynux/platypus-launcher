@@ -237,8 +237,9 @@ func runSocial(ctx context.Context) error {
 	}
 	s.emit("connection", map[string]any{"state": "online"})
 	// Ask Steam to push the family running list to this session; the push
-	// carries the take-back signal the plugin warns about.
-	s.subscribeFamilyRunning()
+	// carries the take-back signal the plugin warns about. Never gates the
+	// session: waitReady and the command loop run without it.
+	go s.subscribeFamilyRunning()
 
 	sc := bufio.NewScanner(br)
 	sc.Buffer(make([]byte, 256*1024), 1024*1024)
@@ -330,7 +331,8 @@ func (s *socialSession) resync() {
 	s.playingSent = 0 // force a resend below
 	s.mu.Unlock()
 	_ = s.sendPlaying(desired, true)
-	s.subscribeFamilyRunning()
+	// The reconnect event goes out without it; the re-ask runs behind.
+	go s.subscribeFamilyRunning()
 }
 
 func (s *socialSession) handle(cmd socialCommand) {
@@ -663,21 +665,25 @@ func (s *socialSession) onPlayingState(body []byte) {
 	}
 }
 
+// familySubscribeTimeout bounds each subscribe call: the running list is
+// supplementary, so a silent Steam never stalls the startup or a resync.
+const familySubscribeTimeout = 5 * time.Second
+
 // subscribeFamilyRunning asks Steam to push the family running list to this
 // persistent session: the group id via GetFamilyGroupForUser (the steamid
 // is a uint64 varint, like the group id), then GetFamilyGroup with
 // send_running_apps. Steam pushes FamilyGroupsClient.NotifyRunningApps#1
 // now and again on every start/stop, each push the full current list.
 // Failures stay silent: the running list is supplementary, and a user in
-// no group simply gets no push. No ids reach any log.
+// no group simply gets no push. No ids reach any log. Runs in its own
+// goroutine: the session startup and the reconnect event never wait for it.
 func (s *socialSession) subscribeFamilyRunning() {
 	if s.client == nil {
 		return
 	}
 	fu := &depot.Enc{}
 	fu.Varint(1, s.selfID)
-	fu.Varint(2, 1) // include_family_group_response
-	raw, err := s.client.Call("FamilyGroups.GetFamilyGroupForUser#1", fu.Bytes(), 0)
+	raw, err := s.client.Call("FamilyGroups.GetFamilyGroupForUser#1", fu.Bytes(), familySubscribeTimeout)
 	if err != nil {
 		return
 	}
@@ -691,7 +697,7 @@ func (s *socialSession) subscribeFamilyRunning() {
 	g := &depot.Enc{}
 	g.Varint(1, m.Int(1))
 	g.Varint(2, 1) // send_running_apps
-	_, _ = s.client.Call("FamilyGroups.GetFamilyGroup#1", g.Bytes(), 0)
+	_, _ = s.client.Call("FamilyGroups.GetFamilyGroup#1", g.Bytes(), familySubscribeTimeout)
 }
 
 // onFamilyRunning forwards one NotifyRunningApps push as a familyRunning

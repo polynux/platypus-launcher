@@ -685,13 +685,54 @@ func TestSteamFamilyStaleRunningRefetches(t *testing.T) {
 // the social session's NotifyRunningApps push carries the running list,
 // and when the owner of the copy the user plays starts the same app the
 // plugin sends family.warning once. Repeats stay silent, unrelated starts
-// don't warn, and with the social session off nothing warns.
+// don't warn, and with the social session off nothing warns. The warning
+// re-arms once the owner stops, and a first push that already shows the
+// take-back warns too.
 func TestSteamFamilyTakebackWarning(t *testing.T) {
 	e := familyEnv(t)
 	e.installFakeExe(t, "5001")
 	e.installFakeExe(t, "5003")
+	// Fast social syncs: the friends list and personas arrive on logon,
+	// so social.start never sits out waitReady.
+	for knob, value := range socialKnobs() {
+		e.setCMState(knob, value)
+	}
 	libraryByID(t, e)
 	e.setCMState("family_group_id", 424242)
+	pushes := func() int {
+		return strings.Count(e.cmLog(), "push 146 FamilyGroupsClient.NotifyRunningApps#1")
+	}
+	// A restart delivers exactly one new push: wait for it, then give the
+	// plugin a bounded window to act on it.
+	restart := func() {
+		t.Helper()
+		before := pushes()
+		if err := e.call("social.stop", map[string]any{}, nil); err != nil {
+			t.Fatalf("social.stop: %v", err)
+		}
+		if err := e.call("social.start", map[string]any{}, nil); err != nil {
+			t.Fatalf("social.start: %v", err)
+		}
+		deadline := time.Now().Add(15 * time.Second)
+		for pushes() <= before {
+			if time.Now().After(deadline) {
+				t.Fatalf("no new running-apps push: %s", e.cmLog())
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		time.Sleep(2 * time.Second)
+	}
+	warnings := func() []json.RawMessage { return e.notes.forMethod("family.warning") }
+	waitWarnings := func(n int) {
+		t.Helper()
+		deadline := time.Now().Add(15 * time.Second)
+		for len(warnings()) < n {
+			if time.Now().After(deadline) {
+				t.Fatalf("family.warning count = %d, want %d", len(warnings()), n)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 	borrowing := []any{
 		map[string]any{"appid": "5001", "player": "76561198", "owner": "76561199"},
 		map[string]any{"appid": "5003", "player": "76561200", "owner": "76561200"},
@@ -700,8 +741,11 @@ func TestSteamFamilyTakebackWarning(t *testing.T) {
 	if err := e.call("social.start", map[string]any{}, nil); err != nil {
 		t.Fatalf("social.start: %v", err)
 	}
+	// The subscribe's wire shape: steamid as a uint64 varint, like the
+	// group id (the fake answers no group on a bad shape).
+	e.waitCMLog("family foruser ok")
 	// Gate: the push is applied once the refreshed in-use list refuses
-	// 5003, naming the player.
+	// 5003, naming the player. Nothing warns: no owner plays the user's game.
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		err := e.rawCallErr("game.launchSpec", map[string]any{"id": "5003"})
@@ -713,7 +757,10 @@ func TestSteamFamilyTakebackWarning(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	// With the social session off, the same take-back warns nothing.
+	if n := len(warnings()); n != 0 {
+		t.Fatalf("borrowing alone warned: %d warnings", n)
+	}
+	// With the social session off, the take-back warns nothing.
 	if err := e.call("social.stop", map[string]any{}, nil); err != nil {
 		t.Fatalf("social.stop: %v", err)
 	}
@@ -721,7 +768,7 @@ func TestSteamFamilyTakebackWarning(t *testing.T) {
 		map[string]any{"appid": "5001", "player": "76561199", "owner": "76561199"})
 	e.setCMState("family_running", takeback)
 	time.Sleep(2 * time.Second)
-	if n := len(e.notes.forMethod("family.warning")); n != 0 {
+	if n := len(warnings()); n != 0 {
 		t.Fatalf("family.warning with social off = %d, want 0", n)
 	}
 	// The owner starts the copy the user plays: exactly one warning,
@@ -729,52 +776,103 @@ func TestSteamFamilyTakebackWarning(t *testing.T) {
 	if err := e.call("social.start", map[string]any{}, nil); err != nil {
 		t.Fatalf("social.start again: %v", err)
 	}
-	raw := e.waitNotify("family.warning", 20*time.Second)
+	waitWarnings(1)
 	var w struct {
 		ID      string `json:"id"`
 		Message string `json:"message"`
 	}
+	raw := warnings()[len(warnings())-1]
 	if err := json.Unmarshal(raw, &w); err != nil {
 		t.Fatalf("family.warning params: %v", err)
 	}
-	if w.ID != "5001" || !strings.Contains(w.Message, "MemberA") {
-		t.Fatalf("family.warning = %+v, want id 5001 naming MemberA", w)
+	if w.ID != "5001" || !strings.Contains(w.Message, "MemberA is taking this game back") {
+		t.Fatalf("family.warning = %+v, want id 5001 taking back naming MemberA", w)
 	}
 	if strings.Contains(string(raw), "secondsLeft") {
 		t.Fatalf("family.warning carries secondsLeft: %s", raw)
 	}
-	if n := len(e.notes.forMethod("family.warning")); n != 1 {
-		t.Fatalf("family.warning count = %d, want exactly 1", n)
-	}
-	restart := func() {
-		t.Helper()
-		if err := e.call("social.stop", map[string]any{}, nil); err != nil {
-			t.Fatalf("social.stop: %v", err)
-		}
-		if err := e.call("social.start", map[string]any{}, nil); err != nil {
-			t.Fatalf("social.start: %v", err)
-		}
-		e.waitCMLog("push 146 FamilyGroupsClient.NotifyRunningApps#1")
-		time.Sleep(2 * time.Second)
-	}
 	// The same push again: no repeat.
+	e.setCMState("family_running", takeback)
 	restart()
-	if n := len(e.notes.forMethod("family.warning")); n != 1 {
+	if n := len(warnings()); n != 1 {
 		t.Fatalf("repeated push warned again: count = %d", n)
 	}
-	// An unrelated start (a game the user isn't playing) warns nothing.
+	// An unrelated start (a copy the user doesn't play) warns nothing.
 	unrelated := append(append([]any{}, takeback...),
 		map[string]any{"appid": "5002", "player": "76561199", "owner": "76561199"})
 	e.setCMState("family_running", unrelated)
 	restart()
-	got := e.notes.forMethod("family.warning")
-	if len(got) != 1 {
+	if got := warnings(); len(got) != 1 {
 		t.Fatalf("unrelated start warned: %d warnings", len(got))
+	} else if strings.Contains(string(got[0]), `"id":"5002"`) {
+		t.Fatalf("warning for a game the user isn't playing: %s", got[0])
 	}
-	for _, g := range got {
-		if strings.Contains(string(g), `"id":"5002"`) {
-			t.Fatalf("warning for a game the user isn't playing: %s", g)
+	// The owner stops: the warning re-arms (applied: 5001 launches again).
+	e.setCMState("family_running", borrowing)
+	restart()
+	if n := len(warnings()); n != 1 {
+		t.Fatalf("owner stopping warned: count = %d", n)
+	}
+	deadline = time.Now().Add(15 * time.Second)
+	for {
+		var spec map[string]any
+		if err := e.call("game.launchSpec", map[string]any{"id": "5001"}, &spec); err == nil {
+			break
+		} else if time.Now().After(deadline) {
+			t.Fatalf("owner stopping not applied: launchSpec 5001 = %v", err)
 		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	// The owner starts again: a second warning.
+	e.setCMState("family_running", takeback)
+	restart()
+	waitWarnings(2)
+	// A first push that already shows the take-back warns too: the user is
+	// being kicked either way. A fresh copy keeps it independent.
+	firstSeen := append(append([]any{}, takeback...),
+		map[string]any{"appid": "5002", "player": "76561198", "owner": "76561200"},
+		map[string]any{"appid": "5002", "player": "76561200", "owner": "76561200"})
+	e.setCMState("family_running", firstSeen)
+	restart()
+	waitWarnings(3)
+	raw = warnings()[len(warnings())-1]
+	if err := json.Unmarshal(raw, &w); err != nil {
+		t.Fatalf("family.warning params: %v", err)
+	}
+	if w.ID != "5002" {
+		t.Fatalf("first-seen take-back warned %+v, want id 5002", w)
+	}
+	// The user's entry vanishes before the owner's appears: still a warning.
+	e.setCMState("family_running", []any{
+		map[string]any{"appid": "5002", "player": "76561198", "owner": "76561199"},
+	})
+	restart()
+	if n := len(warnings()); n != 3 {
+		t.Fatalf("borrowing alone warned: count = %d", n)
+	}
+	e.setCMState("family_running", []any{
+		map[string]any{"appid": "5002", "player": "76561199", "owner": "76561199"},
+	})
+	restart()
+	waitWarnings(4)
+	// Another lender's copy playing warns nothing for the user's copy...
+	e.setCMState("family_running", []any{
+		map[string]any{"appid": "5002", "player": "76561198", "owner": "76561199"},
+		map[string]any{"appid": "5002", "player": "76561200", "owner": "76561200"},
+	})
+	restart()
+	if n := len(warnings()); n != 4 {
+		t.Fatalf("another lender's copy warned: count = %d", n)
+	}
+	// ...and neither does another member's borrowing nor the user's own play.
+	e.setCMState("family_running", []any{
+		map[string]any{"appid": "5001", "player": "76561200", "owner": "76561199"},
+		map[string]any{"appid": "4321", "player": "76561198", "owner": "76561198"},
+		map[string]any{"appid": "4321", "player": "76561200", "owner": "76561200"},
+	})
+	restart()
+	if n := len(warnings()); n != 4 {
+		t.Fatalf("uninvolved play warned: count = %d", n)
 	}
 	if err := e.call("social.stop", map[string]any{}, nil); err != nil {
 		t.Fatalf("social.stop: %v", err)

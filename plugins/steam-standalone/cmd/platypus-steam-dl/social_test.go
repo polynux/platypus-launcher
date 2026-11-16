@@ -1169,3 +1169,34 @@ func familyRunningBody(groupID uint64, pairs ...[3]uint64) []byte {
 	}
 	return b.Bytes()
 }
+
+// The family subscribe never gates the session: a CM that stays silent on
+// the FamilyGroups calls still lets social.start through promptly (each
+// subscribe call times out on its own, behind the startup).
+func TestSocialFamilySubscribeNeverBlocks(t *testing.T) {
+	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
+		unread: map[uint64]int{}, names: map[uint64]string{}}
+	f := useSocialFake(t, steamcmtest.Config{
+		ServiceHandler: func(target string, body []byte) ([]byte, int) {
+			if strings.HasPrefix(target, "FamilyGroups.") {
+				select {} // Steam stays silent: the subscribe timeouts fire instead
+			}
+			return cf.handler(target, body)
+		},
+		Pushes: []steamcmtest.Push{
+			{EMsg: steamcm.EMsgClientFriendsList, Body: friendsListBody(false, friendEntry(testF1, 3))},
+			{EMsg: steamcm.EMsgClientPersonaState, Body: personaBody(
+				personaSpec{id: testF1, state: 1, name: "Ana Ruiz"},
+				personaSpec{id: testSelfID, state: 1, name: "Self Player"})},
+		},
+	})
+	_ = f
+	p := startSocial(t, "none")
+	start := time.Now()
+	waitReadyReply(p, 1)
+	// A gated startup would sit out both 5 s subscribe timeouts first.
+	if dt := time.Since(start); dt > 8*time.Second {
+		t.Fatalf("social.start took %v with a silent family read, want under 8 s", dt)
+	}
+	p.stop(2)
+}
