@@ -2,10 +2,11 @@
 // games are in use right now. One-shot CM session: GetFamilyGroupForUser
 // (the user's group id) then GetFamilyGroup with send_running_apps, which
 // makes Steam push FamilyGroupsClient.NotifyRunningApps#1 with the current
-// running list. The push arrives after the reply, so the session drains a
-// few bounded seconds for it; no push means nothing is running (not an
-// error). Result: {"type":"result","running":[{"appid","player","owner"}]},
-// steamids as strings (they don't fit a JSON number).
+// running list. The push rides in before the reply (fakes) or after it
+// (Steam); the drain stops at the first push, bounded to a few seconds.
+// No push means nothing is running (not an error). Result:
+// {"type":"result","running":[{"appid","player","owner"}]}, steamids as
+// strings (they don't fit a JSON number).
 package main
 
 import (
@@ -49,6 +50,7 @@ func runFamilyRunning(ctx context.Context, req request) error {
 	// hook collects both, the drain below waits for the late ones. Each
 	// push is the whole current state and replaces the previous one.
 	var mu sync.Mutex
+	var gotPush bool
 	var last []runningEntry
 	cm.SetPushHook(func(_ uint32, hdr depot.Msg, body []byte) {
 		if string(hdr.Bytes(12)) != notifyRunningApps {
@@ -56,12 +58,19 @@ func runFamilyRunning(ctx context.Context, req request) error {
 		}
 		entries := decodeRunningApps(body)
 		mu.Lock()
+		gotPush = true
 		last = entries
 		mu.Unlock()
 	})
-	// Field numbers from steammessages_familygroups.steamclient.proto.
+	stopped := func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return gotPush
+	}
+	// Field numbers from steammessages_familygroups.steamclient.proto:
+	// steamid is a uint64 varint, like the group id.
 	fu := &depot.Enc{}
-	fu.Fixed64(1, cm.SteamID())
+	fu.Varint(1, cm.SteamID())
 	fu.Varint(2, 1) // include_family_group_response
 	raw, err := cm.Call("FamilyGroups.GetFamilyGroupForUser#1", fu.Bytes(), 0)
 	if err != nil {
@@ -81,7 +90,11 @@ func runFamilyRunning(ctx context.Context, req request) error {
 	if _, err := cm.Call("FamilyGroups.GetFamilyGroup#1", g.Bytes(), 0); err != nil {
 		return callErr("family running apps", err)
 	}
-	cm.DrainPushes(runningWait)
+	// A push that rode in before the reply stops the drain at once;
+	// otherwise wait for the late one, bounded.
+	if !stopped() {
+		cm.DrainPushes(runningWait, stopped)
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	out := make([]any, 0, len(last))
@@ -98,7 +111,8 @@ func runFamilyRunning(ctx context.Context, req request) error {
 
 // decodeRunningApps reads one NotifyRunningApps body: field 1 the family
 // group id, repeated field 2 the running entries {1: appid, 3: {1: player
-// steamid, 2: owner steamid}}. Malformed entries are skipped, so one bad
+// steamid, 2: owner steamid}}. Field 3 repeats when several members play
+// one app, one pair per entry. Malformed entries are skipped, so one bad
 // entry never blanks the rest.
 func decodeRunningApps(body []byte) []runningEntry {
 	m, err := depot.Decode(body)
@@ -115,15 +129,17 @@ func decodeRunningApps(body []byte) []runningEntry {
 		if appID == 0 {
 			continue
 		}
-		pm, err := depot.Decode(em.Bytes(3))
-		if err != nil {
-			continue
+		for _, praw := range em.AllBytes(3) {
+			pm, err := depot.Decode(praw)
+			if err != nil {
+				continue
+			}
+			player, owner := pm.Int(1), pm.Int(2)
+			if player == 0 || owner == 0 {
+				continue
+			}
+			out = append(out, runningEntry{appID: appID, player: player, owner: owner})
 		}
-		player, owner := pm.Int(1), pm.Int(2)
-		if player == 0 || owner == 0 {
-			continue
-		}
-		out = append(out, runningEntry{appID: appID, player: player, owner: owner})
 	}
 	return out
 }

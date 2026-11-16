@@ -81,6 +81,6 @@ the same game the copies each name their owner. A copy someone else is
 playing right now is marked in use: the in-use list comes from one
 `platypus-steam-dl family-running` CM read per family fetch (Steam pushes
 `FamilyGroupsClient.NotifyRunningApps`), and a failed read leaves copies
-marked free rather than breaking the listing. While the copy a launch
-would use is in use, the listing warns (`family.warning`) and the launch
-is refused (`game.launchSpec` answers `-32002` naming the player).
+marked free rather than breaking the listing. While every copy of a
+borrowed game is in use, the launch is refused (`game.launchSpec` answers
+`-32002` naming the player); a free copy launches.

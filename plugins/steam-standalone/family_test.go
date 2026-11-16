@@ -16,40 +16,6 @@ import (
 	"time"
 )
 
-// waitNotify returns the first notification with this method whose raw
-// params contain sub, waiting up to 10 s for the plugin's async delivery.
-func (e *env) waitNotify(t *testing.T, method, sub string) map[string]any {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		if p := e.hasNotifyParams(method, sub); p != nil {
-			return p
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("no %s notification containing %q", method, sub)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-// hasNotifyParams returns the first notification with this method whose raw
-// params contain sub, or nil. A notification emitted while a call runs may
-// still be in flight when the call returns, so callers poll or sleep.
-func (e *env) hasNotifyParams(method, sub string) map[string]any {
-	e.notesMu.Lock()
-	defer e.notesMu.Unlock()
-	for _, n := range e.notes {
-		if n.method != method || !strings.Contains(string(n.params), sub) {
-			continue
-		}
-		var p map[string]any
-		if json.Unmarshal(n.params, &p) == nil {
-			return p
-		}
-	}
-	return nil
-}
-
 // installFakeExe records an installed game with a real (empty) executable,
 // enough for game.launchSpec to resolve without launching anything.
 func (e *env) installFakeExe(t *testing.T, appID string) {
@@ -454,25 +420,29 @@ func TestSteamFamilyFailureServesLastGood(t *testing.T) {
 	}
 }
 
-// Borrowed copies someone else is playing carry inUse, and the listing
-// warns about the games whose launch copy is in use (family.warning). The
-// helper's CM read is real: the fake CM answers GetFamilyGroupForUser /
-// GetFamilyGroup and pushes NotifyRunningApps.
+// Borrowed copies someone else is playing carry inUse: the helper's CM
+// read is real, with the fake answering GetFamilyGroupForUser /
+// GetFamilyGroup and pushing NotifyRunningApps after the reply (the real
+// ordering). Two pairs share one appid, riding one push entry.
 func TestSteamFamilyInUse(t *testing.T) {
 	e := familyEnv(t)
 	e.setCMState("family_group_id", 424242)
+	e.setCMState("family_push_after_reply", true)
 	// MemberB plays shared 5002 from MemberA's copy (the preferred one)
-	// and single-owner 5001 from MemberA's only copy; the user plays
+	// while MemberA plays it from MemberB's; MemberB also plays
+	// single-owner 5001 from MemberA's only copy; the user plays
 	// withheld 5003 themselves, which is not "in use".
 	e.setCMState("family_running", []any{
 		map[string]any{"appid": "5002", "player": "76561200", "owner": "76561199"},
+		map[string]any{"appid": "5002", "player": "76561199", "owner": "76561200"},
 		map[string]any{"appid": "5001", "player": "76561200", "owner": "76561199"},
 		map[string]any{"appid": "5003", "player": "76561198", "owner": "76561200"},
 	})
 	byID := libraryByID(t, e)
-	// The running-apps read went over the CM: the group lookup and the
-	// push the helper drains for.
+	// The running-apps read went over the CM: the group lookup, the
+	// varint steamid assertion, and the push the helper drains for.
 	e.waitCMLog("service FamilyGroups.GetFamilyGroup#1")
+	e.waitCMLog("family foruser ok")
 	e.waitCMLog("push 146 FamilyGroupsClient.NotifyRunningApps#1")
 
 	both := byID["5002"]
@@ -494,8 +464,8 @@ func TestSteamFamilyInUse(t *testing.T) {
 	if byOwner["76561199"]["ownerName"] != "MemberA" {
 		t.Fatalf("preferred copy 76561199 = %v, want ownerName MemberA", byOwner["76561199"])
 	}
-	if byOwner["76561200"]["inUse"] != false {
-		t.Fatalf("free copy 76561200 = %v, want inUse false", byOwner["76561200"])
+	if byOwner["76561200"]["inUse"] != true {
+		t.Fatalf("second copy 76561200 = %v, want inUse true: MemberA plays from it", byOwner["76561200"])
 	}
 
 	single := byID["5001"]
@@ -522,25 +492,11 @@ func TestSteamFamilyInUse(t *testing.T) {
 	if wcopies[0].(map[string]any)["inUse"] != false {
 		t.Fatalf("5003 copy = %v, want inUse false: the user is the player", wcopies[0])
 	}
-
-	// The listing warns about the borrowed games whose launch copy is in
-	// use, naming the player — and about nothing else.
-	for _, id := range []string{"5001", "5002"} {
-		w := e.waitNotify(t, "family.warning", `"id":"`+id+`"`)
-		if w["message"] != "Family member MemberB is playing this game" {
-			t.Fatalf("family.warning for %s = %v, want the MemberB message", id, w)
-		}
-	}
-	for _, id := range []string{"5003", "5004", "4321"} {
-		if p := e.hasNotifyParams("family.warning", `"id":"`+id+`"`); p != nil {
-			t.Fatalf("unexpected family.warning for %s: %v", id, p)
-		}
-	}
 }
 
 // Steam pushes nothing when nothing is running: copies stay inUse false
-// and the listing warns about nothing. The group lookup still goes over
-// the CM (only the push is missing).
+// and no copies appear for single-owner games. The group lookup still
+// goes over the CM (only the push is missing).
 func TestSteamFamilyNoPushLeavesInUseFalse(t *testing.T) {
 	e := familyEnv(t)
 	e.setCMState("family_group_id", 424242)
@@ -560,43 +516,39 @@ func TestSteamFamilyNoPushLeavesInUseFalse(t *testing.T) {
 	if _, ok := byID["5001"]["copies"]; ok {
 		t.Fatalf("single-owner 5001 carries copies with no push: %v", byID["5001"])
 	}
-	// The warning would ride the listing's own pipe: 2 s without one
-	// means the listing warned about nothing.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if p := e.hasNotifyParams("family.warning", ""); p != nil {
-			t.Fatalf("unexpected family.warning with no push: %v", p)
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
 }
 
-// A borrowed game whose launch copy is in use refuses game.launchSpec
-// with -32002 naming the player; a free copy and the user's own copy
-// still launch.
+// game.launchSpec refuses with -32002 naming the player only when every
+// copy of a borrowed game is in use; a free copy launches. The refusal
+// reads the cached snapshot and borrowed set the listing merged — never
+// its own fetch — so the listing runs first to warm the cache.
 func TestSteamFamilyLaunchSpecRefusal(t *testing.T) {
 	e := familyEnv(t)
 	e.setCMState("family_group_id", 424242)
 	e.setCMState("family_running", []any{
 		map[string]any{"appid": "5002", "player": "76561200", "owner": "76561199"},
+		map[string]any{"appid": "5001", "player": "76561200", "owner": "76561199"},
 		map[string]any{"appid": "4321", "player": "76561200", "owner": "76561200"},
 	})
 	for _, app := range []string{"5002", "5001", "4321"} {
 		e.installFakeExe(t, app)
 	}
-	err := e.rawCallErr("game.launchSpec", map[string]any{"id": "5002"})
+	libraryByID(t, e)
+	var spec map[string]any
+	// 5002's preferred copy is busy, but MemberB's own copy is free.
+	if err := e.call("game.launchSpec", map[string]any{"id": "5002"}, &spec); err != nil {
+		t.Fatalf("launchSpec for 5002 with a free copy: %v", err)
+	}
+	// 5001's only copy is busy: refusal naming the player.
+	err := e.rawCallErr("game.launchSpec", map[string]any{"id": "5001"})
 	if e.rpcCode(err) != -32002 {
-		t.Fatalf("launchSpec for in-use 5002 = %v, want -32002", err)
+		t.Fatalf("launchSpec for in-use 5001 = %v, want -32002", err)
 	}
 	if !strings.Contains(err.Error(), "MemberB") {
-		t.Fatalf("launchSpec for in-use 5002 = %v, want the player named", err)
+		t.Fatalf("launchSpec for in-use 5001 = %v, want the player named", err)
 	}
-	var spec map[string]any
-	if err := e.call("game.launchSpec", map[string]any{"id": "5001"}, &spec); err != nil {
-		t.Fatalf("launchSpec for free 5001: %v", err)
-	}
-	// Owned 4321 is also lent by the playing member, but the launch uses
-	// the user's own copy: no refusal.
+	// Owned 4321 is also lent by the playing member, but it isn't
+	// borrowed: no refusal.
 	if err := e.call("game.launchSpec", map[string]any{"id": "4321"}, &spec); err != nil {
 		t.Fatalf("launchSpec for owned 4321: %v", err)
 	}

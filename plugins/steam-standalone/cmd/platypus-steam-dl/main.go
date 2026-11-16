@@ -29,7 +29,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running")
 	}
 	if os.Args[1] == "auth" {
 		if err := runAuth(context.Background()); err != nil {
@@ -100,7 +100,7 @@ func main() {
 	case "family-running":
 		runErr = runFamilyRunning(ctx, req)
 	default:
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running")
 	}
 	if runErr != nil {
 		if ce, ok := runErr.(cmErr); ok && ce.auth {

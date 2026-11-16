@@ -1401,6 +1401,7 @@ family_cache = None  # [steamid, fetched_at, snapshot], or None
 family_last_good = {}  # steamid -> snapshot: served when a fetch fails or times out
 family_worker = None  # [steamid, generation, thread, box]: the fetch in progress, shared by concurrent callers
 family_generation = 0  # bumped by family_invalidate; an older fetch doesn't write
+family_borrowed = {}  # steamid -> [merged_at, {appid}]: borrowed games library.list merged
 names_lock = threading.Lock()
 names_negative = {}  # steamid -> epoch of the attempt that resolved nothing
 
@@ -1518,16 +1519,32 @@ def family_fetch_preferred(token, group_id):
     return out
 
 
-def family_fetch_running(token):
+_running_logged = set()  # running-read log lines already emitted once per process
+
+
+def family_fetch_running():
     """Borrowed games played right now, over the CM: one platypus-steam-dl
     family-running run per family fetch ([{appid, player, owner}], all
     strings). [] when Steam pushes nothing — and on any failure, so a
     silent helper or CM never breaks the snapshot (copies stay inUse
-    False). The token travels on stdin, never argv, and is never logged."""
+    False). The helper gets the refresh token (like dl_request); the Web
+    API access token is never sent to a subprocess. The refresh token
+    travels on stdin, never argv, and is never logged."""
     try:
-        result = dl_run("family-running", {"refresh_token": token},
+        rt = refresh_token()
+    except Exception:
+        rt = ""
+    if not rt:
+        return []
+    try:
+        result = dl_run("family-running", {"refresh_token": rt},
                         label="Steam family running apps", err_code=-32002)
     except Exception:
+        # Never surface helper stdout (player/owner steamids) in errors:
+        # fixed text only, once per process.
+        if "failed" not in _running_logged:
+            _running_logged.add("failed")
+            log("warning", "Steam running-apps read failed; borrowed copies list as free")
         return []
     out = []
     for e in result.get("running") or []:
@@ -1538,13 +1555,16 @@ def family_fetch_running(token):
         owner = str(e.get("owner") or "")
         if appid and player and owner:
             out.append({"appid": appid, "player": player, "owner": owner})
+    if not out and "empty" not in _running_logged:
+        _running_logged.add("empty")
+        log("warning", "Steam sent no running-apps push; borrowed copies list as free")
     return out
 
 
 def family_in_use_message(player_name):
-    """The user-facing text for a borrowed game in use (launchSpec -32002
-    and family.warning share it, protocol 1.8): the player by name, or a
-    generic fallback when the CM stayed silent about names."""
+    """The user-facing text for a borrowed game in use (launchSpec -32002,
+    protocol 1.8): the player by name, or a generic fallback when the CM
+    stayed silent about names."""
     if player_name:
         return f"Family member {player_name} is playing this game"
     return "A family member is playing this game"
@@ -1624,7 +1644,7 @@ def _family_names_lookup(ids, steamid, box):
 
 
 def _family_fetch(token, steamid, deadline):
-    """The whole fetch — group, apps, preferred, running, names — for one
+    """The whole fetch — group, apps, preferred, names, running — for one
     worker thread. Raises on failure; the worker decides what the failure means."""
     group = family_fetch_group(token, steamid)
     if group is None:
@@ -1644,12 +1664,14 @@ def _family_fetch(token, steamid, deadline):
         members.append(entry)
     apps = family_fetch_apps(token, group["id"])
     preferred = family_fetch_preferred(token, group["id"])
-    running = family_fetch_running(token)
     names = family_member_names([m["id"] for m in members], token, steamid,
                                 timeout=max(1.0, deadline - time.time() - 1.0))
     for m in members:
         if names.get(m["id"]):
             m["name"] = names[m["id"]]
+    # The running read goes last (names keep their budget) and is skipped
+    # when the group lends nothing: there is no copy to mark in use.
+    running = family_fetch_running() if apps else []
     return {"group_id": group["id"], "members": members, "apps": apps,
             "preferred": preferred, "running": running}
 
@@ -1728,6 +1750,32 @@ def family_invalidate():
         family_generation += 1
 
 
+def family_snapshot_cached(steamid):
+    """The cached snapshot (or last good) without fetching: for launchSpec,
+    where in-use is advisory and a fetch would stall the launch. None when
+    no fetch ever succeeded."""
+    steamid = str(steamid)
+    with family_lock:
+        if (family_cache and family_cache[0] == steamid
+                and time.time() - family_cache[1] < FAMILY_TTL):
+            return family_cache[2]
+        return family_last_good.get(steamid)
+
+
+def family_borrowed_cached(steamid):
+    """The borrowed games library.list last merged, without fetching: the
+    set the launchSpec refusal reads instead of its own owned-games lookup.
+    None when no listing merged one within FAMILY_TTL."""
+    steamid = str(steamid)
+    with family_lock:
+        entry = family_borrowed.get(steamid)
+    if not entry:
+        return None
+    if time.time() - entry[0] >= FAMILY_TTL:
+        return None
+    return entry[1]
+
+
 def merge_family_games(out, fam, installed, deadline, steamid=""):
     """Fold the snapshot's shared apps into the library entries. Owned games
     carry no sharedBy (protocol 1.8): an app the user also owns stays a
@@ -1736,13 +1784,17 @@ def merge_family_games(out, fam, installed, deadline, steamid=""):
     it) and the stored preferredCopy; an excluded app does too, so the
     withheld state shows instead of silently vanishing. A copy someone other
     than the user is playing carries inUse (copies appear for it even when
-    it is the only one), and the listing warns about a borrowed game whose
-    launch copy is in use (family.warning, protocol 1.8)."""
+    it is the only one); in-use is carried here and in the launchSpec
+    refusal, never in a listing warning (family.warning is the owner taking
+    a borrowed game back). The user's own play is not marked in use."""
     names = {m["id"]: m.get("name") or "" for m in fam.get("members") or []}
     owned_ids = {e["id"] for e in out}
     preferred = fam.get("preferred") or {}
+    borrowed = set()  # appids merged as borrowed: the launchSpec refusal's set
     # (appid, owner) copies someone other than the user is playing, with
-    # the player behind each one.
+    # the player behind each one. A member playing their own copy counts as
+    # in use too; only the user's own play is left out (and out of the
+    # refusal): they are the one playing, not blocked by it.
     playing = {}
     for r in fam.get("running") or []:
         if not isinstance(r, dict):
@@ -1820,12 +1872,12 @@ def merge_family_games(out, fam, installed, deadline, steamid=""):
             entry["copies"] = copies
             if preferred.get(appid) in owners:
                 entry["preferredCopy"] = preferred[appid]
-        if (appid, lender) in playing:
-            notify("family.warning",
-                   {"id": appid,
-                    "message": family_in_use_message(
-                        names.get(playing[(appid, lender)]))})
+        borrowed.add(appid)
         out.append(entry)
+    # The borrowed set serves the launchSpec refusal, so a launch never
+    # starts its own fetch or owned-games lookup.
+    with family_lock:
+        family_borrowed[str(steamid)] = [time.time(), borrowed]
 
 
 def family_members(_params):
@@ -2869,18 +2921,22 @@ def detect_mode(game_dir):
 
 
 def family_launch_refusal(app):
-    """-32002 message when the borrowed copy the launch would use is in use
-    (protocol 1.8): the lender's copy — the stored pick, or the store's
-    default — played by someone other than the user. None when the game is
-    the user's own, no copy is in use, or the lookup fails: a silent store
-    must not break the launch."""
+    """-32002 message when every copy of a borrowed game is in use
+    (protocol 1.8): each owner's copy played by someone other than the user.
+    A free copy launches: the store picks around the busy one. Reads only
+    the cached snapshot and the borrowed set library.list merged — never a
+    fetch or an owned-games lookup, so a launch never stalls on the store.
+    None when the game isn't borrowed, a copy is free, or nothing cached:
+    in-use is advisory, and a silent store must not break the launch."""
     try:
         if not logged_in():
             return None
-        token = access_token()
-        steamid = str(steam_cm.jwt_payload(token).get("sub"))
-        snap = family_snapshot(token, steamid)
+        steamid = str(steam_cm.jwt_payload(access_token()).get("sub"))
     except Exception:
+        return None
+    snap = family_snapshot_cached(steamid)
+    borrowed = family_borrowed_cached(steamid)
+    if not snap or not borrowed or app not in borrowed:
         return None
     owners = []
     for a in snap.get("apps") or []:
@@ -2890,28 +2946,22 @@ def family_launch_refusal(app):
             break
     if not owners:
         return None
-    try:
-        data = api_get("https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"
-                       f"?include_appinfo=0&include_played_free_games=0&steamid={steamid}", token)
-        owned = {str(g.get("appid") or "")
-                 for g in (data.get("response") or {}).get("games") or []}
-    except Exception:
-        return None
-    if app in owned:
-        # Played from the user's own copy, whatever members lend.
-        return None
-    preferred = snap.get("preferred") or {}
-    lender = preferred.get(app) if preferred.get(app) in owners else owners[0]
     names = {m.get("id"): m.get("name") or ""
              for m in snap.get("members") or [] if isinstance(m, dict)}
+    busy = {}
     for r in snap.get("running") or []:
         if not isinstance(r, dict):
             continue
-        if (str(r.get("appid") or "") == app
-                and str(r.get("owner") or "") == lender
-                and str(r.get("player") or "") not in ("", steamid)):
-            return family_in_use_message(names.get(str(r.get("player") or "")))
-    return None
+        if (str(r.get("appid") or "") != app
+                or str(r.get("player") or "") in ("", steamid)
+                or not str(r.get("owner") or "")):
+            continue
+        busy[str(r.get("owner") or "")] = str(r.get("player") or "")
+    if not busy or any(o not in busy for o in owners):
+        return None
+    preferred = snap.get("preferred") or {}
+    lender = preferred.get(app) if preferred.get(app) in owners else owners[0]
+    return family_in_use_message(names.get(busy.get(lender)))
 
 
 def launch_spec(params):
