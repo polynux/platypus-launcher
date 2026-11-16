@@ -715,3 +715,77 @@ func TestCloudPushWinRootOverride(t *testing.T) {
 		t.Fatalf("status after push = %+v", fresh)
 	}
 }
+
+// A new save in a folder the cloud spells with the Windows client's casing
+// uploads under that spelling (a folder neighbour lends it), and the baseline
+// is keyed by the name the batch sent: the next status is same, and a later
+// edit is an upload, never a conflict with its own earlier save.
+func TestCloudPushNewSaveBorrowsFolderCase(t *testing.T) {
+	e := setup(t)
+	e.login()
+	home := t.TempDir()
+	prefix := filepath.Join(home, "prefix")
+	docs := filepath.Join(prefix, "drive_c", "users", "steamuser", "Documents", "My Games", "Fallout4", "Saves")
+	if err := os.MkdirAll(docs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx := map[string]any{"os": "windows", "home": home, "installDir": filepath.Join(home, "install"),
+		"prefixDir": prefix, "winUser": "steamuser"}
+	e.setCMState("appinfo_4321", `"appinfo" { "appid" "4321" "common" { "name" "Standalone Game" } "ufs" { "savefiles" {
+		"0" { "root" "WinMyDocuments" "path" "My Games/Fallout4/Saves" "pattern" "*.fos" } } } }`)
+	const listedName = "%WinMyDocuments%my games/fallout4/saves/save1.fos"
+	e.setCMState("cloud_changelist", map[string]any{
+		"current_change_number": float64(9),
+		"path_prefixes":         []any{"%WinMyDocuments%my games/fallout4/saves/"},
+		"machine_names":         []any{"test-machine"},
+		"files": []any{map[string]any{"name": "save1.fos", "sha": cloudSHA("old"),
+			"time": float64(100), "size": float64(3), "persist": float64(0),
+			"prefix": float64(0), "machine": float64(0)}},
+	})
+	e.setCMState("cloud_files", map[string]any{listedName: map[string]any{
+		"body": base64.StdEncoding.EncodeToString([]byte("old")), "time": float64(100)}})
+	for name, content := range map[string]string{"save1.fos": "old", "x.fos": "fresh"} {
+		if err := os.WriteFile(filepath.Join(docs, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	st, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Counts.Same != 1 || st.Counts.Upload != 1 || st.State != "pending" {
+		t.Fatalf("status = %+v, want one same and one upload", st)
+	}
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-borrowed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.State != "synced" {
+		t.Fatalf("push = %+v", pushed)
+	}
+	log := e.waitCMLog("upload complete 1 1")
+	if !strings.Contains(log, "upload begin-file 1 %WinMyDocuments%my games/fallout4/saves/x.fos 1 blocks") {
+		t.Fatalf("log misses the borrowed folder spelling: %s", log)
+	}
+	pushBaselineSHA(t, e, "my games/fallout4/saves/x.fos", "fresh")
+
+	next, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.State != "synced" || next.Counts.Same != 2 || next.Counts.Upload != 0 {
+		t.Fatalf("status after push = %+v, want both same", next)
+	}
+
+	if err := os.WriteFile(filepath.Join(docs, "x.fos"), []byte("edited"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	edited, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edited.Counts.Upload != 1 || edited.Counts.Conflict != 0 {
+		t.Fatalf("status after edit = %+v, want an upload, not a conflict", edited)
+	}
+}

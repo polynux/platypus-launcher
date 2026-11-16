@@ -144,8 +144,8 @@ func parseCloudRules(kv *steam.KV) *cloudUFS {
 			Recursive: s.String("recursive") == "1"}
 		// The block appears both ways in appinfo: indexed ("1" "Windows",
 		// measured on Fallout 4/Taiji) and name-keyed ("Windows" "1"). Read
-		// keys and values, ignore index tokens; an empty block means all
-		// platforms, so Platforms stays nil.
+		// keys and values, ignore index tokens; "all" (any case) and an empty
+		// block mean every platform, so Platforms stays nil.
 		if plats := s.Get("platforms"); plats != nil && len(plats.Children) > 0 {
 			set := map[string]bool{}
 			for k, v := range plats.Children {
@@ -157,7 +157,14 @@ func parseCloudRules(kv *steam.KV) *cloudUFS {
 					if _, err := strconv.Atoi(name); err == nil {
 						continue // an index, not an OS name
 					}
+					if strings.EqualFold(name, "all") {
+						set = nil
+						break
+					}
 					set[strings.ToLower(name)] = true
+				}
+				if set == nil {
+					break
 				}
 			}
 			if len(set) > 0 {
@@ -524,28 +531,38 @@ var canonicalRootSpellings = map[string]string{
 }
 
 // uploadCloudName names a new local file the way the cloud does: the root
-// token of a listed entry with the same root (else the documented spelling),
-// and the folder's casing from a listed entry in the same folder (the Windows
+// token of a listed entry with the same root (the documented spelling when
+// the listing carries it, else the entry in the same folder), and the folder's
+// casing from a listed entry with that root in the same folder (the Windows
 // client writes "my games/fallout4/saves/"). The returned rel is the
 // cloud-relative part the name carries, so the baseline keys the spelling the
 // next listing echoes instead of the rule's.
 func uploadCloudName(sc cloudScanned, list []cloudFile) (root, rel string) {
-	root, rel = sc.Root, sc.Rel
-	if canon, ok := canonicalRootSpellings[strings.ToLower(root)]; ok {
-		root = canon
+	canon := sc.Root
+	if c, ok := canonicalRootSpellings[strings.ToLower(canon)]; ok {
+		canon = c
 	}
+	root, rel = canon, sc.Rel
 	parts := splitRel(rel)
 	folder := parts[:len(parts)-1]
+	canonicalSeen, folderSeen, firstSeen := false, false, false
+	folderRoot, firstRoot := "", ""
 	for _, f := range list {
 		lroot, lrel, ok := splitCloudName(f.CloudName)
-		if !ok {
+		if !ok || !strings.EqualFold(lroot, sc.Root) {
 			continue
 		}
-		if strings.EqualFold(lroot, sc.Root) {
-			root = lroot
+		if !firstSeen {
+			firstRoot, firstSeen = lroot, true
+		}
+		if lroot == canon {
+			canonicalSeen = true
+		}
+		if folderSeen || len(folder) == 0 {
+			continue
 		}
 		lp := splitRel(lrel)
-		if len(folder) == 0 || len(lp) != len(parts) {
+		if len(lp) != len(parts) {
 			continue
 		}
 		same := true
@@ -557,7 +574,19 @@ func uploadCloudName(sc cloudScanned, list []cloudFile) (root, rel string) {
 		}
 		if same {
 			rel = strings.Join(lp[:len(folder)], "/") + "/" + parts[len(parts)-1]
+			folderSeen, folderRoot = true, lroot
 		}
+	}
+	// The canonical spelling wins over a folder neighbour's casing; without
+	// either, the listing's own spelling (first entry, so not last-wins) is
+	// what the cloud uses.
+	switch {
+	case canonicalSeen:
+		root = canon
+	case folderSeen:
+		root = folderRoot
+	case firstSeen:
+		root = firstRoot
 	}
 	return root, rel
 }
@@ -967,22 +996,40 @@ func compareCloud(list []cloudFile, local map[string]cloudScanned, ufs *cloudUFS
 		}
 		root, rel := uploadCloudName(sc, list)
 		name := "%" + root + "%" + rel
-		if !cloudNameCovered(name, ufs, ctx, steamID) {
-			// A borrowed folder spelling can be the wrong case for a
-			// case-sensitive rule (another machine's lowercase entry): the
-			// rule's own spelling still names the file.
+		maps := func(n string) bool {
+			l, _, ok := mapCloudName(n, ufs, ctx, steamID)
+			return ok && l == lp
+		}
+		if !maps(name) {
+			// The borrowed spelling names another local file on a
+			// case-sensitive OS (or doesn't resolve): only the rule's own
+			// spelling is this file's name.
 			root, rel = uploadCloudName(sc, nil)
 			name = "%" + root + "%" + rel
 		}
-		pf := cloudPlanFile{Rel: rel, Local: lp, HasRemote: false,
-			CloudName: name}
-		if !cloudNameCovered(name, ufs, ctx, steamID) {
+		if !cloudNameCovered(name, ufs, ctx, steamID) || !maps(name) {
 			// The invariant every upload obeys: the name must be one a rule
-			// covers. The scan builds names from the rule's own parts, so
-			// this catches a rule the coverage check would drop.
+			// covers and resolve back to this file, or the next listing
+			// would never find it.
 			unmapped++
 			continue
 		}
+		// A listed name that only differs in case is this file's cloud copy:
+		// on a case-sensitive OS it lists as a different path, and uploading
+		// the other casing would add a duplicate save.
+		folded := false
+		for _, f := range list {
+			if strings.EqualFold(f.CloudName, name) {
+				folded = true
+				break
+			}
+		}
+		if folded {
+			unmapped++
+			continue
+		}
+		pf := cloudPlanFile{Rel: rel, Local: lp, HasRemote: false,
+			CloudName: name}
 		pf.LocalInfo = statLocal(lp)
 		if !pf.LocalInfo.Found {
 			continue

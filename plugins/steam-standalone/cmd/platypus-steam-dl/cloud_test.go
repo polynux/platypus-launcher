@@ -92,6 +92,8 @@ func TestParseCloudRulesPlatforms(t *testing.T) {
 		{"indexed", `"platforms" { "1" "Windows" }`, map[string]bool{"windows": true}},
 		{"name-keyed", `"platforms" { "Windows" "1" }`, map[string]bool{"windows": true}},
 		{"mixed", `"platforms" { "0" "Linux" "Windows" "1" }`, map[string]bool{"linux": true, "windows": true}},
+		{"all value", `"platforms" { "0" "all" }`, nil},
+		{"all key", `"platforms" { "All" "0" }`, nil},
 		{"empty", `"platforms" { }`, nil},
 	} {
 		ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
@@ -849,6 +851,22 @@ func TestUploadCloudName(t *testing.T) {
 		{"other folder untouched", cloudScanned{Rel: "My Games/Fallout4/Saves/x.fos", Root: "WinMyDocuments"},
 			listed("%WinMyDocuments%Other/Save/save1.fos"),
 			"WinMyDocuments", "My Games/Fallout4/Saves/x.fos"},
+		// S1: another root's folder is not this rule's, even at the same rel.
+		{"cross-root folder not borrowed", cloudScanned{Rel: "install/saves/x.sav", Root: "GameInstall"},
+			listed("%LinuxHome%Install/Saves/old.sav"), "GameInstall", "install/saves/x.sav"},
+		// N1: the canonical spelling wins over a folder neighbour's, in any order.
+		{"canonical root beats folder casing", cloudScanned{Rel: "Saves/x.sav", Root: "WinMyDocuments"},
+			[]cloudFile{{CloudName: "%winmydocuments%Saves/old.sav"}, {CloudName: "%WinMyDocuments%Other/old.sav"}},
+			"WinMyDocuments", "Saves/x.sav"},
+		{"canonical root beats folder casing reversed", cloudScanned{Rel: "Saves/x.sav", Root: "WinMyDocuments"},
+			[]cloudFile{{CloudName: "%WinMyDocuments%Other/old.sav"}, {CloudName: "%winmydocuments%Saves/old.sav"}},
+			"WinMyDocuments", "Saves/x.sav"},
+		{"folder root when no canonical", cloudScanned{Rel: "My Games/G/x.fos", Root: "WinMyDocuments"},
+			[]cloudFile{{CloudName: "%winmydocuments%Other/old.sav"}, {CloudName: "%winmydocuments%my games/g/save.fos"}},
+			"winmydocuments", "my games/g/x.fos"},
+		{"first listed root when nothing else matches", cloudScanned{Rel: "Saves/x.sav", Root: "WinMyDocuments"},
+			[]cloudFile{{CloudName: "%winmydocuments%Other/a.sav"}, {CloudName: "%WINMYDOCUMENTS%Third/b.sav"}},
+			"winmydocuments", "Saves/x.sav"},
 	} {
 		root, rel := uploadCloudName(tc.sc, tc.list)
 		if root != tc.root || rel != tc.rel {
@@ -1017,29 +1035,56 @@ func TestScanLocalSkipsWindowsRuleOnLinux(t *testing.T) {
 	}
 }
 
-// A borrowed folder spelling that only another OS's case rules accept falls
-// back to the rule's own spelling: native Linux keeps "Saves" though the
-// cloud lists "saves/", and the new file still uploads.
-func TestCompareCloudBorrowedCaseFallsBack(t *testing.T) {
-	dir := t.TempDir()
-	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: dir}
-	ufs := parseCloudRules(mustParseKV(t, `"ufs" { "savefiles" {
-		"0" { "root" "GameInstall" "path" "Saves" "pattern" "*.sav" } } }`))
-	save := filepath.Join(dir, "Saves", "x.sav")
-	writeLocal(t, save, "new")
-	list := []cloudFile{listed("%GameInstall%saves/old.sav", "old", 100)}
-	files, unmapped := compareCloud(list, scanLocal(ufs, ctx, 0), ufs, ctx, 0,
-		&cloudBaseline{Files: map[string]cloudBaselineFile{}})
-	var up *cloudPlanFile
-	for i := range files {
-		if files[i].Want == "upload" {
-			up = &files[i]
+// A listed name that differs from a new local file's only in case is that
+// file's cloud copy on a case-sensitive OS: uploading the other casing would
+// add a duplicate save, and the two spellings would download+upload each
+// other forever. Proton resolves both spellings to one file, which compares
+// normally.
+func TestCompareCloudNoCaseOnlySiblingUploads(t *testing.T) {
+	const recursiveUFS = `"ufs" { "savefiles" {
+		"0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" "recursive" "1" } } }`
+	const plainUFS = `"ufs" { "savefiles" {
+		"0" { "root" "GameInstall" "path" "Saves" "pattern" "*.sav" } } }`
+	for _, tc := range []struct {
+		name     string
+		os       string
+		rules    string
+		rel      string // local save under the install dir
+		cloud    string
+		unmapped int
+	}{
+		// (a) a recursive rule, cloud subfolder spelled lowercase. The listed
+		// name is covered and downloads; the local case twin is unmapped.
+		{"recursive linux", "linux", recursiveUFS, "saves/Slot1/x.sav", "%GameInstall%saves/slot1/x.sav", 1},
+		{"recursive windows", "windows", recursiveUFS, "saves/Slot1/x.sav", "%GameInstall%saves/slot1/x.sav", 0},
+		// (b) a plain rule whose folder itself is the differing case: on
+		// native Linux the listed name isn't the rule's either.
+		{"plain linux", "linux", plainUFS, "Saves/x.sav", "%GameInstall%saves/x.sav", 2},
+		{"plain windows", "windows", plainUFS, "Saves/x.sav", "%GameInstall%saves/x.sav", 0},
+	} {
+		dir := t.TempDir()
+		ctx := cloudContext{OS: tc.os, Home: filepath.Join(dir, "home"), InstallDir: filepath.Join(dir, "install"),
+			PrefixDir: filepath.Join(dir, "prefix"), WinUser: "steamuser"}
+		ufs := parseCloudRules(mustParseKV(t, tc.rules))
+		writeLocal(t, filepath.Join(ctx.InstallDir, filepath.FromSlash(tc.rel)), "v1")
+		list := []cloudFile{listed(tc.cloud, "v1", 100)}
+		files, unmapped := compareCloud(list, scanLocal(ufs, ctx, 0), ufs, ctx, 0,
+			&cloudBaseline{Files: map[string]cloudBaselineFile{}})
+		for _, f := range files {
+			if f.Want == "upload" || f.CloudName != tc.cloud && !strings.EqualFold(f.CloudName, tc.cloud) {
+				t.Fatalf("%s: a case-only sibling must not round-trip: files=%+v unmapped=%d", tc.name, files, unmapped)
+			}
 		}
-	}
-	// The listed lowercase entry is unmapped on case-sensitive native Linux
-	// (pre-existing), but the new file still uploads under the rule's casing.
-	if unmapped != 1 || up == nil || up.CloudName != "%GameInstall%Saves/x.sav" {
-		t.Fatalf("files = %+v (unmapped %d), want the rule's spelling", files, unmapped)
+		if unmapped != tc.unmapped {
+			t.Fatalf("%s: unmapped = %d, want %d: files=%+v", tc.name, unmapped, tc.unmapped, files)
+		}
+		if tc.os == "windows" {
+			// Proton reads the two spellings as one file: the listing is
+			// this local file already.
+			if len(files) != 1 || files[0].Want != "same" {
+				t.Fatalf("%s: the listing must compare as this file: files=%+v", tc.name, files)
+			}
+		}
 	}
 }
 
