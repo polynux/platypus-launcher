@@ -555,7 +555,7 @@ learns Platypus's prefix layout:
 
 | Method | Params | Does |
 |---|---|---|
-| `cloud.status` | `{ id, ctx }` | Compares both sides. Read-only: no file written, nothing uploaded |
+| `cloud.status` | `{ id, ctx }` | Compares both sides. No save file written, nothing uploaded (it may record the comparison in the plugin's private baseline) |
 | `cloud.pull` | `{ id, ctx, jobId }` | Downloads what changed **only** in the cloud |
 | `cloud.push` | `{ id, ctx, jobId }` | Uploads what changed **only** on this device |
 | `cloud.resolve` | `{ id, ctx, jobId, choices: { "<path>": "local" \| "remote" } }` | Settles the listed conflicts: `remote` backs up the local file and takes the cloud copy, `local` replaces the cloud copy |

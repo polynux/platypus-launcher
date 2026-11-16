@@ -487,6 +487,31 @@ func TestPushHappensAfterExitOnceTheFilesAreStable(t *testing.T) {
 	}
 }
 
+// A push that uploads nothing (the plugin answers pending with the uploads
+// still counted, like steam-standalone before its push phase) is a skip,
+// not a save: the message says why.
+func TestAPushThatUploadsNothingIsSkipped(t *testing.T) {
+	r := newRig(t, fakeSettings{})
+	r.be.answer("cloud.status", status(types.CloudStatePending, types.CloudCounts{Upload: 2, Same: 1}))
+	r.be.answer("cloud.push", status(types.CloudStatePending, types.CloudCounts{Upload: 2},
+		func(s *types.CloudStatus) { s.Message = "Uploading saves isn't enabled yet." }))
+
+	jid := r.o.Launching(game, cctx)
+	r.o.Exited(game.ID, jid, false)
+	r.o.Wait()
+
+	if got := r.be.methods(); !slices.Equal(got, []string{"cloud.status", "cloud.status", "cloud.push"}) {
+		t.Fatalf("calls %v, want two readings then the push", got)
+	}
+	ev := r.ev.find(types.CloudEvSkipped)
+	if ev == nil || ev.Message != "Not uploaded: Uploading saves isn't enabled yet." || ev.Status == nil {
+		t.Fatalf("no skipped event: %v %+v", r.ev.kinds(), ev)
+	}
+	if len(r.o.PendingPushes()) != 0 {
+		t.Fatal("the push is still owed after it completed")
+	}
+}
+
 func TestAGameThatKeepsWritingDelaysThePush(t *testing.T) {
 	r := newRig(t, fakeSettings{})
 	n := 0

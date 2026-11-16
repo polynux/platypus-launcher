@@ -3452,7 +3452,7 @@ def initialize(params):
     return {"name": "Steam (standalone)", "version": "0.11.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
-                             "verify", "achievements", "playtime", "social", "chat"],
+                             "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],
             # Password branches are unverified against live Steam (no
             # encryptedmanifests decryption yet): listed locked, unlock
             # kept but unadvertised.
@@ -3533,6 +3533,150 @@ def game_save_context(params):
     return result
 
 
+# --- cloud saves (protocol 1.2) -------------------------------------------------
+#
+# Reads compare both sides; pulls download what changed only in the cloud
+# (verified, backed up, baseline updated). Pushes and `local` resolve
+# choices compute the status without uploading anything: uploads wait for
+# the push phase (issue #6), and the answer says so.
+
+def cloud_check(params, need_job):
+    """The app id and CloudContext every cloud.* request carries. The exact
+    -32602 shapes before any CM work, the way plugtest drives them."""
+    app = str((params or {}).get("id") or "")
+    try:
+        app_id = int(app)
+    except ValueError:
+        raise RPCError("invalid params: id is required", -32602)
+    if not app or not app_id:
+        raise RPCError("invalid params: id is required", -32602)
+    ctx = (params or {}).get("ctx")
+    if not isinstance(ctx, dict) or ctx.get("os") not in ("linux", "windows"):
+        raise RPCError("invalid params: ctx needs os (linux or windows), an absolute installDir and, for windows, an absolute prefixDir", -32602)
+    if not isinstance(ctx.get("installDir"), str) or not os.path.isabs(ctx["installDir"]):
+        raise RPCError("invalid params: ctx needs os (linux or windows), an absolute installDir and, for windows, an absolute prefixDir", -32602)
+    if ctx["os"] == "windows" and (not isinstance(ctx.get("prefixDir"), str) or not os.path.isabs(ctx["prefixDir"])):
+        raise RPCError("invalid params: ctx needs os (linux or windows), an absolute installDir and, for windows, an absolute prefixDir", -32602)
+    job_id = (params or {}).get("jobId")
+    if need_job and not job_id:
+        raise RPCError("invalid params: jobId is required", -32602)
+    return app, app_id, ctx, job_id
+
+
+def cloud_unsupported(reason):
+    """A cloud answer that runs no helper: the shape plugtest checks."""
+    return {"state": "unsupported", "message": reason,
+            "counts": {"same": 0, "download": 0, "upload": 0, "conflict": 0, "unmapped": 0},
+            "conflicts": [], "checkedAt": int(time.time())}
+
+
+def installed_mode(app):
+    """The launch mode of an installed game (launch_spec reads the same
+    record): only client-mode games can start through the real client."""
+    return (load_state("installed.json", {}).get(app) or {}).get("mode") or ""
+
+
+def cloud_run(op, app, app_id, ctx, job_id, choices, label):
+    """One platypus-steam-dl cloud run: returns its status dict. Progress
+    lines become cloud.progress notifications; the proc is tracked under
+    the jobId so job.cancel stops it, and a repeated jobId answers from
+    the helper's cached result."""
+    mode = installed_mode(app)
+    if mode == "client":
+        # Steam syncs this game itself when it starts it: Platypus never
+        # touches its saves.
+        return cloud_unsupported("Steam syncs this game itself when it starts it")
+    token = refresh_token()
+    if not token:
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
+    req = {"refresh_token": token, "app_id": app_id, "op": op, "ctx": ctx}
+    if job_id:
+        req["job_id"] = job_id
+    if choices is not None:
+        req["choices"] = choices
+    try:
+        proc = subprocess.Popen([dl_bin(), "cloud"], stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, bufsize=1, env=dict(os.environ))
+    except FileNotFoundError:
+        raise RPCError("platypus-steam-dl is missing; reinstall the plugin")
+    if job_id is not None:
+        with jobs_lock:
+            jobs[job_id] = {"id": app_id, "proc": proc}
+    import collections as _collections
+    text = _collections.deque(maxlen=20)
+    result = None
+    try:
+        try:
+            proc.stdin.write(json.dumps(req) + "\n")
+            proc.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+        for line in proc.stdout:
+            line = line.rstrip()
+            text.append(line)
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("type") == "progress":
+                notify("cloud.progress", {"id": app, "jobId": job_id,
+                                          "phase": msg.get("phase") or "check",
+                                          "done": msg.get("done") or 0,
+                                          "total": msg.get("total") or 0})
+            elif msg.get("type") == "result":
+                result = msg.get("status")
+            elif msg.get("type") == "error":
+                if msg.get("code") == "auth-required":
+                    raise RPCError(tr("need_login_expired"), CODE_AUTH_REQUIRED)
+                message = msg.get("message") or tail(line)
+                if message.startswith("invalid params"):
+                    raise RPCError(message, -32602)
+                raise RPCError("{}: {}".format(label, message), -32000)
+    finally:
+        with jobs_lock:
+            jobs.pop(job_id, None)
+        try:
+            proc.wait()
+        except Exception:
+            pass
+    if result is None:
+        raise RPCError("{}: {}".format(label, tail("\n".join(text))), -32000)
+    # The helper reports the store client running; only a client-mode game
+    # can actually start through it.
+    if isinstance(result, dict) and isinstance(result.get("client"), dict):
+        result["client"]["canLaunch"] = (mode == "client")
+    return result
+
+
+def cloud_status(params):
+    app, app_id, ctx, _ = cloud_check(params, False)
+    return cloud_run("status", app, app_id, ctx, None, None, "Steam cloud")
+
+
+def cloud_pull(params):
+    app, app_id, ctx, job_id = cloud_check(params, True)
+    return cloud_run("pull", app, app_id, ctx, job_id, None, "Steam cloud")
+
+
+def cloud_push(params):
+    app, app_id, ctx, job_id = cloud_check(params, True)
+    return cloud_run("push", app, app_id, ctx, job_id, None, "Steam cloud")
+
+
+def cloud_resolve(params):
+    app, app_id, ctx, job_id = cloud_check(params, True)
+    choices = (params or {}).get("choices")
+    if not isinstance(choices, dict):
+        raise RPCError("invalid params: choices are required", -32602)
+    for path, side in choices.items():
+        if side not in ("local", "remote"):
+            raise RPCError("invalid params: choice for {!r} must be local or remote".format(path), -32602)
+    return cloud_run("resolve", app, app_id, ctx, job_id, choices, "Steam cloud")
+
+
 METHODS = {
     "initialize": initialize,
     "auth.status": auth_status,
@@ -3567,6 +3711,10 @@ METHODS = {
     "chat.send": chat_send,
     "chat.markRead": chat_mark_read,
     "chat.unreadCounts": chat_unread_counts,
+    "cloud.status": cloud_status,
+    "cloud.pull": cloud_pull,
+    "cloud.push": cloud_push,
+    "cloud.resolve": cloud_resolve,
 }
 
 
