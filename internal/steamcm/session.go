@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -30,8 +29,7 @@ type Session struct {
 	licenses  []License
 	pending   [][]byte   // batched messages waiting for the next read
 	mu        sync.Mutex // serialises concurrent service calls (STEAM-5)
-	wmu       sync.Mutex // serialises socket writes (heartbeat + Call)
-	hbStop    chan struct{}
+	wmu       sync.Mutex // serialises socket writes (Call + Close)
 	closeOnce sync.Once
 	// authed is false before any logon (DialUnauth): service calls go
 	// out as EMsg 9804 with no steamid/sessionid, like the real
@@ -376,49 +374,7 @@ func (s *Session) Call(service string, body []byte, timeout time.Duration) ([]by
 // Close logs off and closes the connection; a dropped close is fine.
 func (s *Session) Close() {
 	s.closeOnce.Do(func() {
-		if s.hbStop != nil {
-			close(s.hbStop)
-		}
 		_ = s.write(EMsgClientLogOff, header(s.steamID, s.sessionID, 0, ""), nil)
 		s.conn.Close()
 	})
-}
-
-// unauthHeartbeatEvery is the ClientHeartBeat cadence of a pre-logon
-// session. The CM closes a hello-only socket that never beats after about
-// a minute (issue #182), and 9 s is the cadence Steam's own clients use
-// once logged on. The hello response carries no heartbeat_seconds, so
-// there is no server-provided value to use here.
-const unauthHeartbeatEvery = 9 * time.Second
-
-// unauthHeartbeatInterval honours the PLATYPUS_STEAM_HEARTBEAT_SECONDS
-// test hook (whole seconds, >0); anything else keeps the default.
-func unauthHeartbeatInterval() time.Duration {
-	if v := os.Getenv("PLATYPUS_STEAM_HEARTBEAT_SECONDS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return time.Duration(n) * time.Second
-		}
-	}
-	return unauthHeartbeatEvery
-}
-
-// startHeartbeat keeps a pre-logon session alive until Close: the CM
-// treats a silent hello-only connection as dead. Writes serialise with
-// Call through the write lock; a failed beat only means the socket is
-// gone, and the next Call reports it.
-func (s *Session) startHeartbeat(every time.Duration) {
-	stop := make(chan struct{})
-	s.hbStop = stop
-	go func() {
-		t := time.NewTicker(every)
-		defer t.Stop()
-		for {
-			select {
-			case <-stop:
-				return
-			case <-t.C:
-				_ = s.write(EMsgClientHeartBeat, header(s.steamID, s.sessionID, 0, ""), nil)
-			}
-		}
-	}()
 }

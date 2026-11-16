@@ -167,7 +167,6 @@ func dialUnauthOne(ctx context.Context, endpoint string, tls bool) (*Session, er
 		conn.Close()
 		return nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 	}
-	s.startHeartbeat(unauthHeartbeatInterval())
 	return s, nil
 }
 

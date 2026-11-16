@@ -150,12 +150,6 @@ func (f *fakeCM) serve(c *websocket.Conn) {
 		if emsg == EMsgClientHello {
 			continue
 		}
-		if emsg == EMsgClientHeartBeat {
-			// A pre-logon heartbeat: the session sends these to keep a
-			// hello-only socket alive (issue #182).
-			f.record("heartbeat_unauth")
-			continue
-		}
 		if emsg == EMsgServiceMethodCallNonAuthed {
 			target := string(hdr.Bytes(12))
 			job := hdr.Int(10)

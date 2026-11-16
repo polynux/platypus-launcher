@@ -148,63 +148,52 @@ func qrArt(challengeURL string) string {
 // session and hands out new challenge URLs in between.
 const qrLoginDeadline = 5 * time.Minute
 
-// qrReconnects bounds socket-drop recoveries in one QR login. Each one
-// shows the user a new code, so a flapping CM fails instead of spinning.
-const qrReconnects = 3
-
-// runAuthQR polls one QR login; if the CM socket dies under it (the
-// heartbeats in steamcm should prevent that, but a network blip or a CM
-// restart still can) it starts a fresh session, which emits a new qr
-// event — the dialog redraws instead of the login failing.
-func runAuthQR(ctx context.Context, req authRequest) error {
-	deadline := time.Now().Add(qrLoginDeadline)
-	var err error
-	for attempt := 0; attempt <= qrReconnects; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(time.Duration(attempt) * time.Second):
-			}
-			// Out of time: fail now rather than paint a code nobody
-			// can scan before the deadline.
-			if time.Now().After(deadline) {
-				return err
-			}
-		}
-		err = runAuthQRSession(ctx, deadline)
-		if err == nil || !dropped(err) {
-			return err
-		}
-	}
-	return err
-}
+// authPollRedials bounds CM socket recoveries in one login. Each redial
+// keeps the same auth session, so the code on screen stays valid; a
+// flapping network still fails instead of spinning forever (the CM closes
+// an unauthenticated socket roughly once a minute, so a five-minute login
+// needs a handful).
+const authPollRedials = 12
 
 // dropped reports an error no Steam EResult answered: a dead socket, a
-// silent CM, an unreachable CM list. Only those get a reconnect; a
-// refusal Steam answered (rate limit, expired session) never does.
+// silent CM, an unreachable CM list. Only those get a redial; a refusal
+// Steam answered (rate limit, expired session) never does.
 func dropped(err error) bool {
 	var ce *steamcm.CMError
 	return errors.As(err, &ce) && ce.EResult == 0
 }
 
-func runAuthQRSession(ctx context.Context, deadline time.Time) error {
+// redialAuth replaces the CM socket under an auth session. The session
+// (client_id/request_id) lives on Steam's side, so the new socket polls
+// the same login — this is what node-steam-session's CM transport does on
+// demand, and why the QR the user sees must not change.
+func redialAuth(ctx context.Context, old *steamcm.Session) (*steamcm.Session, error) {
+	old.Close()
+	return steamcm.DialUnauth(ctx)
+}
+
+// runAuthQR begins one QR session and polls it until approved. The CM
+// closes every unauthenticated websocket after about a minute; that drop
+// is not the login ending, so the loop redials and polls the SAME session
+// instead of showing a new code.
+func runAuthQR(ctx context.Context, req authRequest) error {
+	deadline := time.Now().Add(qrLoginDeadline)
 	cm, err := steamcm.DialUnauth(ctx)
 	if err != nil {
 		return err
 	}
-	defer cm.Close()
+	defer func() { cm.Close() }()
 	qr, err := cm.BeginQR(30 * time.Second)
 	if err != nil {
 		return err
 	}
-	art := qrArt(qr.ChallengeURL)
-	emit(map[string]any{"type": "qr", "challenge_url": qr.ChallengeURL, "qr_art": art})
+	emit(map[string]any{"type": "qr", "challenge_url": qr.ChallengeURL, "qr_art": qrArt(qr.ChallengeURL)})
 	clientID, requestID := qr.ClientID, qr.RequestID
 	interval := time.Duration(qr.Interval * float32(time.Second))
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
+	redials := 0
 	for {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("nobody scanned the QR code in time; try again")
@@ -213,7 +202,16 @@ func runAuthQRSession(ctx context.Context, deadline time.Time) error {
 		// dropped CM doesn't hang the dialog.
 		st, err := cm.PollStatus(clientID, requestID, 30*time.Second)
 		if err != nil {
-			return err // 84 and expiry surface here, no retry loop
+			if !dropped(err) || redials >= authPollRedials {
+				return err // 84 and expiry surface here, no retry loop
+			}
+			redials++
+			newCM, rerr := redialAuth(ctx, cm)
+			if rerr != nil {
+				return rerr
+			}
+			cm = newCM
+			continue
 		}
 		if st.NewClientID != 0 {
 			clientID = st.NewClientID
@@ -242,7 +240,7 @@ func runAuthPassword(ctx context.Context, req authRequest, replies <-chan authCo
 	if err != nil {
 		return err
 	}
-	defer cm.Close()
+	defer func() { cm.Close() }()
 	mod, exp, ts, err := cm.GetPasswordRSAPublicKey(req.Account, 30*time.Second)
 	if err != nil {
 		return err
@@ -257,6 +255,7 @@ func runAuthPassword(ctx context.Context, req authRequest, replies <-chan authCo
 	}
 	codeType, needCode, needConfirm := steamcm.GuardNeeded(beg.Allowed)
 	code := strings.TrimSpace(req.Code)
+	waited := false
 	if needCode && code == "" {
 		// Ask once; the plugin feeds the guard it already collected,
 		// or fails fast so the user retries with a fresh code.
@@ -283,8 +282,19 @@ func runAuthPassword(ctx context.Context, req authRequest, replies <-chan authCo
 		if code == "" {
 			return fmt.Errorf("Steam needs a Steam Guard code for this account")
 		}
+		waited = true
 	}
 	if needCode {
+		// Reading a code can take a minute, and the CM closes an
+		// unauthenticated socket in about that long: submit on a fresh
+		// socket rather than on one that may already be gone.
+		if waited {
+			newCM, rerr := redialAuth(ctx, cm)
+			if rerr != nil {
+				return rerr
+			}
+			cm = newCM
+		}
 		if err := cm.UpdateGuardCode(beg.ClientID, beg.SteamID, code, codeType, 30*time.Second); err != nil {
 			return err
 		}
@@ -297,13 +307,23 @@ func runAuthPassword(ctx context.Context, req authRequest, replies <-chan authCo
 		interval = 5 * time.Second
 	}
 	deadline := time.Now().Add(5 * time.Minute)
+	redials := 0
 	for {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("the Steam login timed out; try again")
 		}
 		st, err := cm.PollStatus(clientID, requestID, 30*time.Second)
 		if err != nil {
-			return err
+			if !dropped(err) || redials >= authPollRedials {
+				return err
+			}
+			redials++
+			newCM, rerr := redialAuth(ctx, cm)
+			if rerr != nil {
+				return rerr
+			}
+			cm = newCM
+			continue
 		}
 		if st.NewClientID != 0 {
 			clientID = st.NewClientID

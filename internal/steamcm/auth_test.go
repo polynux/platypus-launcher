@@ -59,34 +59,6 @@ func TestAuthUnauthedUses9804(t *testing.T) {
 	}
 }
 
-func TestAuthUnauthHeartbeat(t *testing.T) {
-	// A hello-only session must send ClientHeartBeat: the CM closes a
-	// pre-logon socket that never beats after about a minute (issue #182)
-	// while the login polls for minutes. The hook shortens the cadence.
-	t.Setenv("PLATYPUS_STEAM_HEARTBEAT_SECONDS", "1")
-	f, host := startFake(t)
-	withFakeCM(t, host)
-	s, err := DialUnauth(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	deadline := time.Now().Add(4 * time.Second)
-	for time.Now().Before(deadline) {
-		beats := 0
-		for _, ev := range f.log() {
-			if ev == "heartbeat_unauth" {
-				beats++
-			}
-		}
-		if beats >= 2 {
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatalf("no two pre-logon heartbeats within 4s: %v", f.log())
-}
-
 func TestAuthQRSuccess(t *testing.T) {
 	_, host := startFake(t)
 	withFakeCM(t, host)

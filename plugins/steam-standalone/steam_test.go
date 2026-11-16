@@ -1028,43 +1028,45 @@ func TestSteamQRAuth(t *testing.T) {
 	}
 }
 
-// The pre-logon CM socket heartbeats (issue #182): the fake closes an
-// unauthenticated connection that sends no ClientHeartBeat after 4 s
-// instead of the live CM's minute, and the login must stay pending
-// through that window and still complete.
-func TestSteamQRHeartbeat(t *testing.T) {
-	t.Setenv("PLATYPUS_STEAM_HEARTBEAT_SECONDS", "1")
-	e := setup(t)
-	e.setCMState("unauth_idle_close", 4)
-	var pr types.AuthPrompt
-	if err := e.call("auth.begin", nil, &pr); err != nil {
-		t.Fatalf("begin: %v", err)
+// polledClients lists the auth-session client ids the fake CM saw polled,
+// in order. One id across connections means the helper redialled and kept
+// polling the same server-side session.
+func polledClients(log string) []string {
+	const marker = "PollAuthSessionStatus#1 client="
+	var ids []string
+	for _, line := range strings.Split(log, "\n") {
+		if i := strings.Index(line, marker); i >= 0 {
+			ids = append(ids, line[i+len(marker):])
+		}
 	}
-	checkQRArt(t, pr.QR)
-	// Outlive the fake's idle window between polls.
-	time.Sleep(5500 * time.Millisecond)
-	var st types.AuthStatus
-	if err := e.call("auth.status", nil, &st); err != nil {
-		t.Fatalf("status: %v", err)
-	}
-	if st.LoggedIn || st.QR == "" {
-		t.Fatalf("QR login after the idle window: %+v\nCM log: %s", st, e.cmLog())
-	}
-	e.setCMState("auth_qr_approved", true)
-	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
-		t.Fatalf("qr complete after idle window: %+v, %v", st, err)
-	}
-	e.waitCMLog("heartbeat_unauth")
-	if log := e.cmLog(); strings.Contains(log, "unauth_idle_close") {
-		t.Fatalf("fake closed the session despite heartbeats: %s", log)
+	return ids
+}
+
+// waitAuthRedial waits until the fake CM logged a drop and a poll on the
+// connection that followed it, then returns the log.
+func (e *env) waitAuthRedial() string {
+	e.t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		log := e.cmLog()
+		if strings.Contains(log, "unauth_drop") && strings.Count(log, "connect\n") >= 2 {
+			if i := strings.LastIndex(log, "connect\n"); i >= 0 &&
+				strings.Contains(log[i:], "PollAuthSessionStatus#1") {
+				return log
+			}
+		}
+		if time.Now().After(deadline) {
+			e.t.Fatalf("no redialled poll after the CM dropped the socket: %s", log)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
-// A CM socket that drops mid-poll must not end the QR login: the helper
-// reconnects, begins a new session and emits a fresh qr event, so the
-// dialog redraws the new code instead of failing (issue #182).
-func TestSteamQRReconnectReemitsCode(t *testing.T) {
-	t.Setenv("PLATYPUS_STEAM_HEARTBEAT_SECONDS", "1")
+// The CM closes an unauthenticated socket after about a minute, mid-poll.
+// That is not the login ending: the auth session lives on Steam's side, so
+// the helper redials and keeps polling the same client_id, and the QR on
+// screen must not change (issue #182).
+func TestSteamQRReconnectKeepsSession(t *testing.T) {
 	e := setup(t)
 	var pr types.AuthPrompt
 	if err := e.call("auth.begin", nil, &pr); err != nil {
@@ -1072,34 +1074,58 @@ func TestSteamQRReconnectReemitsCode(t *testing.T) {
 	}
 	checkQRArt(t, pr.QR)
 	first := pr.QR
-	// The reconnected session gets a new challenge, and the fake drops the
-	// current socket after 2 s even though it heartbeats.
-	e.setCMState("auth_challenge_url", "https://steamcommunity.com/qr/RECONNECTED")
 	e.setCMState("unauth_close_after", 2)
-	var st types.AuthStatus
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		if err := e.call("auth.status", nil, &st); err != nil {
-			t.Fatalf("status: %v", err)
-		}
-		if st.LoggedIn {
-			t.Fatal("status claims logged in before any approval")
-		}
-		if st.QR != "" && st.QR != first {
-			break // the reconnected session's art
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("no fresh QR after the drop; CM log: %s", e.cmLog())
-		}
-		time.Sleep(250 * time.Millisecond)
+	log := e.waitAuthRedial()
+	if strings.Count(log, "BeginAuthSessionViaQR#1") != 1 {
+		t.Fatalf("the socket drop started a new QR session: %s", log)
 	}
-	checkQRArt(t, st.QR)
-	if log := e.cmLog(); strings.Count(log, "service Authentication.BeginAuthSessionViaQR#1") < 2 {
-		t.Fatalf("want a second QR session after the drop: %s", log)
+	ids := polledClients(log)
+	if len(ids) < 2 {
+		t.Fatalf("want polls on both connections, got %v", ids)
+	}
+	for _, id := range ids {
+		if id != ids[0] {
+			t.Fatalf("polled a different auth session after the drop: %v", ids)
+		}
+	}
+	var st types.AuthStatus
+	if err := e.call("auth.status", nil, &st); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if st.LoggedIn {
+		t.Fatal("status claims logged in before any approval")
+	}
+	if st.QR != first {
+		t.Fatal("the QR art changed because of a socket drop")
 	}
 	e.setCMState("auth_qr_approved", true)
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
 		t.Fatalf("qr complete after reconnect: %+v, %v", st, err)
+	}
+}
+
+// The password/guard poll rides out the same socket cap, and the login
+// completes on the session begun before the drop (issue #182).
+func TestSteamPasswordReconnectKeepsSession(t *testing.T) {
+	e := setup(t)
+	e.setCMState("auth_guard", "confirm")
+	e.setCMState("unauth_close_after", 1)
+	var st types.AuthStatus
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- e.call("auth.complete", map[string]any{"fields": map[string]string{
+			"username": "PlatypusUser", "password": "correct-horse"}}, &st)
+	}()
+	log := e.waitAuthRedial()
+	// The mobile approval lands after the drop, so the login only finishes
+	// if the redialled poll is still on the first session.
+	e.setCMState("auth_mobile_approved", true)
+	if err := <-errCh; err != nil || !st.LoggedIn {
+		t.Fatalf("password login across a socket drop: %+v, %v", st, err)
+	}
+	ids := polledClients(log)
+	if len(ids) == 0 {
+		t.Fatalf("no auth polls before the approval: %s", log)
 	}
 }
 
