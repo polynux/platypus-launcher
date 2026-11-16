@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -162,9 +163,37 @@ func gameInstallUFS() string {
 	return `"ufs" { "savefiles" { "0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" } } }`
 }
 
-// Coverage is the pull filter's rule: same root after overrides, under the
-// rule path, matching the pattern. Platforms don't matter (one cloud name
-// serves every OS), and neither does `recursive` (the pattern decides).
+// rulePathParts normalises the path spellings appinfo really uses.
+func TestRulePathParts(t *testing.T) {
+	for _, tc := range []struct {
+		rel  string
+		want []string
+	}{
+		{"/My Games/Fallout4/Saves", []string{"My Games", "Fallout4", "Saves"}},
+		{"./my games/borderlands/savedata", []string{"my games", "borderlands", "savedata"}},
+		{"Steam Save/", []string{"Steam Save"}},
+		{"./", nil},
+		{"", nil},
+		{".", nil},
+		{"saves", []string{"saves"}},
+	} {
+		got := rulePathParts(tc.rel)
+		if len(got) != len(tc.want) {
+			t.Errorf("rulePathParts(%q) = %v, want %v", tc.rel, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("rulePathParts(%q) = %v, want %v", tc.rel, got, tc.want)
+				break
+			}
+		}
+	}
+}
+
+// Coverage is the pull filter's rule: same root, under the rule path,
+// matching the pattern. Platforms don't matter (one cloud name serves every
+// OS), and rootoverrides don't either: they only say where a file lands.
 func TestCloudNameCovered(t *testing.T) {
 	ufs := parseCloudRules(mustParseKV(t, superhotUFS))
 	native := superhotCtx("/home/u")
@@ -193,17 +222,74 @@ func TestCloudNameCovered(t *testing.T) {
 			t.Errorf("proton %q covered = %v, want %v", tc.name, got, tc.covered)
 		}
 	}
-	// Hades: WinMyDocuments with only a MacOS override. The Linux OS has no
-	// override, so the rule and the name keep the same root and the name is
-	// covered even though it can't be placed here (coverage is about the
-	// rule, placement is mapCloudName's job).
+	// Hades: WinMyDocuments with only a MacOS override. The rule owns the
+	// name on every OS; placement is mapCloudName's job and fails natively.
 	hades := parseCloudRules(mustParseKV(t, `"ufs" {
 		"savefiles" { "0" { "root" "WinMyDocuments" "path" "Saved Games/Hades" "pattern" "Profile*.sav" } }
 		"rootoverrides" { "0" { "os" "MacOS" "root" "WinMyDocuments" "useinstead" "MacAppSupport" } }
 	}`))
 	name := "%WinMyDocuments%Saved Games/Hades/Profile0.sav"
 	if !cloudNameCovered(name, hades, proton, 0) || !cloudNameCovered(name, hades, native, 0) {
-		t.Fatal("Hades' rule must cover its save (the MacOS override is another OS's)")
+		t.Fatal("Hades' rule must cover its save whatever the OS override says")
+	}
+}
+
+// A rule without `recursive` owns the folder's own files only, like the scan
+// it feeds; a recursive one owns its subdirectories.
+func TestCloudNameCoveredDepth(t *testing.T) {
+	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: "/games/x"}
+	plain := parseCloudRules(mustParseKV(t, gameInstallUFS()))
+	if !cloudNameCovered("%GameInstall%saves/a.sav", plain, ctx, 0) {
+		t.Fatal("a non-recursive rule must cover its folder's own files")
+	}
+	if cloudNameCovered("%GameInstall%saves/deep/a.sav", plain, ctx, 0) {
+		t.Fatal("a non-recursive rule must not cover subdirectories")
+	}
+	recursive := parseCloudRules(mustParseKV(t, `"ufs" {
+		"savefiles" { "0" { "root" "GameInstall" "path" "saves" "pattern" "*.sav" "recursive" "1" } }
+	}`))
+	if !cloudNameCovered("%GameInstall%saves/deep/a.sav", recursive, ctx, 0) {
+		t.Fatal("a recursive rule owns its subdirectories")
+	}
+}
+
+// Proton's drive_c is case-insensitive, so a rule's spelling covers the
+// cloud's other casing; a native Linux path does not.
+func TestCloudNameCoveredCaseFolding(t *testing.T) {
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" {
+		"savefiles" { "0" { "root" "WinMyDocuments" "path" "My Games/Game" "pattern" "Save*.sav" } }
+	}`))
+	name := "%WinMyDocuments%my games/game/save01.sav"
+	proton := cloudContext{OS: "windows", Home: "/home/u", InstallDir: "/games/x",
+		PrefixDir: "/prefixes/game", WinUser: "steamuser"}
+	native := cloudContext{OS: "linux", Home: "/home/u", InstallDir: "/games/x"}
+	if !cloudNameCovered(name, ufs, proton, 0) {
+		t.Fatal("Proton must cover another casing of the rule path")
+	}
+	if cloudNameCovered(name, ufs, native, 0) {
+		t.Fatal("native Linux paths are case-sensitive")
+	}
+}
+
+// rootoverrides only place a file: a pathtransforms find string that also
+// appears in the file name can't make the rule miss its own save.
+func TestCloudNameCoveredOverrideInFileName(t *testing.T) {
+	ufs := parseCloudRules(mustParseKV(t, `"ufs" {
+		"savefiles" { "0" { "root" "WinAppDataLocalLow" "path" "Foo/Saves" "pattern" "Foo*.sav" } }
+		"rootoverrides" { "0" { "os" "Linux" "root" "WinAppDataLocalLow" "useinstead" "LinuxHome"
+			"pathtransforms" { "0" { "find" "Foo" "replace" "foo" } } } }
+	}`))
+	name := "%WinAppDataLocalLow%Foo/Saves/FooSave.sav"
+	native := superhotCtx("/home/u")
+	proton := cloudContext{OS: "windows", Home: "/home/u", InstallDir: "/games/x",
+		PrefixDir: "/prefixes/game", WinUser: "steamuser"}
+	if !cloudNameCovered(name, ufs, native, 0) || !cloudNameCovered(name, ufs, proton, 0) {
+		t.Fatal("the override must not decide whether the rule covers the name")
+	}
+	// Placement still follows the override.
+	got, _, ok := mapCloudName(name, ufs, native, 0)
+	if !ok || got != "/home/u/foo/Saves/fooSave.sav" {
+		t.Fatalf("local = %q, ok = %v, want the transformed path", got, ok)
 	}
 }
 
@@ -211,10 +297,12 @@ func TestCloudNameCovered(t *testing.T) {
 // account id only covers the expanded spelling.
 func TestCloudNameCoveredRecursiveAndSteamID(t *testing.T) {
 	ufs := parseCloudRules(mustParseKV(t, `"ufs" {
-		"savefiles" { "0" { "root" "GameInstall" "path" "saves/{64BitSteamID}" "pattern" "*.sav" "recursive" "1" } }
-	}`))
+		"savefiles" {
+			"0" { "root" "GameInstall" "path" "saves/{64BitSteamID}" "pattern" "*.sav" "recursive" "1" }
+			"1" { "root" "LinuxHome" "path" ".config/game/{Steam3AccountID}" "pattern" "*.cfg" }
+		} }`))
 	ctx := cloudContext{OS: "linux", Home: "/home/u", InstallDir: "/games/x"}
-	const id = 76561198000000000
+	const id uint64 = 76561198000000000
 	if !cloudNameCovered("%GameInstall%saves/76561198000000000/deep/a.sav", ufs, ctx, id) {
 		t.Fatal("a recursive rule must cover nested saves")
 	}
@@ -223,6 +311,14 @@ func TestCloudNameCoveredRecursiveAndSteamID(t *testing.T) {
 	}
 	if cloudNameCovered("%GameInstall%saves/123/a.sav", ufs, ctx, id) {
 		t.Fatal("another account's folder is not this rule's")
+	}
+	// {Steam3AccountID} is the low 32 bits of the same id.
+	low := id & 0xffffffff
+	if !cloudNameCovered("%LinuxHome%.config/game/"+strconv.FormatUint(low, 10)+"/a.cfg", ufs, ctx, id) {
+		t.Fatal("{Steam3AccountID} rules must cover their expanded spelling")
+	}
+	if cloudNameCovered("%LinuxHome%.config/game/1/a.cfg", ufs, ctx, id) {
+		t.Fatal("another account id is not this rule's")
 	}
 }
 

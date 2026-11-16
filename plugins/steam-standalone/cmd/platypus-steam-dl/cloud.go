@@ -321,29 +321,34 @@ func mapCloudName(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID uin
 }
 
 // cloudNameCovered reports whether some ufs save rule describes a cloud file
-// name: the same root after rootoverrides, under the rule's path, matching
-// its pattern. Platforms are ignored on purpose (one cloud name is used on
-// every OS), and so is `recursive`: the pattern alone decides what a rule
-// owns, as it does for the scan. Pulls and pushes only touch names a rule
-// covers, so a stray name (a game-install or home path no rule lists) can
-// never replace a non-save.
+// name: the same root (case-insensitively), under the rule's path, matching
+// its pattern. The comparison works on the cloud's own spelling:
+// rootoverrides only decide where a file lands (mapCloudName), never whether
+// a rule owns it, so a pathtransforms find string that also appears in a file
+// name can't make a save look foreign. Platforms are ignored: one cloud name
+// serves every OS. Pulls and pushes only touch names a rule covers, so a
+// stray name (a game-install or home path no rule lists) can never replace a
+// non-save.
 func cloudNameCovered(cloudName string, ufs *cloudUFS, ctx cloudContext, steamID uint64) bool {
 	root, rel, ok := splitCloudName(cloudName)
 	if !ok || rel == "" {
 		return false
 	}
-	root, rel = applyRootOverride(ufs, root, substituteSteamID(rel, steamID), ctx.OS)
-	parts := splitRel(rel)
+	parts := splitRel(substituteSteamID(rel, steamID))
 	// Proton's drive_c is case-insensitive, so a rule spelling
 	// "My Games/…/SaveData" covers the cloud's "my games/…/savedata".
 	fold := ctx.OS == "windows"
 	for _, r := range ufs.Rules {
-		rRoot, rPath := applyRootOverride(ufs, r.Root, substituteSteamID(r.Path, steamID), ctx.OS)
-		if !strings.EqualFold(rRoot, root) {
+		if !strings.EqualFold(r.Root, root) {
 			continue
 		}
-		prefix := rulePathParts(rPath)
+		prefix := rulePathParts(substituteSteamID(r.Path, steamID))
 		if len(parts) <= len(prefix) {
+			continue
+		}
+		// A rule without `recursive` lists the folder's own files, like the
+		// scan it feeds; only a recursive rule owns subdirectories.
+		if !r.Recursive && len(parts) != len(prefix)+1 {
 			continue
 		}
 		under := true
@@ -1420,7 +1425,7 @@ func cloudMessage(files []cloudPlanFile, unmapped int) string {
 	}
 	var suffix string
 	if unmapped > 0 {
-		suffix = fmt.Sprintf(" %d cloud file(s) aren't part of this game's save locations.", unmapped)
+		suffix = fmt.Sprintf(" %d cloud file(s) aren't synced on this device.", unmapped)
 	}
 	switch {
 	case cf > 0:

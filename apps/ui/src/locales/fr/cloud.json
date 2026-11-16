@@ -52,8 +52,8 @@
     "upload_other": "{{count}} à téléverser",
     "conflict_one": "{{count}} en conflit",
     "conflict_other": "{{count}} en conflit",
-    "unmapped_one": "{{count}} non placée sur cet appareil",
-    "unmapped_other": "{{count}} non placées sur cet appareil"
+    "unmapped_one": "{{count}} non synchronisée sur cet appareil",
+    "unmapped_other": "{{count}} non synchronisées sur cet appareil"
   },
   "setting": {
     "description": "Si Platypus synchronise les fichiers de sauvegarde de chaque boutique vers son cloud. Chaque jeu peut remplacer le choix de sa boutique sur sa page.",
