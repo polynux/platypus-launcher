@@ -789,3 +789,67 @@ func TestCloudPushNewSaveBorrowsFolderCase(t *testing.T) {
 		t.Fatalf("status after edit = %+v, want an upload, not a conflict", edited)
 	}
 }
+
+// An upload offers the matched rule's platforms (issue #188): a Windows-tagged
+// rule sends platforms_to_sync 1, so the cloud keeps the save out of a Linux
+// client's sync; an untagged rule sends All.
+func TestCloudPushSendsRulePlatforms(t *testing.T) {
+	e := setup(t)
+	e.login()
+	home := t.TempDir()
+	prefix := filepath.Join(home, "prefix")
+	saves := filepath.Join(prefix, "drive_c", "users", "steamuser", "Documents", "Saves")
+	if err := os.MkdirAll(saves, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx := map[string]any{"os": "windows", "home": home, "installDir": filepath.Join(home, "install"),
+		"prefixDir": prefix, "winUser": "steamuser"}
+	e.setCMState("appinfo_4321", `"appinfo" { "appid" "4321" "common" { "name" "Standalone Game" } "ufs" { "savefiles" {
+		"0" { "root" "WinMyDocuments" "path" "Saves" "pattern" "*.sav" "platforms" { "Windows" "1" } } } } }`)
+	e.setCMState("cloud_changelist", map[string]any{"current_change_number": float64(5)})
+	e.setCMState("cloud_files", map[string]any{})
+	if err := os.WriteFile(filepath.Join(saves, "a.sav"), []byte("win-only"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-platforms"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.State != "synced" || pushed.Counts.Same != 1 {
+		t.Fatalf("push = %+v", pushed)
+	}
+	log := e.waitCMLog("upload complete 1 1")
+	if !strings.Contains(log, "platforms=1") {
+		t.Fatalf("log misses the rule's platforms mask: %s", log)
+	}
+
+	// The listing reads the mask back: a Linux context counts the save as
+	// not synced on this device instead of comparing it.
+	linux := map[string]any{"os": "linux", "home": home, "installDir": ctx["installDir"]}
+	other, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": linux})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.Counts.Unmapped != 1 || other.Counts.Same != 0 {
+		t.Fatalf("linux status = %+v, want the Windows save unmapped", other)
+	}
+
+	// An untagged rule offers every platform, like the client's default.
+	e.setCMState("appinfo_4321", `"appinfo" { "appid" "4321" "common" { "name" "Standalone Game" } "ufs" { "savefiles" {
+		"0" { "root" "WinMyDocuments" "path" "Saves" "pattern" "*.sav" } } } }`)
+	if err := os.WriteFile(filepath.Join(saves, "b.sav"), []byte("both"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	again, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-platforms-all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.State != "synced" {
+		t.Fatalf("push = %+v", again)
+	}
+	log = e.waitCMLog("upload complete 2 1")
+	if !strings.Contains(log, "platforms=4294967295") {
+		t.Fatalf("log misses the all-platforms mask: %s", log)
+	}
+}
