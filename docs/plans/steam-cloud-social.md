@@ -192,7 +192,7 @@ Live: repeat L2 on 5 more games. Depends on P3. Can run in parallel with P5.
 
 Scope:
 
-- Plugin `social.start`: `Client` logs on with the `social` ID, sends `ClientChangeStatus` (default **Invisible (7)** so friends data flows without changing visibility; configurable), handles `ClientFriendsList` (filter relationship 3 and SteamID type != clan),
+- Plugin `social.start`: `Client` logs on with the `social` ID, sends `ClientChangeStatus` (default **Online (1)**, as the Steam client does: user decision 2026-11-16; configurable), handles `ClientFriendsList` (filter relationship 3 and SteamID type != clan),
   `ClientRequestFriendData` with the flags from §4.1, accumulates `ClientPersonaState`, resolves avatars from `avatar_hash`, emits `social.friends` (full then incremental) and `social.connection`.
 - Core `internal/social` + Wails events; frontend: Friends panel (online / in game / offline groups, search, "Playing SUPERHOT" links to the game page), own avatar + name in the sidebar with a status indicator.
 - Settings: "Show Steam friends" (off by default), and what happens at login (start the session at app start, or when the panel opens).

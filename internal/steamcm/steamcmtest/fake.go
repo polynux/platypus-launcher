@@ -28,6 +28,10 @@ import (
 type Push struct {
 	EMsg uint32
 	Body []byte
+	// Target sets the header's target_job_name: service notifications
+	// (FriendMessagesClient.IncomingMessage#1, ...) arrive as
+	// EMsgServiceMethodResponse with a target and no jobid_target.
+	Target string
 	// After counts service calls: 0 = right after the logon response,
 	// 1 = after the first service request is received (the push goes
 	// out before that call's reply, so it lands between the client's
@@ -85,8 +89,16 @@ type Config struct {
 	// Pushes is the scripted push queue (friends list, persona state,
 	// playing session state, cloud change notification, ...).
 	Pushes []Push
+	// BatchLogon packs the logon response and the After-0 pushes into
+	// one Multi envelope, like the real CM sometimes does: the client
+	// must route the batch remainder to its handlers, not drop it.
+	BatchLogon bool
 	// ServiceEresult is the EResult stamped on service replies (0 = 1).
 	ServiceEresult int
+	// ServiceHandler answers one service call with a canned reply body
+	// and EResult. When nil the fake mints an access-token reply, like
+	// the existing token-exchange tests need.
+	ServiceHandler func(target string, body []byte) (resp []byte, eresult int)
 }
 
 // Fake is one fake CM server: multiple client connections can be
@@ -285,7 +297,13 @@ func (f *Fake) serve(c *fakeConn) {
 		hb = 5
 	}
 	resp.Varint(3, hb) // heartbeat_seconds
-	c.write(steamcm.PackEMsg(751, sessHdr.Bytes(), resp.Bytes()))
+	if cfg.BatchLogon {
+		batch := append([][]byte{steamcm.PackEMsg(751, sessHdr.Bytes(), resp.Bytes())},
+			f.packDue(cfg, 0, steamID)...)
+		c.write(steamcm.MultiWrap(batch...))
+	} else {
+		c.write(steamcm.PackEMsg(751, sessHdr.Bytes(), resp.Bytes()))
+	}
 	if eres != 1 {
 		_ = c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(1000, ""))
 		return
@@ -302,9 +320,12 @@ func (f *Fake) serve(c *fakeConn) {
 		defer drop.Stop()
 	}
 
-	// Pushes scheduled for "after logon" go now.
+	// Pushes scheduled for "after logon" go now (already sent inside
+	// the batch when BatchLogon packed them with the response).
 	serviceCalls := 0
-	f.sendDue(c, cfg, 0, steamID)
+	if !cfg.BatchLogon {
+		f.sendDue(c, cfg, 0, steamID)
+	}
 	if cfg.SendServerHeartbeat {
 		c.write(steamcm.PackEMsg(steamcm.EMsgClientHeartBeat, sessHdr.Bytes(), nil))
 	}
@@ -338,7 +359,9 @@ func (f *Fake) serve(c *fakeConn) {
 				eres = 1
 			}
 			replyBody := tokenBody(hdr.Int(1))
-			_ = body
+			if cfg.ServiceHandler != nil {
+				replyBody, eres = cfg.ServiceHandler(target, body)
+			}
 			c.write(steamcm.PackEMsg(
 				steamcm.EMsgServiceMethodResponse,
 				steamcm.HeaderReply(steamID, int32(hdr.Int(2)), job, eres),
@@ -351,6 +374,9 @@ func (f *Fake) serve(c *fakeConn) {
 				c.write(websocket.FormatCloseMessage(1000, ""))
 				return
 			}
+		case steamcm.EMsgClientChangeStatus, steamcm.EMsgClientGamesPlayed,
+			steamcm.EMsgClientRequestFriendData:
+			f.record(fmt.Sprintf("emsg %d", emsg))
 		default:
 			f.record(fmt.Sprintf("unexpected %d", emsg))
 		}
@@ -359,13 +385,22 @@ func (f *Fake) serve(c *fakeConn) {
 
 // sendDue sends every push whose After matches count.
 func (f *Fake) sendDue(c *fakeConn, cfg Config, count int, steamID uint64) {
+	for _, msg := range f.packDue(cfg, count, steamID) {
+		c.write(msg)
+	}
+}
+
+// packDue packs every push whose After matches count.
+func (f *Fake) packDue(cfg Config, count int, steamID uint64) [][]byte {
+	var out [][]byte
 	for _, p := range cfg.Pushes {
 		if p.After != count {
 			continue
 		}
 		f.record(fmt.Sprintf("push %d", p.EMsg))
-		c.write(steamcm.PackEMsg(p.EMsg, steamcm.Header(steamID, 4711, 0, ""), p.Body))
+		out = append(out, steamcm.PackEMsg(p.EMsg, steamcm.Header(steamID, 4711, 0, p.Target), p.Body))
 	}
+	return out
 }
 
 func (f *Fake) snapshot() Config {

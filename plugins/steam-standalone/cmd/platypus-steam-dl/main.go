@@ -38,6 +38,14 @@ func main() {
 		}
 		return
 	}
+	if os.Args[1] == "social" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		if err := runSocial(ctx); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		fatal("error", fmt.Sprintf("couldn't read the request: %v", err))
