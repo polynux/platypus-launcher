@@ -195,7 +195,6 @@ func runSocial(ctx context.Context) error {
 		requested: map[uint64]bool{},
 		ready:     make(chan struct{}),
 	}
-	s.selfID, _ = steamcm.SteamIDFromToken(token)
 	cfg := steamcm.ClientConfig{
 		RefreshToken: token,
 		Role:         steamcm.LoginRoleSocial,
@@ -223,6 +222,9 @@ func runSocial(ctx context.Context) error {
 		return err
 	}
 	s.client = c
+	// The session's steamid after logon, not the token's parse: the
+	// subscribe and the self rows use this (issue #189).
+	s.selfID = c.SteamID()
 
 	// Reconnects resend what the session needs; the monitor also reports
 	// connection changes and ends the process on replaced/loggedOut.
@@ -681,8 +683,14 @@ func (s *socialSession) subscribeFamilyRunning() {
 	if s.client == nil {
 		return
 	}
+	// The session's steamid after logon, not the token's parse; with
+	// none there is nothing to subscribe (issue #189).
+	id := s.client.SteamID()
+	if id == 0 {
+		return
+	}
 	fu := &depot.Enc{}
-	fu.Varint(1, s.selfID)
+	fu.Varint(1, id)
 	raw, err := s.client.Call("FamilyGroups.GetFamilyGroupForUser#1", fu.Bytes(), familySubscribeTimeout)
 	if err != nil {
 		return

@@ -482,3 +482,116 @@ print(len([p for m, p in sent if m == "job.done"]))
 		t.Fatalf("duplicate start = %q", got)
 	}
 }
+
+// A background family refresh must never overwrite a fresher
+// NotifyRunningApps push (issue #189): a push that lands while a fetch is
+// in flight wins, and the launch goes afterwards. The fetch's running read
+// is stamped when the helper starts, not when it answers.
+func TestSteamFamilyFetchKeepsNewerPush(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+import threading, time
+hs.notify = lambda *a: None
+hs.logged_in = lambda: True
+hs.family_local_steamid = lambda: "76561198"
+S, O = "76561198", "76561199"
+base = {"group_id": "g1", "members": [],
+    "apps": [{"appid": "5001", "owner_steamids": [O]}], "preferred": {}}
+hs.family_cache = [S, time.time(), dict(base, running=[], running_at=0)]
+hs.family_borrowed = {S: [time.time(), {"5001"}]}
+fetch_start = time.time()
+started = threading.Event()
+release = threading.Event()
+def fake_fetch(token, steamid, deadline):
+    started.set()
+    assert release.wait(10)
+    return dict(base,
+        running=[{"appid": "5001", "player": O, "owner": O}],
+        running_at=fetch_start)
+hs._family_fetch = fake_fetch
+box = {}
+t = threading.Thread(target=hs._family_fetch_worker,
+    args=("tok", S, hs.family_generation, box, time.time() + 10))
+t.start()
+assert started.wait(10)
+# The owner quits while the fetch is in flight: the push carries the
+# fresher free list.
+hs.family_running_event({"running": []})
+release.set()
+t.join(10)
+print(box.get("written"), hs.family_cache[2]["running"],
+    hs.family_last_good[S]["running"])
+print(hs.family_launch_refusal("5001"))
+`)
+	if got != "True [] []\nNone" {
+		t.Fatalf("fetch overwrote the newer push = %q", got)
+	}
+}
+
+// family_fetch_running stamps the running read when the helper starts, so a
+// push that lands mid-flight compares newer (issue #189).
+func TestSteamFamilyRunningStampedAtStart(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+import time
+hs.refresh_token = lambda: "tok"
+called = []
+def fake_dl(sub, req, timeout=None, label="", err_code=-32000):
+    called.append(time.time())
+    return {"running": [{"appid": "1", "player": "P", "owner": "O"}]}
+hs.dl_run = fake_dl
+running, at = hs.family_fetch_running()
+print(at <= called[0], running)
+`)
+	if got != "True [{'appid': '1', 'player': 'P', 'owner': 'O'}]" {
+		t.Fatalf("running read not stamped at start = %q", got)
+	}
+}
+
+// Logout drops all per-account family state: the caches, the borrowed set
+// and the take-back warning memory (issue #189).
+func TestSteamFamilyLogoutClearsAccountState(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+import time
+S = "76561198"
+hs.family_cache = [S, time.time(), {"running": [], "running_at": time.time()}]
+hs.family_last_good = {S: {"running": []}}
+hs.family_borrowed = {S: [time.time(), {"5001"}]}
+hs.family_warned = {("5001", "76561199")}
+hs.family_borrow_seen = {("5001", "76561199")}
+print(hs.auth_logout(None))
+print(hs.family_cache, hs.family_last_good, hs.family_borrowed,
+    hs.family_warned, hs.family_borrow_seen)
+`)
+	if got != "{'loggedIn': False}\nNone {} {} set() set()" {
+		t.Fatalf("logout kept family state = %q", got)
+	}
+}
+
+// A new login clears the previous account's family state, so one account's
+// in-use list or warnings never leak into another's (issue #189).
+func TestSteamFamilyLoginClearsAccountState(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+import base64, json, os
+dd = os.environ["PLATYPUS_PLUGIN_DATA"]
+sub = base64.urlsafe_b64encode(json.dumps({"sub": "76561199"}).encode()).decode()
+open(os.path.join(dd, "refresh.token"), "w").write("x." + sub + ".y")
+hs.run_auth_password = lambda *a, **k: None
+hs.ensure_persona = lambda: None
+S = "76561198"
+hs.family_cache = [S, 1.0, {"running": [{"appid": "5001"}]}]
+hs.family_last_good = {S: {"running": []}}
+hs.family_borrowed = {S: [1.0, {"5001"}]}
+hs.family_warned = {("5001", "76561199")}
+hs.family_borrow_seen = {("5001", "76561199")}
+st = hs.auth_complete({"fields": {"username": "u", "password": "p"}})
+print(st)
+print(hs.family_cache, hs.family_last_good, hs.family_borrowed,
+    hs.family_warned, hs.family_borrow_seen)
+`)
+	if got != "{'loggedIn': True}\nNone {} {} set() set()" {
+		t.Fatalf("login kept family state = %q", got)
+	}
+}
