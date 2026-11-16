@@ -360,6 +360,8 @@ export namespace types {
     installable?: boolean;
     note?: string;
     outside_folder?: boolean;
+    can_allow_folder?: boolean;
+    can_allow_folder_reason?: string;
     native?: boolean;
     store_missing?: boolean;
     client_launch?: boolean;

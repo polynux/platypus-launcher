@@ -75,7 +75,7 @@ describe('atlas attention signals', () => {
 
   it('asks before allowing a game folder', () => {
     const onAllowFolder = vi.fn();
-    render(<FixesView games={[mkGame('outside', { title: 'Outside', outside_folder: true })]} onOpenGame={() => {}} onAllowFolder={onAllowFolder} />);
+    render(<FixesView games={[mkGame('outside', { title: 'Outside', outside_folder: true, can_allow_folder: true })]} onOpenGame={() => {}} onAllowFolder={onAllowFolder} />);
     fireEvent.click(screen.getByRole('button', { name: 'Allow this folder' }));
     expect(screen.getByText('Allow this game folder?')).toBeInTheDocument();
     expect(screen.getByText('Platypus will be allowed to launch games from /g/outside. This changes which folders can launch games.')).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe('atlas attention signals', () => {
   });
 
   it('uses a translated fallback when the outside folder is unknown', () => {
-    render(<FixesView games={[mkGame('outside', { outside_folder: true, install_dir: '' })]} onOpenGame={() => {}} />);
+    render(<FixesView games={[mkGame('outside', { outside_folder: true, install_dir: '', can_allow_folder: true })]} onOpenGame={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: 'Allow this folder' }));
     expect(screen.getByText('Platypus will be allowed to launch games from this folder. This changes which folders can launch games.')).toBeInTheDocument();
   });

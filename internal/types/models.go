@@ -129,6 +129,15 @@ type Game struct {
 	Installable     bool   `json:"installable,omitempty"`    // Platypus can install it through the plugin
 	Note            string `json:"note,omitempty"`           // e.g. "Needs the EA app"
 	OutsideFolder   bool   `json:"outside_folder,omitempty"` // installed outside the folders Platypus lets the plugin launch from
+	// CanAllowFolder says the core would let the user allow this game's
+	// folder (issue #173): set only on outside-folder games AllowFolder
+	// would accept. The UI offers "Allow this folder" off this flag instead
+	// of duplicating the core's folder guards.
+	CanAllowFolder bool `json:"can_allow_folder,omitempty"`
+	// CanAllowFolderReason is why the folder can never be allowed (issue
+	// #173): "root", "home" or "system". Empty when CanAllowFolder is set or
+	// the game needs no allow.
+	CanAllowFolderReason string `json:"can_allow_folder_reason,omitempty"`
 	// Native marks plugin games with a Linux build: they run without Proton,
 	// so the runner pick and Proton-only settings don't apply to them.
 	Native bool `json:"native,omitempty"`

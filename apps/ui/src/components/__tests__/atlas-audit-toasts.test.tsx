@@ -65,7 +65,6 @@ import { AtlasDriveCard } from '../AtlasStorage';
 import { StripJob } from '../GameTabs';
 import { GameOutsideAlert } from '../game/blocks';
 import { friendlyCoreError, errorToastParts } from '../../lib/plainError';
-import { isSystemFolder, SYSTEM_DIRS, cleanPosix } from '../../lib/games';
 
 const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: TooltipProvider });
 afterEach(cleanup);
@@ -327,43 +326,23 @@ describe('F15: runner rows hover', () => {
   });
 });
 
-describe('F16: no Allow for system folders', () => {
-  it('mirrors the core systemDirs list and cleans POSIX paths', () => {
-    const manager = src('../../../internal/plugins/manager.go');
-    const m = manager.match(/systemDirs\s*=\s*\[\]string\{([^}]+)\}/);
-    expect(m).not.toBeNull();
-    const goList = [...m![1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
-    expect([...SYSTEM_DIRS].sort()).toEqual([...goList].sort());
-    expect(isSystemFolder('/usr/bin')).toBe(true);
-    expect(isSystemFolder('/usr/bin/wine')).toBe(true);
-    expect(isSystemFolder('/')).toBe(true);
-    expect(isSystemFolder('//usr/bin')).toBe(true);
-    expect(isSystemFolder('/usr//bin')).toBe(true);
-    expect(isSystemFolder('/opt/../usr/bin')).toBe(true);
-    expect(isSystemFolder('///')).toBe(true);
-    expect(isSystemFolder('/usr/../home/me/Games/x')).toBe(false);
-    expect(isSystemFolder('/tmp/out')).toBe(false);
-    expect(isSystemFolder('/home/u/Games/Echo')).toBe(false);
-    expect(isSystemFolder('')).toBe(false);
-    expect(cleanPosix('/opt/../usr/bin')).toBe('/usr/bin');
-  });
-
+describe('F16: no Allow for refused folders', () => {
   it('game banner shows the reinstall note with no action for /usr/bin', () => {
     const plugin = { id: 'echo', name: 'Echo', install_folder: '/g/echo' } as never;
-    const game = mkGame('esc', { title: 'Echo Escape', install_dir: '/usr/bin', outside_folder: true });
+    const game = mkGame('esc', { title: 'Echo Escape', install_dir: '/usr/bin', outside_folder: true, can_allow_folder: false, can_allow_folder_reason: 'system' });
     render(<GameOutsideAlert game={game} plugin={plugin} onAllowFolder={() => {}} />);
     expect(screen.queryByRole('button', { name: 'Allow this folder' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Move to Games' })).toBeNull();
     expect(screen.getByText(/Reinstall it from Echo into your Games folder/)).toHaveTextContent('/usr/bin');
     cleanup();
-    const okGame = mkGame('out', { title: 'Outside', install_dir: '/tmp/out', outside_folder: true });
+    const okGame = mkGame('out', { title: 'Outside', install_dir: '/tmp/out', outside_folder: true, can_allow_folder: true });
     render(<GameOutsideAlert game={okGame} plugin={plugin} onAllowFolder={() => {}} />);
     expect(screen.getByRole('button', { name: 'Allow this folder' })).toBeInTheDocument();
   });
 
-  it('attention card keeps Open game as the only action for a system folder', () => {
+  it('attention card keeps Open game as the only action for a refused folder', () => {
     const onOpenGame = vi.fn();
-    const game = mkGame('esc', { title: 'Echo Escape', install_dir: '/usr/bin', outside_folder: true });
+    const game = mkGame('esc', { title: 'Echo Escape', install_dir: '/usr/bin', outside_folder: true, can_allow_folder: false, can_allow_folder_reason: 'system' });
     render(<AtlasAttention games={[game]} onOpenGame={onOpenGame} />);
     expect(screen.getByText(/Reinstall it into your Games folder/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Allow this folder' })).toBeNull();
@@ -372,5 +351,13 @@ describe('F16: no Allow for system folders', () => {
     expect(openBtns).toHaveLength(1);
     fireEvent.click(openBtns[0]!);
     expect(onOpenGame).toHaveBeenCalledWith('esc');
+  });
+  it('a game in the home folder shows no Allow action', () => {
+    const plugin = { id: 'echo', name: 'Echo', install_folder: '/g/echo' } as never;
+    const game = mkGame('home', { title: 'Homebound', install_dir: '/home/tester', outside_folder: true, can_allow_folder: false, can_allow_folder_reason: 'home' });
+    render(<GameOutsideAlert game={game} plugin={plugin} onAllowFolder={() => {}} />);
+    expect(screen.queryByRole('button', { name: 'Allow this folder' })).toBeNull();
+    // The system note only names system folders.
+    expect(screen.queryByText(/system folders like/)).toBeNull();
   });
 });
