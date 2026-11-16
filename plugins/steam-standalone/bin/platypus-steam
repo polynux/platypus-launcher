@@ -948,6 +948,9 @@ def auth_complete(params):
                        "Check the account name and password, and try again with a fresh "
                        "Steam Guard code.")
     ensure_persona()
+    # A new account takes over the process: one account's in-use list and
+    # take-back memory must not leak into another's (issue #189).
+    family_reset_account()
     return auth_status()
 
 
@@ -994,6 +997,7 @@ def wait_qr_login(timeout=300):
         if state == "ok":
             stop_qr_login()
             ensure_persona()
+            family_reset_account()
             return auth_status()
         if state == "failed":
             stop_qr_login()
@@ -1015,6 +1019,8 @@ def auth_logout(_params):
     shutil.rmtree(data_dir(), ignore_errors=True)
     os.makedirs(data_dir(), exist_ok=True)
     persona_tried["at"] = 0.0
+    # The login's in-use list and take-back memory die with it (issue #189).
+    family_reset_account()
     return {"loggedIn": False}
 
 
@@ -1553,6 +1559,10 @@ def family_fetch_running(timeout=None, group_id=0):
             req["family_group_id"] = int(group_id)
     except (TypeError, ValueError):
         pass
+    # The read's time is when the helper STARTED, not when it answered: a
+    # background refresh must never overwrite a fresher NotifyRunningApps
+    # push that lands while it is in flight (issue #189).
+    start = time.time()
     try:
         result = dl_run("family-running", req, timeout=timeout,
                         label="Steam family running apps", err_code=-32002)
@@ -1575,7 +1585,7 @@ def family_fetch_running(timeout=None, group_id=0):
     if not result.get("pushed", True) and "nopush" not in _running_logged:
         _running_logged.add("nopush")
         log("info", "Steam sent no running-apps push; borrowed copies list as free")
-    return out, time.time()
+    return out, start
 
 
 def family_in_use_message(player_name):
@@ -1740,8 +1750,19 @@ def _family_fetch_worker(token, steamid, gen, box, deadline):
         with family_lock:
             global family_cache, family_worker
             if gen == family_generation and "snap" in box:
-                family_cache = [str(steamid), time.time(), box["snap"]]
-                family_last_good[str(steamid)] = box["snap"]
+                snap = box["snap"]
+                # A NotifyRunningApps push that landed while this fetch was
+                # in flight is fresher than the fetch's own read (stamped
+                # when the helper started): keep the cache's running list.
+                prev = (family_cache[2] if (family_cache and
+                                            family_cache[0] == str(steamid))
+                        else None)
+                if (prev is not None and (prev.get("running_at") or 0) >
+                        (snap.get("running_at") or 0)):
+                    snap["running"] = prev.get("running") or []
+                    snap["running_at"] = prev.get("running_at") or 0
+                family_cache = [str(steamid), time.time(), snap]
+                family_last_good[str(steamid)] = snap
                 box["written"] = True
             if family_worker is not None and family_worker[3] is box:
                 family_worker = None
@@ -1796,6 +1817,22 @@ def family_invalidate():
     with family_lock:
         family_cache = None
         family_generation += 1
+
+
+def family_reset_account():
+    """Drop all per-account family state: the cached and last-good
+    snapshots, the borrowed set, and the take-back warning memory. Called
+    on logout and when a new account logs in, so one account's in-use
+    list or warnings never leak into another's. Bumps the generation: a
+    fetch started before the switch doesn't write the cache."""
+    global family_cache, family_generation, family_warned, family_borrow_seen
+    with family_lock:
+        family_cache = None
+        family_generation += 1
+        family_last_good.clear()
+        family_borrowed.clear()
+        family_warned.clear()
+        family_borrow_seen.clear()
 
 
 def family_snapshot_cached(steamid):
@@ -3933,7 +3970,7 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.21.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.23.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],

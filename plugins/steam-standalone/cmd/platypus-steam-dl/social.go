@@ -195,6 +195,8 @@ func runSocial(ctx context.Context) error {
 		requested: map[uint64]bool{},
 		ready:     make(chan struct{}),
 	}
+	// Known before Connect: the friends list and persona pushes ride in
+	// with the logon response, and their handlers need our own id.
 	s.selfID, _ = steamcm.SteamIDFromToken(token)
 	cfg := steamcm.ClientConfig{
 		RefreshToken: token,
@@ -223,6 +225,11 @@ func runSocial(ctx context.Context) error {
 		return err
 	}
 	s.client = c
+	// The session's steamid after logon wins over the token's parse when
+	// they differ (issue #189); the subscribe reads it from the client.
+	if id := c.SteamID(); id != 0 {
+		s.selfID = id
+	}
 
 	// Reconnects resend what the session needs; the monitor also reports
 	// connection changes and ends the process on replaced/loggedOut.
@@ -681,8 +688,14 @@ func (s *socialSession) subscribeFamilyRunning() {
 	if s.client == nil {
 		return
 	}
+	// The session's steamid after logon, not the token's parse; with
+	// none there is nothing to subscribe (issue #189).
+	id := s.client.SteamID()
+	if id == 0 {
+		return
+	}
 	fu := &depot.Enc{}
-	fu.Varint(1, s.selfID)
+	fu.Varint(1, id)
 	raw, err := s.client.Call("FamilyGroups.GetFamilyGroupForUser#1", fu.Bytes(), familySubscribeTimeout)
 	if err != nil {
 		return

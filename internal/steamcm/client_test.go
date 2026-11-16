@@ -366,3 +366,18 @@ func containsEvent(evs []string, want string) bool {
 	}
 	return false
 }
+
+// SteamID reports the session's account id after logon (issue #189): the
+// social subscribe uses it instead of parsing the token again.
+func TestClientSteamIDAfterLogon(t *testing.T) {
+	f := steamcmtest.New(t, steamcmtest.Config{})
+	useFake(t, f)
+	c, err := steamcm.Connect(context.Background(), fastConfig(steamcm.LoginRoleSocial))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if got := c.SteamID(); got != 76561198 {
+		t.Fatalf("SteamID = %d, want 76561198", got)
+	}
+}
