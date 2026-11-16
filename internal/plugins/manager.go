@@ -708,18 +708,35 @@ func checkAllowable(path string) error {
 	return checkAllowableFor(path, home)
 }
 
-// checkAllowableFor is checkAllowable with an explicit home (issue #41).
-func checkAllowableFor(path, home string) error {
+// AllowDenyReasonFor reports why path can never be allowed as a game folder:
+// "root", "home" or "system"; "" means AllowFolder would accept it. The same
+// rules AllowFolder enforces, so the library can tell the UI per game whether
+// "Allow this folder" is possible (issue #173) instead of the UI duplicating
+// them.
+func AllowDenyReasonFor(path, home string) string {
 	if path == "/" {
-		return errors.New("refusing to allow the whole filesystem")
+		return "root"
 	}
 	if home != "" && path == filepath.Clean(home) {
-		return errors.New("refusing to allow your whole home folder; pick the game's folder")
+		return "home"
 	}
 	for _, d := range systemDirs {
 		if path == d || strings.HasPrefix(path, d+"/") {
-			return fmt.Errorf("refusing to allow system folder %s", path)
+			return "system"
 		}
+	}
+	return ""
+}
+
+// checkAllowableFor is checkAllowable with an explicit home (issue #41).
+func checkAllowableFor(path, home string) error {
+	switch AllowDenyReasonFor(path, home) {
+	case "root":
+		return errors.New("refusing to allow the whole filesystem")
+	case "home":
+		return errors.New("refusing to allow your whole home folder; pick the game's folder")
+	case "system":
+		return fmt.Errorf("refusing to allow system folder %s", path)
 	}
 	return nil
 }
@@ -727,6 +744,13 @@ func checkAllowableFor(path, home string) error {
 // checkAllowable is the manager's guard with its configured home.
 func (m *Manager) checkAllowable(path string) error {
 	return checkAllowableFor(path, m.home)
+}
+
+// AllowDenyReason reports why path can never be allowed, with the manager's
+// configured home (issue #173). Callers pass the game's cleaned install dir,
+// the same value AllowFolder would check.
+func (m *Manager) AllowDenyReason(path string) string {
+	return AllowDenyReasonFor(path, m.home)
 }
 
 // Folders are the folders the plugin's games may be launched from: its

@@ -147,6 +147,17 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 		// so the install-folder guard has nothing to contain (issue #86).
 		if !lg.ClientLaunch {
 			g.OutsideFolder = !insideAny(real, folders)
+			// Tell the UI whether Allow is possible (issue #173): the same
+			// guard AllowFolder enforces, so the button never offers what the
+			// core would refuse. g.InstallDir is cleaned, the value the Allow
+			// action would send back.
+			if g.OutsideFolder {
+				if reason := s.m.AllowDenyReason(g.InstallDir); reason != "" {
+					g.CanAllowFolderReason = reason
+				} else {
+					g.CanAllowFolder = true
+				}
+			}
 		}
 	}
 	return g

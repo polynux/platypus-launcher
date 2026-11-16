@@ -135,7 +135,7 @@ describe('finding 2: home attention card follows the issue list', () => {
 
   it('asks before allowing a game folder', () => {
     const onAllowFolder = vi.fn();
-    const g = mkGame('out', { title: 'Outside', outside_folder: true, install_dir: '/tmp/out' });
+    const g = mkGame('out', { title: 'Outside', outside_folder: true, install_dir: '/tmp/out', can_allow_folder: true });
     render(<AtlasHome {...homeProps({ games: [g], allGames: [g], onAllowFolder })} />);
     fireEvent.click(screen.getByRole('button', { name: 'Allow this folder' }));
     expect(screen.getByText('Allow this game folder?')).toBeInTheDocument();

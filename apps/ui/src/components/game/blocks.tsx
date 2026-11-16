@@ -18,7 +18,6 @@ import { MonoLabel, Panel, TierBadge, cx } from '../ui';
 import { heroChipClass } from '../Hero';
 import { PluginLogo } from '../PluginLogo';
 import { formatBytes } from '../../lib/games';
-import { isSystemFolder } from '../../lib/games';
 import { formatDecimal1 } from '../../lib/gameLocale';
 import { useVariant } from '../../lib/theme';
 import type { InstallSize } from '../../lib/installSize';
@@ -45,9 +44,11 @@ export function GameOutsideAlert({ game, plugin, onAllowFolder }: {
   const { t } = useTranslation('game');
   const tabs = useVariant('game.structure') === 'tabs';
   if (!game.is_installed || !game.outside_folder) return null;
-  // System folders will never allow (audit F16, CORE-6, R2-1): the core also
-  // refuses to move out of them, so show the reinstall note with no action.
-  const system = isSystemFolder(game.install_dir);
+  // The core says per game whether Allow is possible (issue #173): system,
+  // home and root folders never allow, so the alert shows the reinstall note
+  // with no action. The system note only names system folders.
+  const canAllow = game.can_allow_folder === true;
+  const system = game.can_allow_folder_reason === 'system';
   if (tabs) {
     return (
       <div role="alert" className="flex items-center gap-3 bg-danger/10 px-6 py-2.5 text-[13px] shadow-[inset_2px_0_0_var(--color-danger)]">
@@ -62,9 +63,9 @@ export function GameOutsideAlert({ game, plugin, onAllowFolder }: {
               dir: <span className="font-mono text-[12px] text-text" />,
             }}
           />
-          {system && <span className="block text-text-muted">{t('game:outside.systemNote', { dir: game.install_dir, name: plugin.name })}</span>}
+          {!canAllow && system && <span className="block text-text-muted">{t('game:outside.systemNote', { dir: game.install_dir, name: plugin.name })}</span>}
         </p>
-        {!system && (
+        {canAllow && (
           <Button onClick={() => onAllowFolder(game.install_dir)} className="flex-none">
             <FolderCheck className="h-4 w-4" /> {t('game:outside.allow')}
           </Button>
@@ -86,9 +87,9 @@ export function GameOutsideAlert({ game, plugin, onAllowFolder }: {
             }}
           />
         </p>
-        {system && <p className="mt-1 text-text-muted">{t('game:outside.systemNote', { dir: game.install_dir, name: plugin.name })}</p>}
+        {!canAllow && system && <p className="mt-1 text-text-muted">{t('game:outside.systemNote', { dir: game.install_dir, name: plugin.name })}</p>}
       </div>
-      {!system && (
+      {canAllow && (
         <Button onClick={() => onAllowFolder(game.install_dir)} className="flex-none">
           <FolderCheck className="h-4 w-4" /> {t('game:outside.allow')}
         </Button>
