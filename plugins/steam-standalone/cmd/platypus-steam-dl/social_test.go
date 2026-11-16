@@ -1202,3 +1202,58 @@ func TestSocialFamilySubscribeNeverBlocks(t *testing.T) {
 	}
 	p.stop(2)
 }
+
+// The family subscribe carries the session's steamid after logon (issue
+// #189): field 1 of the ForUser call must be the session's id, or Steam
+// answers no group and the take-back push never comes.
+func TestSocialFamilySubscribeUsesSessionSteamID(t *testing.T) {
+	cf := &chatFake{convs: map[uint64][]chatMsg{}, nextOrd: map[uint64]uint64{},
+		unread: map[uint64]int{}, names: map[uint64]string{}}
+	var mu sync.Mutex
+	var forUser [][]byte
+	f := useSocialFake(t, steamcmtest.Config{
+		ServiceHandler: func(target string, body []byte) ([]byte, int) {
+			if target == "FamilyGroups.GetFamilyGroupForUser#1" {
+				mu.Lock()
+				forUser = append(forUser, append([]byte{}, body...))
+				mu.Unlock()
+			}
+			return familySubscribeHandler(cf)(target, body)
+		},
+		Pushes: socialTestPushes(),
+	})
+	p := startSocial(t, "none")
+	if !f.WaitFor(15*time.Second, func(evs []string) bool {
+		for _, ev := range evs {
+			if ev == "service FamilyGroups.GetFamilyGroup#1" {
+				return true
+			}
+		}
+		return false
+	}) {
+		t.Fatalf("no family subscribe on the wire: %v", f.Events())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(forUser) == 0 {
+		t.Fatal("no GetFamilyGroupForUser call recorded")
+	}
+	m, err := depot.Decode(forUser[0])
+	if err != nil {
+		t.Fatalf("decoding the ForUser call: %v", err)
+	}
+	if got := m.Int(1); got != testSelfID {
+		t.Fatalf("ForUser steamid = %d, want the session's %d", got, testSelfID)
+	}
+	p.stop(2)
+}
+
+// With no session steamid there is nothing to subscribe: the call is
+// skipped instead of sending a steamid 0 the CM would reject (issue #189).
+func TestSocialFamilySubscribeSkipsWithoutSteamID(t *testing.T) {
+	s := &socialSession{client: &steamcm.Client{}}
+	if id := s.client.SteamID(); id != 0 {
+		t.Fatalf("zero client SteamID = %d, want 0", id)
+	}
+	s.subscribeFamilyRunning() // must return without a session to call on
+}

@@ -136,6 +136,15 @@ func (c *Client) Err() error {
 	return c.lastErr
 }
 
+// SteamID reports the account id this client logs on as: the token's
+// sub, which the CM echoes back in the logon response header. Zero on
+// a client that never had a token.
+func (c *Client) SteamID() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.steamID
+}
+
 // Connect dials, logs on and starts the reader, heartbeat and reconnect
 // goroutines. It returns once the first logon response arrived: nil
 // means online, an error means the first logon failed (including
