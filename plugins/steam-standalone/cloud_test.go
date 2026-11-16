@@ -213,6 +213,87 @@ func TestCloudPullEndToEnd(t *testing.T) {
 	}
 }
 
+// A cloud name no save rule covers (#184) is unmapped and never pulled, and
+// a local file outside the rules is never pushed: a stray name under the
+// game's install root can't replace something that isn't a save.
+func TestCloudUncoveredNamesAreSkipped(t *testing.T) {
+	e := setup(t)
+	e.login()
+	ctx, install := e.cloudCtx(t)
+	settings := filepath.Join(install, "config", "settings.ini")
+	if err := os.MkdirAll(filepath.Dir(settings), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settings, []byte("local-settings"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The rules cover saves/*.sav and saves/*.cfg (cloudUFSAppInfo). The
+	// listing also carries a file outside that path and one outside the
+	// patterns, both with the same root: names the official client may keep
+	// in sync but no rule claims.
+	names := []string{"%GameInstall%saves/a.sav", "%GameInstall%saves/notes.txt", "%GameInstall%config/settings.ini"}
+	files := make([]any, 0, len(names))
+	bodies := map[string]any{}
+	for _, n := range names {
+		content := "cloud-" + filepath.Base(n)
+		files = append(files, map[string]any{
+			"name": n, "sha": cloudSHA(content), "time": float64(1700000000),
+			"size": float64(len(content)), "persist": float64(0),
+			"prefix": float64(0), "machine": float64(0),
+		})
+		bodies[n] = map[string]any{
+			"body": base64.StdEncoding.EncodeToString([]byte(content)),
+			"time": float64(1700000000),
+		}
+	}
+	e.setCMState("appinfo_4321", cloudUFSAppInfo)
+	e.setCMState("cloud_changelist", map[string]any{
+		"current_change_number": 7,
+		"machine_names":         []any{"test-machine"},
+		"files":                 files,
+	})
+	e.setCMState("cloud_files", bodies)
+
+	st, err := e.cloudCall(t, "cloud.status", map[string]any{"id": "4321", "ctx": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Counts.Download != 1 || st.Counts.Unmapped != 2 {
+		t.Fatalf("counts = %+v, want one download and two unmapped", st.Counts)
+	}
+	if !strings.Contains(st.Message, "2 cloud file(s)") {
+		t.Fatalf("message = %q, want the unmapped count", st.Message)
+	}
+	pulled, err := e.cloudCall(t, "cloud.pull", map[string]any{"id": "4321", "ctx": ctx, "jobId": "pull-uncovered"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pulled.State != "synced" || pulled.Counts.Unmapped != 2 {
+		t.Fatalf("pull = %+v", pulled)
+	}
+	if got, _ := os.ReadFile(filepath.Join(install, "saves", "a.sav")); string(got) != "cloud-a.sav" {
+		t.Fatalf("covered save = %q", got)
+	}
+	if got, _ := os.ReadFile(settings); string(got) != "local-settings" {
+		t.Fatalf("uncovered name overwrote the local file: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(install, "saves", "notes.txt")); !os.IsNotExist(err) {
+		t.Fatal("a name outside the patterns must not be downloaded")
+	}
+	// Neither uncovered name is uploaded, and the local file outside the
+	// rules is not a candidate at all.
+	pushed, err := e.cloudCall(t, "cloud.push", map[string]any{"id": "4321", "ctx": ctx, "jobId": "push-uncovered"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.Counts.Upload != 0 || pushed.Counts.Download != 0 {
+		t.Fatalf("push = %+v, want nothing to move", pushed)
+	}
+	if log := e.cmLog(); strings.Contains(log, "settings.ini") || strings.Contains(log, "notes.txt") {
+		t.Fatalf("push named an uncovered file: %s", log)
+	}
+}
+
 // A zipped cloud body unpacks before the SHA check.
 func TestCloudPullZip(t *testing.T) {
 	e := setup(t)

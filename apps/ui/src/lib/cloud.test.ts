@@ -6,7 +6,7 @@ describe('cloud helpers', () => {
   it('describes counts and leaves zeros out', () => {
     expect(describeCounts({ same: 3, download: 0, upload: 1, conflict: 0, unmapped: 0 })).toBe('3 in sync · 1 to upload');
     expect(describeCounts({ same: 0, download: 0, upload: 0, conflict: 0, unmapped: 0 })).toBe('');
-    expect(describeCounts({ same: 0, download: 2, upload: 0, conflict: 1, unmapped: 4 })).toBe('2 to download · 1 in conflict · 4 not placed on this device');
+    expect(describeCounts({ same: 0, download: 2, upload: 0, conflict: 1, unmapped: 4 })).toBe('2 to download · 1 in conflict · 4 not synced on this device');
   });
 
   it('prints an empty file as 0 B, small files by exact size, big ones rounded', () => {
