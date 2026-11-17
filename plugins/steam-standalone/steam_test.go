@@ -1624,3 +1624,53 @@ func TestSteamDetailsCompatFacts(t *testing.T) {
 		t.Fatalf("drm = %+v, want absent (Steam states no DRM facts)", d.DRM)
 	}
 }
+
+// News (protocol 1.19, issue #203): the game page's news links come from the
+// keyless ISteamNews API. Only titled https entries are kept, and the answer
+// is cached (news.json) so the game page doesn't poll the Web API.
+func TestSteamDetailsNews(t *testing.T) {
+	e := setup(t)
+	api := os.Getenv("PLATYPUS_STEAM_API_FILE")
+	raw, err := os.ReadFile(api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file map[string]any
+	if err := json.Unmarshal(raw, &file); err != nil {
+		t.Fatal(err)
+	}
+	file["_routes"] = map[string]any{
+		"ISteamNews/GetNewsForApp/v2": map[string]any{"appnews": map[string]any{
+			"appid": 4321,
+			"newsitems": []any{
+				map[string]any{"title": "Patch 1.2", "url": "https://store.steampowered.com/news/app/4321/view/1",
+					"date": float64(1700000000)},
+				map[string]any{"title": "No link"},
+				map[string]any{"title": "Insecure", "url": "http://example.com/insecure"},
+			},
+		}},
+	}
+	data, _ := json.Marshal(file)
+	if err := os.WriteFile(api, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	game := types.Game{
+		ID: stores.GameID(id, "4321"), Source: id, Store: "steam",
+		StoreAppID: "4321", Title: "Standalone Game",
+	}
+	d, err := e.store.Details(context.Background(), game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.News) != 1 {
+		t.Fatalf("news = %+v, want only the titled https entry", d.News)
+	}
+	got := d.News[0]
+	if got.Title != "Patch 1.2" || got.URL != "https://store.steampowered.com/news/app/4321/view/1" ||
+		got.Date != 1700000000 {
+		t.Fatalf("news item = %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(e.pluginData(), "news.json")); err != nil {
+		t.Fatalf("news answer wasn't cached: %v", err)
+	}
+}

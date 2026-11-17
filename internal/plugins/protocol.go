@@ -274,6 +274,16 @@ type GameDetails struct {
 	AgeRating       string        `json:"ageRating,omitempty"`
 	Tags            []string      `json:"tags,omitempty"`
 	Videos          []Video       `json:"videos,omitempty"`
+	// News links are protocol 1.19 (NewsVersion): the game's own
+	// announcements, keyless, https only.
+	News []NewsItem `json:"news,omitempty"`
+}
+
+// NewsItem is one of a game's news links (game.details, protocol 1.19).
+type NewsItem struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+	Date  int64  `json:"date,omitempty"` // unix seconds, 0 when the store has none
 }
 
 // Requirements are the store's system requirements (game.details,
@@ -330,6 +340,11 @@ var StatusVersion = Version{Major: 1, Minor: 16}
 // `online` and gates every source on it, so Platypus sends it the
 // intersection of both switches instead (see requestCompatFacts).
 var ProtectionOnlineVersion = Version{Major: 1, Minor: 18}
+
+// NewsVersion is the first protocol revision whose game.details carries the
+// game's news links (News, issue #203). Platypus reads them only from a
+// plugin that speaks it; an older plugin's game page shows no news.
+var NewsVersion = Version{Major: 1, Minor: 19}
 
 // DRM is what the store says about a game's protection. Every field is a
 // pointer or optional: nil (or "") means the store said nothing, and Platypus

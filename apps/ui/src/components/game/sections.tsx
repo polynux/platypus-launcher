@@ -145,6 +145,25 @@ function controllerLabel(t: (key: string) => string, c?: string): string | null 
   return null;
 }
 
+/** The game's news links (protocol 1.19): the store's own announcements,
+ *  opened outside Platypus. Nothing to show when the store sent none. */
+export function NewsLinks({ news }: { news?: { title: string; url: string }[] }) {
+  if (!news?.length) return null;
+  return (
+    <div data-testid="game-news" className="mt-4 border-t border-hairline pt-3">
+      <ul className="grid gap-1.5 font-mono text-[12px]">
+        {news.map((n) => (
+          <li key={n.url} className="min-w-0 truncate">
+            <ExternalLink href={n.url} className="text-amber-200/80 underline decoration-white/25 underline-offset-2 hover:text-amber-200">
+              {n.title} ↗
+            </ExternalLink>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** The About section: formatted description (collapsed + Show more), details
  *  grid, requirements tabs and links. Calm by default: secondary details live
  *  here, not in the hero. Sideloaded games (issue #38) get a "Find info
@@ -340,6 +359,7 @@ export function AboutSection({ game, details, loading, error, compatUrls, onOpen
           )}
         </div>
       )}
+      <NewsLinks news={details?.news} />
       {linked && (
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-hairline pt-3 font-mono text-[12px] text-text-muted" data-testid="info-attribution">
           <span>

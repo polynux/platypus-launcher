@@ -646,6 +646,16 @@ type GameDetails struct {
 	AgeRating    string            `json:"age_rating,omitempty"`
 	Tags         []string          `json:"tags,omitempty"`
 	Videos       []GameVideo       `json:"videos,omitempty"`
+	// News links (protocol 1.19): the game's own announcements, https only.
+	News []GameNews `json:"news,omitempty"`
+}
+
+// GameNews is one of the game page's news links: the store's title for it and
+// the https URL it opens.
+type GameNews struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+	Date  int64  `json:"date,omitempty"` // unix seconds, 0 when the store has none
 }
 
 // GameRequirements are the store's system requirements, sanitized HTML or
