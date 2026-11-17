@@ -89,18 +89,25 @@ the machine's own: that is the background volunteer-work queue (stale
 buckets to re-process, paired with `ReportBucketProcessingComplete`),
 not the download path, and is not needed.
 
-## What the client does that Platypus does NOT (deliberately)
+## What Platypus does after the bytes land (issue #211)
 
-After the bytes land, the client replays the `.foz` databases with
-`fossilize_replay` into driver caches (`nvidiav1/…`,
-`mesa_shader_cache…`, `fozpipelinesv6/…`) and points the game at them
-(`__GL_SHADER_DISK_CACHE_PATH`, `MESA_GLSL_CACHE_DIR`, … — see local
-`shader_log.txt`: "Setting MESA_GLSL_CACHE_DIR=…",
-"Processing FOZ cache file at …", "Writing NVIDIA cache of 1 buckets").
-Platypus downloads the buckets and runs nothing: the `.foz` files wait in
-`shadercache/<appid>/` for the client (or a future replay step) to
-process. Download-only therefore saves bandwidth on the next client run
-but does not by itself warm the driver caches.
+After the download, the plugin replays each `.foz` with `fossilize_replay`
+— the Steam client's `ubuntu12_64/` copy first, else one on `PATH` — into
+the driver caches (`nvidiav1/…`, `mesa_shader_cache…`,
+`fozpipelinesv6/…`), then the core points the game at the tree at launch:
+`MESA_SHADER_CACHE_DIR`, `__GL_SHADER_DISK_CACHE_PATH` (plus
+`__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1`), and `STEAM_COMPAT_SHADER_PATH`
+for Proton/umu (never native) — mirroring the client's own
+`shader_log.txt` ("Setting MESA_GLSL_CACHE_DIR=…", "Processing FOZ cache
+file at …", "Writing NVIDIA cache of 1 buckets"). Per-GPU buckets need no
+replay (see the Step 0 probe below): their `nvidiav1/…` trees already sit
+in the layout the driver reads. The replay runs one at a time with a 600 s
+total budget per job, never fails the recorded install, and is skipped
+with a warning when no replay binary exists (the `.foz` stays
+download-only until the client processes it).
+Follow-up: `fossilize_replay --device-index` pinning for hybrid GPUs is
+left unset (the replay runs without it); revisit if a multi-GPU machine
+shows the wrong device warming.
 
 ## Implementation consequences (issue #205 step 2)
 
@@ -118,3 +125,40 @@ but does not by itself warm the driver caches.
 - Gated behind the plugin's `settings` toggle (default off); multi-GB
   swarm buckets (CS2 6.6 GB, A Hat in Time 8.3 GB) must not ride every
   install silently. Skip-if-current via stored bucket manifest gids.
+
+## Step 0 probe (issue #211): per-GPU buckets are driver binaries, not .foz
+
+Probed live 2026-11-17 from this worktree (one CM logon, read-only service
+calls + CDN manifest/chunk fetches; scratch deleted afterwards): machine
+GPU vendor NVIDIA, proprietary driver 620.70.06. Client config carries two
+positional per-GPU pairs plus the three `SteamSwarm / G7:` shared buckets.
+
+For one owned game (Counter-Strike 2), the first per-GPU pair answers a
+real bucket (102683032, manifest 4665201175428774799, 788 566 bytes); the
+second answers `NoMatch` (42). The bucket manifest (depot == appid, like
+the swarm path) lists NO `.foz` file — its payload is the NVIDIA
+driver-binary cache layout verbatim:
+
+- `nvidiav1/GLCache/<driver-hash>/<gpu-hash>/steam_shader_cache.bin`
+  (754 718 bytes, magic `CDVN`)
+- `nvidiav1/GLCache/<driver-hash>/<gpu-hash>/steam_shader_cache.toc`
+  (33 848 bytes, magic `CDVN`)
+- plus the `nvidiav1/...` directory entries.
+
+Downloaded both files (< 1 MB total) into a `/tmp` scratch dir, confirmed
+the `CDVN` magic (NVIDIA driver-cache container) in both headers, then
+deleted the scratch dir.
+
+Consequences for #211:
+
+- Per-GPU buckets need NO replay: extract them under
+  `shadercache/<appid>/` and they already sit in the
+  `__GL_SHADER_DISK_CACHE_PATH` (`…/nvidiav1`) layout the driver reads.
+  Only the shared `SteamSwarm / G7:VulkanPipelinesV6` bucket holds
+  `fozpipelinesv6/steam_pipeline_cache.foz` and needs `fossilize_replay`.
+- Per-bucket folders/state therefore track two shapes: driver-native trees
+  (`nvidiav1/…`) usable as-is, and `.foz` files pending replay.
+- `MESA_DISK_CACHE_SINGLE_FILE=1` + `MESA_DISK_CACHE_READ_ONLY_FOZ_DBS`
+  could not be verified here (no Mesa GPU on this machine): a Mesa machine
+  still needs to check whether its per-GPU buckets arrive as `.foz` or as
+  native `mesa_shader_cache…` trees before relying on those knobs.

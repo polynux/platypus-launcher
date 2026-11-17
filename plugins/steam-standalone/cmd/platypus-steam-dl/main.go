@@ -2,7 +2,7 @@
 // plugin, replacing DepotDownloader for installs and logins. It speaks
 // one subcommand per argv:
 //
-//	platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc
+//	platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc|workshop|shader
 //
 // The request (app id, branch, dirs, and the refresh token) arrives as one
 // JSON object on stdin — the token never goes in argv (visible in
@@ -31,7 +31,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|workshop")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc|workshop|shader")
 	}
 	if os.Args[1] == "auth" {
 		if err := runAuth(context.Background()); err != nil {
@@ -97,6 +97,8 @@ func main() {
 		runErr = runTerms(ctx, req)
 	case "versions":
 		runErr = runVersions(ctx, req)
+	case "shader":
+		runErr = runShader(ctx, req)
 	case "unlock":
 		runErr = runUnlock(ctx, req)
 	case "family-running":
@@ -106,7 +108,7 @@ func main() {
 	case "workshop":
 		runErr = runWorkshop(ctx, req)
 	default:
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc|workshop")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc|workshop|shader")
 	}
 	if runErr != nil {
 		var wpe wrongPasswordError
@@ -148,6 +150,9 @@ type request struct {
 	// the old set (the legacy request shape without the field); an empty
 	// list installs the base game only.
 	DLC []string `json:"dlc"`
+	// ShaderDir is the shader cache root for the shader subcommand
+	// (the steamapps/shadercache/<appid> mirror); empty for the rest.
+	ShaderDir string `json:"shader_dir"`
 	// Op is the cloud subcommand (status|pull|push|resolve); Ctx the
 	// CloudContext and Choices the resolve paths, for the cloud op only.
 	Op      string          `json:"op"`
