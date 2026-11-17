@@ -518,6 +518,12 @@ func versionResult(rt resolvedTarget, depots []fetchedDepot, res map[string]any)
 	for _, d := range depots {
 		manifests[d.ref.DepotID] = d.ref.GID
 	}
+	depotDLC := map[uint32]uint32{}
+	for _, d := range depots {
+		if d.ref.DLCAppID != 0 {
+			depotDLC[d.ref.DepotID] = d.ref.DLCAppID
+		}
+	}
 	build := rt.build
 	if build == "" && rt.branch != "" && len(manifests) > 0 {
 		// A private section without branch metadata names no build:
@@ -529,6 +535,7 @@ func versionResult(rt resolvedTarget, depots []fetchedDepot, res map[string]any)
 	res["build"] = build
 	res["version_name"] = rt.versionName
 	res["manifests"] = manifests
+	res["depot_dlc"] = depotDLC
 	return res
 }
 

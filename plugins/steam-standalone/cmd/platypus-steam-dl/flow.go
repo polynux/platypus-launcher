@@ -209,6 +209,26 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 	if len(refs) == 0 {
 		return nil, "", resolvedTarget{}, fmt.Errorf("no depots for this platform")
 	}
+	// DLC selection (protocol 1.5): depots of unselected add-ons leave
+	// the set before anything is resolved or downloaded — the depot keys,
+	// request codes and manifests below only cover kept depots. A nil
+	// selection installs the old set (the legacy request shape). Pinned
+	// manifests for dropped depots are forgotten, not errors: deselecting
+	// an add-on shrinks the install history to the kept depots.
+	keep, err := dlcKeepSet(s.req.DLC)
+	if err != nil {
+		return nil, "", resolvedTarget{}, err
+	}
+	if keep != nil {
+		var dropped []DepotRef
+		refs, dropped = filterDepotsByDLC(refs, keep)
+		for _, r := range dropped {
+			delete(rt.manifests, r.DepotID)
+		}
+		if len(refs) == 0 {
+			return nil, "", resolvedTarget{}, fmt.Errorf("the dlc selection leaves no depots to download")
+		}
+	}
 	// Resolve shared depots: the manifest gid comes straight from the
 	// source app's entry (DepotDownloader recurses the same way), and
 	// the depot key is keyed to the source app unless the game itself

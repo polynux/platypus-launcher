@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"platypus/internal/depot"
+	"platypus/internal/steam"
+	"strings"
 	"sync"
 	"time"
-
-	"platypus/internal/depot"
 )
 
 func runSize(ctx context.Context, req request) error {
@@ -230,6 +231,16 @@ func runUpdate(ctx context.Context, req request) error {
 		if err := depot.SaveManifest(ss.dataDir, req.AppID, d.ref.DepotID, d.ref.GID, d.raw); err != nil {
 			return err
 		}
+	}
+	// Deselected DLC (protocol 1.5): depots that fell out of the download
+	// set leave their files behind the per-depot loop above, so remove
+	// them here — only files no kept depot carries, like the gone pass.
+	kept := map[uint32]bool{}
+	for _, d := range depots {
+		kept[d.ref.DepotID] = true
+	}
+	if err := removeRetiredDepots(ss, req.AppID, kept, installedManifests(depots), req.InstallDir); err != nil {
+		return err
 	}
 	// Same success-path order as runInstall: the flusher's checkpoint
 	// happens before the job file is removed (see flusher.stop).
@@ -699,6 +710,119 @@ func removeGone(installDir string, gone []string) error {
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("removing obsolete files: %s", errs)
+	}
+	return nil
+}
+
+// removeRetiredDepots deletes the files of depots that have saved manifests
+// but are no longer in the download set (a deselected DLC, protocol 1.5).
+// Every saved manifest of a retired depot is diffed against the new
+// combined manifest, like the per-depot gone pass, so files a kept depot
+// still carries stay. Filenames-encrypted manifests need the depot's key,
+// fetched like any other depot key; the retired depot's saved manifests
+// are forgotten, so reselecting downloads from scratch.
+func removeRetiredDepots(s *session, appID uint32, kept map[uint32]bool, combined *depot.Manifest, installDir string) error {
+	dir := filepath.Join(s.dataDir, "manifests", fmt.Sprint(appID))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil // nothing ever installed: nothing retired
+	}
+	var retired []uint32
+	seenRetired := map[uint32]bool{}
+	for _, e := range entries {
+		name := e.Name()
+		i := strings.IndexByte(name, '_')
+		if i <= 0 {
+			continue
+		}
+		var id uint64
+		if _, err := fmt.Sscanf(name[:i], "%d", &id); err != nil || id == 0 {
+			continue
+		}
+		if !kept[uint32(id)] && !seenRetired[uint32(id)] {
+			seenRetired[uint32(id)] = true
+			retired = append(retired, uint32(id))
+		}
+	}
+	if len(retired) == 0 {
+		return nil
+	}
+	// One PICS read resolves the retired depots' key apps (shared depots
+	// key to their source app unless the game is free, like fetchDepots).
+	var kv *steam.KV
+	var free bool
+	pics := func() error {
+		if kv != nil {
+			return nil
+		}
+		toks, err := s.cm.PICSAccessTokens([]uint32{appID}, nil, 0)
+		if err != nil {
+			return callErr("product info tokens", err)
+		}
+		kv, _, err = s.cm.ProductInfo(appID, toks[appID], 0)
+		if err != nil {
+			return callErr("product info", err)
+		}
+		free = kv.Get("common") != nil && kv.Get("common").String("freetodownload") == "1"
+		return nil
+	}
+	for _, depotID := range retired {
+		olds := loadInstalledAll(s.dataDir, appID, depotID)
+		if len(olds) == 0 {
+			continue
+		}
+		needKey := false
+		for _, old := range olds {
+			if old.Meta.FilenamesEncrypted {
+				needKey = true
+				break
+			}
+		}
+		if needKey {
+			if err := pics(); err != nil {
+				return err
+			}
+			app := appID
+			if !free {
+				if depots := kv.Get("depots"); depots != nil {
+					var src uint32
+					fmt.Sscanf(depots.String(fmt.Sprint(depotID), "depotfromapp"), "%d", &src)
+					if src != 0 && src != appID {
+						app = src
+					}
+				}
+			}
+			k, err := s.cm.DepotKey(depotID, app, 0)
+			if err != nil {
+				return depErrf(depotID, err)
+			}
+			for _, old := range olds {
+				if old.Meta.FilenamesEncrypted {
+					if err := old.DecryptFilenames(k); err != nil {
+						return depErrf(depotID, err)
+					}
+				}
+			}
+		}
+		var gone []string
+		seenGone := map[string]bool{}
+		for _, old := range olds {
+			_, g := depot.Diff(old, combined)
+			for _, name := range g {
+				if !seenGone[name] {
+					seenGone[name] = true
+					gone = append(gone, name)
+				}
+			}
+		}
+		if err := removeGone(installDir, gone); err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), fmt.Sprintf("%d_", depotID)) {
+				os.Remove(filepath.Join(dir, e.Name()))
+			}
+		}
 	}
 	return nil
 }

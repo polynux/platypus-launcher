@@ -2,7 +2,7 @@
 // plugin, replacing DepotDownloader for installs and logins. It speaks
 // one subcommand per argv:
 //
-//	platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud
+//	platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc
 //
 // The request (app id, branch, dirs, and the refresh token) arrives as one
 // JSON object on stdin — the token never goes in argv (visible in
@@ -101,8 +101,10 @@ func main() {
 		runErr = runUnlock(ctx, req)
 	case "family-running":
 		runErr = runFamilyRunning(ctx, req)
+	case "dlc":
+		runErr = runDLC(ctx, req)
 	default:
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc")
 	}
 	if runErr != nil {
 		var wpe wrongPasswordError
@@ -135,6 +137,11 @@ type request struct {
 	// Repair, on a verify run, re-downloads the bad files after the check
 	// (protocol 1.4): without it the run only reads.
 	Repair bool `json:"repair"`
+	// DLC is the protocol 1.5 add-on selection (value ids, as strings):
+	// depots whose dlcappid names another DLC are skipped. Nil installs
+	// the old set (the legacy request shape without the field); an empty
+	// list installs the base game only.
+	DLC []string `json:"dlc"`
 	// Op is the cloud subcommand (status|pull|push|resolve); Ctx the
 	// CloudContext and Choices the resolve paths, for the cloud op only.
 	Op      string          `json:"op"`
