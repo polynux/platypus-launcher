@@ -1,11 +1,13 @@
-# Ubisoft Connect (setup + launch + client-run installs, protocol 1.25)
+# Ubisoft Connect (library + setup + launch + client-run installs, protocol 1.25)
 
 Ubisoft games through the official Ubisoft Connect client in one
 Platypus-managed Wine prefix. The client owns installs and launches; this
 plugin answers the installer spec, the wine-client launch spec, the
 client-run install/uninstall commands, the standalone client spec for the
-plugin card's Open button, and reads the client's on-disk state.
-See `docs/research/ubisoft-options.md` and issues
+plugin card's Open button, and reads the client's on-disk state:
+the local-cache library reader is issue #192, written clean-room from
+`docs/research/ubisoft-library-format.md`. See `docs/research/ubisoft-options.md`
+and issues
 [#193](https://github.com/polynux/platypus-launcher/issues/193),
 [#194](https://github.com/polynux/platypus-launcher/issues/194),
 [#212](https://github.com/polynux/platypus-launcher/issues/212),
@@ -28,19 +30,40 @@ Verified with fakes and loopback (no network, no Wine, no account):
   exe, and `startTimeout` 900.
 - `game.install`/`game.update`/`game.uninstall` answer the `clientRun`
   command (`uplay://install/<id>` / `uplay://uninstall/<id>`) with
-  `clientOwnsLocation`, and end the job from the client's on-disk records
-  (bounded wait, readable failure on timeout, silent on cancel). Installed
-  games appear in the library only once the local-cache reader lands
-  (#192): until then a finished install has nowhere to show.
+  `clientOwnsLocation`, and end the job from the client's on-disk state
+  (the install registry gaining `InstallDir`, the catalogue cache being
+  rewritten, or the install key disappearing; bounded wait, readable failure
+  on timeout, silent on cancel).
+- `library.list` reads the client's caches in the prefix: the product
+  catalogue (`cache/configuration/configurations`), the account's owned ids
+  (`cache/ownership/<userId>`) and the install registry in Wine's
+  `system.reg` (`HKLM\Software\Wow6432Node\Ubisoft\Launcher\Installs\<id>\InstallDir`,
+  plus the unredirected key). Owned games are listed once; DLC/ULC products,
+  other stores' copies (`third_party_platform`) and products with no game
+  executable are filtered out; an installed game carries the registry path.
+  A game's launch follows `uplay://launch/<id>/0` and tracks the catalogue's
+  executable. A cache that is missing, truncated/garbage, or the October 2026
+  encrypted `.vdat` container answers one clear, localized status (-32002):
+  "Start Ubisoft Connect once and sign in so Platypus can read your games"
+  ("Lancez Ubisoft Connect une fois et connectez-vous…" in French); it is not
+  an error per call and never crashes on garbage.
+
+The library reader is written only from the public formats in
+`docs/research/ubisoft-library-format.md` (issue #197 leaves the project
+licence open, so no code was ported from any project).
+
 Pending a real prefix and a Ubisoft account (untouched by this plugin):
 
 - L-U1: the Connect install folder (`UbisoftConnect.exe` vs `upc.exe` is a
-  guess until then), login webview under our Wine/Proton, cache/ownership
-  file locations, `uplay://` reachability, process matching for `find`.
-- L-U2: one small game install + launch, and the real install-record
-  location/format replacing `drive_c/platypus-ubisoft/records/<id>.json`.
-- Blocked: the local-cache library reader (#192, needs the licence
-  decision #197); phase B web API (needs product decision Q-U1).
+  guess until then), login webview under our Wine/Proton, the cache paths
+  and ownership file name on a real account, whether `uplay://launch` takes
+  the catalogue's product id, and process matching for `find`.
+- L-U2: one small game install + launch, and whether the client rewrites the
+  catalogue cache on install/update (the watch also keys on the install
+  registry, so an install still completes without it).
+- Blocked: phase B web API (needs product decision Q-U1); reading the
+  encrypted `.vdat` cache (needs the prefix's DPAPI user secrets, so the
+  entitlement endpoint is the fallback).
 
 ## Pinned installer
 
