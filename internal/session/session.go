@@ -523,13 +523,20 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 // redactWriter filters secret values out of a game's output stream. Every
 // occurrence of a prefix is kept, but the token that follows it (up to the
 // next whitespace or quote) is replaced with "***", mirroring RedactArgs.
+//
+// The mutex covers the case OpenSessionLog creates: the tracker flushes and
+// closes the log when the session ends, while a store client outliving the
+// game (protocol 1.20) still writes to the same log (#215).
 type redactWriter struct {
+	mu       sync.Mutex
 	w        io.Writer
 	prefixes []string
 	pending  []byte
 }
 
 func (r *redactWriter) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.pending = append(r.pending, p...)
 	for {
 		i := indexByte(r.pending, '\n')
@@ -547,6 +554,8 @@ func (r *redactWriter) Write(p []byte) (int, error) {
 
 // Flush redacts and writes any trailing output without a newline.
 func (r *redactWriter) Flush() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if len(r.pending) == 0 {
 		return
 	}
