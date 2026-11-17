@@ -100,6 +100,12 @@ func TestShaderCacheEnvAbsent(t *testing.T) {
 	noID := withTree
 	noID.StoreAppID = ""
 	cases["no store id"] = noID
+	badID := withTree
+	badID.StoreAppID = "../730"
+	cases["non-numeric store id"] = badID
+	dotID := withTree
+	dotID.StoreAppID = "730;rm"
+	cases["store id with punctuation"] = dotID
 	for name, game := range cases {
 		_, env, err := BuildCommandFor(game, types.ProtonVersion{}, Target{Exe: game.Executable}, false, "", home)
 		if err != nil {
@@ -110,6 +116,31 @@ func TestShaderCacheEnvAbsent(t *testing.T) {
 			if _, ok := env[k]; ok {
 				t.Fatalf("%s: sets %s = %q", name, k, env[k])
 			}
+		}
+	}
+}
+
+// A symlinked shadercache dir is ignored: the launch never trusts a link
+// where it would point the driver caches.
+func TestShaderCacheEnvSymlink(t *testing.T) {
+	home := t.TempDir()
+	game := shaderGame(home, "730")
+	cache := filepath.Join(home, "games", "shadercache", "730")
+	target := t.TempDir()
+	if err := os.RemoveAll(cache); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, cache); err != nil {
+		t.Fatal(err)
+	}
+	_, env, err := BuildCommandFor(game, types.ProtonVersion{}, Target{Exe: game.Executable}, false, "", home)
+	if err != nil {
+		t.Fatalf("BuildCommand: %v", err)
+	}
+	for _, k := range []string{"MESA_SHADER_CACHE_DIR", "__GL_SHADER_DISK_CACHE_PATH",
+		"__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "STEAM_COMPAT_SHADER_PATH"} {
+		if _, ok := env[k]; ok {
+			t.Fatalf("symlink cache sets %s = %q", k, env[k])
 		}
 	}
 }

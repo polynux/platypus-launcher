@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"platypus/internal/depot"
@@ -123,6 +124,84 @@ func saveShaderState(dataDir string, appID uint32, st map[string]uint64) error {
 	return os.Rename(tmp, shaderStatePath(dataDir, appID))
 }
 
+// shaderResolved is one pair's bucket answer, before its manifest body is
+// fetched: the bucket id, the content manifest to download and the byte
+// size the Shader service reported for it.
+type shaderResolved struct {
+	pair   [2]string
+	bucket uint64
+	gid    uint64
+	size   uint64
+}
+
+// dedupeShaderBuckets drops pairs that resolve to an already-seen bucket
+// id: two config pairs can name one bucket, and it downloads once, counted
+// once. The first pair wins; the loser's state stays unset, so the next
+// run re-resolves (cheaply) instead of re-downloading.
+func dedupeShaderBuckets(in []shaderResolved) []shaderResolved {
+	seen := map[uint64]bool{}
+	out := make([]shaderResolved, 0, len(in))
+	for _, r := range in {
+		if seen[r.bucket] {
+			continue
+		}
+		seen[r.bucket] = true
+		out = append(out, r)
+	}
+	return out
+}
+
+// freeBytes is the free space available to the user on dir's filesystem.
+func freeBytes(dir string) (uint64, error) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(dir, &st); err != nil {
+		return 0, err
+	}
+	return uint64(st.Bavail) * uint64(st.Bsize), nil
+}
+
+// shaderSpaceOK guards the download: twice the resolved buckets must fit
+// on the target and on the staging dir, when that lives elsewhere.
+// Shaders never fail the install, so a cramped disk skips the phase with
+// a clear warning instead of an error.
+func shaderSpaceOK(shaderDir, stageDir string, need uint64) (bool, string) {
+	if need == 0 {
+		return true, ""
+	}
+	// The staging dir may not exist yet on a direct helper run (the
+	// download creates it); make it so the free-space check sees it.
+	if err := os.MkdirAll(stageDir, 0o755); err != nil {
+		return false, fmt.Sprintf("shader cache skipped: cannot check free space on %s: %v", stageDir, err)
+	}
+	want := 2 * need
+	dirs := []string{shaderDir}
+	if as, err := filepath.Abs(shaderDir); err == nil {
+		if bs, err := filepath.Abs(stageDir); err == nil && bs != as {
+			dirs = append(dirs, stageDir)
+		}
+	} else {
+		dirs = append(dirs, stageDir)
+	}
+	for _, d := range dirs {
+		free, err := freeBytes(d)
+		if err != nil {
+			return false, fmt.Sprintf("shader cache skipped: cannot check free space on %s: %v", d, err)
+		}
+		if free < want {
+			return false, fmt.Sprintf("shader cache skipped: need %d MB free on %s, have %d MB; the install is unaffected",
+				want>>20, d, free>>20)
+		}
+	}
+	return true, ""
+}
+
+// shaderLimiter is the run's bandwidth cap (protocol 1.21, issue #207),
+// shared by every bucket like the install path's multi-depot runs; nil
+// when the user set no cap.
+func shaderLimiter(req request) *depot.Limiter {
+	return depot.NewLimiter(req.DownloadLimit)
+}
+
 // shaderBucket is one resolved bucket: the pair that asked for it, the
 // bucket id, the manifest to download and its parsed body.
 type shaderBucket struct {
@@ -160,23 +239,37 @@ func runShader(ctx context.Context, req request) error {
 	// Phase 1: resolve every bucket manifest first, so phase 2 reports
 	// one grand total instead of restarting the bar per bucket.
 	state := loadShaderState(ss.dataDir, req.AppID)
-	var buckets []shaderBucket
+	var resolved []shaderResolved
 	for _, p := range shaderPairs() {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		bucket, gid, _, skip, err := bucketManifest(cm, req.AppID, p)
+		bucket, gid, size, skip, err := bucketManifest(cm, req.AppID, p)
 		if err != nil {
 			return err
 		}
 		if skip {
 			continue
 		}
-		man, err := downloadShaderManifest(ctx, ss, req.AppID, gid, key)
+		resolved = append(resolved, shaderResolved{pair: p, bucket: bucket, gid: gid, size: size})
+	}
+	resolved = dedupeShaderBuckets(resolved)
+	var buckets []shaderBucket
+	var need uint64
+	for _, r := range resolved {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		man, err := downloadShaderManifest(ctx, ss, req.AppID, r.gid, key)
 		if err != nil {
 			return err
 		}
-		buckets = append(buckets, shaderBucket{pair: p, bucket: bucket, gid: gid, man: man})
+		buckets = append(buckets, shaderBucket{pair: r.pair, bucket: r.bucket, gid: r.gid, man: man})
+		need += r.size
+	}
+	if ok, why := shaderSpaceOK(req.ShaderDir, filepath.Join(ss.dataDir, "jobs"), need); !ok {
+		emit(map[string]any{"type": "result", "bytes": 0, "pairs": map[string]string{}, "foz": []string{}, "warning": why})
+		return nil
 	}
 	// Phase 2: download. Buckets whose stored gid matches and whose
 	// on-disk sizes still match are skipped without hashing (the
@@ -190,6 +283,7 @@ func runShader(ctx context.Context, req request) error {
 		total += shaderFileBytes(b.man)
 		pending = append(pending, b)
 	}
+	lim := shaderLimiter(req)
 	onProg, _, _ := progress(total)
 	got := map[string]string{}
 	var foz []string
@@ -198,7 +292,7 @@ func runShader(ctx context.Context, req request) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if m, err := downloadBucket(ctx, ss, b, withBase(onProg, base)); err != nil {
+		if m, err := downloadBucket(ctx, ss, lim, b, withBase(onProg, base)); err != nil {
 			return err
 		} else {
 			n += m
@@ -298,7 +392,7 @@ func shaderFozFiles(man *depot.Manifest) []string {
 // place — per-bucket folders would break that and buy nothing: the state
 // above already tracks buckets separately). Staging resumes per bucket
 // under shader-<app>-<bucket>, like the game installs' job staging.
-func downloadBucket(ctx context.Context, ss *session, b shaderBucket, onProg func(depot.Progress)) (uint64, error) {
+func downloadBucket(ctx context.Context, ss *session, lim *depot.Limiter, b shaderBucket, onProg func(depot.Progress)) (uint64, error) {
 	appID := ss.req.AppID
 	man := b.man
 	key, err := ss.cm.DepotKey(appID, appID, 0)
@@ -334,7 +428,7 @@ func downloadBucket(ctx context.Context, ss *session, b shaderBucket, onProg fun
 		return nil
 	}
 	client := depot.NewClient()
-	sched := depot.NewScheduler(client, depot.SchedulerConfig{InitialConns: seededInitialConns(len(hosts), 4, len(man.UniqueChunks()))})
+	sched := newScheduler(client, lim, len(hosts), len(man.UniqueChunks()))
 	dlErr := sched.DownloadStream(ctx, man, appID, hosts, key, skip, sink, onProg)
 	cErr := w.Close()
 	if dlErr != nil {

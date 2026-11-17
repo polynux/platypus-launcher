@@ -89,18 +89,25 @@ the machine's own: that is the background volunteer-work queue (stale
 buckets to re-process, paired with `ReportBucketProcessingComplete`),
 not the download path, and is not needed.
 
-## What the client does that Platypus does NOT (deliberately)
+## What Platypus does after the bytes land (issue #211)
 
-After the bytes land, the client replays the `.foz` databases with
-`fossilize_replay` into driver caches (`nvidiav1/…`,
-`mesa_shader_cache…`, `fozpipelinesv6/…`) and points the game at them
-(`__GL_SHADER_DISK_CACHE_PATH`, `MESA_GLSL_CACHE_DIR`, … — see local
-`shader_log.txt`: "Setting MESA_GLSL_CACHE_DIR=…",
-"Processing FOZ cache file at …", "Writing NVIDIA cache of 1 buckets").
-Platypus downloads the buckets and runs nothing: the `.foz` files wait in
-`shadercache/<appid>/` for the client (or a future replay step) to
-process. Download-only therefore saves bandwidth on the next client run
-but does not by itself warm the driver caches.
+After the download, the plugin replays each `.foz` with `fossilize_replay`
+— the Steam client's `ubuntu12_64/` copy first, else one on `PATH` — into
+the driver caches (`nvidiav1/…`, `mesa_shader_cache…`,
+`fozpipelinesv6/…`), then the core points the game at the tree at launch:
+`MESA_SHADER_CACHE_DIR`, `__GL_SHADER_DISK_CACHE_PATH` (plus
+`__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1`), and `STEAM_COMPAT_SHADER_PATH`
+for Proton/umu (never native) — mirroring the client's own
+`shader_log.txt` ("Setting MESA_GLSL_CACHE_DIR=…", "Processing FOZ cache
+file at …", "Writing NVIDIA cache of 1 buckets"). Per-GPU buckets need no
+replay (see the Step 0 probe below): their `nvidiav1/…` trees already sit
+in the layout the driver reads. The replay runs one at a time with a 600 s
+total budget per job, never fails the recorded install, and is skipped
+with a warning when no replay binary exists (the `.foz` stays
+download-only until the client processes it).
+Follow-up: `fossilize_replay --device-index` pinning for hybrid GPUs is
+left unset (the replay runs without it); revisit if a multi-GPU machine
+shows the wrong device warming.
 
 ## Implementation consequences (issue #205 step 2)
 

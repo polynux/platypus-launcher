@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"platypus/internal/datadir"
@@ -200,14 +201,19 @@ const steamShaderPlugin = "steam-standalone"
 // downloads buckets for), with a store id, a non-client launch (client
 // launches run under the real Steam client, which points its own caches)
 // and a shadercache/<appid>/ dir already on disk.
+// shaderAppID admits only numeric store ids: the shadercache layout is
+// indexed by app id, and anything else never names a bucket tree.
+var shaderAppID = regexp.MustCompile(`^[0-9]+$`)
+
 func shaderCacheDir(game types.Game) string {
 	if game.Source != steamShaderPlugin || game.StoreAppID == "" ||
+		!shaderAppID.MatchString(game.StoreAppID) ||
 		game.ClientLaunch || game.InstallDir == "" {
 		return ""
 	}
 	dir := filepath.Join(filepath.Dir(game.InstallDir), "shadercache", game.StoreAppID)
-	st, err := os.Stat(dir)
-	if err != nil || !st.IsDir() {
+	st, err := os.Lstat(dir)
+	if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
 		return ""
 	}
 	return dir

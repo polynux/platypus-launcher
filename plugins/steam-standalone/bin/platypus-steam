@@ -73,7 +73,7 @@ LOCALES = {
         "settings_region": "Download region",
         "settings_region_desc": "Automatic uses the Steam client's own region when it has one, else Steam's geolocation.",
         "settings_shader": "Download shader caches",
-        "settings_shader_desc": "Fetch the Steam shader pre-caching buckets into shadercache/ after each install or update. Multi-GB for big games; replayed locally so launches find warm driver caches.",
+        "settings_shader_desc": "Fetch the Steam shader pre-caching buckets into shadercache/ after each install or update. Multi-GB for big games; replayed locally when Steam's replay tool is available, so launches find warm driver caches.",
         "region_auto": "Automatic",
         "dlc_label": "Add-ons",
     },
@@ -89,7 +89,7 @@ LOCALES = {
         "settings_region": "Région de téléchargement",
         "settings_region_desc": "Automatique utilise la région du client Steam s'il en a une, sinon la géolocalisation de Steam.",
         "settings_shader": "Télécharger les caches de shaders",
-        "settings_shader_desc": "Récupère les paquets de précompilation des shaders dans shadercache/ après chaque installation ou mise à jour. Plusieurs Go pour les gros jeux ; rejoués localement pour des caches pilotes chauds au lancement.",
+        "settings_shader_desc": "Récupère les paquets de précompilation des shaders dans shadercache/ après chaque installation ou mise à jour. Plusieurs Go pour les gros jeux ; rejoués localement quand l'outil de replay de Steam est disponible, pour des caches pilotes chauds au lancement.",
         "region_auto": "Automatique",
         "dlc_label": "Extensions",
     },
@@ -3808,6 +3808,22 @@ def game_relocated(params):
             entry["executable"] = ndst + exe[len(nsrc):]
         installed[app] = entry
         save_state("installed.json", installed)
+    # The shader cache is a sibling of the game folder, so it moves with
+    # it: rename the tree, or drop it when the move fails (it is a cache;
+    # the next install/update refetches it).
+    try:
+        old_shader = shader_dir_for(nsrc, app)
+        new_shader = shader_dir_for(ndst, app)
+        if old_shader != new_shader and os.path.isdir(old_shader) and not os.path.islink(old_shader):
+            try:
+                os.makedirs(os.path.dirname(new_shader), exist_ok=True)
+                shutil.move(old_shader, new_shader)
+            except OSError as e:
+                log("warning", "couldn't move the shader cache for app %s: %s" % (app, e))
+                shutil.rmtree(old_shader, ignore_errors=True)
+                shutil.rmtree(new_shader, ignore_errors=True)
+    except OSError:
+        pass
     return {}
 
 
@@ -3936,19 +3952,27 @@ def follow_install(job_id, app, game_dir, dl_kind="install", version=None):
         return
     # The install is recorded BEFORE the best-effort shader phase: a cancel
     # during the shaders skips the shaders, never the finished install (a
-    # recorded install is one job.discard never deletes).
+    # recorded install is one job.discard never deletes). The phase always
+    # ends with job.done carrying the install, so the core refreshes the
+    # library cache even when the shaders were canceled.
+    prev_client = (load_state("installed.json", {}).get(app) or {}).get("mode") == "client"
     installed = record_install(app, game_dir, result.get("os_used") or "linux",
                                version_result(result), req.get("dlc"), result.get("depot_dlc"))
     drop_job_meta(job_id)
+    note = None
     if settings_values().get("shader") is True:
-        fetch_shader_cache(job_id, app, game_dir)
-        with jobs_lock:
-            job = jobs.pop(job_id, None)
-        if (job or {}).get("canceled"):
-            return
+        ig = load_state("installed.json", {}).get(app) or {}
+        if not prev_client and (ig.get("mode") or "none") != "client":
+            # The official client uses its own cache: client-mode games
+            # skip the shader download.
+            note = fetch_shader_cache(job_id, app, game_dir, version)
     done = {"jobId": job_id}
     if installed:
         done["installed"] = installed
+    if note:
+        done["note"] = note
+    with jobs_lock:
+        jobs.pop(job_id, None)
     notify("job.done", done)
 
 
@@ -3959,48 +3983,95 @@ def shader_dir_for(game_dir, app):
                         "shadercache", str(app))
 
 
-def fetch_shader_cache(job_id, app, game_dir):
+def shader_staging_drop(app):
+    """Delete the helper's shader staging for an app: jobs/shader-<app>-*
+    checkpoints and chunk dirs. The shader download runs after the install
+    is recorded, so a canceled run's staging outlives the plugin job id
+    whose discard must clean it (that id only names the job's own files)."""
+    app = str(app or "")
+    if not re.fullmatch(r"[0-9]+", app):
+        return
+    base = jobs_dir()
+    try:
+        names = os.listdir(base)
+    except OSError:
+        return
+    prefix = "shader-%s-" % app
+    for n in names:
+        if not n.startswith(prefix):
+            continue
+        p = os.path.join(base, n)
+        try:
+            if os.path.isdir(p) and not os.path.islink(p):
+                shutil.rmtree(p, ignore_errors=True)
+            else:
+                os.unlink(p)
+        except OSError:
+            pass
+
+
+def fetch_shader_cache(job_id, app, game_dir, version=None):
     """Best-effort shader pre-caching buckets after an install/update
     (issues #205, #211): platypus-steam-dl downloads the Fossilize buckets
     into shadercache/<appid> next to the game, then each .foz is replayed
     locally so launches find warm driver caches. Failures and cancels never
     fail the recorded install: the next install/update retries the missing
-    buckets."""
+    buckets. Returns a short done-note for the job when the phase was
+    skipped for a reason the user should see (no replay binary), else None."""
     with jobs_lock:
         if (jobs.get(job_id) or {}).get("canceled"):
-            return
+            return None
     shader_dir = shader_dir_for(game_dir, app)
     try:
-        req = dl_request({"id": app}, {"install_dir": game_dir,
-                                       "job_id": job_id,
-                                       "shader_dir": shader_dir})
+        params = {"id": app}
+        if (version or {}).get("downloadLimit"):
+            params["downloadLimit"] = int(version["downloadLimit"])
+        req = dl_request(params, {"install_dir": game_dir,
+                                  "job_id": job_id,
+                                  "shader_dir": shader_dir})
         result = dl_run("shader", req, job_id, game_dir,
                         label="shader cache download failed", phase="shaders")
+        if isinstance(result.get("warning"), str) and result["warning"]:
+            log("warning", "shader cache for app %s: %s" % (app, result["warning"]))
+            return None
+        foz = result.get("foz") or []
+        if foz and shader_replay_binary() is None:
+            log("warning", "shader replay skipped for app %s: no fossilize_replay "
+                "in the Steam client or on PATH; the .foz stays download-only" % app)
+            return "Shader caches downloaded but not replayed (no fossilize_replay found)"
+        # One budget for the whole job, not per file: replays are
+        # machine-wide driver work holding the global queue.
+        deadline = time.monotonic() + shader_replay_timeout()
+        for rel in foz:
+            with jobs_lock:
+                if (jobs.get(job_id) or {}).get("canceled"):
+                    break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                log("warning", "shader replay budget of %ds exhausted for app %s" % (shader_replay_timeout(), app))
+                break
+            replay_shader_foz(job_id, shader_dir, rel, remaining)
     except Exception as e:
         with jobs_lock:
             canceled = bool((jobs.get(job_id) or {}).get("canceled"))
         if canceled:
-            return
+            return None
         log("warning", "shader cache download failed for app %s: %s" % (app, e))
-        return
-    for rel in result.get("foz") or []:
-        with jobs_lock:
-            if (jobs.get(job_id) or {}).get("canceled"):
-                break
-        replay_shader_foz(job_id, shader_dir, rel)
+        return None
+    return None
 
 
 # At most one fossilize_replay at a time: replays are machine-wide driver
 # work, and two installs finishing together must not replay together.
 shader_replay_lock = threading.Lock()
 
-SHADER_REPLAY_TIMEOUT = 1800
+SHADER_REPLAY_TIMEOUT = 600
 
 
 def shader_replay_timeout():
-    """Bound per .foz replay, in seconds: the constant by default, or the
-    PLATYPUS_SHADER_REPLAY_TIMEOUT override (the tests shrink it so the
-    timeout path runs in seconds, not half an hour)."""
+    """Bound for the whole job's replays, in seconds: the constant by
+    default, or the PLATYPUS_SHADER_REPLAY_TIMEOUT override (the tests
+    shrink it so the timeout path runs in seconds, not minutes)."""
     try:
         return max(1, int(os.environ.get("PLATYPUS_SHADER_REPLAY_TIMEOUT") or SHADER_REPLAY_TIMEOUT))
     except ValueError:
@@ -4020,25 +4091,46 @@ def shader_replay_binary():
         cand = os.path.join(root, "ubuntu12_64", "fossilize_replay")
         if os.path.isfile(cand) and os.access(cand, os.X_OK):
             return cand
-    return shutil.which("fossilize_replay")
+    found = shutil.which("fossilize_replay")
+    return found if found and os.path.isabs(found) else None
 
 
-def replay_shader_foz(job_id, shader_dir, rel):
+def kill_process_group(proc, grace=2):
+    """Stop a replay and its children: SIGTERM the process group, SIGKILL
+    after a short grace, then always reap the child so its returncode is
+    set (never "exit None")."""
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except OSError:
+        pass
+    try:
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    proc.wait()
+
+
+def replay_shader_foz(job_id, shader_dir, rel, timeout):
     """Replay one downloaded .foz into the driver caches with the same
-    environment a launch uses. Never blocks a launch: this runs in the
-    install/update job, and a cancel stops it between files."""
+    environment a launch uses, within `timeout` seconds of the job's total
+    replay budget. Never blocks a launch: this runs in the install/update
+    job, and a cancel stops it between files. Returns False when no replay
+    binary exists (the .foz stays download-only), True otherwise."""
     if not isinstance(rel, str) or not rel or os.path.isabs(rel):
-        return
+        return True
     src = os.path.realpath(os.path.join(shader_dir, rel))
     if not inside(src, os.path.realpath(shader_dir)) or not os.path.isfile(src):
-        return
+        return True
     binary = shader_replay_binary()
     if not binary:
-        log("warning", "shader replay skipped for %s: no fossilize_replay "
-            "in the Steam client or on PATH; the .foz stays download-only" % rel)
-        return
+        return False
     env = dict(os.environ)
     env["MESA_SHADER_CACHE_DIR"] = shader_dir
+    env["MESA_GLSL_CACHE_DIR"] = shader_dir
+    env.pop("MESA_SHADER_CACHE_DISABLE", None)
     env["__GL_SHADER_DISK_CACHE_PATH"] = os.path.join(shader_dir, "nvidiav1")
     env["__GL_SHADER_DISK_CACHE_SKIP_CLEANUP"] = "1"
     env["STEAM_COMPAT_SHADER_PATH"] = shader_dir
@@ -4047,35 +4139,51 @@ def replay_shader_foz(job_id, shader_dir, rel):
         cmd += ["nice", "-n19"]
     if shutil.which("ionice"):
         cmd += ["ionice", "-c3"]
+    # --device-index stays unset: hybrid-GPU pinning is a follow-up
+    # (see docs/research/steam-shader-cache.md).
     cmd += [binary, src]
     # One replay at a time, interruptible while waiting for the turn: the
     # lock waits in small slices so a cancel never hangs on another game.
     while not shader_replay_lock.acquire(timeout=5):
         with jobs_lock:
             if (jobs.get(job_id) or {}).get("canceled"):
-                return
+                return True
     try:
         with jobs_lock:
             if (jobs.get(job_id) or {}).get("canceled"):
-                return
+                return True
             try:
                 proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL,
-                                        stderr=subprocess.STDOUT)
+                                        stderr=subprocess.STDOUT,
+                                        start_new_session=True)
             except OSError as e:
                 log("warning", "shader replay failed for %s: %s" % (rel, e))
-                return
+                return True
             jobs[job_id] = {**(jobs.get(job_id) or {}), "proc": proc}
         try:
-            limit = shader_replay_timeout()
-            proc.wait(timeout=limit)
-        except subprocess.TimeoutExpired:
-            log("warning", "shader replay timed out for %s after %ds" % (rel, limit))
-        finally:
-            if proc.poll() is None:
+            deadline = time.monotonic() + max(1, timeout)
+            timed_out = False
+            while True:
+                with jobs_lock:
+                    canceled = bool((jobs.get(job_id) or {}).get("canceled"))
+                if canceled:
+                    break
                 try:
-                    proc.kill()
-                except OSError:
-                    pass
+                    proc.wait(timeout=0.5)
+                    break
+                except subprocess.TimeoutExpired:
+                    if time.monotonic() >= deadline:
+                        log("warning", "shader replay timed out for %s after %ds" % (rel, int(timeout)))
+                        timed_out = True
+                        break
+            with jobs_lock:
+                canceled = bool((jobs.get(job_id) or {}).get("canceled"))
+            if canceled or timed_out or proc.poll() is None:
+                # The whole group goes down, not just the parent: a plain
+                # kill would orphan the replay's children (and job.cancel
+                # stops the parent from outside, which poll() alone shows).
+                kill_process_group(proc)
+        finally:
             with jobs_lock:
                 if jobs.get(job_id, {}).get("proc") is proc:
                     jobs[job_id]["proc"] = None
@@ -4084,6 +4192,7 @@ def replay_shader_foz(job_id, shader_dir, rel):
                 canceled = bool((jobs.get(job_id) or {}).get("canceled"))
             if not canceled:
                 log("warning", "shader replay failed for %s (exit %s)" % (rel, proc.returncode))
+        return True
     finally:
         shader_replay_lock.release()
 
@@ -4779,6 +4888,7 @@ def follow_uninstall(job_id, app, ev=None):
             os.unlink(shader_state)
         except OSError:
             pass
+        shader_staging_drop(app)
         save_state("installed.json", installed)
         # Workshop content and its state leave with the game. A root outside
         # the game folder is removed only when this plugin wrote it (it is
@@ -4905,10 +5015,12 @@ def job_discard(params):
                 log("warn", f"not deleting {game_dir}: it holds an installed game")
             else:
                 shutil.rmtree(game_dir, ignore_errors=True)
-                # The shader cache sibling leaves with the discarded install.
-                shader_dir = shader_dir_for(game_dir, params.get("id", meta.get("app")))
-                if os.path.isdir(shader_dir) and inside(shader_dir, install_dir):
-                    shutil.rmtree(shader_dir, ignore_errors=True)
+                # (No shader-cache cleanup here: shaders download only
+                # after the install is recorded, and a recorded install
+                # is never deleted by a discard.)
+    # A canceled shader run's staging (jobs/shader-<app>-*) outlives the
+    # plugin job id, so it drops here rather than with the job's own files.
+    shader_staging_drop(params.get("id", meta.get("app")))
     # Staging: only these three names under jobs/, built from the validated id.
     base = jobs_dir()
     shutil.rmtree(os.path.join(base, job_id + ".chunks"), ignore_errors=True)

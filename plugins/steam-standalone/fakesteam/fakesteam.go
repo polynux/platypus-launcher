@@ -219,6 +219,25 @@ func BuildShader(appID uint32, gid uint64) *Fixture {
 	}, true)
 }
 
+// BuildShaderSwarm builds the shared Fossilize bucket of the test game
+// (depot == app id, like the live Shader service): the
+// fozpipelinesv6 .foz that needs a replay, with an encrypted filename.
+func BuildShaderSwarm(appID uint32, gid uint64) *Fixture {
+	return assemble(TestKey(), appID, gid, "linux", []fileSpec{
+		{name: "fozpipelinesv6/steam_pipeline_cache.foz",
+			body: []byte("fake fossilize bucket")},
+	}, true)
+}
+
+// BuildShaderGPU builds a per-GPU driver-native bucket of the test game:
+// the nvidiav1 tree the driver reads in place, needing no replay.
+func BuildShaderGPU(appID uint32, gid uint64) *Fixture {
+	return assemble(TestKey(), appID, gid, "linux", []fileSpec{
+		{name: "nvidiav1/GLCache/fakedriverhash/fakegpuhash/steam_shader_cache.bin",
+			body: []byte("fake driver cache")},
+	}, true)
+}
+
 // CDN is a fake content server farm serving one fixture.
 type CDN struct {
 	t       *testing.T
@@ -231,15 +250,16 @@ type CDN struct {
 
 // StartCDN serves fixtures from two httptest hosts (so multi-host spread
 // is exercised even in plugin tests). Extra fixtures add depots (a DLC
-// test passes Build and BuildDLC): manifests route by depot id, chunks
-// are served from the merged pool.
+// test passes Build and BuildDLC): manifests route by depot id and gid
+// (the URL is depot/<id>/manifest/<gid>/...), chunks are served from the
+// merged pool.
 func StartCDN(t *testing.T, fix *Fixture, more ...*Fixture) *CDN {
 	t.Helper()
 	fixes := append([]*Fixture{fix}, more...)
 	manifests := map[string][]byte{}
 	chunks := map[string][]byte{}
 	for _, f := range fixes {
-		manifests[fmt.Sprint(f.DepotID)] = f.Raw
+		manifests[fmt.Sprint(f.DepotID)+"/"+fmt.Sprint(f.GID)] = f.Raw
 		for id, enc := range f.Chunks {
 			chunks[id] = enc
 		}
@@ -253,7 +273,11 @@ func StartCDN(t *testing.T, fix *Fixture, more ...*Fixture) *CDN {
 			path := strings.TrimPrefix(r.URL.Path, "/")
 			parts := strings.Split(path, "/")
 			if len(parts) >= 4 && parts[0] == "depot" && parts[2] == "manifest" {
-				raw, ok := manifests[parts[1]]
+				key := parts[1]
+				if len(parts) >= 5 {
+					key += "/" + parts[3]
+				}
+				raw, ok := manifests[key]
 				if !ok && len(fixes) == 1 {
 					// A lone fixture stands in for every depot (a
 					// shared depot resolves to the same gid).

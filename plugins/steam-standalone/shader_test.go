@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -107,6 +108,79 @@ func TestSteamShaderCacheDownloadsAfterInstall(t *testing.T) {
 	}
 }
 
+// Two buckets merge into one client-mirror tree: the swarm bucket's .foz
+// plus the per-GPU bucket's driver-native tree, under one grand progress
+// total and with per-bucket state. The CDN keys manifests by depot+gid, so
+// same-depot buckets don't shadow each other.
+func TestSteamShaderTwoBucketsMerge(t *testing.T) {
+	e := setup(t)
+	steamRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(steamRoot, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	vdf := `"ShaderCacheManager"
+{
+"CurrentBucketGPU"		"TESTGPU"
+"CurrentBucketDriver"		"L9:testdriver"
+}
+`
+	if err := os.WriteFile(filepath.Join(steamRoot, "config", "config.vdf"), []byte(vdf), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PLATYPUS_STEAM_ROOT", steamRoot)
+	t.Setenv("PLATYPUS_PLUGIN_DATA", e.pluginData())
+	swarm := fakesteam.BuildShaderSwarm(4321, 111)
+	gpu := fakesteam.BuildShaderGPU(4321, 222)
+	cdn := fakesteam.StartCDN(t, e.fix, swarm, gpu)
+	e.cdn = cdn
+	fakesteam.WriteCMState(t, e.cmState, cdn, e.fix)
+	fakesteam.WriteCMShaderState(t, e.cmState, map[string]fakesteam.ShaderBucket{
+		"SteamSwarm\tG7:VulkanPipelinesV6": {Bucket: 7, Manifest: swarm.GID, Size: swarm.DiskBytes},
+		"TESTGPU\tL9:testdriver":           {Bucket: 9, Manifest: gpu.GID, Size: gpu.DiskBytes},
+	})
+	e.login()
+	if err := e.call("settings.apply", map[string]any{"values": map[string]any{"region": "auto", "shader": true}}, nil); err != nil {
+		t.Fatalf("settings.apply: %v", err)
+	}
+	game := e.find(e.library(), "4321")
+	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
+	}
+	// Merged tree: one .foz plus the driver-native tree.
+	if body, err := os.ReadFile(filepath.Join(e.folder, "shadercache", "4321",
+		"fozpipelinesv6", "steam_pipeline_cache.foz")); err != nil || string(body) != "fake fossilize bucket" {
+		t.Fatalf("swarm bucket missing: %v %q", err, body)
+	}
+	if body, err := os.ReadFile(filepath.Join(e.folder, "shadercache", "4321",
+		"nvidiav1", "GLCache", "fakedriverhash", "fakegpuhash", "steam_shader_cache.bin")); err != nil || string(body) != "fake driver cache" {
+		t.Fatalf("gpu bucket missing: %v %q", err, body)
+	}
+	// Per-bucket state: both pairs recorded under their own gids.
+	raw, err := os.ReadFile(filepath.Join(e.pluginData(), "shader", "4321.json"))
+	if err != nil || !strings.Contains(string(raw), "111") || !strings.Contains(string(raw), "222") {
+		t.Fatalf("per-bucket state not recorded: %s %v", raw, err)
+	}
+	// One grand progress total across both buckets.
+	want := swarm.DiskBytes + gpu.DiskBytes
+	var total uint64
+	for _, p := range e.notes.forMethod("job.progress") {
+		var msg map[string]any
+		if json.Unmarshal(p, &msg) != nil {
+			continue
+		}
+		if msg["jobId"] != j.ID || msg["phase"] != "shaders" {
+			continue
+		}
+		if n, _ := msg["total"].(float64); uint64(n) > total {
+			total = uint64(n)
+		}
+	}
+	if total != want {
+		t.Fatalf("shader progress total = %d, want %d", total, want)
+	}
+}
+
 // The toggle off (the default): installs fetch no shader buckets.
 func TestSteamShaderCacheDefaultOff(t *testing.T) {
 	e := setup(t)
@@ -191,46 +265,64 @@ func TestSteamShaderCacheSkipsCurrentBuckets(t *testing.T) {
 
 // A cancel during the shader phase keeps the finished install: the record
 // lands before the shaders run, so discarding the canceled job must not
-// delete the game. The replay sleeps, so the cancel reliably lands inside
-// the shader phase.
+// delete the game, and the phase still ends with job.done carrying the
+// install (so the core refreshes the library cache). The fake replay
+// writes a marker first, so the cancel reliably lands inside the replay
+// rather than the download.
 func TestSteamShaderCancelDuringReplayKeepsInstall(t *testing.T) {
 	e := setup(t)
 	shaderEnv(t, e)
+	t.Setenv("PLATYPUS_SHADER_REPLAY_TIMEOUT", "30")
 	e.login()
 	if err := e.call("settings.apply", map[string]any{"values": map[string]any{"region": "auto", "shader": true}}, nil); err != nil {
 		t.Fatalf("settings.apply: %v", err)
 	}
 	steamRoot := os.Getenv("PLATYPUS_STEAM_ROOT")
+	marker := filepath.Join(t.TempDir(), "replaying")
+	script := "#!/bin/sh\necho started > \"" + marker + "\"\nsleep 60\n"
 	if err := os.WriteFile(filepath.Join(steamRoot, "ubuntu12_64", "fossilize_replay"),
-		[]byte("#!/bin/sh\nsleep 60\n"), 0o755); err != nil {
+		[]byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	game := e.find(e.library(), "4321")
 	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		if _, err := os.Stat(filepath.Join(e.folder, "shadercache", "4321")); err == nil {
+		if _, err := os.Stat(marker); err == nil {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("shader phase never started")
+			t.Fatal("replay never started")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	if err := e.call("job.cancel", map[string]any{"jobId": j.ID}, nil); err != nil {
 		t.Fatalf("job.cancel: %v", err)
 	}
+	// The cancel still ends with job.done carrying the finished install.
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("canceled shader phase: %+v, want done", got)
+	}
 	if err := e.call("job.discard", map[string]any{
 		"jobId": j.ID, "id": "4321", "kind": "install", "installDir": e.folder}, nil); err != nil {
 		t.Fatalf("job.discard: %v", err)
 	}
-	installed, _ := os.ReadFile(filepath.Join(e.pluginData(), "installed.json"))
-	if !strings.Contains(string(installed), "4321") {
-		t.Fatalf("install record lost on shader-phase cancel: %s", installed)
+	raw, err := os.ReadFile(filepath.Join(e.pluginData(), "installed.json"))
+	if err != nil || !strings.Contains(string(raw), "4321") {
+		t.Fatalf("install record lost on shader-phase cancel: %s %v", raw, err)
 	}
-	entries, _ := os.ReadDir(e.folder)
-	if len(entries) == 0 {
-		t.Fatal("game folder deleted on shader-phase cancel")
+	// Non-vacuous: the recorded game executable itself survived, not just
+	// a non-empty folder.
+	var installed map[string]map[string]any
+	if err := json.Unmarshal(raw, &installed); err != nil {
+		t.Fatal(err)
+	}
+	exe, _ := installed["4321"]["executable"].(string)
+	if exe == "" {
+		t.Fatalf("no recorded executable: %s", raw)
+	}
+	if _, err := os.Stat(exe); err != nil {
+		t.Fatalf("recorded executable gone on shader-phase cancel: %v", err)
 	}
 }
 
@@ -349,5 +441,255 @@ func TestSteamShaderUninstallCleansCache(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(e.pluginData(), "shader", "4321.json")); !os.IsNotExist(err) {
 		t.Fatal("shader state survived uninstall")
+	}
+}
+
+// A canceled replay kills the whole process group: the fake replay spawns
+// a child, and the child is gone after the cancel (killing just the parent
+// would orphan it).
+func TestSteamShaderReplayKillsProcessGroup(t *testing.T) {
+	e := setup(t)
+	shaderEnv(t, e)
+	t.Setenv("PLATYPUS_SHADER_REPLAY_TIMEOUT", "60")
+	e.login()
+	if err := e.call("settings.apply", map[string]any{"values": map[string]any{"region": "auto", "shader": true}}, nil); err != nil {
+		t.Fatalf("settings.apply: %v", err)
+	}
+	steamRoot := os.Getenv("PLATYPUS_STEAM_ROOT")
+	dir := t.TempDir()
+	marker, pidFile := filepath.Join(dir, "replaying"), filepath.Join(dir, "child.pid")
+	script := "#!/bin/sh\necho started > \"" + marker + "\"\nsleep 60 &\necho $! > \"" + pidFile + "\"\nwait\n"
+	if err := os.WriteFile(filepath.Join(steamRoot, "ubuntu12_64", "fossilize_replay"),
+		[]byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	game := e.find(e.library(), "4321")
+	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("replay never started")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := e.call("job.cancel", map[string]any{"jobId": j.ID}, nil); err != nil {
+		t.Fatalf("job.cancel: %v", err)
+	}
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("canceled shader phase: %+v, want done", got)
+	}
+	raw, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatalf("no child pid from the replay: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil || pid <= 0 {
+		t.Fatalf("bad child pid %q: %v", raw, err)
+	}
+	deadline = time.Now().Add(10 * time.Second)
+	for !childGone(pid) {
+		if time.Now().After(deadline) {
+			t.Fatalf("replay child %d survived the cancel", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// childGone reports whether pid runs no more: no /proc entry, or a zombie
+// awaiting reaping. Either way it computes nothing.
+func childGone(pid int) bool {
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return true
+	}
+	s := string(raw)
+	i := strings.LastIndexByte(s, ')')
+	return i >= 0 && i+2 < len(s) && s[i+2] == 'Z'
+}
+
+// Uninstall drops the helper's leftover shader staging (jobs/shader-<app>-*)
+// alongside the tree and the per-bucket state.
+func TestSteamShaderUninstallCleansStaging(t *testing.T) {
+	e := setup(t)
+	shaderEnv(t, e)
+	e.login()
+	if err := e.call("settings.apply", map[string]any{"values": map[string]any{"region": "auto", "shader": true}}, nil); err != nil {
+		t.Fatalf("settings.apply: %v", err)
+	}
+	game := e.find(e.library(), "4321")
+	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
+	}
+	// Leftover staging from a canceled run (a clean run clears its own).
+	jobsDir := filepath.Join(e.pluginData(), "jobs")
+	if err := os.MkdirAll(filepath.Join(jobsDir, "shader-4321-7.chunks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobsDir, "shader-4321-7.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobsDir, "other-job.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	u, err := e.q.Add(jobs.KindUninstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.waitJob(u.ID); got.State != jobs.StateDone {
+		t.Fatalf("uninstall: %+v", got)
+	}
+	for _, n := range []string{"shader-4321-7.json", "shader-4321-7.chunks"} {
+		if _, err := os.Stat(filepath.Join(jobsDir, n)); !os.IsNotExist(err) {
+			t.Fatalf("shader staging survived uninstall: %s", n)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(jobsDir, "other-job.json")); err != nil {
+		t.Fatalf("unrelated job file deleted: %v", err)
+	}
+}
+
+// Discarding a canceled job drops the helper's shader staging too: it is
+// named by app (jobs/shader-<app>-*), not by the plugin job id whose own
+// files the discard already removes.
+func TestSteamShaderDiscardCleansStaging(t *testing.T) {
+	e := setup(t)
+	jobsDir := filepath.Join(e.pluginData(), "jobs")
+	if err := os.MkdirAll(filepath.Join(jobsDir, "shader-4321-7.chunks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobsDir, "shader-4321-7.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobsDir, "other-job.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.call("job.discard", map[string]any{
+		"jobId": "test-shader-discard", "id": "4321", "kind": "install", "installDir": e.folder}, nil); err != nil {
+		t.Fatalf("job.discard: %v", err)
+	}
+	for _, n := range []string{"shader-4321-7.json", "shader-4321-7.chunks"} {
+		if _, err := os.Stat(filepath.Join(jobsDir, n)); !os.IsNotExist(err) {
+			t.Fatalf("shader staging survived discard: %s", n)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(jobsDir, "other-job.json")); err != nil {
+		t.Fatalf("unrelated job file deleted: %v", err)
+	}
+}
+
+// Relocating the game moves the sibling shadercache tree with it.
+func TestSteamShaderRelocationMovesCache(t *testing.T) {
+	e := setup(t)
+	shaderEnv(t, e)
+	e.login()
+	if err := e.call("settings.apply", map[string]any{"values": map[string]any{"region": "auto", "shader": true}}, nil); err != nil {
+		t.Fatalf("settings.apply: %v", err)
+	}
+	game := e.find(e.library(), "4321")
+	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
+	}
+	raw, err := os.ReadFile(filepath.Join(e.pluginData(), "installed.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var installed map[string]map[string]any
+	if err := json.Unmarshal(raw, &installed); err != nil {
+		t.Fatal(err)
+	}
+	old, _ := installed["4321"]["path"].(string)
+	if old == "" {
+		t.Fatalf("no recorded path: %s", raw)
+	}
+	dst := filepath.Join(e.gamesFolder, "relocated", filepath.Base(old))
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(old, dst); err != nil {
+		t.Fatal(err)
+	}
+	var ok map[string]any
+	if err := e.call("game.relocated", map[string]any{"id": "4321", "from": old, "to": dst}, &ok); err != nil {
+		t.Fatalf("game.relocated: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(filepath.Dir(dst), "shadercache", "4321",
+		"fozpipelinesv6", "steam_pipeline_cache.foz"))
+	if err != nil || string(body) != "fake fossilize bucket" {
+		t.Fatalf("shader cache did not move: %v %q", err, body)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(old), "shadercache", "4321")); !os.IsNotExist(err) {
+		t.Fatal("old shader cache survived relocation")
+	}
+}
+
+// Client-mode games skip the shader download: the official client manages
+// its own cache.
+func TestSteamShaderSkipsClientModeGames(t *testing.T) {
+	e := setup(t)
+	shaderEnv(t, e)
+	e.login()
+	game := e.find(e.library(), "4321")
+	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
+	}
+	e.setLaunchMode("4321", "client")
+	if err := e.call("settings.apply", map[string]any{"values": map[string]any{"region": "auto", "shader": true}}, nil); err != nil {
+		t.Fatalf("settings.apply: %v", err)
+	}
+	mark := len(e.cmLog())
+	up, err := e.q.Add(jobs.KindUpdate, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.waitJob(up.ID); got.State != jobs.StateDone {
+		t.Fatalf("update: %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(e.folder, "shadercache")); !os.IsNotExist(err) {
+		t.Fatal("shader cache fetched for a client-mode game")
+	}
+	if strings.Contains(e.cmLog()[mark:], "shader_bucket") {
+		t.Fatal("shader buckets queried for a client-mode game")
+	}
+}
+
+// Without a replay binary the install still completes, and the job carries
+// a note saying the caches stayed download-only.
+func TestSteamShaderNoReplayBinaryNote(t *testing.T) {
+	e := setup(t)
+	shaderEnv(t, e)
+	// The real Steam client on this machine ships fossilize_replay: hide
+	// the home-dir candidates so the removed fake means "no binary".
+	t.Setenv("HOME", t.TempDir())
+	e.login()
+	if err := e.call("settings.apply", map[string]any{"values": map[string]any{"region": "auto", "shader": true}}, nil); err != nil {
+		t.Fatalf("settings.apply: %v", err)
+	}
+	steamRoot := os.Getenv("PLATYPUS_STEAM_ROOT")
+	if err := os.Remove(filepath.Join(steamRoot, "ubuntu12_64", "fossilize_replay")); err != nil {
+		t.Fatal(err)
+	}
+	game := e.find(e.library(), "4321")
+	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
+	}
+	found := false
+	for _, p := range e.notes.forMethod("job.done") {
+		var msg map[string]any
+		if json.Unmarshal(p, &msg) != nil || msg["jobId"] != j.ID {
+			continue
+		}
+		if note, _ := msg["note"].(string); strings.Contains(note, "fossilize_replay") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("job.done carries no replay-skipped note")
 	}
 }
