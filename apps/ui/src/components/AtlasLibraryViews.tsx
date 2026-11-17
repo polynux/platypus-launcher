@@ -4,7 +4,7 @@
 // warm, cool and slate keep today's LibraryView path exactly. Only the Atlas
 // list-detail presentation renders these; every colour comes from a token.
 import React, { useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpDown, Download, FolderPlus, LayoutGrid, Play, Search, Settings2, SlidersHorizontal, Table2, Users, X } from 'lucide-react';
 import type { ActivityEvent, Collection, Game, Job, ProtonVersion, SessionEvent, StoreType } from '../types';
 import { Cover, cx, relTime } from './ui';
@@ -163,24 +163,50 @@ export function AtlasActiveChips(p: AtlasChipsProps) {
 }
 
 /** Compact source warnings for the Atlas library (D22 `SourceWarnings`
- *  compact): one card with a Fix action and a dismiss ×. */
+ *  compact): one card with the warning's own message (the plugin's status,
+ *  localized by the plugin), a Fix action and a dismiss ×. */
 export function AtlasWarnings({ warnings, pluginName, onOpenPlugins }: {
-  warnings: { source: string; needs_auth?: boolean; message?: string }[];
+  warnings: { source: string; needs_auth?: boolean; unavailable?: boolean; message?: string }[];
   pluginName: (id: string) => string;
   onOpenPlugins: () => void;
 }) {
   const { t } = useTranslation('library');
   const [dismissed, setDismissed] = useState(false);
   if (dismissed || warnings.length === 0) return null;
-  const loggedOut = warnings.find((w) => w.needs_auth);
   return (
-    <div role="status" className="flex items-center gap-2.5 rounded-lg bg-danger/[0.08] px-3 py-2 text-[12.5px] ring-1 ring-danger/25">
-      <AlertTriangle className="h-4 w-4 flex-none text-danger" aria-hidden />
-      <p className="min-w-0 flex-1 truncate text-text-body">
-        {loggedOut
-          ? t('library:warningLoggedOut', { name: pluginName(loggedOut.source) })
-          : t('library:listDetail.warnings', { count: warnings.length })}
-      </p>
+    <div role="status" className="flex items-start gap-2.5 rounded-lg bg-danger/[0.08] px-3 py-2 text-[12.5px] ring-1 ring-danger/25">
+      <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-danger" aria-hidden />
+      <div className="min-w-0 flex-1 space-y-1">
+        {warnings.map((warning) => (
+          <p key={warning.source} className="text-text-body" title={warning.message}>
+            {warning.needs_auth ? (
+              <Trans
+                i18nKey="library:warningLoggedOut"
+                values={{ name: pluginName(warning.source) }}
+                components={{ name: <span className="font-bold" /> }}
+              />
+            ) : warning.unavailable ? (
+              <Trans
+                i18nKey="library:warningUnavailable"
+                values={{ name: pluginName(warning.source), message: warning.message ?? '' }}
+                components={{
+                  name: <span className="font-bold" />,
+                  msg: <span className="font-mono text-[12px] text-text-muted" />,
+                }}
+              />
+            ) : (
+              <Trans
+                i18nKey="library:warningListFailed"
+                values={{ name: pluginName(warning.source), message: warning.message ?? '' }}
+                components={{
+                  name: <span className="font-bold" />,
+                  msg: <span className="font-mono text-[12px] text-text-muted" />,
+                }}
+              />
+            )}
+          </p>
+        ))}
+      </div>
       <button
         type="button"
         onClick={onOpenPlugins}

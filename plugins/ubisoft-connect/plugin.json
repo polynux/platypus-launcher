@@ -1,9 +1,9 @@
 {
   "id": "ubisoft-connect",
   "name": "Ubisoft Connect",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Platypus",
-  "description": "Ubisoft games through the official Ubisoft Connect client in a Platypus-managed prefix (installs and launches run through the client; the library reader is pending issue #192).",
+  "description": "Ubisoft games through the official Ubisoft Connect client in a Platypus-managed prefix: the library comes from the client's local caches and install registry; installs and launches run through the client.",
   "manifestVersion": 1,
   "protocol": { "versions": ["1.20", "1.23"], "transport": "jsonrpc-stdio" },
   "store": "ubisoft",
