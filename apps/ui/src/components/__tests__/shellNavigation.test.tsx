@@ -5,6 +5,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render as rtlRender, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Shell } from '../Shell';
@@ -63,7 +64,7 @@ describe('shell navigation variants', () => {
     // Plugins sits in the Tools group; opening it keeps the entry one click away.
     await user.click(within(nav).getByRole('button', { name: 'Tools' }));
     expect(within(nav).getByRole('button', { name: /Plugins/ })).toBeInTheDocument();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('topbar mode keeps Settings and Plugins reachable, with axe clean', async () => {
@@ -77,7 +78,7 @@ describe('shell navigation variants', () => {
     // Plugins sits in the Tools menu in topbar mode.
     await user.click(screen.getByRole('button', { name: /Tools/ }));
     expect(screen.getByRole('menuitem', { name: /Plugins/ })).toBeInTheDocument();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('renders the Tools panel outside the nav overflow container (D1)', async () => {
@@ -183,7 +184,10 @@ describe('shell navigation variants', () => {
   });
 });
 
-describe('sourcebar shell variant (/22, issue #135)', () => {
+// The /22 top bar and More places menu mount most of the shell and switch
+// places: measured 2.8 s per test under load (6 workers, load 12), so the
+// budget is that × 3 (issue #170).
+describe('sourcebar shell variant (/22, issue #135)', { timeout: 9_000 }, () => {
   const sourcebarProps = {
     ...baseProps,
     ownership: 'installed' as const,
@@ -222,7 +226,7 @@ describe('sourcebar shell variant (/22, issue #135)', () => {
     expect(screen.getByRole('button', { name: 'Covers' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Table' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Add store/ })).toBeInTheDocument();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('hides the library bar on views without a library', async () => {
@@ -231,7 +235,7 @@ describe('sourcebar shell variant (/22, issue #135)', () => {
     // The top bar stays; only the library/views bar is gone.
     expect(screen.getByRole('button', { name: 'Home' })).toBeInTheDocument();
     expect(container.querySelector('nav[aria-label="Library"]')).toBeNull();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('dispatches the command palette event from the search button', async () => {
@@ -386,7 +390,7 @@ describe('sourcebar activity footer (issue #125)', () => {
     expect(screen.getByText('Game One')).toBeInTheDocument();
     expect(screen.getByText('Game Two')).toBeInTheDocument();
     expect(screen.getByText('25%')).toBeInTheDocument();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('shows the library title and opens Downloads from a job item (R4-14)', async () => {
@@ -516,7 +520,7 @@ describe('sourcebar activity footer (issue #125)', () => {
     expect(screen.getByText(/Library scanned/)).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(/Offline/);
     expect(screen.getByText('Platypus 0.2.0')).toBeInTheDocument();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('dots the Plugins item when a plugin needs attention (issue #132)', async () => {

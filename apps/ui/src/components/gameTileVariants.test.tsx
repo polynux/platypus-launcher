@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup as rtlCleanup, render as rtlRender, screen as rtlScreen } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 
@@ -46,7 +47,7 @@ describe('GameTile catalog variants', () => {
             state.variants = { ...state.variants, 'game-tile.aspect': aspect, 'game-tile.compat': compat, 'game-tile.overlay': overlay, 'game-tile.density': density };
             const { container } = rtlRender(<GameTile game={game()} job={job} meta="10h · test" coverBadges onOpen={() => {}} />);
             expect(rtlScreen.getByRole('button', { name: /Doom/ })).toBeInTheDocument();
-            (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+            (expect(await axe(container)) as any).toHaveNoViolations();
           });
         }
       }
@@ -57,14 +58,14 @@ describe('GameTile catalog variants', () => {
     state.variants = { ...state.variants, 'game-tile.aspect': '3:4', 'game-tile.compat': 'on', 'game-tile.overlay': 'on', 'game-tile.density': 'comfortable' };
     const { container } = rtlRender(<GameTile game={game({ status: '', is_installed: true })} meta="1h · auto" hideNative onOpen={() => {}} />);
     expect(rtlScreen.getByRole('button', { name: /Doom/ })).toBeInTheDocument();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('renders the library tile (2:3 compact card) without axe violations', async () => {
     state.variants = { ...state.variants, 'library-tile.aspect': '2:3', 'library-tile.compat': 'on', 'library-tile.overlay': 'on', 'library-tile.density': 'compact' };
     const { container } = rtlRender(<GameTile game={game()} job={job} meta="10h · test" coverBadges site="library" onOpen={() => {}} />);
     expect(rtlScreen.getByRole('button', { name: /Doom/ })).toBeInTheDocument();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 });
 
@@ -79,7 +80,7 @@ describe('GameRow catalog variants', () => {
           </div>,
         );
         expect(rtlScreen.getByRole('row', { name: /Doom/ })).toBeInTheDocument();
-        (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+        (expect(await axe(container)) as any).toHaveNoViolations();
       });
     }
   }
@@ -94,6 +95,6 @@ describe('Virtualized game tiles', () => {
     );
     // jsdom has no layout: the fallback renders the first screenful.
     expect(rtlScreen.getByRole('button', { name: /Game 0/ })).toBeInTheDocument();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 
@@ -40,7 +41,7 @@ describe('ViewHeader catalog variants', () => {
           expect(screen.getByRole('heading', { name: 'Runners' })).toBeInTheDocument();
           if (subtitle === 'shown') expect(screen.getByText('Every runner')).toBeInTheDocument();
           else expect(screen.queryByText('Every runner')).not.toBeInTheDocument();
-          (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+          (expect(await axe(container)) as any).toHaveNoViolations();
         });
       }
     }
@@ -54,7 +55,7 @@ describe('EmptyState catalog variants', () => {
         state.variants = { ...state.variants, 'empty-state.chrome': chrome, 'empty-state.icon': icon };
         const { container } = render(<EmptyState label="Nothing here">Nothing matches.</EmptyState>);
         expect(screen.getByText('Nothing here')).toBeInTheDocument();
-        (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+        (expect(await axe(container)) as any).toHaveNoViolations();
       });
     }
   }
@@ -73,7 +74,7 @@ describe('ListRow catalog variants', () => {
         expect(screen.getByRole('button', { name: /Game title/ })).toBeInTheDocument();
         if (media === 'on') expect(screen.getByTestId('row-cover')).toBeInTheDocument();
         else expect(screen.queryByTestId('row-cover')).not.toBeInTheDocument();
-        (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+        (expect(await axe(container)) as any).toHaveNoViolations();
       });
     }
   }
@@ -86,7 +87,7 @@ describe('ListRow catalog variants', () => {
     </>);
     expect(screen.getByText('Runner name')).toBeInTheDocument();
     expect(screen.getByText('Job title')).toBeInTheDocument();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 });
 
@@ -96,7 +97,7 @@ describe('Section catalog variants', () => {
       state.variants = { ...state.variants, 'section.chrome': chrome };
       const { container } = render(<Section><p>Group body</p></Section>);
       expect(screen.getByText('Group body')).toBeInTheDocument();
-      (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+      (expect(await axe(container)) as any).toHaveNoViolations();
     });
   }
 });

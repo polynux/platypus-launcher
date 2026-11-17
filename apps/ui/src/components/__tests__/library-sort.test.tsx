@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render as rtlRender, fireEvent, within } from '@testing-library/react';
-import { LibraryView, sortGames } from '../LibraryView';
+import { LibraryView, matchesExtraFilters, sortGames } from '../LibraryView';
 import type { Game } from '../../types';
 import { TooltipProvider } from '../ds/tooltip';
 const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: TooltipProvider });
@@ -70,8 +70,7 @@ describe('Library sort', () => {
 });
 
 describe('extra filters predicate (issue #132)', () => {
-  it('matches tier, status and lending together', async () => {
-    const { matchesExtraFilters } = await import('../LibraryView');
+  it('matches tier, status and lending together', () => {
     const g = (o: Partial<Game> = {}): Game =>
       ({ id: 'x', source: 'steam', store: 'steam', store_app_id: 'x', title: 'x', cover_url: '', banner_url: '', install_dir: '', executable: '', is_installed: true, settings: {}, ...o }) as Game;
     const native = g({ native: true });

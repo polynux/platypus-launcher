@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Effect } from 'effect';
@@ -159,7 +160,7 @@ describe('Game settings catalog variants', () => {
         );
         // The dialog portals outside the render container, so axe runs on the
         // body: the dialog content is what must be violation-free.
-        (expect(await (await import('vitest-axe')).axe(document.body)) as any).toHaveNoViolations();
+        (expect(await axe(document.body)) as any).toHaveNoViolations();
       });
     }
   }
@@ -276,7 +277,7 @@ describe('Game settings catalog variants', () => {
       }
       // Drawer chrome: ghost 28px close, hairline header, single scroller.
       expect(screen.getByRole('button', { name: 'Close' })).toHaveClass('size-7');
-      (expect(await (await import('vitest-axe')).axe(document.body)) as any).toHaveNoViolations();
+      (expect(await axe(document.body)) as any).toHaveNoViolations();
     });
 
     it('opens one section at a time and closes it again', async () => {

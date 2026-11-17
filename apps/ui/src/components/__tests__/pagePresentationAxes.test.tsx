@@ -10,6 +10,10 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { Effect } from 'effect';
 import { Dashboard } from '../Dashboard';
 import { FixesView } from '../FixesView';
+// Static, not `await import()` inside a test (issue #167): the whole-App module
+// graph is a large cost under load, and an in-test import is billed to the 5 s
+// test budget.
+import { App } from '../../App';
 import '../../lib/i18n';
 
 const variants = vi.hoisted(() => ({ map: {} as Record<string, string> }));
@@ -123,7 +127,6 @@ describe('page-presentation axes', () => {
     variants.map['friends.presentation'] = friends;
     variants.map['library.presentation'] = 'grid';
     variants.map['settings.presentation'] = 'page';
-    const { App } = await import('../../App');
     api.values = {
       getLibrary: { games: [], warnings: [] },
       getProtonVersions: [],

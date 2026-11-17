@@ -5,6 +5,7 @@
 import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render as rtlRender, cleanup, screen, within } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Effect } from 'effect';
@@ -81,7 +82,7 @@ describe('plugins layouts', () => {
     // The required parts render inside the store card: the login row and
     // the install-folder action of a ready plugin.
     expect(screen.getByText('Echo store')).toBeTruthy();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('renders the cool layout: data and built-in share a row below the store cards', async () => {
@@ -96,12 +97,12 @@ describe('plugins layouts', () => {
     expect(within(row as HTMLElement).getByText('ProtonDB')).toBeTruthy();
     // The store block keeps its required parts in the themed layout too.
     expect(within(main as HTMLElement).getByText('Echo')).toBeTruthy();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('keeps the approve action and login row inside the store card', async () => {
     const { container } = view([plugin({ status: 'unapproved', offers: [cap('library')] })]);
     expect(await screen.findByRole('button', { name: /Review and approve/ })).toBeTruthy();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 });
