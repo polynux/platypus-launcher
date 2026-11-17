@@ -1,15 +1,15 @@
 {
   "id": "epic-legendary",
   "name": "Epic Games (legendary)",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Platypus",
   "description": "Your Epic Games library through legendary: log in, install, update and launch owned games without the Epic launcher.",
   "manifestVersion": 1,
-  "protocol": { "versions": ["1.0"], "transport": "jsonrpc-stdio" },
+  "protocol": { "versions": ["1.0", "1.4", "1.7"], "transport": "jsonrpc-stdio" },
   "store": "epic",
   "exec": "bin/platypus-epic",
   "icon": "icon.svg",
-  "capabilities": ["library", "install", "launch", "auth", "discard"],
+  "capabilities": ["library", "install", "launch", "auth", "discard", "verify", "achievements", "playtime"],
   "requires": [
     { "bin": "legendary", "hint": "uv tool install legendary-gl (or pipx install legendary-gl)" },
     { "bin": "python3", "hint": "install python3 from your distribution" }
