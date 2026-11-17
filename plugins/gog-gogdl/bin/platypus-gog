@@ -16,14 +16,24 @@ gogdl notes that shape this plugin:
     $PLATYPUS_PLUGIN_DATA so Platypus's sandbox rules hold.
   - `auth --code <code>` exchanges a code from the OAuth login page.
   - `auth` (no arguments) prints the stored credentials as JSON, which is how
-    login state is checked without network.
+    login state is checked without network (gogdl refreshes an expired token
+    before answering).
   - Library listing needs GOG's web API, which gogdl doesn't expose directly;
     the plugin calls GOG's gamesdb endpoint with gogdl's credentials itself.
-  - `info` prints the download and disk size; `download` installs; progress
+  - `info` prints the download and disk size, the install languages and the
+    owned DLCs; `download` installs (`--lang`, `--with-dlcs`/`--dlcs`); progress
     lines come on stdout/stderr and are parsed into job.progress.
+  - `repair` is `download` with verification: it re-hashes every file against
+    the manifest it stored during the install and re-downloads what differs.
+    It always repairs, so a check hashes here (see "verify" below).
+  - Achievements and playtime live on GOG's gameplay service and take the
+    access token gogdl stores; Heroic reads them the same way. See
+    docs/research/gog-apis.md.
 """
 
+import datetime
 import glob
+import hashlib
 import json
 import os
 import re
@@ -35,13 +45,20 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import zlib
+from concurrent.futures import ThreadPoolExecutor
 
 API = 1
-PLUGIN_VERSION = "0.2.0"
+PLUGIN_VERSION = "0.3.0"
 CODE_AUTH_REQUIRED = -32001
 # GOG build ids are long digits (e.g. 57200821661238017).
 BUILD_ID_RE = re.compile(r"[0-9]{4,32}")
+# The language GOG's gameplay API answers in (X-Gog-Lc), from initialize.
+LOCALE = "en-US"
+CAPABILITIES = ["library", "install", "launch", "auth", "discard", "versions",
+                "verify", "install-options", "achievements", "playtime"]
 
 
 def stall_limits():
@@ -177,19 +194,45 @@ def credentials():
     return creds
 
 
-def api_get(url, token):
+def api_url(url):
+    """The URL with its origin swapped for a test server's
+    (PLATYPUS_GOG_API_BASE): tests answer every store API from one loopback
+    port, real runs use the stores' own hosts."""
+    base = os.environ.get("PLATYPUS_GOG_API_BASE")
+    if not base:
+        return url
+    part, origin = urllib.parse.urlsplit(url), urllib.parse.urlsplit(base)
+    return urllib.parse.urlunsplit((origin.scheme, origin.netloc,
+                                    origin.path.rstrip("/") + part.path,
+                                    part.query, ""))
+
+
+def api_get(url, token, headers=None):
     # Test hook: tests point this at a file with the response, so nothing
     # reaches the network. Not set in normal runs.
     hook = os.environ.get("PLATYPUS_GOG_API_FILE")
     if hook:
         with open(hook) as f:
             return json.load(f)
-    headers = {"User-Agent": "gogdl (Platypus)"}
+    req_headers = {"User-Agent": "gogdl (Platypus)"}
     if token:  # anonymous endpoints can reject an empty Bearer
-        headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request(url, headers=headers)
+        req_headers["Authorization"] = f"Bearer {token}"
+    req_headers.update(headers or {})
+    req = urllib.request.Request(api_url(url), headers=req_headers)
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read().decode())
+
+
+def api_get_zjson(url):
+    """A CDN metadata document: zlib-compressed JSON (content system v2), or
+    plain JSON for the endpoints that don't compress."""
+    req = urllib.request.Request(api_url(url), headers={"User-Agent": "gogdl (Platypus)"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        raw = r.read()
+    try:
+        return json.loads(zlib.decompress(raw, 15))
+    except zlib.error:
+        return json.loads(raw)
 
 
 # --- auth ---------------------------------------------------------------
@@ -263,22 +306,28 @@ def game_details_meta(app_id, token):
         return {}
 
 
+def account_products(token):
+    """The owned games from GOG's account API (paged). userData.json no longer
+    lists owned games (it dropped ownedGames); this endpoint does, with title
+    and art included."""
+    page, games = 1, []
+    while True:
+        data = api_get(f"https://www.gog.com/account/getFilteredProducts"
+                       f"?mediaType=1&page={page}", token)
+        games += data.get("products") or []
+        if page >= (data.get("totalPages") or 1):
+            break
+        page += 1
+    return games
+
+
 def library_list(_params):
     creds = credentials()
     if not creds:
         raise RPCError("log in to GOG first", CODE_AUTH_REQUIRED)
     token = creds["access_token"]
     try:
-        # userData.json no longer lists owned games (it dropped ownedGames);
-        # the account endpoint does, with title and art included.
-        page, games = 1, []
-        while True:
-            data = api_get(f"https://www.gog.com/account/getFilteredProducts"
-                           f"?mediaType=1&page={page}", token)
-            games += data.get("products") or []
-            if page >= (data.get("totalPages") or 1):
-                break
-            page += 1
+        games = account_products(token)
     except Exception as e:
         raise RPCError(f"GOG API is unreachable: {e}")
     installed = installed_games()
@@ -303,9 +352,11 @@ def library_list(_params):
             "bannerUrl": f"{img}.jpg" if img else "",
         }
         # gogdl's linux manager has no builds: a Linux installer gets every
-        # capability except version selection.
+        # capability except version selection. features replaces the plugin's
+        # set for this game, so every capability must be listed here (a
+        # missing one would be off for these games).
         if (g.get("worksOn") or {}).get("Linux"):
-            entry["features"] = ["library", "install", "launch", "auth", "discard"]
+            entry["features"] = [c for c in CAPABILITIES if c != "versions"]
         # Movie extras sit in the same account list.
         if g.get("isMovie") or g.get("category") == "movie" or g.get("url", "").startswith("/movie/"):
             entry["installable"] = False
@@ -403,29 +454,66 @@ def parse_gogdl_json(out, err):
         raise RPCError(f"gogdl info printed no JSON: {tail(err)}")
 
 
-def best_sizes(data):
-    """The expected (download, disk) pair. gogdl installs en-US by default,
-    so that entry wins when it carries numbers; then the * entry; then the
-    biggest language (the max overstates multilingual games). Older gogdl
-    builds printed the fields at top level."""
+def size_pair(entry):
+    entry = entry or {}
+    return int(entry.get("download_size") or 0), int(entry.get("disk_size") or 0)
+
+
+def best_sizes(data, lang=""):
+    """The expected (download, disk) pair. A chosen language adds the depots
+    every install gets ("*"); without one gogdl installs en-US, so that entry
+    wins when it carries numbers; then the * entry; then the biggest language
+    (the max overstates multilingual games). Older gogdl builds printed the
+    fields at top level."""
     sizes = (data or {}).get("size") or {"*": data}
+    if lang and isinstance(sizes.get(lang), dict):
+        download, disk = size_pair(sizes[lang])
+        base_download, base_disk = size_pair(sizes.get("*"))
+        return download + base_download, disk + base_disk
     for key in ("en-US", "*"):
         e = sizes.get(key) or {}
         if e.get("download_size") or e.get("disk_size"):
-            return int(e.get("download_size") or 0), int(e.get("disk_size") or 0)
+            return size_pair(e)
     entries = list(sizes.values()) or [data]
     best = max(entries, key=lambda e: int((e or {}).get("disk_size") or 0))
-    return int(best.get("download_size") or 0), int(best.get("disk_size") or 0)
+    return size_pair(best)
+
+
+def expected_sizes(data, lang="", dlcs=()):
+    """(download, disk) for the chosen language and add-ons: gogdl reports each
+    DLC's sizes keyed by language, like the base game's."""
+    download, disk = best_sizes(data, lang)
+    wanted = {str(d) for d in dlcs or []}
+    for dlc in (data or {}).get("dlcs") or []:
+        if not isinstance(dlc, dict) or str(dlc.get("id")) not in wanted:
+            continue
+        sizes = dlc.get("size")
+        if isinstance(sizes, dict):
+            d, k = best_sizes({"size": sizes}, lang)
+            download += d
+            disk += k
+    return download, disk
+
+
+def option_choices(options):
+    """(language, DLC ids) from a job's install-option choices. Platypus sends
+    the complete set, so an absent group means the game offers none."""
+    o = options if isinstance(options, dict) else {}
+    lang = str(o.get("language") or "")
+    raw = o.get("dlc")
+    dlcs = [str(d) for d in raw if str(d)] if isinstance(raw, list) else []
+    return lang, dlcs
 
 
 def install_size(params):
     app = params["id"]
+    lang, dlcs = option_choices(params.get("options"))
     build, branch = resolve_target(params.get("target"))
     if build:
         data = require_served_build(app, platform_of(app), build, branch or None)
     else:
         data = gog_info(app, platform_of(app))
-    download, disk = best_sizes(data)
+    download, disk = expected_sizes(data, lang, dlcs)
     return {"downloadBytes": download, "diskBytes": disk}
 
 
@@ -445,6 +533,77 @@ def platform_of(app):
     except Exception:
         pass
     return "windows"
+
+
+# --- install options (protocol 1.5) -----------------------------------------
+#
+# gogdl installs one language (--lang, en-US by default) and, with --with-dlcs
+# plus --dlcs, exactly the owned add-ons named; without those flags it skips
+# DLC. `info` lists both for a game.
+
+def stored_manifest(app):
+    """gogdl's manifest for a game: what it verifies against, and where the
+    installed language and add-ons are recorded. {} when there is none."""
+    for sub in (os.path.join("heroic_gogdl", "manifests"), "manifests"):
+        try:
+            with open(os.path.join(gogdl_config_base(), sub, app)) as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+        except (OSError, ValueError):
+            pass
+    return {}
+
+
+def installed_language(app):
+    return str(stored_manifest(app).get("HGLInstallLanguage") or "")
+
+
+def installed_dlcs(app):
+    ids = set()
+    for d in stored_manifest(app).get("HGLdlcs") or []:
+        if isinstance(d, dict) and d.get("id") is not None:
+            ids.add(str(d["id"]))
+    return ids
+
+
+def game_options(params):
+    """The install choices gogdl offers: the install language and the owned
+    add-ons (gogdl lists only DLC the account owns)."""
+    app = str((params or {}).get("id") or "")
+    if not app:
+        raise RPCError("invalid params: id is required", -32602)
+    try:
+        data = gog_info(app, platform_of(app), timeout=120)
+    except RPCError as e:
+        if e.code == CODE_AUTH_REQUIRED:
+            raise
+        raise RPCError(f"couldn't list install options for {app}: {e}", -32002)
+    lang = installed_language(app)
+    groups = []
+    langs = [str(l) for l in (data.get("languages") or []) if l]
+    if langs:
+        default = lang if lang in langs else ("en-US" if "en-US" in langs else langs[0])
+        groups.append({"id": "language", "label": "Language", "kind": "select",
+                       "default": default,
+                       "values": [{"id": l, "label": l} for l in langs]})
+    dlcs = [d for d in (data.get("dlcs") or []) if isinstance(d, dict) and d.get("id") is not None]
+    if dlcs:
+        have = installed_dlcs(app)
+        values = []
+        for d in dlcs:
+            v = {"id": str(d["id"]), "label": str(d.get("title") or d["id"]), "owned": True}
+            sizes = d.get("size")
+            if isinstance(sizes, dict):
+                disk = best_sizes({"size": sizes}, lang)[1]
+                if disk:
+                    v["sizeBytes"] = disk
+            if str(d["id"]) in have:
+                v["installed"] = True
+            values.append(v)
+        groups.append({"id": "dlc", "label": "Add-ons", "kind": "multi",
+                       "dlc": True, "values": values})
+    return {"groups": groups}
 
 
 # --- versions (1.3) ---------------------------------------------------------
@@ -584,7 +743,16 @@ def start_job(params, kind):
         cmd += ["--build", build]
     if branch:
         cmd += ["--branch", branch]
-    cmd += ["--platform", platform, "--skip-dlcs", "--max-workers", "4"]
+    cmd += ["--platform", platform]
+    lang, dlcs = option_choices(params.get("options"))
+    if lang:
+        cmd += ["--lang", lang]
+    if dlcs:
+        # --dlcs only lists what to take; --with-dlcs lets gogdl take any.
+        cmd += ["--with-dlcs", "--dlcs", ",".join(dlcs)]
+    else:
+        cmd += ["--skip-dlcs"]
+    cmd += ["--max-workers", "4"]
     if kind == "install":
         # A fresh install (resume included) with no marker on disk must not
         # diff against a cached manifest: gogdl compares manifest vs manifest
@@ -612,6 +780,7 @@ def start_job(params, kind):
         job["argv"] = argv
         canceled = job["canceled"]
         job["title"] = params.get("title") or ""
+        job["options"] = params.get("options") or {}
         # What this run converges to, and when it last moved: the stall
         # watchdog fails the job when gogdl hangs (see follow_job).
         job["build"], job["channel"], job["platform"] = build, branch, platform
@@ -832,6 +1001,59 @@ def follow_job(job_id, kind, proc):
     notify("job.done", done)
 
 
+def line_reader(fd):
+    """A next_line(timeout) reader for fd: one line within timeout, "" at end
+    of stream (or a closed pipe), None on timeout. Keeps a byte buffer across
+    calls. Reads the raw fd, not the TextIOWrapper: the wrapper readaheads into
+    an internal buffer that select() can't see, so select-then-readline would
+    stall with whole lines already buffered but the fd dry."""
+    buf = b""
+
+    def next_line(timeout):
+        nonlocal buf
+        while b"\n" not in buf:
+            try:
+                ready, _, _ = select.select([fd], [], [], timeout)
+            except (OSError, ValueError):
+                return ""
+            if not ready:
+                return None
+            try:
+                chunk = os.read(fd, 65536)
+            except OSError:
+                return ""
+            if chunk == b"":
+                line, buf = buf, b""
+                return line.decode("utf-8", "replace") if line else ""
+            buf += chunk
+            timeout = 0
+        line, buf = buf.split(b"\n", 1)
+        return line.decode("utf-8", "replace")
+
+    return next_line
+
+
+def pump(proc, next_line, on_line):
+    """Feeds proc's output lines to on_line until it exits or every writer
+    closes. gogdl forks workers that can hold the pipe open after the parent:
+    once the process is gone, take the lines already here and stop instead of
+    hanging on EOF."""
+    while True:
+        line = next_line(5)
+        if line is None:
+            pass  # timeout: re-check the process below
+        elif line == "":
+            return  # every writer closed: EOF (or the pipe went away)
+        else:
+            on_line(line)
+        if proc.poll() is not None:
+            while True:
+                line = next_line(0)
+                if not line:  # "" (EOF) or None (nothing waiting)
+                    return
+                on_line(line)
+
+
 def watch_attempt(job_id, proc, state, bytes_stall, quiet_stall):
     """Reads one gogdl run to its end: "eof", "stalled" or "canceled". A stall
     kills the run's process group; the caller decides whether to retry."""
@@ -869,38 +1091,12 @@ def watch_attempt(job_id, proc, state, bytes_stall, quiet_stall):
         return None
 
     threading.Thread(target=watchdog, daemon=True).start()
-    # Read the raw fd, not the TextIOWrapper: the wrapper readaheads into an
-    # internal buffer that select() can't see, so select-then-readline would
-    # stall with whole lines already buffered but the fd dry.
     try:
         fd = proc.stdout.fileno()
     except (OSError, ValueError):
         stop.set()
         return "eof"
-    buf = b""
-
-    def next_line(timeout):
-        """One line within timeout, "" on end of stream (or a closed pipe),
-        None on timeout. Keeps a byte buffer across calls."""
-        nonlocal buf
-        while b"\n" not in buf:
-            try:
-                ready, _, _ = select.select([fd], [], [], timeout)
-            except (OSError, ValueError):
-                return ""
-            if not ready:
-                return None
-            try:
-                chunk = os.read(fd, 65536)
-            except OSError:
-                return ""
-            if chunk == b"":
-                line, buf = buf, b""
-                return line.decode("utf-8", "replace") if line else ""
-            buf += chunk
-            timeout = 0
-        line, buf = buf.split(b"\n", 1)
-        return line.decode("utf-8", "replace")
+    next_line = line_reader(fd)
 
     def handle_line(line):
         """Folds one gogdl output line into the job's progress timers and the
@@ -957,23 +1153,7 @@ def watch_attempt(job_id, proc, state, bytes_stall, quiet_stall):
                 state["speed"] = speed
             notify("job.progress", dict(state))
 
-    while True:
-        line = next_line(5)
-        if line is None:
-            pass  # timeout: re-check the process below
-        elif line == "":
-            break  # every writer closed: EOF (or the pipe went away)
-        else:
-            handle_line(line)
-        if proc.poll() is not None:
-            # gogdl is gone, but forked workers may still hold the pipe open:
-            # take the lines already here, then stop instead of hanging on EOF.
-            while True:
-                line = next_line(0)
-                if not line:  # "" (EOF) or None (nothing waiting)
-                    break
-                handle_line(line)
-            break
+    pump(proc, next_line, handle_line)
     stop.set()
     with jobs_lock:
         job = jobs.get(job_id, {})
@@ -992,6 +1172,7 @@ def finish_install(job, kind):
     app, path = job.get("id"), job.get("path")
     build, channel = job.get("build") or "", job.get("channel") or ""
     platform = job.get("platform") or platform_of(app)
+    lang, dlcs = option_choices(job.get("options"))
     game_dir = find_game_dir(app, path, platform) if app and path else ""
     if not has_marker(game_dir, app, platform):
         marker_name = "a Linux installer marker" if platform == "linux" else f"goggame-{app}.info"
@@ -1009,7 +1190,7 @@ def finish_install(job, kind):
             log("warn", f"couldn't confirm the installed size for {app}: {e}")
             data = None
         if data:
-            _, expected = best_sizes(data)
+            _, expected = expected_sizes(data, lang, dlcs)
             actual_bytes = dir_size(game_dir)
             if expected > 0 and actual_bytes < expected // 2:
                 return (f"installed only {fmt_bytes(actual_bytes)} of the expected "
@@ -1044,7 +1225,7 @@ def finish_install(job, kind):
             return (f"installed {app} but couldn't determine the build (the "
                     f"store didn't answer); retry the job.", {})
     if data:
-        _, expected = best_sizes(data)
+        _, expected = expected_sizes(data, lang, dlcs)
         actual_bytes = dir_size(game_dir)
         if expected > 0 and actual_bytes < expected // 2:
             return (f"installed only {fmt_bytes(actual_bytes)} of the expected "
@@ -1461,11 +1642,460 @@ def launch_spec(params):
     }
 
 
+# --- verify and move (protocol 1.4) ------------------------------------------
+#
+# game.verify: a check hashes the installed files against what gogdl recorded
+# during the install — its content-system manifest for Windows installs (whose
+# per-depot file lists live on GOG's CDN) or the Linux installer's
+# .gogdl-linux-manifest — and a repair then runs `gogdl repair` (download with
+# verification) and re-checks. game.relocated rebases the install record after
+# Platypus moved the folder itself.
+
+def galaxy_path(name):
+    """GOG's CDN layout for a manifest hash: ab/cd/abcd…."""
+    return name if "/" in name else name[:2] + "/" + name[2:4] + "/" + name
+
+
+def lang_matches(depot_langs, installed):
+    """Whether a depot belongs to an install of `installed`: "*" or that
+    language. Depot languages may be shortened ("en" for "en-US"), which gogdl
+    treats as equal (its table maps deprecated codes)."""
+    want = (installed or "").lower()
+    for l in depot_langs or []:
+        l = str(l).lower()
+        if l == "*" or (want and (l == want or l.startswith(want + "-")
+                                  or want.startswith(l + "-"))):
+            return True
+    return False
+
+
+def case_insensitive_path(path):
+    """The path as it is on disk when only its case differs, else path."""
+    if os.path.exists(path):
+        return path
+    folder, name = os.path.split(path)
+    try:
+        for entry in os.listdir(folder or "."):
+            if entry.lower() == name.lower():
+                return os.path.join(folder, entry)
+    except OSError:
+        pass
+    return path
+
+
+def crc32_matches(path, want):
+    crc = 0
+    try:
+        with open(path, "rb") as f:
+            while True:
+                block = f.read(1 << 20)
+                if not block:
+                    break
+                crc = zlib.crc32(block, crc)
+    except OSError:
+        return False
+    return crc & 0xFFFFFFFF == want & 0xFFFFFFFF
+
+
+def hashes_match(path, chunks):
+    """Whether every chunk of the file matches the store's md5, streamed one
+    chunk at a time (a check never loads a file into memory)."""
+    try:
+        with open(path, "rb") as f:
+            for c in chunks:
+                if not isinstance(c, dict):
+                    return False
+                want = str(c.get("md5") or "").lower()
+                left = int(c.get("size") or 0)
+                h = hashlib.md5()
+                while left > 0:
+                    block = f.read(min(left, 1 << 20))
+                    if not block:
+                        return False
+                    h.update(block)
+                    left -= len(block)
+                if want and h.hexdigest() != want:
+                    return False
+    except OSError:
+        return False
+    return True
+
+
+def depot_files(meta):
+    """(path, chunks) for the game files a stored manifest lists: the install's
+    language and DLC depots only; support files are left out (gogdl installs
+    those outside the game folder)."""
+    base = str(meta.get("baseProductId") or "")
+    dlcs = {str(d["id"]) for d in meta.get("HGLdlcs") or []
+            if isinstance(d, dict) and d.get("id") is not None}
+    lang = str(meta.get("HGLInstallLanguage") or "")
+    bits = "64" if sys.maxsize > 2 ** 32 else "32"
+    files = []
+    for depot in meta.get("depots") or []:
+        if not isinstance(depot, dict) or not depot.get("manifest"):
+            continue
+        product = str(depot.get("productId") or "")
+        if product != base and product not in dlcs:
+            continue
+        if not lang_matches(depot.get("languages"), lang):
+            continue
+        if depot.get("osBitness") and bits not in [str(b) for b in depot["osBitness"]]:
+            continue
+        data = api_get_zjson("https://cdn.gog.com/content-system/v2/meta/"
+                             + galaxy_path(str(depot["manifest"])))
+        for item in ((data or {}).get("depot") or {}).get("items") or []:
+            if not isinstance(item, dict) or item.get("type") != "DepotFile":
+                continue
+            if "support" in (item.get("flags") or []):
+                continue
+            path = str(item.get("path") or "").replace("\\", "/").lstrip("/")
+            if path:
+                files.append((path, item.get("chunks") or []))
+    return files
+
+
+def check_progress(job_id, done, total, last):
+    """job.progress for a file check, at most every half second."""
+    now = time.monotonic()
+    if done < total and now - last[0] < 0.5:
+        return
+    last[0] = now
+    notify("job.progress", {"jobId": job_id, "phase": "checking",
+                            "bytes": done, "total": total,
+                            "percent": (100.0 * done / total) if total else 0.0})
+
+
+def canceled(job_id):
+    with jobs_lock:
+        return bool(jobs.get(job_id, {}).get("canceled"))
+
+
+def verify_files(job_id, app, game_dir, platform):
+    """(checked, damaged, missing) for an installed game, or None when the job
+    was canceled. Raises RPCError when there is nothing to check against."""
+    last = [0.0]
+    checked = damaged = missing = done = 0
+    if platform == "linux":
+        try:
+            with open(os.path.join(game_dir, ".gogdl-linux-manifest")) as f:
+                manifest = json.load(f)
+        except (OSError, ValueError):
+            raise RPCError("this install has no stored game manifest to check; "
+                           "reinstall the game, then verify again")
+        files = [f for f in (manifest.get("files") or [])
+                 if isinstance(f, dict) and not f.get("is_symlink")
+                 and str(f.get("file_name") or "").startswith("data/noarch/")]
+        total = sum(int(f.get("size") or 0) for f in files)
+        for f in files:
+            if canceled(job_id):
+                return None
+            checked += 1
+            path = str(f["file_name"]).replace("data/noarch", game_dir)
+            if not os.path.isfile(path):
+                missing += 1
+            elif not crc32_matches(path, int(f.get("crc32") or 0)):
+                damaged += 1
+            done += int(f.get("size") or 0)
+            check_progress(job_id, done, total, last)
+        return checked, damaged, missing
+    meta = stored_manifest(app)
+    if int(meta.get("version") or 0) == 1:
+        raise RPCError("file checking isn't available for this game yet (it "
+                       "installs from GOG's older content system); update the "
+                       "game once, then verify again")
+    try:
+        files = depot_files(meta)
+    except Exception as e:
+        raise RPCError(f"couldn't read GOG's file list for {app}: {e}")
+    if not files:
+        raise RPCError("this install has no stored game file list to check; "
+                       "update the game once, then verify again")
+    total = sum(sum(int(c.get("size") or 0) for c in chunks if isinstance(c, dict))
+                for _path, chunks in files)
+    for rel, chunks in files:
+        if canceled(job_id):
+            return None
+        checked += 1
+        path = case_insensitive_path(os.path.join(game_dir, rel))
+        if not os.path.isfile(path):
+            missing += 1
+        elif not hashes_match(path, chunks):
+            damaged += 1
+        done += sum(int(c.get("size") or 0) for c in chunks if isinstance(c, dict))
+        check_progress(job_id, done, total, last)
+    return checked, damaged, missing
+
+
+def ensure_exclude_file(app):
+    """gogdl's Linux repair reads its exclude list without a fallback; an empty
+    one keeps that from crashing a repair."""
+    path = os.path.join(gogdl_config_base(), "heroic_gogdl", "exclude", app)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a"):
+            pass
+    except OSError:
+        pass
+
+
+def start_verify(params):
+    app = str(params.get("id") or "")
+    job_id = str(params.get("jobId") or "")
+    install_dir = str(params.get("installDir") or "")
+    if not app or not job_id:
+        raise RPCError("invalid params: id and jobId are required", -32602)
+    if not os.path.isabs(install_dir):
+        raise RPCError("installDir is missing or relative; Platypus always sends one")
+    ig = installed_games().get(app)
+    if not ig:
+        raise RPCError(f"{app} is not installed")
+    if not os.path.isdir(install_dir):
+        raise RPCError(f"{install_dir} isn't a folder")
+    platform = ig.get("platform") or "windows"
+    if platform == "linux":
+        if not os.path.isfile(os.path.join(install_dir, ".gogdl-linux-manifest")):
+            raise RPCError("this install has no stored game manifest to check; "
+                           "reinstall the game, then verify again")
+    else:
+        if not stored_manifest(app):
+            # A 0.1.0 install may have kept gogdl's manifest in the shared
+            # config dir; adopt it when it matches the installed build.
+            prime_legacy_manifest(app, install_dir)
+        meta = stored_manifest(app)
+        if not meta:
+            raise RPCError("this install has no stored game manifest to check; "
+                           "update the game once, then verify again")
+        if int(meta.get("version") or 0) == 1:
+            raise RPCError("file checking isn't available for this game yet (it "
+                           "installs from GOG's older content system); update the "
+                           "game once, then verify again")
+    repair = bool(params.get("repair"))
+    if not claim_job(job_id, {"proc": None, "canceled": False, "id": app, "dir": install_dir}):
+        return {}
+    threading.Thread(target=follow_verify,
+                     args=(job_id, app, install_dir, platform, repair),
+                     daemon=True).start()
+    return {}
+
+
+def report_repair_line(job_id, state, line):
+    parsed = parse_progress(line)
+    if not parsed:
+        return
+    pct, done, total, speed = parsed
+    state.update({"percent": pct, "bytes": done, "total": total})
+    if speed is not None:
+        state["speed"] = speed
+    notify("job.progress", dict(state))
+
+
+def run_repair(job_id, app, install_dir, platform):
+    """The repair half of a verify: gogdl re-hashes the files and re-downloads
+    the broken ones. None on success, else the message for job.failed."""
+    ensure_exclude_file(app)
+    argv = ["gogdl", "--auth-config-path", auth_file(), "repair", app,
+            "--path", install_dir, "--platform", platform, "--max-workers", "4"]
+    try:
+        proc = spawn_gogdl(argv)
+    except FileNotFoundError:
+        return "gogdl is not installed (needs version 1.1 or newer)"
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if job is None or job.get("canceled"):
+            stop_proc(proc, grace=5)
+            return None
+        job["proc"] = proc
+    state = {"jobId": job_id, "phase": "repairing", "percent": 0}
+    try:
+        next_line = line_reader(proc.stdout.fileno())
+    except (OSError, ValueError, AttributeError):
+        next_line = None
+    if next_line is not None:
+        pump(proc, next_line, lambda line: report_repair_line(job_id, state, line))
+    try:
+        rc = proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        stop_proc(proc, grace=5)
+        rc = -1
+    return None if rc == 0 else f"gogdl repair exited with {rc}"
+
+
+def follow_verify(job_id, app, install_dir, platform, repair):
+    notify("job.progress", {"jobId": job_id, "phase": "checking"})
+    repaired = 0
+    try:
+        report = verify_files(job_id, app, install_dir, platform)
+        if report is None:  # canceled while hashing
+            with jobs_lock:
+                jobs.pop(job_id, None)
+            return
+        checked, damaged, missing = report
+        if repair and (damaged or missing):
+            failed = run_repair(job_id, app, install_dir, platform)
+            if canceled(job_id):
+                with jobs_lock:
+                    jobs.pop(job_id, None)
+                return
+            if failed is not None:
+                with jobs_lock:
+                    jobs.pop(job_id, None)
+                notify("job.failed", {"jobId": job_id, "error": failed})
+                return
+            after = verify_files(job_id, app, install_dir, platform)
+            if after is None:
+                with jobs_lock:
+                    jobs.pop(job_id, None)
+                return
+            left = after[1] + after[2]
+            repaired = max(0, damaged + missing - left)
+            damaged, missing = after[1], after[2]
+    except Exception as e:
+        with jobs_lock:
+            jobs.pop(job_id, None)
+        if canceled(job_id):
+            return
+        error = str(e) if isinstance(e, RPCError) else f"{type(e).__name__}: {e}"
+        notify("job.failed", {"jobId": job_id, "error": error})
+        return
+    with jobs_lock:
+        job = jobs.pop(job_id, {})
+    if job.get("canceled"):
+        return
+    notify("job.done", {"jobId": job_id,
+                        "verify": {"checked": checked, "damaged": damaged,
+                                   "missing": missing, "repaired": repaired}})
+
+
+def game_relocated(params):
+    """Platypus moved the game's folder itself (protocol 1.4, no capability):
+    rebase the install record from `from` to `to`. -32602 when the record
+    doesn't point at `from`."""
+    app = str(params.get("id") or "")
+    src, dst = params.get("from") or "", params.get("to") or ""
+    if not app or not src or not dst:
+        raise RPCError("invalid params: id, from and to are required", -32602)
+    if not os.path.isabs(dst):
+        raise RPCError("invalid params: to must be an absolute path", -32602)
+    nsrc = os.path.normpath(src)
+    with state_lock:
+        state = installed_games()
+        entry = state.get(app)
+        if entry is None or os.path.normpath(entry.get("path") or "") != nsrc:
+            raise RPCError(f"no install record at {src}", -32602)
+        entry["path"] = dst
+        exe = os.path.normpath(entry.get("executable") or "")
+        if exe == nsrc or exe.startswith(nsrc + os.sep):
+            entry["executable"] = os.path.join(dst, os.path.relpath(exe, nsrc))
+        save_installed(state)
+    return {}
+
+
+# --- achievements and playtime (protocol 1.7) -------------------------------
+#
+# Both live on GOG's gameplay service and take gogdl's stored access token:
+# achievements are per game (icons, unlock times and rarity included), playtime
+# is one sessions call per owned game (time_sum, in minutes) — GOG exposes no
+# library-wide playtime call (Heroic reads the same endpoint, per game).
+
+def iso_unix(text):
+    """Unix seconds from GOG's ISO-8601 date, or None."""
+    if not isinstance(text, str) or not text:
+        return None
+    try:
+        return int(datetime.datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
+
+
+def gameplay(path, token):
+    return api_get("https://gameplay.gog.com" + path, token, {"X-Gog-Lc": LOCALE})
+
+
+def achievements_list(params):
+    app = str((params or {}).get("id") or "")
+    if not app:
+        raise RPCError("invalid params: id is required", -32602)
+    creds = credentials()
+    if not creds:
+        raise RPCError("log in to GOG first", CODE_AUTH_REQUIRED)
+    user = str(creds.get("user_id") or "")
+    if not user:
+        raise RPCError("GOG's credentials don't name the account; log in again")
+    try:
+        data = gameplay(f"/clients/{app}/users/{user}/achievements", creds["access_token"])
+    except urllib.error.HTTPError as e:
+        if e.code == 404:  # the game has no achievements
+            data = {}
+        elif e.code in (401, 403):
+            raise RPCError("GOG refused the session; log in again", CODE_AUTH_REQUIRED)
+        else:
+            raise RPCError(f"GOG's achievements service answered {e.code}", -32002)
+    except Exception as e:
+        raise RPCError(f"GOG's achievements service is unreachable: {e}", -32002)
+    out, unlocked = [], 0
+    for a in data.get("items") or []:
+        if not isinstance(a, dict):
+            continue
+        aid = str(a.get("achievement_key") or a.get("achievement_id") or "")
+        if not aid:
+            continue
+        entry = {"id": aid, "name": str(a.get("name") or aid),
+                 "description": str(a.get("description") or ""),
+                 "hidden": a.get("visible") is False}
+        when = iso_unix(a.get("date_unlocked"))
+        icon = a.get("image_url_unlocked") if when else a.get("image_url_locked")
+        if isinstance(icon, str) and icon.startswith("http"):
+            entry["icon"] = icon
+        if when:
+            entry["unlockedAt"] = when
+            unlocked += 1
+        try:
+            rarity = float(a.get("rarity"))
+        except (TypeError, ValueError):
+            rarity = 0.0
+        if rarity > 0:
+            entry["globalPercent"] = round(min(rarity, 100.0), 1)
+        out.append(entry)
+    return {"total": len(out), "unlocked": unlocked, "list": out}
+
+
+def playtime_list(_params=None):
+    creds = credentials()
+    if not creds:
+        raise RPCError("log in to GOG first", CODE_AUTH_REQUIRED)
+    user = str(creds.get("user_id") or "")
+    if not user:
+        raise RPCError("GOG's credentials don't name the account; log in again")
+    token = creds["access_token"]
+    try:
+        games = account_products(token)
+    except Exception as e:
+        raise RPCError(f"GOG API is unreachable: {e}", -32002)
+    apps = [str(g.get("id")) for g in games if isinstance(g, dict) and g.get("id")]
+
+    def minutes(app):
+        try:
+            return max(0, int(gameplay(f"/games/{app}/users/{user}/sessions",
+                                       token).get("time_sum") or 0))
+        except Exception:
+            return 0  # one game's sessions failing hides only its time
+
+    out = []
+    if apps:
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            for app, mins in zip(apps, pool.map(minutes, apps)):
+                if mins:
+                    out.append({"id": app, "minutes": mins})
+    return {"games": out}
+
+
 # --- dispatch -----------------------------------------------------------
 
 def initialize(params):
+    global LOCALE
+    LOCALE = str((params or {}).get("locale") or "") or "en-US"
     return {"name": "GOG (gogdl)", "version": PLUGIN_VERSION, "api": API,
-            "capabilities": ["library", "install", "launch", "auth", "discard", "versions"],
+            "capabilities": list(CAPABILITIES),
             "features": {"versions": {"builds": True, "channels": True,
                                      "manual": False, "password": False}},
             "missing": []}
@@ -1542,9 +2172,14 @@ METHODS = {
     "library.list": library_list,
     "game.details": game_details,
     "game.installSize": install_size,
+    "game.options": game_options,
     "game.install": lambda p: start_job(p, "install"),
     "game.update": lambda p: start_job(p, "update"),
     "game.uninstall": lambda p: start_job(p, "uninstall"),
+    "game.verify": start_verify,
+    "game.relocated": game_relocated,
+    "achievements.list": achievements_list,
+    "playtime.list": playtime_list,
     "job.cancel": job_cancel,
     "job.discard": job_discard,
     "game.launchSpec": launch_spec,

@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import time
+import zlib
 
 STATE = os.environ["FAKE_GOGDL_STATE"]
 GOOD_CODE = "Xa1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
@@ -16,6 +17,9 @@ LATEST_BUILD = "8888"
 OLD_BUILD = "7777"
 BETA_BUILD = "7776"
 DISK_BYTES = 12 * 1024 * 1024
+# The depot hash the fake writes into its stored Windows manifest; the tests'
+# fake CDN answers any /content-system/v2/meta/ path with the matching list.
+DEPOT_HASH = "ab12cd34ef567890ab12cd34ef567890"
 
 
 def load():
@@ -29,6 +33,54 @@ def load():
 def save(st):
     with open(STATE, "w") as f:
         json.dump(st, f)
+
+
+def crc32_file(path):
+    crc = 0
+    with open(path, "rb") as f:
+        while True:
+            block = f.read(1 << 20)
+            if not block:
+                break
+            crc = zlib.crc32(block, crc)
+    return crc & 0xFFFFFFFF
+
+
+def write_manifests(app, build, platform, game_dir):
+    """The file lists the real tool stores: .gogdl-linux-manifest for the Linux
+    installer manager, the content-system manifest for Windows installs (what
+    `gogdl repair` verifies against)."""
+    if platform == "linux":
+        files = []
+        for root, _dirs, names in os.walk(game_dir):
+            for name in sorted(names):
+                rel = os.path.relpath(os.path.join(root, name), game_dir).replace(os.sep, "/")
+                if name.startswith("."):
+                    continue
+                files.append({"file_name": "data/noarch/" + rel,
+                              "crc32": crc32_file(os.path.join(root, name)),
+                              "size": os.path.getsize(os.path.join(root, name)),
+                              "is_symlink": False})
+        with open(os.path.join(game_dir, ".gogdl-linux-manifest"), "w") as f:
+            json.dump({"files": files, "info_checksum": ""}, f)
+        return
+    cfg = os.environ.get("GOGDL_CONFIG_PATH") or ""
+    if not cfg:
+        return
+    manifests = os.path.join(cfg, "heroic_gogdl", "manifests")
+    os.makedirs(manifests, exist_ok=True)
+    meta = {
+        "version": 2,
+        "baseProductId": app,
+        "HGLInstallLanguage": "en-US",
+        "HGLdlcs": [],
+        "installDirectory": "SuperGame",
+        "buildId": build,
+        "depots": [{"languages": ["*", "en-US"], "manifest": DEPOT_HASH,
+                    "productId": app, "size": DISK_BYTES}],
+    }
+    with open(os.path.join(manifests, app), "w") as f:
+        json.dump(meta, f)
 
 
 def err(msg, code=1):
@@ -85,7 +137,8 @@ def main():
             if code != GOOD_CODE:
                 print(json.dumps({"error": True}))
                 return
-            account = {"access_token": "tok123", "refresh_token": "r", "expires_in": 3600, "loginTime": time.time()}
+            account = {"access_token": "tok123", "refresh_token": "r", "expires_in": 3600,
+                       "user_id": "46899977096215655", "loginTime": time.time()}
             # Like the real gogdl, the credentials live in --auth-config-path,
             # so deleting that file (the plugin's logout) logs out.
             os.makedirs(os.path.dirname(auth_path) or ".", exist_ok=True)
@@ -103,13 +156,23 @@ def main():
         build = rest[rest.index("--build") + 1] if "--build" in rest else LATEST_BUILD
         platform = rest[rest.index("--platform") + 1] if "--platform" in rest else "windows"
         print(json.dumps(info_for(build, platform)))
-    elif cmd in ("download", "update"):
+    elif cmd in ("download", "update", "repair"):
         app = rest[0]
         path = rest[rest.index("--path") + 1]
         platform = rest[rest.index("--platform") + 1] if "--platform" in rest else "windows"
         build = rest[rest.index("--build") + 1] if "--build" in rest else LATEST_BUILD
         if build not in (LATEST_BUILD, OLD_BUILD, BETA_BUILD):
             build = LATEST_BUILD  # unmatched --build keeps the default
+        if cmd == "repair":
+            # A repair works in place (gogdl appends no folder name) and
+            # refuses without the manifest it stored at install time.
+            cfg = os.environ.get("GOGDL_CONFIG_PATH") or ""
+            stored = os.path.join(cfg, "heroic_gogdl", "manifests", app)
+            if platform != "linux" and not os.path.exists(stored):
+                err("No manifest stored locally, unable to verify")
+            game_dir = path
+        else:
+            game_dir = os.path.join(path, st.get("install_subdir", "SuperGame"))
         if os.environ.get("FAKE_GOGDL_STALL_ONCE") == "1":
             flag = STATE + ".stalled"
             if not os.path.exists(flag):
@@ -121,7 +184,6 @@ def main():
                       "Running for: 00:00:01, ETA: 00:00:10", flush=True)
                 time.sleep(300)
                 return
-        game_dir = os.path.join(path, st.get("install_subdir", "SuperGame"))
         os.makedirs(game_dir, exist_ok=True)
         # Like the real tool, resume bookkeeping lives inside the game folder.
         with open(os.path.join(game_dir, ".gogdl-resume"), "w") as f:
@@ -190,8 +252,6 @@ def main():
             # never a goggame-<id>.info marker.
             with open(os.path.join(game_dir, "gameinfo"), "w") as f:
                 f.write("SuperGame")
-            with open(os.path.join(game_dir, ".gogdl-linux-manifest"), "w") as f:
-                f.write("{}")
         else:
             with open(os.path.join(game_dir, f"goggame-{app}.info"), "w") as f:
                 json.dump({"buildId": build, "version": {LATEST_BUILD: "1.0"}.get(build, "0.9")}, f)
@@ -199,6 +259,7 @@ def main():
         with open(script, "w") as f:
             f.write("#!/bin/sh\necho \"gog game $*\"\n")
         os.chmod(script, 0o755)
+        write_manifests(app, build, platform, game_dir)
         st.setdefault("paths", {})[st.get("install_id", "1234")] = game_dir
         save(st)
         print("[cli] INFO: Download complete", file=sys.stderr)
