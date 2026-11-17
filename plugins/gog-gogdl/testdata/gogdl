@@ -14,6 +14,7 @@ GOOD_CODE = "Xa1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
 
 LATEST_BUILD = "8888"
 OLD_BUILD = "7777"
+BETA_BUILD = "7776"
 DISK_BYTES = 12 * 1024 * 1024
 
 
@@ -41,16 +42,22 @@ def info_for(build):
          "branch": None, "generation": 2},
         {"build_id": OLD_BUILD, "version_name": "0.9", "date_published": "2023-12-12T10:27:37+0000",
          "branch": None, "generation": 2},
+        {"build_id": BETA_BUILD, "version_name": "0.9b", "date_published": "2023-12-20T10:27:37+0000",
+         "branch": "beta", "generation": 2},
     ]
-    names = {LATEST_BUILD: "1.0", OLD_BUILD: "0.9"}
+    names = {LATEST_BUILD: "1.0", OLD_BUILD: "0.9", BETA_BUILD: "0.9b"}
     if build not in names:
-        return None
+        # Like real gogdl (manager.py:114-119): an unmatched --build keeps
+        # the default build instead of failing, so callers must compare the
+        # answered buildId with the requested one.
+        build = LATEST_BUILD
+    total = int(os.environ.get("FAKE_GOGDL_TOTAL_COUNT", str(len(builds))))
     return {"size": {"*": {"download_size": 0, "disk_size": 0},
                      "en-US": {"download_size": 8 * 1024 * 1024, "disk_size": DISK_BYTES}},
             "buildId": build, "versionName": names[build],
             "languages": ["en-US"], "folder_name": "SuperGame", "dependencies": [],
-            "available_branches": [None], "dlcs": [],
-            "builds": {"total_count": 2, "count": 2, "items": builds}}
+            "available_branches": ["beta", None], "dlcs": [],
+            "builds": {"total_count": total, "count": len(builds), "items": builds}}
 
 
 def main():
@@ -89,16 +96,24 @@ def main():
         print(json.dumps(creds))
     elif cmd == "info":
         build = rest[rest.index("--build") + 1] if "--build" in rest else LATEST_BUILD
-        data = info_for(build)
-        if data is None:
-            err(f"unknown build {build}")
-        print(json.dumps(data))
+        print(json.dumps(info_for(build)))
     elif cmd in ("download", "update"):
         app = rest[0]
         path = rest[rest.index("--path") + 1]
         build = rest[rest.index("--build") + 1] if "--build" in rest else LATEST_BUILD
-        if build not in (LATEST_BUILD, OLD_BUILD):
-            err(f"unknown build {build}")
+        if build not in (LATEST_BUILD, OLD_BUILD, BETA_BUILD):
+            build = LATEST_BUILD  # unmatched --build keeps the default
+        if os.environ.get("FAKE_GOGDL_STALL_ONCE") == "1":
+            flag = STATE + ".stalled"
+            if not os.path.exists(flag):
+                # First run hangs after one progress line; the retry (a fresh
+                # process for the same job) completes. Mimics the live stall
+                # plus the plugin's kill-and-respawn recovery.
+                open(flag, "w").write("1")
+                print("[PROGRESS] INFO: = Progress: 10.0 838860/8388608, "
+                      "Running for: 00:00:01, ETA: 00:00:10", flush=True)
+                time.sleep(300)
+                return
         game_dir = os.path.join(path, st.get("install_subdir", "SuperGame"))
         os.makedirs(game_dir, exist_ok=True)
         # Like the real tool, resume bookkeeping lives inside the game folder.
@@ -117,18 +132,42 @@ def main():
             # fail the job instead of hanging.
             time.sleep(60)
             return
+        if os.environ.get("FAKE_GOGDL_SLOW") == "1":
+            # Slow but moving: small byte growth with throughput lines, over a
+            # span longer than the test's bytes-stall limit. Must NOT fail.
+            for i in range(1, 13):
+                time.sleep(0.5)
+                done = i * 256 * 1024
+                print(f"[PROGRESS] INFO: = Progress: {100.0 * done / total:.1f} {done}/{total}, "
+                      f"Running for: 00:00:0{i % 10}, ETA: 00:00:01", flush=True)
+                print(f"[PROGRESS] INFO: = Downloaded: {done / 1048576:.2f} MiB, Written: 0.00 MiB", flush=True)
+                print("[PROGRESS] INFO:  + Download\t- 0.50 MiB/s (raw) / 0.50 MiB/s (decompressed)", flush=True)
+            # (falls through to the normal completion below)
         if os.environ.get("FAKE_GOGDL_FROZEN") == "1":
             # The live stall signature (issue #4): progress lines keep coming
-            # with the same byte count and zero throughput, forever.
+            # at zero throughput while the byte count never grows, forever.
             while True:
-                print(f"[PROGRESS] INFO: = Progress: 22.36 16802208/{total}, "
-                      f"Running for: 00:17:14, ETA: 00:59:59", flush=True)
+                print("[PROGRESS] INFO: = Progress: 25.0 2097152/8388608, "
+                      "Running for: 00:17:14, ETA: 00:59:59", flush=True)
                 print("[PROGRESS] INFO:  + Download\t- 0.00 MiB/s (raw) / 0.00 MiB/s (decompressed)", flush=True)
                 time.sleep(0.1)
+        if os.environ.get("FAKE_GOGDL_QUIET") == "1":
+            # One chatty line, then nothing at all: the quiet timer must fail
+            # the job even though no progress line ever appeared.
+            print("[V2] INFO: Initialized V2 Download Manager", flush=True)
+            time.sleep(300)
+            return
+        if os.environ.get("FAKE_GOGDL_ORPHAN") == "1":
+            # A forked child keeps stdout open after the parent exits: the
+            # reader must still finish the job instead of hanging on EOF.
+            import subprocess as sp
+            sp.Popen(["sleep", "120"], stdout=sys.stdout, stderr=sys.stdout,
+                     stdin=sp.DEVNULL)
         for pct, mib in lines[1:]:
-            time.sleep(step)
-            print(f"[PROGRESS] INFO: = Progress: {pct} {int(mib * 1024 * 1024)}/{total}, "
-                  f"Running for: 00:00:02, ETA: 00:00:01", flush=True)
+            if os.environ.get("FAKE_GOGDL_SLOW") != "1":
+                time.sleep(step)
+                print(f"[PROGRESS] INFO: = Progress: {pct} {int(mib * 1024 * 1024)}/{total}, "
+                      f"Running for: 00:00:02, ETA: 00:00:01", flush=True)
         # The game files, at the size info advertises (sparse: apparent bytes
         # count, no disk is used), so the plugin's size check passes. A short
         # install writes almost nothing, so the check must fail the job.
@@ -140,8 +179,7 @@ def main():
             with open(payload, "wb") as f:
                 f.truncate(DISK_BYTES)
         with open(os.path.join(game_dir, f"goggame-{app}.info"), "w") as f:
-            json.dump({"buildId": build,
-                       "version": "1.0" if build == LATEST_BUILD else "0.9"}, f)
+            json.dump({"buildId": build, "version": {LATEST_BUILD: "1.0"}.get(build, "0.9")}, f)
         script = os.path.join(game_dir, "start.sh")
         with open(script, "w") as f:
             f.write("#!/bin/sh\necho \"gog game $*\"\n")

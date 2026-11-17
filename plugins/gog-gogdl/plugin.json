@@ -11,7 +11,7 @@
   "icon": "icon.svg",
   "capabilities": ["library", "install", "launch", "auth", "discard", "versions"],
   "requires": [
-    { "bin": "gogdl", "hint": "get the gogdl_linux_x86_64 binary from github.com/Heroic-Games-Launcher/heroic-gogdl/releases and put it on your PATH as gogdl" },
+    { "bin": "gogdl", "hint": "get gogdl 1.1 or newer from github.com/Heroic-Games-Launcher/heroic-gogdl/releases and put it on your PATH as gogdl" },
     { "bin": "python3", "hint": "install python3 from your distribution" }
   ],
   "install_dir": "gog",
