@@ -56,6 +56,12 @@ it has one, else Steam's geolocation; a chosen region asks Steam's Content
 Server Directory for that region's cell id instead. `PLATYPUS_STEAM_CELLID`
 still overrides both when automatic.
 
+Shader pre-caching (off by default, same settings page): after each install
+or update the plugin fetches the Steam shader buckets (Fossilize `.foz`)
+into `<Games folder>/steam/shadercache/<appid>/` and runs nothing — the
+Steam client replays them into driver caches on its next run. Buckets can
+be multi-GB for big games; already-downloaded buckets are skipped.
+
 ## Launch modes
 
 Steam games fall into three cases, detected per game from the installed

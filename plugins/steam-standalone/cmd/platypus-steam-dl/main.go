@@ -2,7 +2,7 @@
 // plugin, replacing DepotDownloader for installs and logins. It speaks
 // one subcommand per argv:
 //
-//	platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc
+//	platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc|shader
 //
 // The request (app id, branch, dirs, and the refresh token) arrives as one
 // JSON object on stdin — the token never goes in argv (visible in
@@ -31,7 +31,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc|shader")
 	}
 	if os.Args[1] == "auth" {
 		if err := runAuth(context.Background()); err != nil {
@@ -103,8 +103,10 @@ func main() {
 		runErr = runFamilyRunning(ctx, req)
 	case "dlc":
 		runErr = runDLC(ctx, req)
+	case "shader":
+		runErr = runShader(ctx, req)
 	default:
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc|shader")
 	}
 	if runErr != nil {
 		var wpe wrongPasswordError
@@ -151,6 +153,9 @@ type request struct {
 	// when the caller already knows the group (the plugin's Web API
 	// fetch does); zero means look it up over the CM.
 	FamilyGroupID uint64 `json:"family_group_id"`
+	// ShaderDir is the shader cache root for the shader subcommand
+	// (the steamapps/shadercache/<appid> mirror); empty for the rest.
+	ShaderDir string `json:"shader_dir"`
 }
 
 type cmErr struct {

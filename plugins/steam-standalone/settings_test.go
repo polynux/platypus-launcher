@@ -21,7 +21,7 @@ func TestSteamSettingsSchema(t *testing.T) {
 			Fields []struct {
 				ID      string `json:"id"`
 				Kind    string `json:"kind"`
-				Default string `json:"default"`
+				Default any    `json:"default"`
 				Options []struct {
 					ID    string `json:"id"`
 					Label string `json:"label"`
@@ -32,7 +32,7 @@ func TestSteamSettingsSchema(t *testing.T) {
 	if err := e.call("settings.schema", map[string]any{}, &schema); err != nil {
 		t.Fatalf("settings.schema: %v", err)
 	}
-	if len(schema.Groups) != 1 || len(schema.Groups[0].Fields) != 1 {
+	if len(schema.Groups) != 1 || len(schema.Groups[0].Fields) != 2 {
 		t.Fatalf("schema: %+v", schema)
 	}
 	field := schema.Groups[0].Fields[0]
@@ -43,12 +43,20 @@ func TestSteamSettingsSchema(t *testing.T) {
 	for _, o := range field.Options {
 		ids[o.ID] = true
 	}
-	if !ids["auto"] || !ids["14"] || !ids[field.Default] {
+	if !ids["auto"] || !ids["14"] || !ids[field.Default.(string)] {
 		t.Fatalf("region options: %+v", field.Options)
+	}
+	shader := schema.Groups[0].Fields[1]
+	if shader.ID != "shader" || shader.Kind != "bool" || shader.Default != false {
+		t.Fatalf("shader field: %+v", shader)
 	}
 	// An unknown region is refused, like a value core refuses before saving.
 	if err := e.call("settings.apply", map[string]any{"values": map[string]any{"region": "9999"}}, nil); err == nil {
 		t.Fatal("unknown region accepted")
+	}
+	// A non-boolean shader value is refused too.
+	if err := e.call("settings.apply", map[string]any{"values": map[string]any{"shader": "yes"}}, nil); err == nil {
+		t.Fatal("non-boolean shader accepted")
 	}
 }
 

@@ -205,6 +205,17 @@ func BuildDLCEncrypted() *Fixture {
 	}, true)
 }
 
+// BuildShader builds the fixture for a shader bucket of the test game:
+// depot == app id (like the live Shader service resolves), one
+// fozpipelinesv6 .foz file with encrypted filenames (the live shape).
+// Same key as Build, so one depot key unlocks both.
+func BuildShader(appID uint32, gid uint64) *Fixture {
+	return assemble(TestKey(), appID, gid, "linux", []fileSpec{
+		{name: "fozpipelinesv6/steam_pipeline_cache.foz",
+			body: []byte("fake fossilize bucket")},
+	}, true)
+}
+
 // CDN is a fake content server farm serving one fixture.
 type CDN struct {
 	t       *testing.T
@@ -332,6 +343,38 @@ func WriteCMStateDLC(t *testing.T, cmState string, cdn *CDN, base, dlc *Fixture)
 }
 }
 `, base.DepotID, base.GID, base.DiskBytes, dlc.DepotID, dlc.GID, dlc.DiskBytes)
+	raw, _ := json.Marshal(st)
+	if err := os.WriteFile(cmState, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// ShaderBucket is one fake Shader.GetBucketManifest answer: the bucket id,
+// manifest gid and byte size served for a (gpu, driver) pair.
+type ShaderBucket struct {
+	Bucket   uint64
+	Manifest uint64
+	Size     uint64
+}
+
+// WriteCMShaderState points the fake CM's Shader service at bucket
+// manifests: pairs maps "gpu\tdriver" to its bucket. Unknown pairs
+// answer NoMatch, like the live service. It preserves the other knobs in
+// the state file.
+func WriteCMShaderState(t *testing.T, cmState string, pairs map[string]ShaderBucket) {
+	t.Helper()
+	var st map[string]any
+	if raw, err := os.ReadFile(cmState); err == nil {
+		json.Unmarshal(raw, &st)
+	}
+	if st == nil {
+		st = map[string]any{}
+	}
+	buckets := map[string]any{}
+	for k, b := range pairs {
+		buckets[k] = map[string]any{"bucket": b.Bucket, "manifest": b.Manifest, "size": b.Size}
+	}
+	st["shader_buckets"] = buckets
 	raw, _ := json.Marshal(st)
 	if err := os.WriteFile(cmState, raw, 0o644); err != nil {
 		t.Fatal(err)

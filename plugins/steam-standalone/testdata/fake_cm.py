@@ -96,6 +96,13 @@ re-read on every auth poll so tests can approve mid-login):
                        begin, so begin answers listing + 2 (S3 race)
     cloud_complete_eresult  eresult for the complete reply (default 1);
                        2 fails the push at completion
+  Shader pre-caching (issue #205): Shader.GetBucketManifest answers from
+    shader_buckets {"<gpu>\t<driver>": {"manifest": gid, "size": bytes,
+                    "bucket": id}}; an unknown pair answers 42 (NoMatch),
+                    like the live service. The bucket manifest itself rides
+                    the fake CDN as depot == appid (see fakesteam
+                    BuildShader); depot keys and request codes come from the
+                    download knobs below.
 # Downloads ride plain HTTP on localhost: the fake prints "http <port>" as
 # its second stdout line and serves /cloud/<appid>/<name>; url_host in the
 # ClientFileDownload reply points at it. Uploaded blocks ride the same
@@ -601,6 +608,9 @@ def serve_logged_in(conn, hdr, body, st):
             continue
         if target == "ContentServerDirectory.GetCDNAuthToken#1":
             serve_cdn_token(conn, hdr, body, st, steamid, sessionid)
+            continue
+        if target == "Shader.GetBucketManifest#1":
+            serve_shader_bucket(conn, hdr, body, st, steamid, sessionid)
             continue
         # Pushes scheduled for this call go out BEFORE the reply, so
         # they land between the client's request and the reply it waits
@@ -1138,6 +1148,31 @@ def serve_cdn_token(conn, hdr, body, st, steamid, sessionid):
                             pb_str(1, st.get("cdn_token", "cdn-token")) + pb_int(2, exp)))
 
 
+# --- Shader pre-caching (issue #205) ------------------------------------------
+# shader_buckets maps "<gpu>\\t<driver>" to {"manifest", "size", "bucket"}.
+# An unknown pair answers 42 (NoMatch), like the live service; a pair with
+# manifest 0 means "no bucket published", also a skip for the downloader.
+def serve_shader_bucket(conn, hdr, body, st, steamid, sessionid):
+    jobid = hdr.get(10, [0])[0]
+    req = pb_parse(body)
+    app = req.get(1, [0])[0]
+    gpu = req.get(2, [b""])[0]
+    drv = req.get(3, [b""])[0]
+    if isinstance(gpu, bytes):
+        gpu = gpu.decode("utf-8", "replace")
+    if isinstance(drv, bytes):
+        drv = drv.decode("utf-8", "replace")
+    record("shader_bucket app=%s gpu=%s driver=%s" % (app, gpu, drv))
+    entry = (st.get("shader_buckets") or {}).get("%s\t%s" % (gpu, drv))
+    if entry is None:
+        conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                                content_hdr(steamid, sessionid, jobid, 42), b""))
+        return
+    resp = (pb_int(1, entry.get("manifest", 0))
+            + pb_int(2, entry.get("size", 0))
+            + pb_int(3, entry.get("bucket", 7)))
+    conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                            content_hdr(steamid, sessionid, jobid), resp))
 # --- Cloud saves (Auto-Cloud listings + downloads, issue #6) -----------------
 # Knobs are documented at the top (cloud_changelist, cloud_files). Downloads
 # ride plain HTTP on localhost; HTTP_PORT is set in main().

@@ -72,6 +72,8 @@ LOCALES = {
         "settings_downloads_desc": "Where installs, updates and verify fetch their chunks from.",
         "settings_region": "Download region",
         "settings_region_desc": "Automatic uses the Steam client's own region when it has one, else Steam's geolocation.",
+        "settings_shader": "Download shader caches",
+        "settings_shader_desc": "Fetch the Steam shader pre-caching buckets (Fossilize) into shadercache/ after each install or update. Multi-GB for big games; the client processes them on its next run.",
         "region_auto": "Automatic",
         "dlc_label": "Add-ons",
     },
@@ -86,6 +88,8 @@ LOCALES = {
         "settings_downloads_desc": "La provenance des morceaux des installations, mises à jour et vérifications.",
         "settings_region": "Région de téléchargement",
         "settings_region_desc": "Automatique utilise la région du client Steam s'il en a une, sinon la géolocalisation de Steam.",
+        "settings_shader": "Télécharger les caches de shaders",
+        "settings_shader_desc": "Récupère les paquets de précompilation des shaders (Fossilize) dans shadercache/ après chaque installation ou mise à jour. Plusieurs Go pour les gros jeux ; le client les traite à son prochain lancement.",
         "region_auto": "Automatique",
         "dlc_label": "Extensions",
     },
@@ -297,7 +301,8 @@ def settings_values():
     if not isinstance(values, dict):
         values = {}
     region = values.get("region")
-    return {"region": region if region in REGION_IDS else "auto"}
+    return {"region": region if region in REGION_IDS else "auto",
+            "shader": values.get("shader") is True}
 
 
 def download_env():
@@ -324,6 +329,12 @@ def settings_schema(_params):
             "default": "auto",
             "options": [{"id": rid, "label": tr("region_auto") if rid == "auto" else label}
                         for rid, label in REGIONS],
+        }, {
+            "id": "shader",
+            "kind": "bool",
+            "label": tr("settings_shader"),
+            "description": tr("settings_shader_desc"),
+            "default": False,
         }],
     }]}
 
@@ -335,7 +346,10 @@ def settings_apply(params):
     region = values.get("region") or "auto"
     if region not in REGION_IDS:
         raise RPCError("invalid params: unknown download region", -32602)
-    save_state("settings.json", {"region": region})
+    shader = values.get("shader", False)
+    if not isinstance(shader, bool):
+        raise RPCError("invalid params: shader is not a boolean", -32602)
+    save_state("settings.json", {"region": region, "shader": shader})
     return {}
 
 
@@ -3258,6 +3272,8 @@ def follow_install(job_id, app, game_dir, dl_kind="install", version=None):
         else:
             notify("job.failed", {"jobId": job_id, "error": str(e)})
         return
+    if settings_values().get("shader") is True:
+        fetch_shader_cache(job_id, app, game_dir)
     with jobs_lock:
         job = jobs.pop(job_id, {})
     if job.get("canceled"):
@@ -3269,6 +3285,23 @@ def follow_install(job_id, app, game_dir, dl_kind="install", version=None):
     if installed:
         done["installed"] = installed
     notify("job.done", done)
+
+
+def fetch_shader_cache(job_id, app, game_dir):
+    """Best-effort shader pre-caching buckets after an install/update
+    (issue #205): platypus-steam-dl downloads the Fossilize buckets into
+    shadercache/<appid> next to the game and runs nothing. Failures never
+    fail the install: the next install/update retries the missing buckets."""
+    shader_dir = os.path.join(os.path.dirname(os.path.abspath(game_dir)),
+                               "shadercache", str(app))
+    try:
+        req = dl_request({"id": app}, {"install_dir": game_dir,
+                                       "job_id": job_id,
+                                       "shader_dir": shader_dir})
+        dl_run("shader", req, job_id, game_dir,
+               label="shader cache download failed", phase="shaders")
+    except Exception as e:
+        log("warning", "shader cache download failed for app %s: %s" % (app, e))
 
 
 def version_result(result):
