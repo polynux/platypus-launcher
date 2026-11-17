@@ -14,6 +14,11 @@ export default defineConfig({
     // One jsdom per worker instead of one per file (issue #40): 29 s → 13 s
     // for the same 642 tests, keeping per-file isolation.
     pool: 'vmThreads',
+    // One full UI run must not oversubscribe the box (issue #170): 12 workers
+    // of jsdom push whole-App and axe files past the 5 s default when other
+    // agents run suites alongside (measured at load 13–35). Half the cores,
+    // still parallel.
+    maxWorkers: '50%',
     // Slow integration tests live in *.slow.test.{ts,tsx} and only run with
     // PLATYPUS_TEST_SLOW=1 (issue #40). There are currently none.
     exclude: slow

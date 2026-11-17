@@ -6,6 +6,7 @@ import React from 'react';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { render as rtlRender, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Effect } from 'effect';
@@ -164,7 +165,7 @@ describe('game page tabs variant', () => {
     // The achievements summary opens the Achievements tab.
     await user.click(screen.getByRole('button', { name: /See all 2 achievements/ }));
     expect(within(tablist).getByRole('tab', { name: /Achievements/ })).toHaveAttribute('aria-selected', 'true');
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('hides the back link on the list-detail stage but keeps it outside', async () => {

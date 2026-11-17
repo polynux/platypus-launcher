@@ -8,6 +8,10 @@ import { render as rtlRender, cleanup, screen, fireEvent, act } from '@testing-l
 import { Effect } from 'effect';
 import '../../lib/i18n';
 import { TooltipProvider } from '../ds/tooltip';
+// Static, not `await import()` inside a test (issue #167): the whole-App module
+// graph is a large cost under load, and an in-test import is billed to the 5 s
+// test budget.
+import { App } from '../../App';
 import type { Game, StorePlugin } from '../../types';
 
 const theme = vi.hoisted(() => ({
@@ -276,7 +280,6 @@ describe('mixed themes: the now-running toast follows the library (issue #168)',
     ({ id: 'g1', source: 'steam', store: 'steam', store_app_id: 'g1', title: 'Doom', is_installed: true, settings: {} }) as Game;
 
   async function openApp() {
-    const { App } = await import('../../App');
     api.values = {
       getLibrary: { games: [doom()], warnings: [] },
       getProtonVersions: [],

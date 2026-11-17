@@ -85,7 +85,10 @@ const openTab = (name: RegExp | string) => {
   fireEvent.click(screen.getByRole('tab', { name }));
 };
 
-describe('Verify and move in the game settings', () => {
+// Renders the game page and drives its dialogs through the whole view:
+// integration work, measured 2.3 s per test under load (6 workers, load 12),
+// so the budget is that × 3 (issue #170).
+describe('Verify and move in the game settings', { timeout: 7_000 }, () => {
   it('offers Verify files only when the plugin offers verify', () => {
     const { unmount } = render(<GamePage game={game()} plugin={plugin(['install', 'verify'])} {...base} />);
     expect(screen.queryByRole('button', { name: /Verify files/ })).toBeNull(); // not on the page itself
@@ -148,7 +151,9 @@ describe('Verify and move in the game settings', () => {
   });
 });
 
-describe('Remove from library for sideloaded games', () => {
+// Same page-and-dialog work, measured 1.8 s per test under the same load
+// (issue #170).
+describe('Remove from library for sideloaded games', { timeout: 6_000 }, () => {
   const custom = (o: Partial<Game> = {}): Game => game({
     id: 'custom-1', source: 'custom', store: 'custom', store_app_id: 'custom',
     title: 'Sideloaded Gem', install_dir: '/games/sideload', executable: '/games/sideload/gem',
