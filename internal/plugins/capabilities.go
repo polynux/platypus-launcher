@@ -42,6 +42,7 @@ const (
 	rev19  = "1.9"  // chat with friends (docs/plugins/protocol.md, "Chat")
 	rev117 = "1.17" // compatibility facts providers (docs/plugins/protocol.md, "Compat facts")
 	rev111 = "1.11" // terms to accept before an install (docs/plugins/protocol.md, "Terms")
+	rev122 = "1.22" // workshop subscriptions (docs/plugins/protocol.md, "Workshop")
 )
 
 var registry = []Capability{
@@ -108,6 +109,8 @@ var registry = []Capability{
 		Methods:         []string{"runner.list", "runner.options", "runner.detectExecutable", "runner.prefix", "runner.env", "runner.migrateSettings", "runner.clientCrash", "runner.wrap", "runner.actions", "runner.runAction", "runner.crashHints"},
 		OptionalMethods: []string{"runner.available", "runner.remove"},
 		Surfaces:        []string{"launch", "game-settings", "crash-hints"}},
+	{Name: "workshop", Since: rev122, Orchestrated: true,
+		Methods: []string{"workshop.list", "workshop.sync"}, Surfaces: []string{"workshop-section"}},
 }
 
 // capabilityFreeOptional are optional methods that belong to no capability:
@@ -123,9 +126,9 @@ func OptionalWithoutCapability(method string) bool {
 }
 
 // sharedMethods are requests that more than one capability uses besides the
-// one that owns them: job.cancel stops an install, and also a cloud sync or
-// a client setup (protocol 1.19).
-var sharedMethods = map[string][]string{"job.cancel": {"cloud-saves", "launch"}}
+// one that owns them: job.cancel stops an install, and also a cloud sync, a
+// client setup (protocol 1.19) or a Workshop sync.
+var sharedMethods = map[string][]string{"job.cancel": {"cloud-saves", "launch", "workshop"}}
 
 // MethodOffered reports whether a plugin offering caps serves method, which
 // belongs to capability (see CapabilityForMethod).

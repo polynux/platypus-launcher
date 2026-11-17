@@ -24,6 +24,7 @@ const VERB_KEY: Record<Job['kind'], string> = {
   remove: 'downloads:action.remove',
   'runner-install': 'downloads:action.install',
   'client-setup': 'downloads:action.client-setup',
+  workshop: 'downloads:action.workshop',
 };
 
 const STATE_KEY: Record<Job['state'], string> = {
@@ -48,6 +49,7 @@ const FINISHED_KEY: Record<Job['kind'], string> = {
   remove: 'downloads:atlas.finished.remove',
   'runner-install': 'downloads:atlas.finished.install',
   'client-setup': 'downloads:atlas.finished.client-setup',
+  workshop: 'downloads:atlas.finished.workshop',
 };
 
 export type AtlasDownloadsProps = {

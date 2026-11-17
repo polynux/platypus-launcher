@@ -12,6 +12,7 @@
     "verify": "Verify",
     "move": "Move",
     "backup": "Backup",
+    "workshop": "Workshop sync",
     "restore": "Restore",
     "remove": "Remove",
     "client-setup": "Set up"
@@ -37,7 +38,8 @@
     "backup": "Backup",
     "restore": "Restore",
     "remove": "remove",
-    "client-setup": "client setup"
+    "client-setup": "client setup",
+    "workshop": "Workshop sync"
   },
   "state": {
     "queued": "queued",
@@ -101,7 +103,8 @@
       "backup": "Backed up",
       "restore": "Restored",
       "remove": "Removed",
-      "client-setup": "Set up"
+      "client-setup": "Set up",
+      "workshop": "Synced"
     },
     "queue": "Queue",
     "pauseAll": "Pause all",

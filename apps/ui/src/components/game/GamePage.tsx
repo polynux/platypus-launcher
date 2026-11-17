@@ -5,7 +5,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
-import type { ActivityEvent, ArtCandidate, Collection, Game, GameDetails, GameSettings, GameJobKind, GameStatus, Job, ProtonVersion, RemoveOptions, SessionEvent, StorePlugin, Tweak, View } from '../../types';
+import type { ActivityEvent, ArtCandidate, Collection, Game, GameDetails, GameSettings, GameJobKind, GameStatus, Job, ProtonVersion, RemoveOptions, SessionEvent, StorePlugin, Tweak, View, WorkshopItem } from '../../types';
 import { CopyPicker } from '../CopyPicker';
 import { Lightbox, toMediaItems, type MediaItem } from '../Lightbox';
 import { InstallOptionsDialog } from '../InstallOptionsDialog';
@@ -36,7 +36,7 @@ import { isCustomized } from '../../lib/customize';
 import { useInstallSize, type InstallSize } from '../../lib/installSize';
 import type { GameSettingsTab } from '../../lib/gameSettingsTabs';
 import { GameActivity, GameBackLink, GameCompat, GameHeroActions, GameHeroHeading, GameInstallNote, GameOutsideAlert } from './blocks';
-import { AboutSection, AchievementsSection, CollectionsSection, InstallationPanel, MediaStrip, StatusNotesSection } from './sections';
+import { AboutSection, AchievementsSection, CollectionsSection, InstallationPanel, MediaStrip, StatusNotesSection, WorkshopSection } from './sections';
 
 /** Wide art for the hero banner: the details' hero first, then the library
  *  entry's images. Kept per game id alongside the details cache. */
@@ -107,6 +107,8 @@ interface GamePageProps {
   onHeroArt?: (url: string | null) => void;
   /** A Tune flyout write the core confirmed, for App's copy of the game. */
   onTuneSaved?: (settings: GameSettings) => void;
+  /** Queues the Workshop sync job (protocol 1.22); the app shows the toast. */
+  onSyncWorkshop?: () => void;
 }
 
 // Store metadata is cached across navigations, keyed by game id + version.
@@ -181,6 +183,32 @@ function useDetails(game: Game) {
     setNonce((n) => n + 1);
   };
   return { details, error, loading: !details && !error && hasSource, reload };
+}
+
+/** A game's subscribed Workshop items (protocol 1.22), or [] when the plugin
+ *  doesn't offer them for this game. A Workshop job for the game ending
+ *  reloads the list so its installed flags follow what the sync wrote; a
+ *  failed read keeps its error for the section's Retry. */
+function useGameWorkshop(game: Game, enabled: boolean, job?: Job): { items: WorkshopItem[]; error: string | null; reload: () => void } {
+  const [items, setItems] = useState<WorkshopItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0);
+  const key = job?.kind === 'workshop' ? `${job.id}:${job.state}` : '';
+  useEffect(() => {
+    setItems([]);
+    setError(null);
+    if (!enabled) return;
+    let live = true;
+    Effect.runPromise(LauncherApi.getGameWorkshop(game)).then(
+      (list) => live && setItems(list),
+      (e) => live && setError(e instanceof Error ? e.message : String(e)),
+    );
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.id, enabled, key, nonce]);
+  return { items, error, reload: () => setNonce((n) => n + 1) };
 }
 
 /** One region's frame in a game layout (issue #103): the hero holds the top
@@ -296,6 +324,7 @@ export function GamePage(p: GamePageProps) {
   const viaSteam = game.source === 'steam' && !game.executable;
   const plugin = p.plugin;
   const job = p.job;
+  const workshop = useGameWorkshop(game, !!plugin && game.is_installed && offers(plugin, 'workshop', { game }), job);
   const active = job && (job.state === 'queued' || job.state === 'running');
   const clientSetup = !sessionActive && (setupNeeded || setupJob)
     ? {
@@ -596,6 +625,10 @@ export function GamePage(p: GamePageProps) {
       onCopyChanged: p.onCopyChanged,
       progress,
       ach,
+      workshop: workshop.items,
+      workshopError: workshop.error,
+      onRetryWorkshop: workshop.reload,
+      onSyncWorkshop: p.onSyncWorkshop,
       events,
     },
     layout,
@@ -774,6 +807,10 @@ interface GameData {
   onCopyChanged?: () => void;
   progress: ReturnType<typeof useAchievementProgress>;
   ach: GameDetails['achievements'];
+  workshop: WorkshopItem[];
+  workshopError: string | null;
+  onRetryWorkshop: () => void;
+  onSyncWorkshop?: () => void;
   events: ActivityEvent[];
 }
 
@@ -864,7 +901,19 @@ function gameBlocks(d: GameData, _layout?: GameLayoutData): Record<string, React
       <CollectionsSection game={game} collections={d.collections} onManage={d.onManageCollections} />
     ),
     installation: isPluginGame(game) && game.is_installed && d.plugin ? (
-      <InstallationPanel game={game} plugin={d.plugin} job={d.job} onJobAction={d.onJobAction} sourceLogos={d.sourceLogos} />
+      <div className="space-y-5">
+        <InstallationPanel game={game} plugin={d.plugin} job={d.job} onJobAction={d.onJobAction} sourceLogos={d.sourceLogos} />
+        {offers(d.plugin, 'workshop', { game }) && (d.workshop.length > 0 || d.workshopError) ? (
+          <WorkshopSection
+            items={d.workshop}
+            error={d.workshopError}
+            job={d.job}
+            onSync={d.onSyncWorkshop}
+            onRetry={d.onRetryWorkshop}
+            onJobAction={d.onJobAction}
+          />
+        ) : null}
+      </div>
     ) : null,
     copies: isPluginGame(game) && d.plugin ? (
       <CopyPicker game={game} plugin={d.plugin} onChanged={() => d.onCopyChanged?.()} />

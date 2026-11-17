@@ -77,6 +77,32 @@ Detection between 2 and 3 can't be perfect by inspection. The plugin tries
 direct first; if the game dies within seconds of launch, retrying marks it
 "needs client" (the game page offers this) and mode 3 is used from then on.
 
+## Workshop
+
+The game page lists the account's Workshop subscriptions for that game and a
+single **Sync** action downloads or updates their content (a normal job, with
+progress and cancel in the Downloads view). Listing reads the CM
+(`CMsgClientUCMEnumerateUserSubscribedFilesWithUpdates` for the ids and
+content handles, `PublishedFile.GetDetails` for titles and previews);
+downloading reuses the Go downloader's content path, reading each item's
+manifest from the game's workshop depot (`depots.workshopdepot`, else the app
+id) — DepotDownloader's `-pubfile` flow. Items with only a legacy `file_url`
+are downloaded over https from Steam's content hosts (steamusercontent.com,
+steampowered.com, their Akamai/CloudFront edges); a redirect or any other host
+is refused. Only the current content is available: Steam keeps no past
+versions of Workshop items.
+
+Content placement follows the store: a game whose folder sits in a Steam
+library (`steamapps/common/...`) gets `<library>/steamapps/workshop/content/
+<appid>/<item>`, the layout the Steam client uses; a game Platypus installed
+itself has no `steamapps` tree, so its content goes to
+`<install folder>/workshop/<item>` and leaves with the game. A game that finds
+its mods through the Steamworks API may still need the Steam client at
+runtime; the client-required launch mode covers that. There are no per-game
+placement rules yet: a Platypus-installed game always gets `workshop/<item>`
+(issue #214 tracks the rules). Subscribing and unsubscribing are account
+writes and aren't offered yet.
+
 ## Steam Families
 
 Borrowed games list who they are shared by, and when several members lend

@@ -93,6 +93,7 @@ export function toActivityRow(
       case 'uninstall': return t('activity:log.jobVerbUninstalled');
       case 'verify': return t('activity:log.jobVerbVerified');
       case 'move': return t('activity:log.jobVerbMoved');
+      case 'workshop': return t('activity:log.jobVerbSynced');
       default: return k;
     }
   };
@@ -102,7 +103,7 @@ export function toActivityRow(
     detail = t('activity:log.sessionStopped', { title });
     const secs = Number(e.args?.seconds ?? 0);
     if (secs > 0) meta = t('activity:log.sessionMinutes', { count: Math.max(1, Math.round(secs / 60)) });
-  } else if (e.kind === 'install' || e.kind === 'update' || e.kind === 'uninstall' || e.kind === 'verify' || e.kind === 'move') {
+  } else if (e.kind === 'install' || e.kind === 'update' || e.kind === 'uninstall' || e.kind === 'verify' || e.kind === 'move' || e.kind === 'workshop') {
     detail = t('activity:log.jobDone', { action: verb(e.kind), title });
     meta = e.args?.store ?? e.args?.version;
   } else if (e.kind === 'cloud') {
@@ -1004,6 +1005,11 @@ export function AppContent() {
       jobs={jobs}
       onJob={(kind) => runJob(kind, game)}
       onJobAction={jobAction}
+      onSyncWorkshop={() => {
+        Effect.runPromise(LauncherApi.syncGameWorkshop(game))
+          .then(() => notify(t('downloads:queued', { action: t('downloads:action.workshop'), title: game.title }), 'busy'))
+          .catch((err) => notify(coreErrMsg(err), 'err'));
+      }}
       onAllowFolder={(folder) => allowFolder(game, folder)}
       onNavigate={setView}
       onNotify={notify}

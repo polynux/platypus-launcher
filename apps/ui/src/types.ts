@@ -59,6 +59,7 @@ export type Achievements = gen.Achievements;
 export type ProgressAchievement = gen.ProgressAchievement;
 export type AchievementProgress = gen.AchievementProgress;
 export type RedeemResult = gen.RedeemResult;
+export type WorkshopItem = gen.WorkshopItem;
 export type GameDetails = gen.GameDetails;
 export type Tweak = gen.Tweak;
 
@@ -177,7 +178,7 @@ export type AuthStatus = gen.AuthStatus;
 export type AuthField = gen.AuthField;
 export type AuthPrompt = gen.AuthPrompt;
 
-export type JobKind = 'install' | 'update' | 'uninstall' | 'verify' | 'move' | 'backup' | 'restore' | 'remove';
+export type JobKind = 'install' | 'update' | 'uninstall' | 'verify' | 'move' | 'backup' | 'restore' | 'remove' | 'workshop';
 /** The jobs a game page starts from its install panel (the rest have their own actions). */
 export type GameJobKind = 'install' | 'update' | 'uninstall';
 export type JobState = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'canceled';

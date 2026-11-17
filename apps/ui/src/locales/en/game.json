@@ -265,6 +265,20 @@
     "unknownFolder": "not known to Platypus",
     "jobFailed": "The {{kind}} didn't finish."
   },
+  "workshop": {
+    "heading": "Workshop",
+    "count_one": "{{count}} item subscribed",
+    "count_other": "{{count}} items subscribed",
+    "installed": "Installed",
+    "needsUpdate": "Update available",
+    "notInstalled": "Not downloaded",
+    "updated": "Updated {{date}}",
+    "pathNote": "Files are written to this game's Workshop folder; games that read Steam's workshop folder (like client launches) use them.",
+    "listFailed": "Couldn't read your Workshop items.",
+    "sync": "Sync",
+    "syncing": "Syncing…",
+    "jobFailed": "The Workshop sync didn't finish."
+  },
   "achievements": {
     "heading": "Achievements",
     "countKnown": "{{unlocked}}/{{total}} · {{percent}}%",

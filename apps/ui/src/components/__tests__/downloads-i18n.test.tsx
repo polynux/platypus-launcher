@@ -54,6 +54,12 @@ describe('downloads live language switching', () => {
     expect(screen.getByText(/Automatic update/)).toBeTruthy();
   });
 
+  it('renders a Workshop sync row', async () => {
+    await i18n.changeLanguage('en');
+    wrap(<DownloadsView jobs={[job({ kind: 'workshop' })]} onAction={noop} onClear={noop} onOpenGame={noop} />);
+    expect(screen.getByText('Workshop sync · Goose')).toBeTruthy();
+  });
+
   it('localizes the job progress bytes line', async () => {
     wrap(<JobProgress job={job()} onCancel={noop} />);
     expect(screen.getByText(/3\.7 MB of 30\.0 GB/)).toBeTruthy();

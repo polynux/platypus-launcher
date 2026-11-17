@@ -43,6 +43,11 @@ const (
 	// its own AddRemove constructor, no size check, RunsInCore, and no
 	// downloaded data to discard.
 	KindRemove = "remove"
+	// KindWorkshop downloads or updates a game's subscribed Workshop items
+	// (workshop.sync, protocol 1.22). The plugin runs it like an update; it
+	// writes only Workshop content, so it holds nothing and is never
+	// discarded by core.
+	KindWorkshop = "workshop"
 	// KindRunnerInstall installs a GE-Proton build into the runner folder
 	// (issue #142). Like a core move it runs in core: its own
 	// AddRunnerInstall constructor, no size check, RunsInCore, and progress
@@ -516,6 +521,18 @@ func (q *Queue) AddVerify(source, gameID, storeGameID, title, installDir string,
 	})
 }
 
+// AddWorkshop queues a Workshop sync of an installed game's subscriptions.
+// The plugin chooses where the content lands inside the game's folder.
+func (q *Queue) AddWorkshop(source, gameID, storeGameID, title, installDir string) (types.Job, error) {
+	if !filepath.IsAbs(installDir) {
+		return types.Job{}, fmt.Errorf("install folder %q is not an absolute path", installDir)
+	}
+	return q.enqueue(&types.Job{
+		Kind: KindWorkshop, Source: source, GameID: gameID, StoreGameID: storeGameID,
+		Title: title, InstallDir: installDir,
+	})
+}
+
 // AddBackup queues a core-run save backup of a game's saves. trigger names
 // why it runs ("manual", "uninstall", "after-session", "before-restore") and
 // rides in Destination (no new Job field, so old queue files still parse).
@@ -871,7 +888,7 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 		if u.Installed != nil && job.Kind != KindUninstall && installed != nil {
 			installed(job, *u.Installed)
 		}
-		if (job.Kind == KindInstall || job.Kind == KindUpdate || job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindRemove) && finished != nil {
+		if (job.Kind == KindInstall || job.Kind == KindUpdate || job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindRemove || job.Kind == KindWorkshop) && finished != nil {
 			finished(job)
 		}
 		q.finish(job.ID, StateDone, "")

@@ -28,6 +28,7 @@ import type {
   Game,
   GameDetails,
   RedeemResult,
+  WorkshopItem,
   GameFixInfo,
   Compat,
   CrashHints,
@@ -371,6 +372,11 @@ export const LauncherApi = {
       const a = await App.GetGameAchievements(backend(game));
       return a ? { ...a, list: a.list ?? [] } : null;
     }),
+  // Workshop subscriptions (protocol 1.22). The list is read-only; a sync is a
+  // queued job, so its progress shows in the downloads queue like an update.
+  getGameWorkshop: (game: Game) =>
+    call<WorkshopItem[]>('GetGameWorkshop', async () => (await App.GetGameWorkshop(backend(game))) ?? []),
+  syncGameWorkshop: (game: Game) => call<Job>('SyncWorkshop', () => App.SyncWorkshop(backend(game))),
   // The code goes to the store's plugin only; one submission at a time (Go refuses a second).
   redeemCode: (source: string, code: string) =>
     call<RedeemResult>('RedeemCode', async () => {

@@ -55,6 +55,7 @@
   },
   "game": {
     "launchBusy": "« {{title}} » est occupé ({{what}}) ; lancez-le une fois terminé.",
+    "launchBusyWorkshop": "« {{title}} » synchronise les éléments d’atelier ; lancez-le une fois terminé.",
     "noClientLaunch": "« {{title}} » ne peut pas être démarré via un client de boutique.",
     "noCommand": "« {{title}} » n'a renvoyé aucune commande.",
     "noLaunchTarget": "Le jeu « {{title}} » n'a pas de cible de lancement.",
@@ -317,6 +318,9 @@
     "clientRunning": "Fermez {{client}} d’abord : il est ouvert et écrirait les mêmes sauvegardes.",
     "queued": "{{title}} a déjà une sauvegarde en file d’attente.",
     "unknown": "Version de sauvegarde inconnue."
+  },
+  "workshop": {
+    "unsupported": "{{name}} ne propose pas d'éléments d'atelier."
   },
   "theme": {
     "unknown": "Aucun thème ne s'appelle {{theme}}.",

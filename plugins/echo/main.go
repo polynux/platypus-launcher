@@ -215,9 +215,10 @@ type knobs struct {
 	SettingsDelayMs int  `json:"settingsDelayMs"`
 }
 
-// defaultProtocols is what echo speaks: 1.0 to 1.20, so it meets the highest
-// revision Platypus offers (the negotiation picks the best both speak).
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20"}
+// defaultProtocols is what echo speaks: every revision through 1.22, so it
+// meets the highest one Platypus offers (the negotiation picks the best both
+// speak).
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21", "1.22"}
 
 var (
 	knobMu  sync.Mutex
@@ -786,6 +787,10 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		rec["acceptedTerms"] = st.AcceptedTerms
 		stMu.Unlock()
 		return rec, nil
+	case "workshop.list":
+		return workshopList(p)
+	case "workshop.sync":
+		return startWorkshop(p)
 	case "achievements.list":
 		return achievementsList(p)
 	case "playtime.list":

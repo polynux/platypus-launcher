@@ -12,6 +12,7 @@
     "verify": "Vérification",
     "move": "Déplacement",
     "backup": "Sauvegarde",
+    "workshop": "Synchronisation atelier",
     "restore": "Restauration",
     "remove": "Suppression",
     "client-setup": "Configuration"
@@ -37,7 +38,8 @@
     "backup": "Sauvegarde",
     "restore": "Restauration",
     "remove": "suppression",
-    "client-setup": "configuration du client"
+    "client-setup": "configuration du client",
+    "workshop": "Synchronisation atelier"
   },
   "state": {
     "queued": "en attente",
@@ -102,7 +104,8 @@
       "backup": "Sauvegardé",
       "restore": "Restauré",
       "remove": "Supprimé",
-      "client-setup": "Configuré"
+      "client-setup": "Configuré",
+      "workshop": "Synchronisé"
     },
     "pauseAll": "Tout mettre en pause",
     "recent": "Récents",

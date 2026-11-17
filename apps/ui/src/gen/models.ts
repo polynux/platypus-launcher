@@ -1058,4 +1058,14 @@ export namespace types {
     fetched_at: number;
     licence_url: string;
   }
+
+  export interface WorkshopItem {
+    id: string;
+    title: string;
+    preview_url?: string;
+    size_bytes?: number;
+    updated_at?: number;
+    installed: boolean;
+    needs_update: boolean;
+  }
 }

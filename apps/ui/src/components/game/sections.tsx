@@ -5,7 +5,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Maximize2, Play, Search, Trophy } from 'lucide-react';
-import type { Achievement, ArtCandidate, Collection, Game, GameDetails, GameStatus, Job, StorePlugin } from '../../types';
+import type { Achievement, ArtCandidate, Collection, Game, GameDetails, GameStatus, Job, StorePlugin, WorkshopItem } from '../../types';
 import { ExternalLink } from '../ExternalLink';
 import type { MediaItem } from '../Lightbox';
 import { openExternal } from '../../lib/external';
@@ -717,6 +717,86 @@ export function InstallationPanel({
       {active && <div className="mt-4"><JobProgress job={job} onCancel={(id) => onJobAction('cancel', id)} /></div>}
       {job?.state === 'failed' && !active && (
         <ErrorNotice className="mt-2" message={job.error ?? ''} fallback={t('game:installation.jobFailed', { kind: job.kind })} onRetry={() => onJobAction('retry', job.id)} />
+      )}
+    </Panel>
+  );
+}
+
+/** The game's subscribed Workshop items (protocol 1.22): what is on disk, what
+ *  an update is waiting for, and one Sync action that queues the store's job.
+ *  Progress and cancel ride the same queue as an update. */
+export function WorkshopSection({
+  items,
+  error,
+  job,
+  onSync,
+  onRetry,
+  onJobAction,
+}: {
+  items: WorkshopItem[];
+  error?: string | null;
+  job?: Job;
+  onSync?: () => void;
+  onRetry?: () => void;
+  onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
+}) {
+  const { t } = useTranslation('game');
+  const syncJob = job?.kind === 'workshop' ? job : undefined;
+  const active = syncJob && (syncJob.state === 'queued' || syncJob.state === 'running');
+  if (items.length === 0 && !error) return null;
+  return (
+    <Panel className="bg-surface-strong">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <h2 className="text-[15px] font-bold">{t('game:workshop.heading')}</h2>
+        <span className="font-mono text-hint tabular-nums text-text-muted">
+          {t('game:workshop.count', { count: items.length })}
+        </span>
+      </div>
+      {/* Where the files go (S1): one line, no per-game table. */}
+      <p className="mb-3 text-hint leading-snug text-text-muted">{t('game:workshop.pathNote')}</p>
+      {error ? (
+        <ErrorNotice message={error} fallback={t('game:workshop.listFailed')} onRetry={onRetry} />
+      ) : null}
+      {!error && <div className="space-y-2">
+        {items.map((it) => {
+          const state = !it.installed
+            ? t('game:workshop.notInstalled')
+            : it.needs_update
+              ? t('game:workshop.needsUpdate')
+              : t('game:workshop.installed');
+          return (
+            <div key={it.id} className="flex items-center gap-3 border-t border-hairline pt-2 first:border-0 first:pt-0">
+              {it.preview_url ? (
+                <img src={it.preview_url} alt="" loading="lazy" className="h-10 w-10 flex-none rounded-lg object-cover" />
+              ) : (
+                <span className="h-10 w-10 flex-none rounded-lg bg-surface" />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[12px] font-bold" title={it.title}>{it.title}</div>
+                <div className="font-mono text-hint text-text-muted">
+                  {[formatBytes(it.size_bytes ?? 0), it.updated_at ? t('game:workshop.updated', { date: formatDate(it.updated_at) }) : ''].filter(Boolean).join(' · ')}
+                </div>
+              </div>
+              <span
+                className={cx(
+                  'flex-none rounded-full px-2 py-0.5 font-mono text-hint',
+                  !it.installed ? 'bg-white/[0.06] text-text-muted' : it.needs_update ? 'bg-amber-300/15 text-amber-200' : 'bg-accent-strong/15 text-accent-strong',
+                )}
+              >
+                {state}
+              </span>
+            </div>
+          );
+        })}
+      </div>}
+      {!error && <div className="mt-3 flex items-center gap-2">
+        <Button size="sm" variant="neutral" disabled={!!active || !onSync || !!error} onClick={onSync}>
+          {active ? t('game:workshop.syncing') : t('game:workshop.sync')}
+        </Button>
+      </div>}
+      {active && <div className="mt-3"><JobProgress job={syncJob} onCancel={(id) => onJobAction('cancel', id)} /></div>}
+      {syncJob?.state === 'failed' && !active && (
+        <ErrorNotice className="mt-2" message={syncJob.error ?? ''} fallback={t('game:workshop.jobFailed')} onRetry={() => onJobAction('retry', syncJob.id)} />
       )}
     </Panel>
   );

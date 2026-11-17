@@ -31,7 +31,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|workshop")
 	}
 	if os.Args[1] == "auth" {
 		if err := runAuth(context.Background()); err != nil {
@@ -103,8 +103,10 @@ func main() {
 		runErr = runFamilyRunning(ctx, req)
 	case "dlc":
 		runErr = runDLC(ctx, req)
+	case "workshop":
+		runErr = runWorkshop(ctx, req)
 	default:
-		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|terms|versions|unlock|auth|cloud|family-running|dlc|workshop")
 	}
 	if runErr != nil {
 		var wpe wrongPasswordError
@@ -151,6 +153,8 @@ type request struct {
 	Op      string          `json:"op"`
 	Ctx     json.RawMessage `json:"ctx"`
 	Choices json.RawMessage `json:"choices"`
+	// Items are the workshop subcommand's published files (id, hcontent).
+	Items []workshopItem `json:"items"`
 	// FamilyGroupID skips the ForUser lookup for the family-running read
 	// when the caller already knows the group (the plugin's Web API
 	// fetch does); zero means look it up over the CM.

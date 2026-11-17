@@ -1,4 +1,4 @@
-# Store plugin protocol (1.21, draft)
+# Store plugin protocol (1.22, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -149,6 +149,8 @@ other errors can contain.
 | `family.setPreferredCopy` | `{ id, ownerId }` | `{}` (1.8, optional, [Family](#family-18)) |
 | `settings.schema` | `{}` | `{ groups: [Group] }` (1.8, [Plugin settings](#plugin-settings-18)) |
 | `settings.apply` | `{ values, gameId? }` | `{}` (1.8, [Plugin settings](#plugin-settings-18)) |
+| `workshop.list` | `{ id }` | `[WorkshopItem]` (1.22, [Workshop](#workshop-122)) |
+| `workshop.sync` | `{ id, installDir, jobId }` | `{}` once started (1.22, [Workshop](#workshop-122)) |
 
 `qr` (on `auth.begin`, and on `auth.status` while a QR login is pending) is a QR
 code as block-art text: `"\u2588"` is a dark module, two characters per module,
@@ -706,7 +708,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21", "1.22"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -754,11 +756,12 @@ that doesn't know it.
   news links on `game.details` (`news`, see [News](#news-119)); 1.20: the
   wine-client launch delegate and the `client.setup` job (a store client in a
   Platypus-managed prefix; see [Wine clients](#wine-clients-120)); 1.21: the optional `downloadLimit` param of
-  `game.install` and `game.update` (see [Download limit](#download-limit-121)); see [Compat facts](#compat-facts-117),
+  `game.install` and `game.update` (see [Download limit](#download-limit-121)); 1.22: the `workshop` capability
+  (`workshop.list`, `workshop.sync`, see [Workshop](#workshop-122)); see [Compat facts](#compat-facts-117),
   [Runner](#runner-117), and [Save context](#save-context-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20 or 1.21 method.
+  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20, 1.21 or 1.22 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -795,6 +798,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `compat-facts` | 1.17 | `compat.lookup` | | yes |
 | `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.env`, `runner.migrateSettings`, `runner.clientCrash`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | `runner.available`, `runner.remove` | yes |
 | `save-context` | 1.17 | `game.saveContext` | | yes |
+| `workshop` | 1.22 | `workshop.list`, `workshop.sync` | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in
@@ -1634,6 +1638,42 @@ game.verify  { id, installDir, jobId, repair: true, downloadLimit? }
   starts the job; changing it mid-download affects the next install or update.
 - **Not on the wire anywhere else.** `game.installSize` and the rest carry no
   `downloadLimit`; a plain verify (no repair) has nothing to cap.
+
+## Workshop (1.22)
+
+The `workshop` capability lists a game's subscribed Workshop items and brings
+their files onto disk. Subscribing and unsubscribing are account writes and
+are not offered yet: the plugin only reads the account's current
+subscriptions.
+
+```
+workshop.list { id } -> [{ id, title, previewUrl?, sizeBytes?, updatedAt?, installed, needsUpdate }]
+workshop.sync { id, installDir, jobId } -> {}
+```
+
+- **workshop.list** takes the store game id (as `game.launchSpec` does) and
+  returns every item the user is subscribed to for it, newest first. `id` is
+  the store's item id, as a decimal string (a Steam published-file id is a
+  64-bit number, so don't send it as a JSON number). `title` is plain text.
+  `previewUrl` must be http(s); Platypus drops anything else. `sizeBytes` is
+  the item's current download size and `updatedAt` its last update in Unix
+  seconds; either may be absent. `installed` says the item's content is on
+  disk and `needsUpdate` says an update was published since it was written —
+  both are the plugin's own knowledge of the files it synced, never a guess.
+  Missing `id` is `-32602`. A store without Workshop items for the game
+  answers `[]`, not an error.
+- **workshop.sync** is a job like `game.update`: it downloads or updates every
+  subscribed item's content for that game. `installDir` is the game's own
+  folder (`library.list`'s `installPath`), and the plugin decides where inside
+  it (or beside it) the store's runtime expects Workshop content; no per-game
+  placement rules exist yet (Steam's follow-up is #214). Platypus
+  sends `jobId`, reports progress through `job.progress` and the outcome
+  through `job.done`/`job.failed`; `job.cancel` stops it. A repeated `jobId`
+  starts no second copy. A game that isn't installed fails with a readable
+  `-32000`; a store with nothing subscribed for it answers `job.done` and
+  writes nothing.
+- **Gating.** A plugin that negotiated 1.21 or older never receives these
+  methods, and the game page shows no Workshop section.
 
 ## Out of scope
 

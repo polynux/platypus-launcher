@@ -55,6 +55,7 @@
   "jobVerbUpdated": "updated",
   "jobVerbAutoUpdated": "automatic update",
   "jobVerbUninstalled": "uninstalled",
+  "jobVerbSynced": "Synced",
   "jobDone": "{{action}} {{title}}",
   "jobFailed": "{{kind}} of {{title}} failed",
   "sideloaded": "Sideloaded {{title}}",

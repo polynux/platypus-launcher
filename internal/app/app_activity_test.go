@@ -232,14 +232,14 @@ func TestJobActivityRecordsStoreSizeVersion(t *testing.T) {
 		t.Fatalf("job row carries an English verb: %+v", e.Args)
 	}
 	// Verify and move are recorded too (issue #145).
-	for _, kind := range []string{"update", "uninstall", "verify", "move"} {
+	for _, kind := range []string{"update", "uninstall", "verify", "move", "workshop"} {
 		a.recordJobActivity(types.Job{Kind: kind, Source: "echo", GameID: "echo_1", Title: "One"})
 	}
 	kinds := map[string]bool{}
 	for _, e := range a.ListActivity(0, 0) {
 		kinds[e.Kind] = true
 	}
-	for _, kind := range []string{"install", "update", "uninstall", "verify", "move"} {
+	for _, kind := range []string{"install", "update", "uninstall", "verify", "move", "workshop"} {
 		if !kinds[kind] {
 			t.Fatalf("no %s row in %+v", kind, kinds)
 		}
