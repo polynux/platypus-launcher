@@ -147,6 +147,9 @@ func (a *App) failStoppedJobs() {
 			continue
 		}
 		if p, ok := a.plugins.Plugin(j.Source); !ok || p.Status != plugins.StatusReady {
+			// Stop the core-run command first: FailSource only fails the
+			// job, and the command would keep running without its owner.
+			a.stopClientRuns(j.Source)
 			a.jobs.FailSource(j.Source, "the plugin was stopped ("+statusOr(p, "removed")+")")
 		}
 	}

@@ -191,9 +191,12 @@ func (s VersionSet) MarshalJSON() ([]byte, error) {
 // a Platypus-managed Wine prefix) and the client.setup job that installs it;
 // 1.21 adds the optional downloadLimit param of game.install and game.update
 // (issue #207); 1.22 adds the workshop capability (workshop.list,
-// workshop.sync); 1.24 adds game invites (the social.invite notification,
-// the join fields of Friend.game, and the invites of social.state).
-var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12}, {1, 13}, {1, 14}, {1, 15}, {1, 16}, {1, 17}, {1, 18}, {1, 19}, {1, 20}, {1, 21}, {1, 22}, {1, 24}}
+// workshop.sync); 1.23 adds the clientRun answer of game.install, game.update
+// and game.uninstall (the core runs a client command in the pinned prefix as
+// part of the plugin's job); 1.24 adds game invites (the social.invite
+// notification, the join fields of Friend.game, and the invites of
+// social.state).
+var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12}, {1, 13}, {1, 14}, {1, 15}, {1, 16}, {1, 17}, {1, 18}, {1, 19}, {1, 20}, {1, 21}, {1, 22}, {1, 23}, {1, 24}}
 
 // InviteVersion is the first protocol revision with game invites: a plugin
 // below it sends no social.invite and no join fields.
@@ -211,6 +214,16 @@ var WineClientVersion = Version{1, 20}
 // game.update accept downloadLimit, the global speed cap in bytes per second
 // (issue #207). A plugin below it downloads at its own pace.
 var DownloadLimitVersion = Version{1, 21}
+
+// ClientRunVersion is the first protocol revision whose game.install,
+// game.update and game.uninstall may answer a clientRun command for the core
+// to run in the pinned client prefix (issue #212). An older plugin's
+// clientRun answer is rejected.
+var ClientRunVersion = Version{1, 23}
+
+// SigninVersion is the first protocol revision with the signin clientStatus
+// state (the client is up and waits for the user, issue #213).
+var SigninVersion = Version{1, 23}
 
 // Negotiate picks the highest version both sides speak.
 func Negotiate(offered VersionSet, supported []Version) (Version, bool) {

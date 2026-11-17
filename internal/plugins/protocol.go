@@ -416,6 +416,30 @@ type InstallSize struct {
 	DiskBytes     int64 `json:"diskBytes"`
 }
 
+// ClientRunSpec is the client command game.install, game.update and
+// game.uninstall may answer (protocol 1.23, issue #212): the core runs it
+// under the runner in the pinned client prefix as part of the plugin's job,
+// validated like a client.setup exe. The plugin still owns the job and ends
+// it with job.done / job.failed from its own watch.
+type ClientRunSpec struct {
+	Exe    string            `json:"exe"`
+	Args   []string          `json:"args,omitempty"`
+	Env    map[string]string `json:"env,omitempty"`
+	Redact []string          `json:"redact,omitempty"`
+}
+
+// InstallAnswer is what game.install, game.update and game.uninstall answer:
+// either {} once the plugin started its own work, or a clientRun command for
+// the core to run (protocol 1.23). ClientOwnsLocation says the client owns
+// the install location, so the core skips creating/claiming installDir and
+// reads the path back from the next library.list; Size is the download bytes
+// for the free-space check (without it the check is skipped).
+type InstallAnswer struct {
+	ClientRun          *ClientRunSpec `json:"clientRun,omitempty"`
+	ClientOwnsLocation bool           `json:"clientOwnsLocation,omitempty"`
+	Size               int64          `json:"size,omitempty"`
+}
+
 // WorkshopItem is one entry of workshop.list (protocol 1.22): the plugin's
 // own view of a subscribed Workshop item. The app maps it to types.WorkshopItem
 // (the UI's snake_case vocabulary) after checking the urls.

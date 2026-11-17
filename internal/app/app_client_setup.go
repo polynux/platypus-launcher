@@ -30,6 +30,9 @@ func (a *App) startClientSetup(j types.Job) error {
 	if !a.plugins.Runtime(j.Source).Speaks(plugins.WineClientVersion) {
 		return fmt.Errorf("%s speaks an older protocol and can't set up its client", j.Source)
 	}
+	if a.clientRunHolding(j.Source) {
+		return fmt.Errorf("%s is busy with another client command; try again once it finishes", j.Source)
+	}
 	runCtx, cancel := context.WithCancel(a.ctx)
 	run, err := a.clientSetups.begin(j.ID, cancel)
 	if err != nil {
@@ -241,6 +244,11 @@ func (a *App) SetupClient(source string, confirmed bool) (types.Job, error) {
 	if a.wineClientRunning(source) {
 		return types.Job{}, apperr.New("client.inUse",
 			fmt.Sprintf("%s is running; stop the game before setting it up", name),
+			map[string]string{"client": name, "source": source})
+	}
+	if a.clientRunHolding(source) {
+		return types.Job{}, apperr.New("client.inUse",
+			fmt.Sprintf("%s is busy; try again once its current job finishes", name),
 			map[string]string{"client": name, "source": source})
 	}
 	prefix := stores.ClientPrefixDir(source, a.effectivePrefixesFolder())

@@ -39,6 +39,7 @@
   },
   "client": {
     "confirmDownload": "{{message}}",
+    "gameRunning": "« {{client}} » exécute un jeu ; arrêtez-le avant {{actionFr}}.",
     "inUse": "« {{client}} » est en cours d'exécution ; arrêtez le jeu avant de le configurer.",
     "notSetUp": "« {{client}} » n'est pas encore configuré ; configurez-le d'abord, puis lancez le jeu."
   },
@@ -55,6 +56,7 @@
   },
   "game": {
     "badJoinArg": "Impossible d'utiliser les arguments de jonction de l'invitation pour « {{title}} ».",
+    "clientRunBusy": "« {{title}} » est occupé ({{actionFr}} dans {{client}}) ; lancez-le une fois terminé.",
     "launchBusy": "« {{title}} » est occupé ({{what}}) ; lancez-le une fois terminé.",
     "launchBusyWorkshop": "« {{title}} » synchronise les éléments d’atelier ; lancez-le une fois terminé.",
     "noClientLaunch": "« {{title}} » ne peut pas être démarré via un client de boutique.",

@@ -101,6 +101,12 @@ func installFakeRunner(t *testing.T, pluginsDir string) {
 // installs and launches of the fake wine game run through them. env adds
 // extra plugin environment (ECHO_SETUP_CONFIRM, ECHO_INSTALLER_SLEEP).
 func wineClientEnv(t *testing.T, env map[string]string) *fixturesEnv {
+	return wineClientEnvWith(t, env, wineClientManifest)
+}
+
+// wineClientEnvWith is wineClientEnv with the echo manifest given, so the
+// clientRun tests (protocol 1.23) run the same setup under a newer manifest.
+func wineClientEnvWith(t *testing.T, env map[string]string, manifest string) *fixturesEnv {
 	t.Helper()
 	root := t.TempDir()
 	st, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), root)
@@ -127,7 +133,7 @@ func wineClientEnv(t *testing.T, env map[string]string) *fixturesEnv {
 	})
 	t.Cleanup(a.plugins.Shutdown)
 	installEchoApp(t, pluginsDir)
-	if err := os.WriteFile(filepath.Join(pluginsDir, "echo", "plugin.json"), []byte(wineClientManifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(pluginsDir, "echo", "plugin.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	installFakeRunner(t, pluginsDir)

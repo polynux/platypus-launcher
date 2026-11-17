@@ -128,9 +128,9 @@ other errors can contain.
 | `game.details` | `{ id, terms? }` | `GameDetails` (with `terms` from 1.11, media from 1.12, news from 1.19) |
 | `game.saveContext` | `{ id }` | `{ roots?, storeUserId?, prefix?, windows?, proton?, winUser? }` |
 | `game.installSize` | `{ id, target?, options? }` | `{ downloadBytes, diskBytes }` |
-| `game.install` | `{ id, installDir, jobId, title?, target?, options?, downloadLimit? }` | `{}` once started (`downloadLimit` 1.21, [Download limit](#download-limit-121)) |
-| `game.update` | `{ id, installDir, jobId, title?, target?, options?, downloadLimit? }` | `{}` once started (`downloadLimit` 1.21, [Download limit](#download-limit-121)) |
-| `game.uninstall` | `{ id, jobId }` | `{}` once started |
+| `game.install` | `{ id, installDir, jobId, title?, target?, options?, downloadLimit? }` | `{}` once started, or `{ clientRun, clientOwnsLocation?, size? }` for the core to run (1.23, [Client-run commands](#client-run-commands-123)) (`downloadLimit` 1.21, [Download limit](#download-limit-121)) |
+| `game.update` | `{ id, installDir, jobId, title?, target?, options?, downloadLimit? }` | `{}` once started, or `{ clientRun, clientOwnsLocation?, size? }` for the core to run (1.23, [Client-run commands](#client-run-commands-123)) (`downloadLimit` 1.21, [Download limit](#download-limit-121)) |
+| `game.uninstall` | `{ id, jobId }` | `{}` once started, or `{ clientRun, clientOwnsLocation?, size? }` for the core to run (1.23, [Client-run commands](#client-run-commands-123)) |
 | `game.verify` | `{ id, installDir, jobId, repair }` | `{}` once started (1.4, [Verify and move](#verify-and-move-14)) |
 | `game.move` | `{ id, from, to, jobId }` | `{}` once started (1.4, [Verify and move](#verify-and-move-14)) |
 | `game.relocated` | `{ id, from, to }` | `{}` (optional, 1.4, [Verify and move](#verify-and-move-14)) |
@@ -138,7 +138,7 @@ other errors can contain.
 | `job.discard` | `{ jobId, id, installDir }` | `{}` |
 | `client.setup` | `{ jobId, prefix }` | `{ exe, args?, env?, redact?, size?, confirm? }` (1.20, [Wine clients](#wine-clients-120)) |
 | `game.launchSpec` | `{ id, preview, via?, executable?, prefix? }` | `LaunchSpec` (`executable` 1.15, [Offline launches](#offline-launches-115); `prefix` 1.20, [Wine clients](#wine-clients-120)) |
-| `game.clientStatus` | `{ id, since }` (`since` is launch time, Unix seconds) | `{ state, label?, progress?, bytes?, total? }` (1.18, [Client launch status](#client-launch-status-118)) |
+| `game.clientStatus` | `{ id, since }` (`since` is launch time, Unix seconds) | `{ state, label?, progress?, bytes?, total? }` (`signin` 1.23, [Client-run commands](#client-run-commands-123); 1.18, [Client launch status](#client-launch-status-118)) |
 | `cloud.status` | `{ id, ctx }` | `CloudStatus` (1.2, [Cloud saves](#cloud-saves-12)) |
 | `cloud.pull` | `{ id, ctx, jobId }` | `CloudStatus` |
 | `cloud.push` | `{ id, ctx, jobId }` | `CloudStatus` |
@@ -600,7 +600,9 @@ in the client's session log. `job.done` ends the setup; `job.cancel` kills
 the installer and stops the prefix's wineserver. While a setup job holds the
 client, its games refuse to launch; the setup job itself shows in the queue
 like any other job and has nothing to discard. Platypus sends `client.setup`
-only to a plugin that settled on 1.20 or later.
+only to a plugin that settled on 1.20 or later. Installs through the same
+client run as core-run commands of the plugin's job (protocol 1.23, see
+[Client-run commands](#client-run-commands-123)).
 
 ## Cloud saves (1.2)
 
@@ -708,7 +710,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21", "1.22"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21", "1.22", "1.23"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -757,13 +759,16 @@ that doesn't know it.
   wine-client launch delegate and the `client.setup` job (a store client in a
   Platypus-managed prefix; see [Wine clients](#wine-clients-120)); 1.21: the optional `downloadLimit` param of
   `game.install` and `game.update` (see [Download limit](#download-limit-121)); 1.22: the `workshop` capability
-  (`workshop.list`, `workshop.sync`, see [Workshop](#workshop-122)); 1.24: game invites (the `social.invite`
+  (`workshop.list`, `workshop.sync`, see [Workshop](#workshop-122)); 1.23: the `clientRun` answer of
+  `game.install`, `game.update` and `game.uninstall` (the core runs a client command in the pinned
+  prefix as part of the plugin's job) and the `signin` clientStatus state (the client waits for the user,
+  see [Client-run commands](#client-run-commands-123)); 1.24: game invites (the `social.invite`
   notification, the join fields of `Friend.game`, and the `invites` of `social.state`;
   see [Game invites](#game-invites-124)); see [Compat facts](#compat-facts-117),
   [Runner](#runner-117), and [Save context](#save-context-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20, 1.21 or 1.22 method.
+  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20, 1.21, 1.22, 1.23 or 1.24 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -1682,6 +1687,56 @@ workshop.sync { id, installDir, jobId } -> {}
   writes nothing.
 - **Gating.** A plugin that negotiated 1.21 or older never receives these
   methods, and the game page shows no Workshop section.
+
+## Client-run commands (1.23)
+
+For stores whose own Windows client owns installs (Ubisoft Connect runs its
+games from its own prefix), `game.install`, `game.update` and
+`game.uninstall` may answer a client command for the core to run, instead of
+starting the work themselves:
+
+```
+game.install { id, installDir, jobId, ... } -> { clientRun, clientOwnsLocation?, size? }
+game.update  { id, installDir, jobId, ... } -> { clientRun, clientOwnsLocation?, size? }
+game.uninstall { id, jobId }               -> { clientRun, clientOwnsLocation?, size? }
+clientRun = { exe, args?, env?, redact? }
+```
+
+- **`clientRun`.** The client executable and its arguments (a `uplay://`
+  URL): the core validates the exe like a `client.setup` exe (an absolute or
+  `C:\` path, present now, inside the client's prefix or an allowed folder,
+  with the same env denylist) and runs it under the runner in the pinned
+  client prefix as part of the same job — the session log, the cancel (kill
+  plus `wineserver -k`) and the launch holds all work like a client setup.
+  The core does not end the job when the command exits: the plugin still owns
+  the job and ends it with `job.done` / `job.failed` from its own watch of
+  the client's on-disk state (bounded; a readable failure on timeout).
+  `job.cancel` stops the command and is forwarded as usual. An older
+  plugin's `clientRun` answer is rejected with a readable error.
+- **`clientOwnsLocation`.** The client owns the install location and the
+  job's `installDir` doesn't apply: the core passes `installDir` as usual but
+  skips creating or claiming it, and the game's path is whatever the next
+  `library.list` reports. Without it the core uses `installDir` as for any
+  other install.
+- **`size`.** The download bytes for the free-space check. Without it the
+  check is skipped.
+- **Holds.** While a clientRun job runs, the client's games refuse to launch
+  (the same hold as a client setup), and a second clientRun or setup for the
+  same client waits or is refused with a readable error.
+- **Gating.** Only a plugin that negotiated 1.23 or later may answer
+  `clientRun`; an older plugin keeps answering `{}` once its own work starts.
+
+### Waiting for sign-in (1.23)
+
+While a wine-client launch is pending, the client may be up without the game:
+a first-run self-update, or sitting at the sign-in screen. `game.clientStatus`
+reports that wait with the `signin` state (protocol 1.23): the client is up,
+the game isn't, the user must act in the client (sign in, accept terms,
+confirm a dialog). While `signin` is reported the start deadline is paused
+(extended each poll like `updating`), with an overall ceiling of 30 minutes
+from launch so a forgotten window doesn't track forever. The UI shows
+"Waiting for you in <client>" on the Play button, with the plugin's `label`
+when given.
 
 ## Game invites (1.24)
 

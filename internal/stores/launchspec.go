@@ -292,6 +292,42 @@ func ValidateClientSetup(spec plugins.ClientSetupSpec, man plugins.Manifest, fol
 	}, nil
 }
 
+// ValidateClientRun checks a clientRun answer (protocol 1.23): the client
+// command the core runs under the runner in the pinned client prefix. Like
+// a client.setup exe it must exist now, inside the prefix or an allowed
+// folder, with the same env denylist.
+func ValidateClientRun(spec plugins.ClientRunSpec, man plugins.Manifest, folders []string, clientDir string) (*ClientRun, error) {
+	if spec.Exe == "" {
+		return nil, fmt.Errorf("%s returned no client executable", man.ID)
+	}
+	exe, err := resolveWineExe(spec.Exe, clientDir)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", man.ID, err)
+	}
+	real, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		return nil, fmt.Errorf("%s: client command %s: %w", man.ID, spec.Exe, err)
+	}
+	if !insideAny(real, folders) {
+		return nil, fmt.Errorf("%s: client command %s is outside its prefix (%s)", man.ID, spec.Exe, strings.Join(folders, ", "))
+	}
+	if st, err := os.Stat(real); err != nil {
+		return nil, err
+	} else if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: %s is not a file", man.ID, spec.Exe)
+	}
+	env, err := validateEnvMap(spec.Env, man, "clientRun")
+	if err != nil {
+		return nil, err
+	}
+	return &ClientRun{
+		Exe:    real,
+		Args:   slices.Clone(spec.Args),
+		Env:    env,
+		Redact: validateRedact(spec.Redact),
+	}, nil
+}
+
 // validateEnvMap checks plugin env against the denylist. Wine-client launches
 // and client setups share the direct launches' denylist: prefix and DLL
 // overrides are Platypus's.
