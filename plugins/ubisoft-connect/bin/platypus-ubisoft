@@ -131,8 +131,8 @@ CONFIG_DIRS = ("cache", "configuration")
 CONFIG_NAME = "configurations"
 CONFIG_VDAT = "configurations.vdat"
 OWNERSHIP_DIRS = ("cache", "ownership")
-INSTALLS_RE = (r"(?i)^software\\(wow6432node\\)?ubisoft\\launcher\\"
-               r"installs\\([0-9]+)$")
+INSTALLS_RE = re.compile(r"(?i)^software\\(wow6432node\\)?ubisoft\\launcher\\"
+                         r"installs\\([0-9]+)$")
 MAX_CACHE_BYTES = 32 << 20      # a real configurations file is a few MB
 MAX_REG_BYTES = 32 << 20        # system.reg is ~1 MB in a normal prefix
 MAX_CACHE_RECORDS = 50000
@@ -368,7 +368,10 @@ def parse_ownership(data):
 def _yaml_value(text):
     text = text.strip()
     if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
-        text = text[1:-1]
+        return text[1:-1]
+    cut = text.find(" #")
+    if cut >= 0:
+        text = text[:cut].rstrip()
     return text
 
 
@@ -432,7 +435,8 @@ def config_hints(text):
         if key == "name":
             title = _yaml_value(value)
         elif key == "is_ulc":
-            is_ulc = _yaml_value(value).lower() in ("yes", "true")
+            is_ulc = _yaml_value(value).lower() in ("yes", "true", "on", "y",
+                                                    "1")
         elif key == "third_party_platform":
             third_party = True
         elif key == "installer":
@@ -480,7 +484,7 @@ def parse_installs(text):
             current = None
             if end > 0:
                 key = line[1:end].replace("\\\\", "\\")
-                match = re.match(INSTALLS_RE, key)
+                match = INSTALLS_RE.match(key)
                 if match:
                     current = match.group(2)
             continue
@@ -532,11 +536,17 @@ def windows_path(prefix, winpath):
     drive, sep, rest = text.partition(":")
     if not sep or len(drive) != 1:
         return ""
-    parts = [part for part in rest.split("\\") if part]
+    raw = [part for part in rest.split("\\") if part]
+    if any(part == ".." for part in raw):
+        return ""
+    parts = [part for part in raw if part != "."]
     if drive.upper() == "C":
         base = next((d for d in layouts(prefix) if os.path.isdir(d)),
                     os.path.join(prefix, "drive_c"))
     else:
+        # Wine drive letters are the prefix's own dosdevices mappings (Z: is
+        # / by default), so the result is a host path outside the prefix:
+        # that is where the client really installed the game.
         base = os.path.realpath(os.path.join(prefix, "dosdevices",
                                              drive.lower() + ":"))
         if not os.path.isdir(base):
@@ -599,7 +609,9 @@ def cache_stamp(prefix):
     them, which is what the install watch and the parse cache key on."""
     root, config, vdat, own, own_vdat = cache_state(prefix)
     stamp = [root, config, vdat]
-    for path in own + own_vdat:
+    for path in [config, vdat] + own + own_vdat:
+        if not path:
+            continue
         try:
             st = os.stat(path)
             stamp.append((path, st.st_size, st.st_mtime_ns))
@@ -609,10 +621,12 @@ def cache_stamp(prefix):
 
 
 def _read_cache(path):
-    if os.path.getsize(path) > MAX_CACHE_BYTES:
-        raise ValueError("cache file too large")
+    """The file's bytes, refusing a file over the cap (read MAX+1, no stat)."""
     with open(path, "rb") as f:
-        return f.read()
+        data = f.read(MAX_CACHE_BYTES + 1)
+    if len(data) > MAX_CACHE_BYTES:
+        raise ValueError("cache file too large")
+    return data
 
 
 def vdat_info(data):
@@ -689,12 +703,19 @@ def _read_library(prefix):
         return [], True, {}
     try:
         configs = parse_configurations(_read_cache(config))
-        if not configs:
-            return [], True, {}
-        owned = set()
-        for path in own:
-            owned |= parse_ownership(_read_cache(path))
     except (OSError, ValueError):
+        return [], True, {}
+    if not configs:
+        return [], True, {}
+    owned = set()
+    parsed = False
+    for path in own:
+        try:
+            owned |= parse_ownership(_read_cache(path))
+            parsed = True
+        except (OSError, ValueError):
+            continue  # a stale/garbage sidecar must not hide the others
+    if not parsed:
         return [], True, {}
     installed = installs(prefix)
     games = []

@@ -2,12 +2,14 @@
 // render under atlas with real-shaped data.
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TooltipProvider } from '../ds/tooltip';
-import { AtlasLibraryGrid, AtlasLibraryTable, AtlasLibraryPage, AtlasActiveChips, AtlasGameBadges, AtlasSkeleton } from '../AtlasLibraryViews';
+import { AtlasLibraryGrid, AtlasLibraryTable, AtlasLibraryPage, AtlasActiveChips, AtlasGameBadges, AtlasSkeleton, AtlasWarnings } from '../AtlasLibraryViews';
 import { LibraryListDetail } from '../LibraryListDetail';
 import type { Game, Job, SessionEvent } from '../../types';
+import '../../lib/i18n';
+import i18n from '../../lib/i18n';
 
 vi.mock('../../effect/runtime', () => ({ LauncherApi: {} }));
 
@@ -53,6 +55,54 @@ describe('atlas grid (issue #136)', () => {
     const job = { id: 'j1', game_id: 'alpha', kind: 'download', state: 'running', percent: 42 } as Job;
     render(<AtlasLibraryGrid games={games()} jobs={jobsById([job])} onOpen={() => {}} />);
     expect(screen.getByLabelText('Downloading, 42%')).toBeInTheDocument();
+  });
+});
+
+describe('atlas warnings (issue #192)', () => {
+  const warning = (message: string) => ({
+    source: 'ubisoft-connect',
+    unavailable: true,
+    message,
+  });
+
+  it('shows the plugin status message, not just a count, in en and fr', async () => {
+    const onOpenPlugins = vi.fn();
+    const { rerender } = render(
+      <AtlasWarnings
+        warnings={[warning('Start Ubisoft Connect once and sign in so Platypus can read your games')]}
+        pluginName={() => 'Ubisoft Connect'}
+        onOpenPlugins={onOpenPlugins}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent("Ubisoft Connect isn't available right now: Start Ubisoft Connect once and sign in so Platypus can read your games");
+    try {
+      await act(async () => {
+        await i18n.changeLanguage('fr');
+      });
+      rerender(
+        <AtlasWarnings
+          warnings={[warning('Lancez Ubisoft Connect une fois et connectez-vous pour que Platypus puisse lire vos jeux')]}
+          pluginName={() => 'Ubisoft Connect'}
+          onOpenPlugins={onOpenPlugins}
+        />,
+      );
+      expect(screen.getByRole('status')).toHaveTextContent("Ubisoft Connect est indisponible pour l'instant : Lancez Ubisoft Connect une fois et connectez-vous pour que Platypus puisse lire vos jeux");
+    } finally {
+      await act(async () => {
+        await i18n.changeLanguage('en');
+      });
+    }
+  });
+
+  it('keeps the logged-out line for an auth warning', () => {
+    render(
+      <AtlasWarnings
+        warnings={[{ source: 'epic', needs_auth: true, message: 'logged out' }]}
+        pluginName={() => 'Epic Games'}
+        onOpenPlugins={() => {}}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Epic Games is logged out, so its games are missing.');
   });
 });
 

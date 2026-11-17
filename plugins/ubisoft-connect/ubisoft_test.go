@@ -145,11 +145,14 @@ func gameYAML(name, exe string) string {
 		"  installer:\n    game_identifier: " + name + "\n"
 }
 
-// dlcYAML is an add-on product: is_ulc, no start_game.
-func dlcYAML(name string) string {
+// dlcYAML is an add-on product: is_ulc, no start_game. flag is the raw
+// is_ulc value, so the test can exercise the truthy spellings.
+func dlcYAMLFlag(name, flag string) string {
 	return "version: 2.0\nroot:\n  name: \"" + name + "\"\n" +
-		"  is_visible: no\n  is_ulc: yes\n"
+		"  is_visible: no\n  is_ulc: " + flag + "\n"
 }
+
+func dlcYAML(name string) string { return dlcYAMLFlag(name, "yes") }
 
 // thirdPartyYAML is a product sold on another store: no Ubisoft library entry.
 func thirdPartyYAML(name string) string {
@@ -165,16 +168,13 @@ func cacheDir(prefix string) string {
 		"Local", "Ubisoft Game Launcher")
 }
 
-// plantCaches writes the plaintext catalogue and ownership cache. Passing
-// owned also writes the ownership file (an empty list writes an empty one).
-func plantCaches(t *testing.T, prefix string, records [][]byte, owned ...uint64) {
+// plantCatalogue writes only the plaintext product catalogue, leaving the
+// ownership cache as it is (the client rewrites each file on its own).
+func plantCatalogue(t *testing.T, prefix string, records [][]byte) {
 	t.Helper()
 	configDir := filepath.Join(cacheDir(prefix), "cache", "configuration")
-	ownDir := filepath.Join(cacheDir(prefix), "cache", "ownership")
-	for _, dir := range []string{configDir, ownDir} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
 	catalogue := []byte{}
 	for _, record := range records {
@@ -183,10 +183,22 @@ func plantCaches(t *testing.T, prefix string, records [][]byte, owned ...uint64)
 	if err := os.WriteFile(filepath.Join(configDir, "configurations"), catalogue, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if owned != nil {
-		if err := os.WriteFile(filepath.Join(ownDir, "1234"), ownershipFile(owned...), 0o644); err != nil {
-			t.Fatal(err)
-		}
+}
+
+// plantCaches writes the plaintext catalogue and ownership cache. Passing
+// owned also writes the ownership file (an empty list writes an empty one).
+func plantCaches(t *testing.T, prefix string, records [][]byte, owned ...uint64) {
+	t.Helper()
+	plantCatalogue(t, prefix, records)
+	if owned == nil {
+		return
+	}
+	ownDir := filepath.Join(cacheDir(prefix), "cache", "ownership")
+	if err := os.MkdirAll(ownDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ownDir, "1234"), ownershipFile(owned...), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -216,26 +228,50 @@ func plantEncryptedCache(t *testing.T, prefix string) {
 	}
 }
 
-// plantInstalls writes the client's install registry into Wine's text
-// system.reg (HKLM), both of which the reader must tolerate.
-func plantInstalls(t *testing.T, prefix string, installs map[string]string) {
-	t.Helper()
+// installSections is the client's install keys for one registry view: wow
+// is the Wow6432Node view a 32-bit client writes, false the unredirected key
+// a 64-bit client wrote.
+func installSections(installs map[string]string, wow bool) []string {
 	ids := make([]string, 0, len(installs))
 	for id := range installs {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	lines := []string{"WINE REGISTRY Version 2", "#arch=win64"}
+	view := ""
+	if wow {
+		view = `\\Wow6432Node`
+	}
+	var lines []string
 	for _, id := range ids {
 		escaped := strings.ReplaceAll(installs[id], `\`, `\\`)
 		lines = append(lines, "",
-			`[Software\\Wow6432Node\\Ubisoft\\Launcher\\Installs\\`+id+`] 1700000000`,
+			`[Software`+view+`\\Ubisoft\\Launcher\\Installs\\`+id+`] 1700000000`,
 			`"InstallDir"="`+escaped+`"`)
+	}
+	return lines
+}
+
+// plantInstallViews writes the install registry into Wine's text system.reg
+// (HKLM) for the requested registry view(s).
+func plantInstallViews(t *testing.T, prefix string, installs map[string]string, wow, plain bool) {
+	t.Helper()
+	lines := []string{"WINE REGISTRY Version 2", "#arch=win64"}
+	if wow {
+		lines = append(lines, installSections(installs, true)...)
+	}
+	if plain {
+		lines = append(lines, installSections(installs, false)...)
 	}
 	if err := os.WriteFile(filepath.Join(prefix, "system.reg"),
 		[]byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// plantInstalls writes the 32-bit client's Wow6432Node install keys.
+func plantInstalls(t *testing.T, prefix string, installs map[string]string) {
+	t.Helper()
+	plantInstallViews(t, prefix, installs, true, false)
 }
 
 // libraryError is library.list's RPC error, for message checks.
@@ -248,6 +284,22 @@ func libraryError(t *testing.T, s *plugtest.Session) *jsonrpc.Error {
 		t.Fatalf("library.list: got %s (%v), want the unreadable-cache status", raw, err)
 	}
 	return rpcErr
+}
+
+// libraryIDs is library.list's game ids in response order.
+func libraryIDs(t *testing.T, s *plugtest.Session) []string {
+	t.Helper()
+	var lib struct {
+		Games []struct {
+			ID string `json:"id"`
+		} `json:"games"`
+	}
+	call(t, s, "library.list", nil, &lib)
+	ids := make([]string, 0, len(lib.Games))
+	for _, game := range lib.Games {
+		ids = append(ids, game.ID)
+	}
+	return ids
 }
 
 // plantClient writes a client executable into a drive layout.
@@ -469,7 +521,15 @@ func TestUbisoftLibraryLocalCache(t *testing.T) {
 		configRecord(96, 0, dlcYAML("Conviction DLC")),
 		configRecord(97, 0, thirdPartyYAML("Steam Copy")),
 		configRecord(900, 0, gameYAML("Not Owned", "Other.exe")),
-	}, 635, 636, 96, 97)
+		// Every truthy is_ulc spelling is add-on content.
+		configRecord(98, 0, dlcYAMLFlag("On DLC", "on")),
+		configRecord(99, 0, dlcYAMLFlag("One DLC", "1")),
+		configRecord(100, 0, dlcYAMLFlag("True DLC", "TRUE")),
+		// An unquoted value drops its trailing YAML comment.
+		configRecord(639, 0, "version: 2.0\nroot:\n  name: Commented Game # note\n"+
+			"  start_game:\n    online:\n      executables:\n"+
+			"        - path:\n            relative: \"Commented.exe\"\n"),
+	}, 635, 636, 96, 97, 98, 99, 100, 639)
 	plantInstalls(t, prefix, map[string]string{
 		"635": `C:\Program Files (x86)\Ubisoft\Game`,
 	})
@@ -484,8 +544,8 @@ func TestUbisoftLibraryLocalCache(t *testing.T) {
 		} `json:"games"`
 	}
 	call(t, sess, "library.list", nil, &lib)
-	if len(lib.Games) != 2 {
-		t.Fatalf("library.list = %+v, want the two owned launchable games", lib.Games)
+	if len(lib.Games) != 3 {
+		t.Fatalf("library.list = %+v, want the three owned launchable games", lib.Games)
 	}
 	byID := map[string]struct {
 		Title       string `json:"title"`
@@ -512,6 +572,9 @@ func TestUbisoftLibraryLocalCache(t *testing.T) {
 	if owned := byID["636"]; owned.Title != "Owned Not Installed" ||
 		owned.Installed || owned.InstallPath != "" || !owned.Installable {
 		t.Errorf("game = %+v, want 636 owned and not installed", owned)
+	}
+	if commented := byID["639"]; commented.Title != "Commented Game" || commented.Installed {
+		t.Errorf("game = %+v, want the title without its YAML comment", commented)
 	}
 
 	// Only protocol keys go on the wire (the DLC/third-party/not-owned
@@ -558,6 +621,105 @@ func TestUbisoftLibraryLocalCache(t *testing.T) {
 	call(t, sess, "library.list", nil, &lib)
 	if len(lib.Games) != 0 {
 		t.Fatalf("library.list = %+v, want an empty library for no owned games", lib.Games)
+	}
+}
+
+// B1: the catalogue is part of the cache stamp, so rewriting only
+// configurations changes what the library reports.
+func TestUbisoftLibraryCatalogueRewrite(t *testing.T) {
+	sess := startWithPin(t)
+	prefix := filepath.Join(t.TempDir(), "client")
+	rememberPrefix(t, sess, prefix)
+	plantCaches(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Older", "a.exe")),
+	}, 635, 636)
+	if ids := libraryIDs(t, sess); !slices.Equal(ids, []string{"635"}) {
+		t.Fatalf("library.list = %v, want [635] before the catalogue rewrite", ids)
+	}
+	// Ownership is untouched: only the client rewrote its catalogue.
+	plantCatalogue(t, prefix, [][]byte{
+		configRecord(636, 0, gameYAML("Newer", "b.exe")),
+	})
+	if ids := libraryIDs(t, sess); !slices.Equal(ids, []string{"636"}) {
+		t.Fatalf("library.list = %v, want [636] after a catalogue-only rewrite", ids)
+	}
+}
+
+// B2: one unparsable ownership file must not hide the other ones.
+func TestUbisoftLibraryOwnershipSidecar(t *testing.T) {
+	sess := startWithPin(t)
+	prefix := filepath.Join(t.TempDir(), "client")
+	rememberPrefix(t, sess, prefix)
+	plantCaches(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Game", "Game.exe")),
+		configRecord(636, 0, gameYAML("Other", "Other.exe")),
+	}, 635, 636)
+	ownDir := filepath.Join(cacheDir(prefix), "cache", "ownership")
+	if err := os.WriteFile(filepath.Join(ownDir, "9999"), []byte{0x0a, 0x05, 'x'}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The good <userId> file still lists the games.
+	if ids := libraryIDs(t, sess); !slices.Equal(ids, []string{"635", "636"}) {
+		t.Fatalf("library.list = %v, want both games with a garbage sidecar present", ids)
+	}
+	// With no parsable ownership file left, the library is unreadable again.
+	if err := os.Remove(filepath.Join(ownDir, "1234")); err != nil {
+		t.Fatal(err)
+	}
+	statusMessage(t, sess)
+}
+
+// S2/B3: both install-registry views are read, and a mapped path never keeps
+// "." or ".." parts.
+func TestUbisoftLibraryInstallRegistryViews(t *testing.T) {
+	sess := startWithPin(t)
+	prefix := filepath.Join(t.TempDir(), "client")
+	rememberPrefix(t, sess, prefix)
+	plantCaches(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Wow", "Wow.exe")),
+		configRecord(636, 0, gameYAML("Plain", "Plain.exe")),
+		configRecord(637, 0, gameYAML("Both", "Both.exe")),
+		configRecord(638, 0, gameYAML("Traversal", "T.exe")),
+	}, 635, 636, 637, 638)
+
+	// The 32-bit view, then the unredirected 64-bit view.
+	plantInstallViews(t, prefix, map[string]string{"635": `C:\Wow\Game`}, true, false)
+	plantInstallViews(t, prefix, map[string]string{"636": `C:\Plain\Game`}, false, true)
+	// Both views present for one product: one entry, no duplicate.
+	plantInstallViews(t, prefix, map[string]string{
+		"635": `C:\Wow\Game`,
+		"636": `C:\Plain\Game`,
+		"637": `C:\Both\Game`,
+		"638": `C:\..\..\tmp\x`,
+	}, true, true)
+
+	var lib struct {
+		Games []struct {
+			ID          string `json:"id"`
+			Installed   bool   `json:"installed"`
+			InstallPath string `json:"installPath"`
+		} `json:"games"`
+	}
+	call(t, sess, "library.list", nil, &lib)
+	if len(lib.Games) != 4 {
+		t.Fatalf("library.list = %+v, want four games (no duplicate from two views)", lib.Games)
+	}
+	byID := map[string][2]any{}
+	for _, game := range lib.Games {
+		byID[game.ID] = [2]any{game.Installed, game.InstallPath}
+	}
+	for id, dir := range map[string]string{"635": "Wow", "636": "Plain", "637": "Both"} {
+		installed, path := byID[id][0].(bool), byID[id][1].(string)
+		if !installed || path != filepath.Join(prefix, "drive_c", dir, "Game") {
+			t.Errorf("game %s = installed %v path %q, want %s under drive_c", id, installed, path, dir)
+		}
+	}
+	// A ".." part is refused: installed (the registry says so) but no path.
+	if installed, _ := byID["638"][0].(bool); !installed {
+		t.Error("638 = not installed, want the registry's installed state")
+	}
+	if path := byID["638"][1].(string); path != "" {
+		t.Errorf("638 installPath = %q, want none for a traversal path", path)
 	}
 }
 
@@ -800,6 +962,9 @@ func TestUbisoftInstallAnswersClientRun(t *testing.T) {
 	sess := suite(env).Start(t)
 	prefix := filepath.Join(t.TempDir(), "client")
 	setupPrefix(t, sess, prefix)
+	plantCaches(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Game", "Game.exe")),
+	}, 635)
 
 	var ans clientRunAnswer
 	call(t, sess, "game.install",
@@ -825,11 +990,13 @@ func TestUbisoftInstallAnswersClientRun(t *testing.T) {
 		t.Errorf("update args = %v, want the install URL", upd.ClientRun.Args)
 	}
 	// A pre-existing install is not completion: the update must not finish
-	// until the client rewrites its catalogue cache.
+	// until the client rewrites its catalogue cache. Only the catalogue is
+	// touched (the ownership file stays as it was).
 	noJobEvent(t, sess, "update-1", []string{"job.done", "job.failed"}, time.Second)
-	plantCaches(t, prefix, [][]byte{
-		configRecord(635, 0, gameYAML("Game", "Game.exe")),
-	}, 635)
+	plantCatalogue(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Game", "Game2.exe")),
+		configRecord(636, 0, gameYAML("Other", "Other.exe")),
+	})
 	waitJobEvent(t, sess, "update-1", []string{"job.done"}, 5*time.Second)
 
 	var un clientRunAnswer

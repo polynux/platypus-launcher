@@ -155,7 +155,9 @@ Container: protobuf `OwnershipCache`:
 
 **[inf]** Field 1 is the authoritative per-product record and field 2 the same
 set as plain ids; taking the union of both is safe and tolerant. Field 3 is a
-superset that can include add-ons, so it is not used on its own.
+superset that can include add-ons, so it is not used on its own. When several
+files sit in `ownership/`, the parseable ones are unioned: a stale or garbage
+file must not hide the account's file.
 
 The catalogue and the ownership file are intersected: a cached product
 configuration is not proof of ownership (the client caches descriptions of
@@ -201,7 +203,9 @@ Installed state is therefore "the registry has an `InstallDir` for this product"
 and the Linux path is the registry path with `C:` mapped to
 `<prefix>/drive_c` (other drive letters resolve through `<prefix>/dosdevices/<x>:`,
 the Wine drive mapping) [src: Wine documentation on the `dosdevices` directory;
-**[inf]** for the mapping rule].
+**[inf]** for the mapping rule]. A `.` component is dropped; a path with any
+`..` component is not used at all, so a crafted value cannot walk out of the
+mapped base.
 
 A game can be owned and not installed: it is in the catalogue and in the
 ownership file, with no install key. The library lists it as owned, not
