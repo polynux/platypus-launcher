@@ -188,6 +188,11 @@ func TestDiskMountsParseAndMatch(t *testing.T) {
 			t.Fatalf("driveOf(%q) = %q, want %q", path, got, want)
 		}
 	}
+	// No mount table (Windows has no mountinfo): a path groups by its volume
+	// root, which is the filesystem root on this host (issue #83).
+	if got := driveOf("/mnt/games/X", nil); got != "/" {
+		t.Fatalf("driveOf with no mounts = %q, want the filesystem root", got)
+	}
 }
 
 // A prefix pinned inside the game's own folder is already inside the walked

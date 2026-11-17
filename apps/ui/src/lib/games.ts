@@ -96,7 +96,8 @@ export function isPluginGame(g: Game): boolean {
 
 /** System folders the core will never allow (audit F16, CORE-6): launching
  *  "games" from there would let a plugin run any system binary. Mirrors
- *  `systemDirs` in internal/plugins/manager.go (plus the filesystem root). */
+ *  `unixSystemDirs` in internal/platform/paths_unix.go (plus the filesystem
+ *  root; Windows has its own list in that package, issue #83). */
 export const SYSTEM_DIRS = ['/bin', '/boot', '/dev', '/etc', '/lib', '/lib32', '/lib64', '/proc', '/run', '/sbin', '/sys', '/usr', '/var'];
 
 /** POSIX clean (like the core's filepath.Clean): drop empty and "." segments,

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"platypus/internal/dataplug"
+	"platypus/internal/platform"
 	"platypus/internal/settings"
 	"platypus/internal/themes"
 )
@@ -699,10 +700,8 @@ func (m *Manager) AllowFolder(id, path string) error {
 	return m.trust.SetPluginState(id, st)
 }
 
-// systemDirs can't be allowed as game folders: launching "games" from there
-// would let a plugin run any system binary.
-var systemDirs = []string{"/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/proc", "/run", "/sbin", "/sys", "/usr", "/var"}
-
+// No system folder can be allowed as a game folder: launching "games" from
+// there would let a plugin run any system binary.
 func checkAllowable(path string) error {
 	home, _ := os.UserHomeDir()
 	return checkAllowableFor(path, home)
@@ -710,16 +709,14 @@ func checkAllowable(path string) error {
 
 // checkAllowableFor is checkAllowable with an explicit home (issue #41).
 func checkAllowableFor(path, home string) error {
-	if path == "/" {
+	if platform.IsRoot(path) {
 		return errors.New("refusing to allow the whole filesystem")
 	}
 	if home != "" && path == filepath.Clean(home) {
 		return errors.New("refusing to allow your whole home folder; pick the game's folder")
 	}
-	for _, d := range systemDirs {
-		if path == d || strings.HasPrefix(path, d+"/") {
-			return fmt.Errorf("refusing to allow system folder %s", path)
-		}
+	if platform.IsProtected(path) {
+		return fmt.Errorf("refusing to allow system folder %s", path)
 	}
 	return nil
 }

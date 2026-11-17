@@ -329,8 +329,8 @@ describe('F15: runner rows hover', () => {
 
 describe('F16: no Allow for system folders', () => {
   it('mirrors the core systemDirs list and cleans POSIX paths', () => {
-    const manager = src('../../../internal/plugins/manager.go');
-    const m = manager.match(/systemDirs\s*=\s*\[\]string\{([^}]+)\}/);
+    const core = src('../../../internal/platform/paths_unix.go');
+    const m = core.match(/unixSystemDirs\s*=\s*\[\]string\{([^}]+)\}/);
     expect(m).not.toBeNull();
     const goList = [...m![1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
     expect([...SYSTEM_DIRS].sort()).toEqual([...goList].sort());

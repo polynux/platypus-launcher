@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"platypus/internal/apperr"
+	"platypus/internal/platform"
 )
 
 // Save-backup settings (issue #42). The backups live under <dataDir>/backups
@@ -67,7 +68,7 @@ func (s *Store) SetBackupsFolder(path string) (string, error) {
 		return "", apperr.New("settings.folder.notAbsolute",
 			fmt.Sprintf("folder %q is not a clean absolute path", path), map[string]string{"path": path})
 	}
-	if clean == "/" {
+	if platform.IsRoot(clean) {
 		return "", apperr.New("settings.folder.isRoot", "the backups folder cannot be the filesystem root", nil)
 	}
 	s.mu.Lock()

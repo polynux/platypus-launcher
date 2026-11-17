@@ -9,6 +9,7 @@ import (
 
 	"platypus/internal/apperr"
 	"platypus/internal/jobs"
+	"platypus/internal/platform"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
 )
@@ -228,6 +229,6 @@ func (a *App) GetInstallSize(game types.Game) (int64, error) {
 // installed. The dialog compares it with the size of the chosen options.
 func (a *App) GetInstallFreeSpace(game types.Game) (int64, error) {
 	folder, _ := a.plugins.InstallFolder(game.Source, a.settings.GamesFolder())
-	free, err := jobs.FreeSpace(folder)
+	free, err := platform.FreeSpace(folder)
 	return int64(free), err
 }
