@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Fake `wine` for the ubisoft-connect tests: handles the plugin's client
+invocation `wine <client-exe> uplay://<action>/<id>[/...]` without Wine or
+Ubisoft Connect. It reads $WINEPREFIX for the prefix, appends its argv to
+$FAKE_WINE_CALLS (one JSON list per line, like the gog fake's .calls), waits
+$FAKE_WINE_DELAY seconds (a cancel window), then applies the URL to the
+plugin's interim install records
+(<prefix>/drive_c/platypus-ubisoft/records/<id>.json): install writes
+{"exe": $FAKE_WINE_EXE or "Game.exe"}, uninstall removes it, launch is a
+no-op. $FAKE_WINE_FAIL=1 exits 1 before touching anything."""
+
+import json
+import os
+import sys
+import time
+
+ACTION = {"install", "uninstall", "launch"}
+
+
+def main():
+    calls = os.environ.get("FAKE_WINE_CALLS")
+    if calls:
+        with open(calls, "a") as f:
+            f.write(json.dumps(sys.argv) + "\n")
+    url = sys.argv[-1] if len(sys.argv) > 2 else ""
+    parts = url.split("uplay://")[-1].split("/") if url.startswith("uplay://") else []
+    if len(parts) < 2 or parts[0] not in ACTION:
+        print(f"fake wine: can't handle {url!r}", file=sys.stderr)
+        return 2
+    action, app = parts[0], parts[1]
+    if os.environ.get("FAKE_WINE_FAIL") == "1":
+        print("fake wine: instructed to fail", file=sys.stderr)
+        return 1
+    prefix = os.environ.get("WINEPREFIX", "")
+    records = os.path.join(prefix, "drive_c", "platypus-ubisoft", "records")
+    os.makedirs(records, exist_ok=True)
+    time.sleep(float(os.environ.get("FAKE_WINE_DELAY", "0.2")))
+    record = os.path.join(records, app + ".json")
+    if action == "install":
+        with open(record, "w") as f:
+            json.dump({"exe": os.environ.get("FAKE_WINE_EXE", "Game.exe")}, f)
+    elif action == "uninstall":
+        try:
+            os.remove(record)
+        except FileNotFoundError:
+            pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
