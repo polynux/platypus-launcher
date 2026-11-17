@@ -26,7 +26,7 @@ const id = "ubisoft-connect"
 // fake installer instead of a download, and a short record-watch bound.
 func suite(t *testing.T, extra map[string]string) plugtest.Suite {
 	t.Helper()
-	hook, err := filepath.Abs(filepath.Join("testdata", "fake-installer.exe"))
+	hook, err := filepath.Abs(filepath.Join("testdata", "fake-installer.bin"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestUbisoftClientSetup(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("client.setup isn't an installer spec: %s", raw)
 	}
-	hook, _ := os.ReadFile(filepath.Join("testdata", "fake-installer.exe"))
+	hook, _ := os.ReadFile(filepath.Join("testdata", "fake-installer.bin"))
 	if !filepath.IsAbs(decoded.Exe) || !strings.HasPrefix(decoded.Exe, prefix) {
 		t.Errorf("exe = %q, want an absolute path inside the prefix", decoded.Exe)
 	}
