@@ -182,6 +182,11 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 	if len(ordered) == 0 {
 		return nil
 	}
+	// A derived context lets the collector stop workers that would
+	// otherwise block on a full results channel after an early return
+	// (sink error such as a full disk, or the caller cancelling).
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	states := make([]*hostState, len(hosts))
 	for i, h := range hosts {
 		states[i] = &hostState{host: h}
@@ -235,13 +240,17 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 				return // the context ended; the collector's done case unwinds
 			}
 			data, host, err := s.fetchOne(ctx, m, depotID, task.chunk, states, key)
-			if err != nil {
-				results <- result{id: string(task.chunk.ID), task: task, err: err}
-				continue
+			r := result{id: string(task.chunk.ID), task: task, err: err}
+			if err == nil {
+				doneBytes.Add(uint64(len(data)))
+				doneChunks.Add(1)
+				r = result{id: string(task.chunk.ID), data: data, host: host}
 			}
-			doneBytes.Add(uint64(len(data)))
-			doneChunks.Add(1)
-			results <- result{id: string(task.chunk.ID), data: data, host: host}
+			select {
+			case results <- r:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 	wg.Add(initial)
@@ -281,16 +290,22 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 			}
 		}
 	}()
+	// stop ends the run: cancel unblocks workers and the grower, the grower
+	// is joined before wg.Wait so it can't wg.Add a worker concurrently.
+	stop := func() {
+		cancel()
+		close(stopGrow)
+		<-growDone
+		close(tasks)
+		wg.Wait()
+	}
 	var failures []error
 	completed := 0
 	usedHosts := map[string]bool{}
 	for completed < len(ordered) {
 		select {
 		case <-ctx.Done():
-			close(stopGrow)
-			close(tasks)
-			wg.Wait()
-			<-growDone
+			stop()
 			return ctx.Err()
 		case r := <-results:
 			completed++
@@ -309,10 +324,7 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 			}
 			if sink != nil {
 				if err := sink(r.id, r.data); err != nil {
-					close(stopGrow)
-					close(tasks)
-					wg.Wait()
-					<-growDone
+					stop()
 					return err
 				}
 			}
@@ -326,10 +338,7 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 			}
 		}
 	}
-	close(stopGrow)
-	close(tasks)
-	wg.Wait()
-	<-growDone
+	stop()
 	_ = chunkByID
 	if len(failures) > 0 {
 		return failures[0]
