@@ -527,10 +527,13 @@ func TestWineClientSetupRefusedWhileRunning(t *testing.T) {
 	if _, err := e.a.LaunchGame(wineGame()); err != nil {
 		t.Fatalf("LaunchGame: %v", err)
 	}
-	waitSessionState(t, e, wineGame().ID, "running")
+	ev := waitSessionState(t, e, wineGame().ID, "running")
 	if _, err := e.a.SetupClient("echo", false); apperr.CodeOf(err) != "client.inUse" {
 		t.Fatalf("SetupClient while running: %v, want client.inUse", err)
 	}
+	// The fake client outlives the game (B2); it is killed at the end so it
+	// doesn't keep writing into the session log past the test (#215).
+	client := parentPid(t, ev.PID)
 	if err := e.a.StopGame(wineGame().ID); err != nil {
 		t.Fatalf("StopGame: %v", err)
 	}
@@ -538,4 +541,12 @@ func TestWineClientSetupRefusedWhileRunning(t *testing.T) {
 	if _, err := e.a.SetupClient("echo", false); err != nil {
 		t.Fatalf("SetupClient after stop: %v", err)
 	}
+	// Setup runs under the fake runner: wait for the job so no installer
+	// process races t.TempDir cleanup (#215).
+	j2, ok := e.a.ClientSetupJob("echo")
+	if !ok {
+		t.Fatal("ClientSetupJob not held after the setup was queued")
+	}
+	e.waitJob(t, j2.ID, jobs.StateDone)
+	_ = killProcess(client)
 }
