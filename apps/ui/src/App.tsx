@@ -526,12 +526,13 @@ export function AppContent() {
       .finally(() => setLaunchingId(null));
   };
 
-  // A game invite's Join: the same launch with the join args appended (or
-  // the game page when it isn't installed; the invite hook decides).
-  const launchWithArgs = (game: Game, args: string[]) => {
+  // A game invite's Join: the same launch with the join fragment appended.
+  // The core parses the raw fragment against the allowlist before anything
+  // runs; the UI mirror (lib/invites) only decides the disabled Join.
+  const launchWithArgs = (game: Game, kind: string, connect: string, lobbyId: string) => {
     if (launchingId || sessions[game.id]) return;
     setLaunchingId(game.id);
-    Effect.runPromise(LauncherApi.launchWithArgs(game, args))
+    Effect.runPromise(LauncherApi.launchWithArgs(game, kind, connect, lobbyId))
       .then((res) => notify(res || t('game:launching', { title: game.title }), 'busy'))
       .catch((err) => notify(coreErrMsg(err), 'err'))
       .finally(() => setLaunchingId(null));
@@ -543,16 +544,17 @@ export function AppContent() {
     const frag = friendInvite(friend);
     if (!frag) return;
     const decision = joinDecision(frag, friend.game?.id, games);
-    if (decision.kind === 'launch') launchWithArgs(decision.game, decision.args);
+    if (decision.kind === 'launch') launchWithArgs(decision.game, frag.kind, frag.connect ?? '', frag.lobbyId ?? '');
     else if (decision.kind === 'page') openGame(decision.gameId);
   };
+  // Null when Join does something (launch the game, or open its page when
+  // it isn't installed); otherwise the disabled reason the row shows.
   const joinFriendReason = (plugin: string, friend: SocialFriend): string | null => {
     const frag = friendInvite(friend);
     if (!frag) return null;
     const title = friend.game?.title ?? '';
     const decision = joinDecision(frag, friend.game?.id, games);
     if (decision.kind === 'disabled') return t(`chat:invite.${decision.reason}`, { title });
-    if (decision.kind === 'page') return t('chat:panel.viewGame');
     return null;
   };
 

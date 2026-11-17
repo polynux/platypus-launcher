@@ -1,53 +1,93 @@
 // Game invites (protocol 1.24): splitting a join fragment into argv and
-// deciding what Join does: launch with the join args, open the game page
-// when it isn't installed, or stay disabled with a reason.
+// deciding what Join does: launch the installed game, open the game page
+// when it isn't installed, or stay disabled with a reason. The shapes mirror
+// the core's strict allowlist (social.ParseJoinArgs); the core parses the
+// raw fragment again before anything runs, so this only decides the button.
 import type { Game, SocialFriend } from '../types';
 
-// joinArgCap mirrors the core's cap: a longer fragment is truncated, never
-// shelled, and the core validates again before anything runs.
-const joinArgCap = 16;
-
-/** Split a join fragment into argv: whitespace-separated, double quotes
- *  group, backslash escapes the next character. Null when a quote never
- *  closes: Join stays disabled rather than guessing argv.
+/** Split a join fragment on whitespace. Quotes and backslashes never appear
+ *  in a valid fragment, so their presence refuses the split: Join stays
+ *  disabled rather than guessing argv.
  */
 export function splitConnectArgs(fragment: string): string[] | null {
-  const out: string[] = [];
-  let cur = '';
-  let inToken = false;
-  let quote = false;
-  for (let i = 0; i < fragment.length; i++) {
-    const c = fragment[i];
-    if (quote) {
-      if (c === '"') quote = false;
-      else if (c === '\\' && i + 1 < fragment.length) cur += fragment[++i];
-      else cur += c;
-      continue;
-    }
-    if (c === '"') {
-      quote = true;
-      inToken = true;
-      continue;
-    }
-    if (c === '\\' && i + 1 < fragment.length) {
-      cur += fragment[++i];
-      inToken = true;
-      continue;
-    }
-    if (c === ' ' || c === '\t' || c === '\n' || c === '\r') {
-      if (inToken) {
-        out.push(cur);
-        cur = '';
-        inToken = false;
-      }
-      continue;
-    }
-    cur += c;
-    inToken = true;
+  if (fragment.includes('"') || fragment.includes('\\')) return null;
+  return fragment.split(/[\t\n\r ]+/).filter((t) => t.length > 0);
+}
+
+const uintRe = /^\d{1,20}$/;
+const hostRe = /^(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])$/;
+const portRe = /^\d{1,5}$/;
+const passwordRe = /^[A-Za-z0-9._~!@#$%^&*-]{1,64}$/;
+
+function parseUintId(s: string): string | null {
+  if (!uintRe.test(s)) return null;
+  try {
+    const n = BigInt(s);
+    if (n === 0n) return null;
+    return String(n);
+  } catch {
+    return null;
   }
-  if (quote) return null;
-  if (inToken) out.push(cur);
-  return out.slice(0, joinArgCap);
+}
+
+function validJoinPassword(pw: string): boolean {
+  return passwordRe.test(pw) && !pw.startsWith('-');
+}
+
+function validJoinAddr(addr: string): boolean {
+  const slash = addr.indexOf('/');
+  let hostport = addr;
+  if (slash >= 0) {
+    if (!validJoinPassword(addr.slice(slash + 1))) return false;
+    hostport = addr.slice(0, slash);
+  }
+  let host = hostport;
+  let port: string | null = null;
+  if (hostport.startsWith('[')) {
+    const end = hostport.indexOf(']');
+    if (end < 0) return false;
+    const rest = hostport.slice(end + 1);
+    if (rest !== '' && !rest.startsWith(':')) return false;
+    if (rest !== '') port = rest.slice(1);
+    host = hostport.slice(0, end + 1);
+  } else {
+    if (hostport.split(':').length > 2) return false;
+    const cut = hostport.indexOf(':');
+    if (cut >= 0) {
+      host = hostport.slice(0, cut);
+      port = hostport.slice(cut + 1);
+    }
+  }
+  if (!hostRe.test(host)) return false;
+  if (port === null) return true;
+  if (!portRe.test(port)) return false;
+  const n = Number(port);
+  return n >= 1 && n <= 65535;
+}
+
+/** Parse a raw join fragment against the allowlist; null refuses it, the
+ *  same shapes the core enforces before anything runs.
+ */
+export function parseJoinFragment(kind: string, connect?: string | null, lobbyId?: string | null): string[] | null {
+  if (kind === 'lobby') {
+    const id = lobbyId ? parseUintId(lobbyId) : null;
+    return id ? ['+connect_lobby', id] : null;
+  }
+  if (kind !== 'connect' || !connect || connect.length > 256) return null;
+  const toks = splitConnectArgs(connect);
+  if (!toks) return null;
+  if (toks.length === 2 && toks[0] === '+connect' && validJoinAddr(toks[1])) return ['+connect', toks[1]];
+  if (toks.length === 4 && toks[0] === '+connect' && toks[2] === '+password' && validJoinAddr(toks[1]) && validJoinPassword(toks[3]))
+    return toks;
+  if (toks.length === 2 && toks[0] === '+invite') {
+    const id = parseUintId(toks[1]);
+    return id ? ['+invite', id] : null;
+  }
+  if (toks.length === 3 && toks[0] === '+invite' && toks[2] === '-launchsource2') {
+    const id = parseUintId(toks[1]);
+    return id ? ['+invite', id, '-launchsource2'] : null;
+  }
+  return null;
 }
 
 export interface JoinFragment {
@@ -85,17 +125,13 @@ export function joinDecision(frag: JoinFragment, gameId: string | undefined, lib
     return { kind: 'disabled', reason: 'missing' };
   }
   if (!game.is_installed) return { kind: 'page', gameId: game.id };
-  if (frag.kind === 'lobby') {
-    if (!game.client_launch) return { kind: 'disabled', reason: 'client' };
-    if (!frag.lobbyId) return { kind: 'disabled', reason: 'fragment' };
-    return { kind: 'launch', game, args: ['+connect_lobby', frag.lobbyId] };
-  }
-  const args = frag.connect ? splitConnectArgs(frag.connect) : null;
-  if (!args || args.length === 0) return { kind: 'disabled', reason: 'fragment' };
+  if (frag.kind === 'lobby' && !game.client_launch) return { kind: 'disabled', reason: 'client' };
+  const args = parseJoinFragment(frag.kind, frag.connect, frag.lobbyId);
+  if (!args) return { kind: 'disabled', reason: 'fragment' };
   return { kind: 'launch', game, args };
 }
 
-/** The dedupe key of a toasted invite: one toast per friend, kind and time. */
-export function inviteKey(plugin: string, fromId: string, kind: string, at: number): string {
-  return `${plugin}:${fromId}:${kind}:${at}`;
+/** The dedupe key of a toasted invite: one toast per friend and app. */
+export function inviteKey(plugin: string, fromId: string, storeId: string): string {
+  return `${plugin}:${fromId}:${storeId}`;
 }

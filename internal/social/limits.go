@@ -63,9 +63,10 @@ func (g *Game) clean() {
 	g.LobbyID = clip(g.LobbyID, maxLobbyIDLen)
 }
 
-// clean applies the limits to an invite. It reports false when the invite
-// names no friend, no game, or no way to join, which is what mergeInvites
-// keys on.
+// clean applies the limits to an invite. Over-long fragments are dropped at
+// the boundary, never clipped, and the kind must match its field against
+// the join allowlist (ParseJoinArgs): anything else is refused. It reports
+// false for what mergeInvites drops.
 func (iv *Invite) clean() bool {
 	iv.From.ID = clip(iv.From.ID, maxIDLen)
 	if iv.From.ID == "" {
@@ -75,19 +76,15 @@ func (iv *Invite) clean() bool {
 	if iv.From.Name == "" {
 		iv.From.Name = iv.From.ID
 	}
+	if len(iv.Connect) > maxConnectLen || len(iv.Game.StoreID) > maxStoreIDLen || len(iv.LobbyID) > maxLobbyIDLen {
+		return false
+	}
 	iv.Game.clean()
 	if iv.Game.StoreID == "" {
 		return false
 	}
-	iv.Connect = clip(iv.Connect, maxConnectLen)
-	iv.LobbyID = clip(iv.LobbyID, maxLobbyIDLen)
-	if iv.Kind != "connect" && iv.Kind != "lobby" {
-		return false
-	}
-	if iv.Connect == "" && iv.LobbyID == "" {
-		return false
-	}
-	return true
+	_, ok := ParseJoinArgs(iv.Kind, iv.Connect, iv.LobbyID)
+	return ok
 }
 
 // clean applies the limits to the user's own account.

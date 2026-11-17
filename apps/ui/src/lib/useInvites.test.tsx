@@ -5,6 +5,8 @@ import { useInviteToasts } from './useInvites';
 import type { NotifyOptions } from './notify';
 import type { Game, SocialView } from '../types';
 
+const nowSec = () => Math.floor(Date.now() / 1000);
+
 const game = (over: Partial<Game> = {}): Game =>
   ({
     id: 'p.steam-standalone.620',
@@ -15,7 +17,7 @@ const game = (over: Partial<Game> = {}): Game =>
     ...over,
   }) as Game;
 
-const inviteView = (invite: Record<string, unknown>): SocialView[] => [
+const inviteView = (invite: Record<string, unknown>, from = { id: '1', name: 'Ana Ruiz' }): SocialView[] => [
   {
     seq: 1,
     plugin: 'steam-standalone',
@@ -26,11 +28,11 @@ const inviteView = (invite: Record<string, unknown>): SocialView[] => [
     friends: [{ id: '1', name: 'Ana Ruiz', state: 'online' }],
     invites: [
       {
-        from: { id: '1', name: 'Ana Ruiz' },
+        from,
         game: { id: 'p.steam-standalone.620', title: 'Portal', storeId: '620' },
         kind: 'connect',
         connect: '+connect 1.2.3.4:27015',
-        at: 1791400000,
+        at: nowSec(),
         ...invite,
       },
     ],
@@ -57,7 +59,7 @@ afterEach(async () => {
 });
 
 describe('useInviteToasts', () => {
-  it('toasts a new invite with a Join action that launches with the join args', async () => {
+  it('toasts a new invite with a Join action that launches with the raw fragment', async () => {
     await act(async () => {
       await i18n.changeLanguage('en');
     });
@@ -70,24 +72,48 @@ describe('useInviteToasts', () => {
     act(() => {
       calls[0].options?.action?.onClick({} as React.MouseEvent<HTMLButtonElement>);
     });
-    expect(launchWithArgs).toHaveBeenCalledWith(game(), ['+connect', '1.2.3.4:27015']);
+    expect(launchWithArgs).toHaveBeenCalledWith(game(), 'connect', '+connect 1.2.3.4:27015', '');
   });
 
-  it('does not re-toast invites that were already here, and toasts in French', async () => {
+  it('never shows a Steam id in a toast', async () => {
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+    const games = [game()];
+    const { hook, calls } = setup([], games);
+    hook.rerender({ v: inviteView({}, { id: '76561198000000002', name: '76561198000000002' }) });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].msg).toBe('a friend invited you to play Portal');
+  });
+
+  it('skips stale invites and throttles to one toast per friend per 120 s, in French', async () => {
     await act(async () => {
       await i18n.changeLanguage('fr');
     });
     try {
       const games = [game()];
-      const { hook, openGame, calls } = setup(inviteView({}), games);
+      const { hook, openGame, calls } = setup([], games);
+      // A 16-minute-old invite never toasts.
+      hook.rerender({ v: inviteView({ at: nowSec() - 16 * 60 }) });
       expect(calls).toHaveLength(0);
-      hook.rerender({ v: inviteView({ lobbyId: '109775241000000001', connect: undefined, kind: 'lobby' }) });
       // A lobby join on a game without a client launch explains itself, with no Join action.
+      hook.rerender({ v: inviteView({ lobbyId: '109775241000000001', connect: undefined, kind: 'lobby' }) });
       expect(calls).toHaveLength(1);
       expect(calls[0].msg).toBe('Ana Ruiz vous invite à jouer à Portal');
       expect(calls[0].options?.action).toBeUndefined();
       expect(calls[0].options?.description).toBe("Rejoindre nécessite le client Steam, et Portal ne l'utilise pas.");
       expect(openGame).not.toHaveBeenCalled();
+      // A second invite from the same friend inside 120 s stays quiet,
+      // even for another app.
+      hook.rerender({
+        v: inviteView({
+          game: { title: 'Other', storeId: '47700' },
+          kind: 'connect',
+          connect: '+connect 9.9.9.9:27015',
+          at: nowSec() + 2,
+        }),
+      });
+      expect(calls).toHaveLength(1);
     } finally {
       await act(async () => {
         await i18n.changeLanguage('en');

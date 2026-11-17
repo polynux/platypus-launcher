@@ -1750,25 +1750,34 @@ social.invite { from: { id, name }, game: { id?, title, storeId },
 ```
 
 - **What it is.** `kind: "connect"` joins with the `connect` command-line
-  fragment (`+connect host:port`, `+invite …`, or another per-game fragment:
-  Platypus appends its tokens to the launch, never prepending `+connect`
-  itself). `kind: "lobby"` joins the `lobbyId` Steam lobby through the game's
+  fragment; `kind: "lobby"` joins the `lobbyId` Steam lobby through the game's
   store client. `at` is Unix seconds.
+- **Join shapes.** Only these exact token shapes ever reach an exec; anything
+  else is refused with a readable error before anything runs:
+  `+connect <host>[:<port>][/password]` (hostname/IPv4 or bracketed IPv6,
+  port 1-65535, optional `+password <pw>` instead of the `/pw` suffix),
+  `+invite <uint64>` (optionally `+invite <uint64> -launchsource2`), and
+  `+connect_lobby <uint64>` (a Steam lobby id, 1-20 digits). `+exec`,
+  `-insecure`, extra tokens, paths and every other form never launch.
 - **One per friend.** The plugin keeps one pending invite per friend (newest
   wins) and treats the same friend, game and fragment inside 120 s as a
   repeat: stores push the same invitation over several channels at once.
   `social.state` carries the pending invites so a UI restart does not lose
   them; Platypus does the same one-per-friend merge on its side.
-- **Caps.** Platypus cuts an over-long `connect` (256 characters), `storeId`
-  or `lobbyId` (64 each) down to size rather than dropping the invite, like
-  the rest of the friend's data. An invite with no friend, no game, or
-  neither `connect` nor `lobbyId` is dropped.
+- **Expiry.** A pending invite lives 15 minutes: the helper, the core and the
+  UI agree on the window, and the core is the authority that drops it. When
+  the inviter stops playing that app, the join is gone with it.
+- **Caps.** An over-long `connect` (over 256 characters), `storeId` or
+  `lobbyId` (over 64 each) drops the invite at the boundary, never clipped.
+  An invite with no friend, no game, a kind its field doesn't match, or
+  neither `connect` nor `lobbyId` is dropped the same way.
 - **Gating.** Platypus takes `social.invite` only from a plugin that
   negotiated 1.24 or later, and only about a friend on that plugin's own
   list; anything older or stranger is dropped where it arrives.
 - **Privacy.** Invites and join fragments are other users' data: they stay in
-  memory and out of the launcher's logs. The plugin persists no invite text,
-  only what the friends list already keeps.
+  memory and out of the launcher's logs (join arguments never reach a session
+  log line). The plugin persists no invite text, only what the friends list
+  already keeps.
 
 ## Out of scope
 

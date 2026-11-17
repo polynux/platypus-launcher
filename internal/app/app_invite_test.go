@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"platypus/internal/apperr"
 	"platypus/internal/plugins"
@@ -70,7 +71,7 @@ func inviteParams(friend, name, storeID, kind, frag string) json.RawMessage {
 	iv := map[string]any{
 		"from": map[string]any{"id": friend, "name": name},
 		"game": map[string]any{"storeId": storeID, "title": "Game " + storeID},
-		"kind": kind, "at": 1791400000,
+		"kind": kind, "at": time.Now().Unix(),
 	}
 	if kind == "lobby" {
 		iv["lobbyId"] = frag
@@ -129,7 +130,8 @@ func (s directStore) Launch(context.Context, types.Game, bool) (*stores.Launch, 
 }
 
 // Extra arguments ride the launch spec through the runner wrap: argv for
-// direct launches, after the app id for store-client launches.
+// direct launches, after the app id for store-client launches. The preview
+// never shows them: join fragments are another user's data, not log lines.
 func TestLaunchWithArgsThreadsThroughWrap(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
@@ -146,8 +148,8 @@ func TestLaunchWithArgsThreadsThroughWrap(t *testing.T) {
 	if tail := p.args[len(p.args)-len(extra):]; !reflect.DeepEqual(tail, extra) {
 		t.Fatalf("args = %q, want the tail %q", p.args, extra)
 	}
-	if got := p.shown(); !strings.Contains(got, "+connect 1.2.3.4:27015") {
-		t.Fatalf("preview = %q, want the join fragment", got)
+	if got := p.shown(); strings.Contains(got, "1.2.3.4:27015") {
+		t.Fatalf("preview = %q, must not carry the join fragment", got)
 	}
 
 	a.stores = stores.NewRegistry(nil, clientStore{command: []string{"steam", "-applaunch", "620"}})
@@ -159,35 +161,89 @@ func TestLaunchWithArgsThreadsThroughWrap(t *testing.T) {
 	if want := []string{"steam", "-applaunch", "620", "+connect_lobby", "109775241000000001"}; !reflect.DeepEqual(cp.args, want) {
 		t.Fatalf("client args = %q, want %q", cp.args, want)
 	}
+	if got := cp.shown(); strings.Contains(got, "109775241000000001") {
+		t.Fatalf("client preview = %q, must not carry the lobby id", got)
+	}
 }
 
-// Join arguments are validated like the spec's own: bounded in count and
-// length, with no control characters, and never shelled.
-func TestLaunchWithArgsValidation(t *testing.T) {
+// A sideloaded game takes the same join tail through its own launch, with
+// the fragment kept out of the preview.
+func TestLaunchWithArgsThreadsThroughSideload(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name string
-		args []string
-		code string
-	}{
-		{"ok", []string{"+connect", "1.2.3.4:27015"}, ""},
-		{"quoted", []string{`+connect "1.2.3.4:27015"`}, ""},
-		{"tooMany", make([]string, 17), "game.tooManyJoinArgs"},
-		{"tooLong", []string{strings.Repeat("c", 257)}, "game.badJoinArg"},
-		{"newline", []string{"+connect", "a\nb"}, "game.badJoinArg"},
-		{"nul", []string{"a\x00b"}, "game.badJoinArg"},
-	} {
-		if err := validateExtraArgs("G", tc.args); (err == nil) != (tc.code == "") {
-			t.Fatalf("%s: err = %v, want code %q", tc.name, err, tc.code)
-		}
+	home := t.TempDir()
+	a := nativeTestApp(t, home)
+	a.ctx = context.Background()
+	exe := writeExe(t, filepath.Join(home, "game", "game"), elfBytes, true)
+	if _, err := a.settings.AddCustomGame("Nat", exe); err != nil {
+		t.Fatal(err)
 	}
+	g := a.customGames()[0]
+	extra := []string{"+connect", "1.2.3.4:27015"}
+	p, err := a.prepareLaunchArgs(g, true, extra)
+	if err != nil {
+		t.Fatalf("prepareLaunchArgs: %v", err)
+	}
+	if tail := p.args[len(p.args)-len(extra):]; !reflect.DeepEqual(tail, extra) {
+		t.Fatalf("args = %q, want the tail %q", p.args, extra)
+	}
+	if got := p.shown(); strings.Contains(got, "1.2.3.4:27015") {
+		t.Fatalf("preview = %q, must not carry the join fragment", got)
+	}
+}
+
+// A wine-client launch appends the join fragment to the client's own
+// arguments, the same way a native client launch does.
+func TestLaunchWithArgsThreadsThroughWineClient(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	a := nativeTestApp(t, home)
+	a.ctx = context.Background()
+	exe := writeExe(t, filepath.Join(home, "client", "steam.exe"), []byte("MZ\x90\x00"), true)
+	cl := &stores.ClientLaunch{
+		Client:  "Steam",
+		Command: []string{"steam", "-applaunch", "620"},
+		Wine:    &stores.WineClientLaunch{Exe: exe, Args: []string{"-silent", "-applaunch", "620"}},
+	}
+	g := types.Game{ID: "clientstore-620", Source: "clientstore", StoreAppID: "620", Title: "Portal"}
+	extra := []string{"+connect", "1.2.3.4:27015"}
+	p, err := a.prepareWineClient(g, cl, true, extra)
+	if err != nil {
+		t.Fatalf("prepareWineClient: %v", err)
+	}
+	if tail := p.args[len(p.args)-len(extra):]; !reflect.DeepEqual(tail, extra) {
+		t.Fatalf("args = %q, want the tail %q", p.args, extra)
+	}
+	if got := p.shown(); strings.Contains(got, "1.2.3.4:27015") {
+		t.Fatalf("preview = %q, must not carry the join fragment", got)
+	}
+}
+
+// LaunchWithArgs parses the raw fragment against the allowlist before
+// anything runs: anything else is refused with a readable error.
+func TestLaunchWithArgsRefusesBadFragments(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	a := nativeTestApp(t, home)
 	a.ctx = context.Background()
 	g := types.Game{ID: "c-1", Source: "custom", Title: "G"}
-	_, err := a.LaunchWithArgs(g, make([]string, 17))
-	var ae *apperr.Error
-	if !errors.As(err, &ae) || ae.Code != "game.tooManyJoinArgs" {
-		t.Fatalf("LaunchWithArgs with 17 args: %v", err)
+	for _, tc := range []struct {
+		name          string
+		kind, connect string
+		lobby         string
+	}{
+		{"insecure", "connect", "-insecure", ""},
+		{"exec", "connect", "+exec x", ""},
+		{"extraToken", "connect", "+connect a b", ""},
+		{"plusConnect", "connect", "connect 1.2.3.4", ""},
+		{"empty", "connect", "", ""},
+		{"badKind", "stream", "+connect 1.2.3.4", ""},
+		{"lobbyAlpha", "lobby", "", "abc"},
+		{"lobby21", "lobby", "", "1" + strings.Repeat("0", 20)},
+	} {
+		_, err := a.LaunchWithArgs(g, tc.kind, tc.connect, tc.lobby)
+		var ae *apperr.Error
+		if !errors.As(err, &ae) || ae.Code != "game.badJoinArg" {
+			t.Fatalf("%s: err = %v, want game.badJoinArg", tc.name, err)
+		}
 	}
 }

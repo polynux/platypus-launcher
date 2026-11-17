@@ -21,6 +21,7 @@ import (
 type fakeBackend struct {
 	mu       sync.Mutex
 	offers   bool
+	invites  bool
 	snapshot any
 	missing  map[string]bool
 	fail     map[string]error
@@ -38,13 +39,19 @@ type fakeCall struct {
 }
 
 func newFake() *fakeBackend {
-	return &fakeBackend{offers: true, missing: map[string]bool{}, fail: map[string]error{}, views: make(chan View, 64)}
+	return &fakeBackend{offers: true, invites: true, missing: map[string]bool{}, fail: map[string]error{}, views: make(chan View, 64)}
 }
 
 func (f *fakeBackend) Offers(context.Context, string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.offers
+}
+
+func (f *fakeBackend) Invites(string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.invites
 }
 
 func (f *fakeBackend) Call(_ context.Context, plugin, method string, params, result any) error {

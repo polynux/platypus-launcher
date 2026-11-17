@@ -131,6 +131,10 @@ type Backend interface {
 	// right now.
 	Offers(ctx context.Context, pluginID string) bool
 	Call(ctx context.Context, pluginID, method string, params, result any) error
+	// Invites reports whether the plugin may send game invites: it settled
+	// on protocol 1.24 or later. Older plugins' invites are stripped from
+	// the state and dropped from notifications.
+	Invites(pluginID string) bool
 }
 
 // Options configure a Manager.
@@ -341,19 +345,29 @@ func (m *Manager) Notify(pluginID, method string, params json.RawMessage) {
 		} else {
 			s.view.Friends = merge(s.view.Friends, push.Friends)
 		}
+		// An invite outlives its game: when the inviter stops playing that
+		// app (or leaves the list), the join is gone with it.
+		s.view.Invites = pruneStaleInvites(s.view.Invites, s.view.Friends)
 	case NoteInvite:
+		// Older plugins' invites are stripped from the state and dropped
+		// from notifications alike (protocol 1.24 or later only).
+		if !m.opt.Backend.Invites(pluginID) {
+			s.mu.Unlock()
+			return
+		}
 		var iv Invite
 		if json.Unmarshal(params, &iv) != nil {
 			s.mu.Unlock()
 			return
 		}
-		// One invite per friend: the newest replaces, so the view the
-		// UI redraws from never stacks repeats.
-		s.view.Invites = mergeInvites(s.view.Invites, []Invite{iv})
+		// One invite per friend, and only for a friend on the list: the
+		// view the UI redraws from never stacks repeats or strangers.
+		s.view.Invites = mergeInvites(s.view.Invites, s.view.Friends, []Invite{iv})
 	default:
 		s.mu.Unlock()
 		return
 	}
+	s.view.Invites = pruneExpiredInvites(s.view.Invites)
 	s.mu.Unlock()
 	m.emit(s)
 }
@@ -378,15 +392,18 @@ func merge(list, friends []Friend) []Friend {
 	return list
 }
 
-// mergeInvites applies invites to list: one per friend, newest wins.
-// Invites that name no friend, no game or no way to join are dropped.
-// The result is never nil.
-func mergeInvites(list, invites []Invite) []Invite {
+// mergeInvites applies invites to list: one per friend, newest wins, and
+// only for a friend on the list. Invites that name no friend, no game or no
+// way to join are dropped. The result is never nil.
+func mergeInvites(list []Invite, friends []Friend, invites []Invite) []Invite {
 	if list == nil {
 		list = []Invite{}
 	}
 	for _, iv := range invites {
 		if !iv.clean() {
+			continue
+		}
+		if slices.IndexFunc(friends, func(f Friend) bool { return f.ID == iv.From.ID }) < 0 {
 			continue
 		}
 		if i := slices.IndexFunc(list, func(x Invite) bool { return x.From.ID == iv.From.ID }); i >= 0 {
@@ -396,6 +413,36 @@ func mergeInvites(list, invites []Invite) []Invite {
 		}
 	}
 	return list
+}
+
+// pruneExpiredInvites drops invites older than the TTL (core is the
+// authority on expiry). It filters in place; callers hold the sub lock.
+func pruneExpiredInvites(invites []Invite) []Invite {
+	now := time.Now().Unix()
+	kept := invites[:0]
+	for _, iv := range invites {
+		if iv.At > 0 && now-iv.At < inviteTTLSeconds {
+			kept = append(kept, iv)
+		}
+	}
+	return kept
+}
+
+// pruneStaleInvites drops invites whose inviter left the list or stopped
+// playing that app. It filters in place; callers hold the sub lock.
+func pruneStaleInvites(invites []Invite, friends []Friend) []Invite {
+	kept := invites[:0]
+	for _, iv := range invites {
+		i := slices.IndexFunc(friends, func(f Friend) bool { return f.ID == iv.From.ID })
+		if i < 0 {
+			continue
+		}
+		if g := friends[i].Game; g != nil && g.StoreID != "" && g.StoreID != iv.Game.StoreID {
+			continue
+		}
+		kept = append(kept, iv)
+	}
+	return kept
 }
 
 // SetStatus changes the user's own status on a plugin's store. It needs a
@@ -586,7 +633,12 @@ func (m *Manager) connect(ctx context.Context, s *sub) error {
 	}
 	s.view.Self = snap.Self
 	s.view.Friends = merge(nil, snap.Friends)
-	s.view.Invites = mergeInvites(nil, snap.Invites)
+	// Invites seed from the state only for a plugin that may send them
+	// (protocol 1.24 or later); older plugins' invites are stripped here.
+	s.view.Invites = []Invite{}
+	if m.opt.Backend.Invites(s.id) {
+		s.view.Invites = mergeInvites(nil, snap.Friends, snap.Invites)
+	}
 	s.sent = "" // a new process knows of no game yet
 	s.mu.Unlock()
 	m.emit(s)
@@ -677,6 +729,13 @@ func (m *Manager) snapshot(s *sub) View {
 	v.Friends = slices.Clone(s.view.Friends)
 	if v.Friends == nil {
 		v.Friends = []Friend{}
+	}
+	// Invites clone like friends do: a concurrent Notify must not race a
+	// view read. Expired invites leave here too.
+	s.view.Invites = pruneExpiredInvites(s.view.Invites)
+	v.Invites = slices.Clone(s.view.Invites)
+	if v.Invites == nil {
+		v.Invites = []Invite{}
 	}
 	return v
 }

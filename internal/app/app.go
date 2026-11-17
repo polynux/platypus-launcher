@@ -1114,6 +1114,9 @@ type prepared struct {
 	redact []string             // argument prefixes hidden in previews and logs
 	runner plugins.RunnerInfo   // the runner the plugin picked, when the game uses one
 	stop   func(force bool)
+	// extra counts trailing join arguments (LaunchWithArgs): shown leaves
+	// them out, so join fragments never reach session logs.
+	extra int
 }
 
 // prepareLaunch asks the game's store how to launch it and builds the command.
@@ -1155,14 +1158,19 @@ func (a *App) prepareLaunchArgs(game types.Game, preview bool, extra []string) (
 	case launch != nil && launch.Client != nil:
 		// The store client starts the game, so the command runs as it is: a
 		// runner wrapper would wrap the client, not the game.
-		return &prepared{args: append(slices.Clone(launch.Client.Command), extra...), env: map[string]string{}, client: launch.Client}, nil
+		return &prepared{args: append(slices.Clone(launch.Client.Command), extra...), env: map[string]string{}, client: launch.Client, extra: len(extra)}, nil
 	case launch != nil && launch.Direct != nil:
 		d := launch.Direct
 		dir := d.Dir
 		if game.Settings.WorkingDir != "" {
 			dir = game.Settings.WorkingDir
 		}
-		return a.wrapLaunch(game, append(append([]string{d.Exe}, d.Args...), extra...), d.Env, dir, d.NeedsWine, preview, d.Redact)
+		p, err := a.wrapLaunch(game, append(append([]string{d.Exe}, d.Args...), extra...), d.Env, dir, d.NeedsWine, preview, d.Redact)
+		if err != nil {
+			return nil, err
+		}
+		p.extra = len(extra)
+		return p, nil
 	}
 
 	if a.isCustomLaunch(game) {
@@ -1172,7 +1180,12 @@ func (a *App) prepareLaunchArgs(game types.Game, preview bool, extra []string) (
 	if dir == "" && game.Executable != "" {
 		dir = filepath.Dir(game.Executable)
 	}
-	return a.wrapLaunch(game, append([]string{game.Executable}, extra...), nil, dir, !game.Native, preview, nil)
+	p, err := a.wrapLaunch(game, append([]string{game.Executable}, extra...), nil, dir, !game.Native, preview, nil)
+	if err != nil {
+		return nil, err
+	}
+	p.extra = len(extra)
+	return p, nil
 }
 
 // prepareWineClient runs the store client itself under the runner in its own
@@ -1215,6 +1228,7 @@ func (a *App) prepareWineClient(game types.Game, cl *stores.ClientLaunch, previe
 		return nil, err
 	}
 	p.client = cl
+	p.extra = len(extra)
 	return p, nil
 }
 
@@ -1250,7 +1264,12 @@ func (a *App) prepareCustomLaunch(game types.Game, preview bool, extra []string)
 		if dir == "" && game.Executable != "" {
 			dir = filepath.Dir(game.Executable)
 		}
-		return a.wrapLaunch(game, append([]string{game.Executable}, extra...), nil, dir, true, preview, nil)
+		p, err := a.wrapLaunch(game, append([]string{game.Executable}, extra...), nil, dir, true, preview, nil)
+		if err != nil {
+			return nil, err
+		}
+		p.extra = len(extra)
+		return p, nil
 	}
 	st, err := os.Stat(game.Executable)
 	if err != nil {
@@ -1278,10 +1297,17 @@ func (a *App) prepareCustomLaunch(game types.Game, preview bool, extra []string)
 	if dir == "" && game.Executable != "" {
 		dir = filepath.Dir(game.Executable)
 	}
-	return a.wrapLaunch(game, append(append([]string{command}, args...), extra...), nil, dir, false, preview, nil)
+	p, err := a.wrapLaunch(game, append(append([]string{command}, args...), extra...), nil, dir, false, preview, nil)
+	if err != nil {
+		return nil, err
+	}
+	p.extra = len(extra)
+	return p, nil
 }
 
-// shown is the command line with env, redacted for previews and logs.
+// shown is the command line with env, redacted for previews and logs. Join
+// arguments are left out: they are another user's data (server addresses,
+// lobby ids) and never reach a log.
 func (p *prepared) shown() string {
 	keys := make([]string, 0, len(p.env))
 	for k := range p.env {
@@ -1292,7 +1318,11 @@ func (p *prepared) shown() string {
 	for _, k := range keys {
 		parts = append(parts, k+"="+p.env[k])
 	}
-	return strings.Join(append(parts, stores.RedactArgs(p.args, p.redact)...), " ")
+	args := p.args
+	if p.extra > 0 && p.extra <= len(args) {
+		args = args[:len(args)-p.extra]
+	}
+	return strings.Join(append(parts, stores.RedactArgs(args, p.redact)...), " ")
 }
 
 // stopHook asks the game's wineserver to terminate when the game is stopped;
@@ -1324,41 +1354,21 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 	return a.launchGame(game, false)
 }
 
-// LaunchWithArgs starts a game with extra command-line arguments appended
-// to its launch spec: a game invite's join fragment, split by the caller.
-// Direct launches run them as argv; store-client launches pass them after
-// the app id, which is what the client's own run URL does. The extras are
-// validated like the spec's own arguments and never shelled.
-func (a *App) LaunchWithArgs(game types.Game, extraArgs []string) (string, error) {
-	if err := validateExtraArgs(game.Title, extraArgs); err != nil {
-		return "", err
+// LaunchWithArgs starts a game with a game invite's join fragment appended
+// to its launch spec: kind "connect" (a +connect/+invite command line) or
+// kind "lobby" (a Steam lobby id). The fragment is parsed and checked
+// against the strict join allowlist here, before anything runs: the remote
+// friend controls launch argv, so nothing pre-split ever reaches an exec.
+// Direct launches run the args as argv; store-client launches pass them
+// after the app id, which is what the client's own run URL does.
+func (a *App) LaunchWithArgs(game types.Game, kind, connect, lobbyID string) (string, error) {
+	args, ok := social.ParseJoinArgs(kind, connect, lobbyID)
+	if !ok {
+		return "", apperr.New("game.badJoinArg",
+			fmt.Sprintf("the invite for %s doesn't name a usable join", game.Title),
+			map[string]string{"title": game.Title})
 	}
-	return a.launchGameArgs(game, false, extraArgs)
-}
-
-// maxJoinArgs caps the extra arguments of one join; maxJoinArgLen caps each
-// one, like a command line the game itself would parse.
-const (
-	maxJoinArgs   = 16
-	maxJoinArgLen = 256
-)
-
-// validateExtraArgs keeps a join fragment from smuggling control characters
-// or an argument flood into a launch.
-func validateExtraArgs(title string, args []string) error {
-	if len(args) > maxJoinArgs {
-		return apperr.New("game.tooManyJoinArgs",
-			fmt.Sprintf("too many join arguments (%d, at most %d)", len(args), maxJoinArgs),
-			map[string]string{"title": title, "count": fmt.Sprint(len(args))})
-	}
-	for _, arg := range args {
-		if len(arg) > maxJoinArgLen || strings.ContainsAny(arg, "\x00\r\n") {
-			return apperr.New("game.badJoinArg",
-				fmt.Sprintf("join argument %q is not usable", arg),
-				map[string]string{"title": title, "arg": arg})
-		}
-	}
-	return nil
+	return a.launchGameArgs(game, false, args)
 }
 
 // launchGame starts a game. anyway is the user's "launch anyway" for this one

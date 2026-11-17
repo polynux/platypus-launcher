@@ -39,7 +39,7 @@ func (a *App) inviteSpoken(id string, params json.RawMessage) bool {
 	if a.plugins == nil || a.social == nil {
 		return false
 	}
-	if !a.plugins.Runtime(id).Speaks(plugins.InviteVersion) {
+	if !a.invitesAllowed(id) {
 		return false
 	}
 	var p struct {
@@ -52,6 +52,17 @@ func (a *App) inviteSpoken(id string, params json.RawMessage) bool {
 	}
 	return slices.ContainsFunc(a.social.View(id).Friends, func(f social.Friend) bool { return f.ID == p.From.ID })
 }
+
+// invitesAllowed reports whether the plugin settled on protocol 1.24 or
+// later: the social backend's answer for the manager's own gate.
+func (a *App) invitesAllowed(id string) bool {
+	if a.plugins == nil {
+		return false
+	}
+	return a.plugins.Runtime(id).Speaks(plugins.InviteVersion)
+}
+
+func (b socialBackend) Invites(pluginID string) bool { return b.a.invitesAllowed(pluginID) }
 
 // startSocial creates the friends orchestrator. Subscriptions start with
 // syncSocial, once the plugins are known.

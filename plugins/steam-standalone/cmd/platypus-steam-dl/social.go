@@ -675,6 +675,11 @@ func (s *socialSession) onPersonaState(body []byte) {
 		f.gameConnect = connect
 		f.gameLobby = lobby
 		f.lastSeen = seen
+		// The inviter stopped playing that app (or stopped playing): the
+		// join is gone with it.
+		if iv, ok := s.invites[id]; ok && iv.app != app {
+			delete(s.invites, id)
+		}
 		changed = append(changed, f)
 	}
 	var out []map[string]any
@@ -729,7 +734,16 @@ type invite struct {
 // other, so a repeat inside the window is dropped.
 const inviteRepeatWindow = 120
 
-// inviteNow is the clock addInvite dedupes by; tests stub it.
+// inviteTTLSeconds is how long a pending invite lives: 15 minutes, agreed
+// with core (the authority on expiry) and the UI.
+const inviteTTLSeconds = int64(15 * 60)
+
+// maxPendingInvites caps one session's pending invites; beyond it the
+// oldest invite makes room. Invites are one per friend, so this only trips
+// on a misbehaving store.
+const maxPendingInvites = 64
+
+// inviteNow is the clock addInvite dedupes and expires by; tests stub it.
 var inviteNow = func() int64 { return time.Now().Unix() }
 
 // inviteKey identifies a repeat: same friend, game, kind and fragment.
@@ -738,13 +752,18 @@ func inviteKey(iv invite) string {
 }
 
 // addInvite keeps one invite per friend (newest wins), drops repeats inside
-// the window, and emits the survivor. Callers hold no lock; the key and the
-// connect string never reach any log.
+// the window, and emits the survivor. Invites from strangers never reach
+// the plugin. Callers hold no lock; the key and the connect string never
+// reach any log.
 func (s *socialSession) addInvite(iv invite) {
 	now := inviteNow()
 	iv.at = now
 	key := inviteKey(iv)
 	s.mu.Lock()
+	if _, ok := s.friends[iv.friend]; !ok {
+		s.mu.Unlock()
+		return
+	}
 	if last, ok := s.inviteSeen[key]; ok && now-last < inviteRepeatWindow {
 		s.mu.Unlock()
 		return
@@ -755,11 +774,32 @@ func (s *socialSession) addInvite(iv invite) {
 			delete(s.inviteSeen, k)
 		}
 	}
+	s.pruneExpiredLocked(now)
+	if _, ok := s.invites[iv.friend]; !ok && len(s.invites) >= maxPendingInvites {
+		// Make room for a new friend: evict the oldest invite.
+		var oldest uint64
+		var oldestAt int64
+		for id, old := range s.invites {
+			if oldestAt == 0 || old.at < oldestAt {
+				oldest, oldestAt = id, old.at
+			}
+		}
+		delete(s.invites, oldest)
+	}
 	cp := iv
 	s.invites[iv.friend] = &cp
 	out := s.renderInvite(&cp)
 	s.mu.Unlock()
 	s.emit("invite", out)
+}
+
+// pruneExpiredLocked drops invites older than the TTL; callers hold s.mu.
+func (s *socialSession) pruneExpiredLocked(now int64) {
+	for id, iv := range s.invites {
+		if now-iv.at >= inviteTTLSeconds {
+			delete(s.invites, id)
+		}
+	}
 }
 
 // renderInvite renders an invite for the plugin; callers hold s.mu so the
@@ -793,6 +833,7 @@ func (s *socialSession) renderInvite(iv *invite) map[string]any {
 // invitesLocked renders the pending invites, oldest friend first; callers
 // hold s.mu.
 func (s *socialSession) invitesLocked() []map[string]any {
+	s.pruneExpiredLocked(inviteNow())
 	ids := make([]uint64, 0, len(s.invites))
 	for id := range s.invites {
 		ids = append(ids, id)
@@ -815,6 +856,11 @@ func (s *socialSession) onInviteToGame(hdr depot.Msg, body []byte) {
 		return
 	}
 	if len(m.Bytes(4)) != 0 {
+		return
+	}
+	// steam_id_dest names the invitee: anything not addressed to this
+	// session is not ours.
+	if s.selfID != 0 && m.Int(1) != s.selfID {
 		return
 	}
 	src := m.Int(2)
@@ -842,6 +888,11 @@ func (s *socialSession) onChatInvite(body []byte) {
 	}
 	gameID := m.Int(7)
 	if gameID == 0 || gameID>>24 != 0 {
+		return
+	}
+	// steam_id_invited names the invitee: anything not addressed to this
+	// session is not ours.
+	if s.selfID != 0 && m.Int(1) != s.selfID {
 		return
 	}
 	patron := m.Int(3)

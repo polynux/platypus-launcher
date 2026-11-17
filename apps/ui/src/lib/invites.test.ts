@@ -1,22 +1,52 @@
 import { describe, it, expect } from 'vitest';
-import { friendInvite, inviteKey, joinDecision, splitConnectArgs } from './invites';
+import { friendInvite, inviteKey, joinDecision, parseJoinFragment, splitConnectArgs } from './invites';
 import type { Game } from '../types';
 
 describe('splitConnectArgs', () => {
-  it('splits the observed fragment shapes, honouring quotes and escapes', () => {
+  it('splits on whitespace', () => {
     expect(splitConnectArgs('+connect 1.2.3.4:27015')).toEqual(['+connect', '1.2.3.4:27015']);
-    expect(splitConnectArgs('+invite 30095787509687845 -launchsource2')).toEqual(['+invite', '30095787509687845', '-launchsource2']);
-    expect(splitConnectArgs('+connect "1.2.3.4:27015"')).toEqual(['+connect', '1.2.3.4:27015']);
     expect(splitConnectArgs('  +connect\t1.2.3.4:27015  ')).toEqual(['+connect', '1.2.3.4:27015']);
-    expect(splitConnectArgs('a\\ b c')).toEqual(['a b', 'c']);
-    expect(splitConnectArgs('"a\\"b"')).toEqual(['a"b']);
     expect(splitConnectArgs('')).toEqual([]);
   });
-  it('refuses an unclosed quote instead of guessing argv', () => {
-    expect(splitConnectArgs('+connect "1.2.3.4:27015')).toBeNull();
+  it('refuses quotes and backslashes instead of guessing argv', () => {
+    expect(splitConnectArgs('+connect "1.2.3.4:27015"')).toBeNull();
+    expect(splitConnectArgs('a\\ b')).toBeNull();
   });
-  it('caps at 16 tokens', () => {
-    expect(splitConnectArgs(Array.from({ length: 20 }, (_, i) => `a${i}`).join(' '))).toHaveLength(16);
+});
+
+describe('parseJoinFragment', () => {
+  it('accepts the exact allowlist shapes', () => {
+    expect(parseJoinFragment('connect', '+connect example.com')).toEqual(['+connect', 'example.com']);
+    expect(parseJoinFragment('connect', '+connect 1.2.3.4:27015')).toEqual(['+connect', '1.2.3.4:27015']);
+    expect(parseJoinFragment('connect', '+connect 1.2.3.4:27015 +password s3cret')).toEqual([
+      '+connect',
+      '1.2.3.4:27015',
+      '+password',
+      's3cret',
+    ]);
+    expect(parseJoinFragment('connect', '+connect [2001:db8::1]:27015')).toEqual(['+connect', '[2001:db8::1]:27015']);
+    expect(parseJoinFragment('connect', '+invite 30095787509687845')).toEqual(['+invite', '30095787509687845']);
+    expect(parseJoinFragment('connect', '+invite 30095787509687845 -launchsource2')).toEqual([
+      '+invite',
+      '30095787509687845',
+      '-launchsource2',
+    ]);
+    expect(parseJoinFragment('lobby', undefined, '109775241000000001')).toEqual(['+connect_lobby', '109775241000000001']);
+  });
+  it('refuses everything else', () => {
+    expect(parseJoinFragment('connect', '-insecure')).toBeNull();
+    expect(parseJoinFragment('connect', '+exec x')).toBeNull();
+    expect(parseJoinFragment('connect', '+connect a b')).toBeNull();
+    expect(parseJoinFragment('connect', '+connect 1.2.3.4:27015 +exec x')).toBeNull();
+    expect(parseJoinFragment('connect', '+connect 1.2.3.4:99999')).toBeNull();
+    expect(parseJoinFragment('connect', '+connect ho_st!')).toBeNull();
+    expect(parseJoinFragment('connect', '+connect ::1')).toBeNull();
+    expect(parseJoinFragment('connect', '+connect h:1 +password -x')).toBeNull();
+    expect(parseJoinFragment('lobby', undefined, `1${'0'.repeat(20)}`)).toBeNull();
+    expect(parseJoinFragment('lobby', undefined, '0')).toBeNull();
+    expect(parseJoinFragment('lobby')).toBeNull();
+    expect(parseJoinFragment('Connect', '+connect 1.2.3.4:27015')).toBeNull();
+    expect(parseJoinFragment('stream', '+connect 1.2.3.4:27015')).toBeNull();
   });
 });
 
@@ -31,7 +61,7 @@ const libGame = (over: Partial<Game> = {}): Game =>
   }) as Game;
 
 describe('joinDecision', () => {
-  it('launches an installed game with the split fragment', () => {
+  it('launches an installed game with the join args', () => {
     const d = joinDecision({ kind: 'connect', connect: '+connect 1.2.3.4:27015' }, 'p.steam-standalone.620', [libGame()]);
     expect(d).toEqual({ kind: 'launch', game: libGame(), args: ['+connect', '1.2.3.4:27015'] });
   });
@@ -53,7 +83,7 @@ describe('joinDecision', () => {
       kind: 'disabled',
       reason: 'client',
     });
-    expect(joinDecision({ kind: 'connect', connect: '+connect "oops' }, 'p.steam-standalone.620', [libGame()])).toEqual({
+    expect(joinDecision({ kind: 'connect', connect: '-insecure' }, 'p.steam-standalone.620', [libGame()])).toEqual({
       kind: 'disabled',
       reason: 'fragment',
     });
@@ -80,7 +110,7 @@ describe('friendInvite', () => {
 });
 
 describe('inviteKey', () => {
-  it('scopes a toast to the store, the friend and the time', () => {
-    expect(inviteKey('steam', '1', 'connect', 9)).toBe('steam:1:connect:9');
+  it('scopes a toast to the store, the friend and the app', () => {
+    expect(inviteKey('steam', '1', '620')).toBe('steam:1:620');
   });
 });

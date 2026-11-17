@@ -69,8 +69,7 @@
     "notInstalled": "{{title}} is not installed.",
     "notRunning": "That game is not running.",
     "runnerMissing": "Runner {{id}} is not installed.",
-    "running": "{{title}} is already running.",
-    "tooManyJoinArgs": "Too many join arguments for {{title}}."
+    "running": "{{title}} is already running."
   },
   "gog": {
     "productId": {

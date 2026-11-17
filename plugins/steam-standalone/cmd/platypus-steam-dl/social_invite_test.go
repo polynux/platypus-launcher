@@ -88,17 +88,19 @@ func TestSocialInvitePushes(t *testing.T) {
 			{EMsg: steamcm.EMsgClientFriendsList, Body: full},
 			{EMsg: steamcm.EMsgClientPersonaState, Body: persona},
 			// A direct join with its routing app, then the same push
-			// again (dropped), one without a game (dropped) and a
-			// Remote Play invite (dropped).
+			// again (dropped), one without a game (dropped), a Remote
+			// Play invite (dropped) and one addressed elsewhere (dropped).
 			{EMsg: steamcm.EMsgClientInviteToGame, RoutingAppID: 620, Body: inviteToGameBody(testSelfID, testF1, "+connect 9.9.9.9:27015", "")},
 			{EMsg: steamcm.EMsgClientInviteToGame, RoutingAppID: 620, Body: inviteToGameBody(testSelfID, testF1, "+connect 9.9.9.9:27015", "")},
 			{EMsg: steamcm.EMsgClientInviteToGame, Body: inviteToGameBody(testSelfID, testF1, "+connect 9.9.9.9:27015", "")},
 			{EMsg: steamcm.EMsgClientInviteToGame, RoutingAppID: 620, Body: inviteToGameBody(testSelfID, testF1, "+connect 9.9.9.9:27015", "stream")},
-			// A lobby invite, then a chat-room invite (dropped) and a
-			// mod game_id (dropped).
+			{EMsg: steamcm.EMsgClientInviteToGame, RoutingAppID: 620, Body: inviteToGameBody(testF2, testF1, "+connect 9.9.9.9:27015", "")},
+			// A lobby invite, then a chat-room invite (dropped), a mod
+			// game_id (dropped) and one addressed elsewhere (dropped).
 			{EMsg: steamcm.EMsgClientChatInvite, Body: chatInviteBody(testSelfID, lobbyID, testF2, 3, 47700)},
 			{EMsg: steamcm.EMsgClientChatInvite, Body: chatInviteBody(testSelfID, lobbyID, testF2, 1, 47700)},
 			{EMsg: steamcm.EMsgClientChatInvite, Body: chatInviteBody(testSelfID, lobbyID, testF2, 3, 47700|uint64(1)<<24)},
+			{EMsg: steamcm.EMsgClientChatInvite, Body: chatInviteBody(testF1, lobbyID, testF2, 3, 47700)},
 			// Chat cards: an entry-3 lobby card for F1 (newest wins),
 			// an entry-1 connect card for F2, and our own echo (dropped).
 			{EMsg: steamcm.EMsgServiceMethodResponse, Target: "FriendMessagesClient.IncomingMessage#1",
@@ -165,7 +167,7 @@ func TestSocialInviteDedupeWindow(t *testing.T) {
 	now := int64(1791400000)
 	inviteNow = func() int64 { return now }
 	defer func() { inviteNow = old }()
-	s := &socialSession{invites: map[uint64]*invite{}, inviteSeen: map[string]int64{}}
+	s := &socialSession{friends: map[uint64]*friendInfo{testF1: {id: testF1}}, invites: map[uint64]*invite{}, inviteSeen: map[string]int64{}}
 	first := invite{friend: testF1, app: 620, kind: "connect", connect: "+connect 9.9.9.9:27015"}
 	s.addInvite(first)
 	s.addInvite(first)
@@ -224,5 +226,79 @@ func TestSocialPersonaJoinData(t *testing.T) {
 	f = s.friends[testF1]
 	if f.gameConnect != "" || f.gameLobby != "" {
 		t.Fatalf("cleared presence kept join data: %q %q", f.gameConnect, f.gameLobby)
+	}
+}
+
+// An invite from a stranger never reaches the plugin, even with an empty
+// friends list.
+func TestSocialInviteStrangerDropped(t *testing.T) {
+	s := &socialSession{friends: map[uint64]*friendInfo{}, invites: map[uint64]*invite{}, inviteSeen: map[string]int64{}}
+	s.addInvite(invite{friend: testF1, app: 620, kind: "connect", connect: "+connect 9.9.9.9:27015"})
+	if len(s.invites) != 0 {
+		t.Fatalf("stranger invite kept: %+v", s.invites)
+	}
+}
+
+// Pending invites expire after 15 minutes.
+func TestSocialInviteExpires(t *testing.T) {
+	old := inviteNow
+	now := int64(1791400000)
+	inviteNow = func() int64 { return now }
+	defer func() { inviteNow = old }()
+	s := &socialSession{friends: map[uint64]*friendInfo{testF1: {id: testF1}}, invites: map[uint64]*invite{}, inviteSeen: map[string]int64{}}
+	s.addInvite(invite{friend: testF1, app: 620, kind: "connect", connect: "+connect 9.9.9.9:27015"})
+	now += inviteTTLSeconds
+	if got := s.invitesLocked(); len(got) != 0 {
+		t.Fatalf("expired invite rendered: %v", got)
+	}
+	if len(s.invites) != 0 {
+		t.Fatalf("expired invite kept: %+v", s.invites)
+	}
+}
+
+// When the inviter stops playing that app, the join is gone with it.
+func TestSocialInviteDroppedWhenStoppedPlaying(t *testing.T) {
+	s := &socialSession{
+		friends:    map[uint64]*friendInfo{testF1: {id: testF1, gameApp: 620, hasData: true}},
+		invites:    map[uint64]*invite{},
+		inviteSeen: map[string]int64{},
+		selfID:     testSelfID,
+	}
+	s.addInvite(invite{friend: testF1, app: 620, kind: "connect", connect: "+connect 9.9.9.9:27015"})
+	if len(s.invites) != 1 {
+		t.Fatalf("invite missing: %+v", s.invites)
+	}
+	playing := &depot.Enc{}
+	playing.Fixed64(1, testF1)
+	playing.Varint(3, 730)
+	outer := &depot.Enc{}
+	outer.BytesField(2, playing.Bytes())
+	s.onPersonaState(outer.Bytes())
+	if len(s.invites) != 0 {
+		t.Fatalf("stale invite survived the game change: %+v", s.invites)
+	}
+}
+
+// The pending map is capped: beyond 64 a new friend evicts the oldest.
+func TestSocialInviteMapCapped(t *testing.T) {
+	old := inviteNow
+	now := int64(1791400000)
+	inviteNow = func() int64 { return now }
+	defer func() { inviteNow = old }()
+	friends := map[uint64]*friendInfo{}
+	for i := range maxPendingInvites + 1 {
+		id := testF1 + uint64(i)
+		friends[id] = &friendInfo{id: id}
+	}
+	s := &socialSession{friends: friends, invites: map[uint64]*invite{}, inviteSeen: map[string]int64{}}
+	for i := range maxPendingInvites + 1 {
+		now++
+		s.addInvite(invite{friend: testF1 + uint64(i), app: 620, kind: "connect", connect: "+connect 9.9.9.9:27015"})
+	}
+	if len(s.invites) != maxPendingInvites {
+		t.Fatalf("pending invites = %d, want the cap %d", len(s.invites), maxPendingInvites)
+	}
+	if _, ok := s.invites[testF1]; ok {
+		t.Fatalf("oldest invite survived the cap")
 	}
 }
