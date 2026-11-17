@@ -7,6 +7,10 @@ package plugtest_test
 
 import (
 	"bytes"
+	"compress/zlib"
+	"crypto/md5"
+	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -216,7 +220,8 @@ func TestConformanceEpic(t *testing.T) {
 }
 
 // gog-gogdl keeps its own install index in the plugin's data dir; the fake
-// gogdl drives it without the network.
+// gogdl drives it without the network. The fake CDN answers the depot file
+// list the Windows install's stored manifest points at (verify reads it).
 func TestConformanceGog(t *testing.T) {
 	testenv.RequireSlow(t)
 	state := filepath.Join(t.TempDir(), "gogdl-state.json")
@@ -224,11 +229,35 @@ func TestConformanceGog(t *testing.T) {
 	api := filepath.Join(t.TempDir(), "gog-api.json")
 	os.WriteFile(api, []byte(`{"totalPages": 1, "products": [{"id": 1234, "title": "Super Game", "isGame": true, "image": "//img.gog/box"}],
   "_test": {"id": 1234, "description": {"lead": "A super game."}, "genres": [{"name": "Action"}], "downloads": {"installers": [{"os": "linux", "language": "en-US"}]}}}`), 0o644)
+	// The install writes a 12 MiB zero-filled data.bin (the fake gogdl's
+	// shape), and its depot list hashes it as one chunk.
+	content := make([]byte, 12<<20)
+	sum := md5.Sum(content)
+	depot, err := json.Marshal(map[string]any{"version": 2, "depot": map[string]any{"items": []any{
+		map[string]any{"type": "DepotFile", "path": "data.bin", "md5": hex.EncodeToString(sum[:]),
+			"chunks": []any{map[string]any{"md5": hex.EncodeToString(sum[:]), "size": len(content)}}},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body bytes.Buffer
+	zw := zlib.NewWriter(&body)
+	zw.Write(depot)
+	zw.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/content-system/v2/meta/") {
+			w.Write(body.Bytes())
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
 	plugtest.Suite{
 		ID:      "gog-gogdl",
 		CopyDir: "../../plugins/gog-gogdl",
 		FakeCLI: map[string]string{"gogdl": "../../plugins/gog-gogdl/testdata/gogdl"},
-		Env:     map[string]string{"FAKE_GOGDL_STATE": state, "PLATYPUS_GOG_API_FILE": api},
+		Env: map[string]string{"FAKE_GOGDL_STATE": state, "PLATYPUS_GOG_API_FILE": api,
+			"PLATYPUS_GOG_API_BASE": srv.URL},
 		// The API file answers every id; unknown-id details is unit-tested in
 		// plugins/gog-gogdl.
 		NoUnknownDetails: true,
