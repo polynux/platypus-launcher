@@ -135,6 +135,8 @@ EMSG_CLIENT_PICS_PRIVATE_BETA = 8907
 EMSG_CLIENT_GET_USER_STATS = 818
 EMSG_CLIENT_GET_USER_STATS_RESPONSE = 819
 EMSG_CLIENT_HELLO = 9805
+EMSG_UCM_ENUMERATE_SUBSCRIBED = 7378
+EMSG_UCM_ENUMERATE_SUBSCRIBED_RESPONSE = 7379
 # Push messages phase 0 fakes (enums_clientserver.proto).
 EMSG_CLOUD_NOTIFY_APP_STATE_CHANGE = 146
 EMSG_CLIENT_PERSONA_STATE = 766
@@ -548,6 +550,9 @@ def serve_logged_in(conn, hdr, body, st):
                     EMSG_CLIENT_PICS_PRIVATE_BETA):
             serve_content(conn, emsg, hdr, body, st, steamid, sessionid)
             continue
+        if emsg == EMSG_UCM_ENUMERATE_SUBSCRIBED:
+            serve_subscribed(conn, hdr, body, st, steamid, sessionid)
+            continue
         if emsg == EMSG_CLIENT_GET_USER_STATS:
             serve_user_stats(conn, hdr, body, st, steamid, sessionid)
             continue
@@ -585,6 +590,9 @@ def serve_logged_in(conn, hdr, body, st):
             continue
         if target == "Cloud.ClientConflictResolution#1":
             serve_upload_conflict(conn, hdr, body, st, steamid, sessionid)
+            continue
+        if target == "PublishedFile.GetDetails#1":
+            serve_published_details(conn, hdr, body, st, steamid, sessionid)
             continue
         if target == "ContentServerDirectory.GetServersForSteamPipe#1":
             serve_servers(conn, hdr, body, st, steamid, sessionid)
@@ -666,6 +674,77 @@ def serve_logged_in(conn, hdr, body, st):
                                     pb_int(1, steamid) + pb_int(2, sessionid), pb_int(1, kick)))
             conn.close_frame()
             return
+
+
+# --- workshop subscriptions (protocol 1.22) ----------------------------------
+# Knobs (state file):
+#   workshop_items:   [{"published_file_id", "appid", "hcontent", "size",
+#                       "updated", "subscribed", "depot_content"}], the
+#                       account's subscriptions as UCM enumerates them.
+#   workshop_details: [{"id", "title", "preview_url", "file_url",
+#                       "filename", "hcontent", "size", "updated",
+#                       "file_type", "children": ["id", ...]}], what
+#                       PublishedFile.GetDetails answers.
+def serve_subscribed(conn, hdr, body, st, steamid, sessionid):
+    """CMsgClientUCMEnumerateUserSubscribedFilesWithUpdates (7378/7379):
+    app_id = 1, and the answer carries eresult = 1, subscribed_files = 2
+    (published_file_id = 1, rtime32_subscribed = 2, appid = 3,
+    file_hcontent = 4, file_size = 5, rtime32_last_updated = 6,
+    is_depot_content = 7) and total_results = 3."""
+    jobid = hdr.get(10, [0])[0]
+    want = pb_parse(body).get(1, [0])[0]
+    record(f"workshop subscribed app={want}")
+    items = [it for it in st.get("workshop_items") or []
+             if int(it.get("appid") or want) == want]
+    out = pb_int(1, 1)
+    for it in items:
+        entry = pb_fixed64(1, int(it.get("published_file_id") or 0))
+        if it.get("subscribed"):
+            entry += pb_fixed32(2, int(it["subscribed"]))
+        entry += pb_int(3, int(it.get("appid") or want))
+        entry += pb_fixed64(4, int(it.get("hcontent") or 0))
+        entry += pb_int(5, int(it.get("size") or 0))
+        entry += pb_fixed32(6, int(it.get("updated") or 0))
+        entry += pb_int(7, 1 if it.get("depot_content") else 0)
+        out += pb_msg(2, entry)
+    out += pb_int(3, len(items))
+    resp_hdr = pb_fixed64(11, jobid)
+    conn.send_frame(2, pack(EMSG_UCM_ENUMERATE_SUBSCRIBED_RESPONSE, resp_hdr, out))
+
+
+def serve_published_details(conn, hdr, body, st, steamid, sessionid):
+    """PublishedFile.GetDetails#1: publishedfileids = 1 (repeated fixed64),
+    appid = 14; the answer is repeated publishedfiledetails = 1."""
+    jobid = hdr.get(10, [0])[0]
+    want = set(pb_parse(body).get(1) or [])
+    record(f"workshop details {len(want)} ids")
+    out = b""
+    for d in st.get("workshop_details") or []:
+        did = int(d.get("id") or 0)
+        if did not in want:
+            continue
+        item = pb_int(1, 1)
+        item += pb_fixed64(2, did)
+        item += pb_int(4, int(d.get("creator_appid") or 0))
+        item += pb_int(5, int(d.get("appid") or 0))
+        if d.get("filename"):
+            item += pb_str(7, d["filename"])
+        item += pb_int(8, int(d.get("size") or 0))
+        if d.get("file_url"):
+            item += pb_str(10, d["file_url"])
+        if d.get("preview_url"):
+            item += pb_str(11, d["preview_url"])
+        if d.get("hcontent"):
+            item += pb_fixed64(14, int(d["hcontent"]))
+        item += pb_str(16, d.get("title") or "")
+        item += pb_int(20, int(d.get("updated") or 0))
+        item += pb_int(34, int(d.get("file_type") or 0))
+        for child in d.get("children") or []:
+            item += pb_msg(53, pb_fixed64(1, int(child)))
+        out += pb_msg(1, item)
+    resp_hdr = (pb_int(1, steamid) + pb_int(2, sessionid)
+                + pb_fixed64(11, jobid) + pb_int(13, 1))
+    conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, resp_hdr, out))
 
 # --- family running apps (protocol 1.8, issue #178) ---------------------------
 # Driven by the state file so the plugin tests script what the helper's

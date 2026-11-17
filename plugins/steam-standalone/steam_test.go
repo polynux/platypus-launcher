@@ -53,6 +53,9 @@ func (b backend) Start(ctx context.Context, j types.Job) error {
 			p["repair"] = true
 		}
 	}
+	if j.Kind == jobs.KindWorkshop {
+		return b.m.Call(ctx, j.Source, "workshop.sync", p, nil)
+	}
 	return b.m.Call(ctx, j.Source, "game."+j.Kind, p, nil)
 }
 

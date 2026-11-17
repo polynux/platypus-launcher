@@ -131,11 +131,11 @@ type GameSaveContext struct {
 }
 
 type ClientStatus struct {
-	State string `json:"state"`
-	Label string `json:"label,omitempty"`
+	State    string   `json:"state"`
+	Label    string   `json:"label,omitempty"`
 	Progress *float64 `json:"progress,omitempty"`
-	Bytes int64 `json:"bytes,omitempty"`
-	Total int64 `json:"total,omitempty"`
+	Bytes    int64    `json:"bytes,omitempty"`
+	Total    int64    `json:"total,omitempty"`
 }
 
 // CompatLookupGame is one game in a batched compat.lookup request (1.17).
@@ -390,6 +390,19 @@ type Achievement struct {
 type InstallSize struct {
 	DownloadBytes int64 `json:"downloadBytes"`
 	DiskBytes     int64 `json:"diskBytes"`
+}
+
+// WorkshopItem is one entry of workshop.list (protocol 1.22): the plugin's
+// own view of a subscribed Workshop item. The app maps it to types.WorkshopItem
+// (the UI's snake_case vocabulary) after checking the urls.
+type WorkshopItem struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	PreviewURL  string `json:"previewUrl"`
+	SizeBytes   int64  `json:"sizeBytes"`
+	UpdatedAt   int64  `json:"updatedAt"`
+	Installed   bool   `json:"installed"`
+	NeedsUpdate bool   `json:"needsUpdate"`
 }
 
 // JobUpdate is the params of job.progress, job.done and job.failed.

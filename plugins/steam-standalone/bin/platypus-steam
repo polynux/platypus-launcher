@@ -2771,6 +2771,294 @@ def playtime_list(_params):
     return {"games": out}
 
 
+# --- workshop (protocol 1.22) ------------------------------------------------
+#
+# Listing goes over the CM session the plugin already knows how to open, since
+# the Web API's IPublishedFileService needs an API key:
+# CMsgClientUCMEnumerateUserSubscribedFilesWithUpdates (EMsg 7378) gives the
+# account's subscriptions for one app with each item's content handle
+# (file_hcontent, the content manifest id), and PublishedFile.GetDetails#1
+# adds titles and previews. Content downloads are depot manifests read from the
+# game's workshop depot by platypus-steam-dl's `workshop` subcommand
+# (DepotDownloader's -pubfile path); legacy items that only carry file_url are
+# plain HTTP files.
+#
+# Placement: the Steam client puts content in
+# <library>/steamapps/workshop/content/<appid>/<publishedfileid>. A game
+# installed through the Steam client keeps that layout. A game Platypus
+# installed itself lives under the user's games folder, outside any steamapps
+# tree, so its content goes to <installDir>/workshop/<publishedfileid> (see
+# README.md).
+
+WORKSHOP_FILE_TYPE_COLLECTION = 3
+WORKSHOP_PAGE = 100
+
+
+def cm_workshop_session():
+    """A logged-on CM session for the workshop reads. CMError auth is the
+    login's, everything else is a transient failure."""
+    if not logged_in():
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
+    token = refresh_token()
+    if not token:
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
+    try:
+        steamid = int(steam_cm.jwt_payload(token)["sub"])
+        return steam_cm.CMSession(steamid, token)
+    except (KeyError, ValueError, TypeError) as e:
+        raise RPCError(f"the stored Steam login can't be used ({e})", CODE_AUTH_REQUIRED)
+
+
+def workshop_state():
+    return load_state("workshop.json", {})
+
+
+def workshop_save_state(state):
+    save_state("workshop.json", state)
+
+
+def workshop_number(params):
+    app = str(params.get("id") or "")
+    try:
+        mine = int(app)
+    except ValueError:
+        raise RPCError("invalid params: id is required", -32602)
+    if mine <= 0:
+        raise RPCError("invalid params: id is required", -32602)
+    return app
+
+
+def workshop_subscriptions(app, session):
+    """The account's subscribed items for app, as the CM reports them:
+    [{id, hcontent, size, updated, subscribed}] newest first. The CM returns
+    the list with the count it totals, so a short page is the last one."""
+    out, seen, known = [], 0, set()
+    for _ in range(20):
+        page, total = session.subscribed_files(int(app), seen)
+        for p in page:
+            if str(p.get("appid") or "") not in ("", app):
+                continue
+            if p.get("published_file_id") in known:
+                continue
+            known.add(p.get("published_file_id"))
+            out.append({
+                "id": p.get("published_file_id") or "",
+                "hcontent": int(p.get("hcontent") or 0),
+                "size": int(p.get("size") or 0),
+                "updated": int(p.get("updated") or 0),
+                "subscribed": int(p.get("subscribed") or 0),
+            })
+        seen += len(page)
+        if not page or seen >= int(total or 0):
+            break
+    out.sort(key=lambda p: (p.get("subscribed") or 0, p.get("updated") or 0), reverse=True)
+    return out
+
+
+def workshop_details(app, ids, session=None):
+    """Published file details by id, batched. An item Steam no longer returns
+    (delisted, private) is simply absent."""
+    ids = [i for i in dict.fromkeys(str(x) for x in ids if x)]
+    if not ids:
+        return {}
+    own = session is None
+    if own:
+        session = cm_workshop_session()
+    try:
+        out = {}
+        for start in range(0, len(ids), WORKSHOP_PAGE):
+            for d in session.published_file_details(int(app), ids[start:start + WORKSHOP_PAGE]):
+                if d.get("id"):
+                    out[d["id"]] = d
+        return out
+    finally:
+        if own:
+            session.logoff()
+
+
+def workshop_root(app, install_dir):
+    """Where this game's workshop content goes (see the section comment)."""
+    norm = os.path.normpath(install_dir)
+    marker = os.sep + os.path.join("steamapps", "common") + os.sep
+    idx = norm.find(marker)
+    if idx != -1:
+        return os.path.join(norm[:idx], "steamapps", "workshop", "content", app)
+    return os.path.join(install_dir, "workshop")
+
+
+def workshop_items(app):
+    """The subscription list joined with its details, for both list and sync.
+    One CM session covers both calls; a CMError is mapped to the protocol's
+    login/transient codes."""
+    try:
+        session = cm_workshop_session()
+        try:
+            subs = workshop_subscriptions(app, session)
+            details = workshop_details(app, [s["id"] for s in subs], session) if subs else {}
+        finally:
+            session.logoff()
+    except steam_cm.CMError as e:
+        raise RPCError(str(e), CODE_AUTH_REQUIRED if e.auth else -32000)
+    if not subs:
+        return []
+    state = workshop_state().get(app) or {}
+    out = []
+    for s in subs:
+        d = details.get(s["id"]) or {}
+        hcontent = int(d.get("hcontent") or s.get("hcontent") or 0)
+        installed_h = state.get(s["id"])
+        installed = installed_h is not None
+        out.append({
+            "id": s["id"],
+            "title": d.get("title") or f"Workshop item {s['id']}",
+            "preview": d.get("preview_url") or "",
+            "size": int(d.get("size") or s.get("size") or 0),
+            "updated": int(d.get("updated") or s.get("updated") or 0),
+            "hcontent": hcontent,
+            "file_url": d.get("file_url") or "",
+            "filename": d.get("filename") or "",
+            "file_type": int(d.get("file_type") or 0),
+            "children": d.get("children") or [],
+            "installed": installed,
+            "needs_update": bool(installed and installed_h != hcontent),
+        })
+    return out
+
+
+def workshop_list(params):
+    app = workshop_number(params)
+    items = workshop_items(app)
+    return [{
+        "id": it["id"], "title": it["title"], "previewUrl": it["preview"],
+        "sizeBytes": it["size"], "updatedAt": it["updated"],
+        "installed": it["installed"], "needsUpdate": it["needs_update"],
+    } for it in items]
+
+
+def start_workshop(params):
+    app = workshop_number(params)
+    job_id = params.get("jobId") or ""
+    if not job_id:
+        raise RPCError("invalid params: jobId is required", -32602)
+    install_dir = params.get("installDir") or ""
+    if not os.path.isabs(install_dir):
+        raise RPCError("invalid params: installDir must be an absolute path", -32602)
+    if app not in load_state("installed.json", {}):
+        raise RPCError(tr("not_installed", app=app))
+    if not claim_job(job_id, {"canceled": False, "id": app, "dir": install_dir, "proc": None}):
+        return {}
+    threading.Thread(target=follow_workshop, args=(job_id, app, install_dir), daemon=True).start()
+    return {}
+
+
+def apply_workshop_plans(app, items):
+    """Resolve the direct items and their collection children into one list of
+    downloadable plans. A collection counts as its children's content."""
+    plans = []
+    collections = []
+    missing_children = []
+    for it in items:
+        if it["file_type"] == WORKSHOP_FILE_TYPE_COLLECTION and it["children"]:
+            collections.append(it)
+            missing_children.extend(it["children"])
+        else:
+            plans.append(it)
+    if missing_children:
+        known = {p["id"] for p in plans}
+        details = workshop_details(app, [i for i in missing_children if i not in known])
+        for cid in missing_children:
+            d = details.get(cid)
+            if d is None:
+                continue
+            plans.append({
+                "id": cid,
+                "title": d.get("title") or f"Workshop item {cid}",
+                "hcontent": int(d.get("hcontent") or 0),
+                "file_url": d.get("file_url") or "",
+                "filename": d.get("filename") or "",
+                "size": int(d.get("size") or 0),
+            })
+    return plans, collections
+
+
+def follow_workshop(job_id, app, install_dir):
+    root = workshop_root(app, install_dir)
+    try:
+        items = workshop_items(app)
+        plans, collections = apply_workshop_plans(app, items)
+        depot_items = [p for p in plans if p["hcontent"]]
+        http_items = [p for p in plans if not p["hcontent"] and p["file_url"]]
+        if len(depot_items) + len(http_items) != len(plans):
+            raise RPCError("a subscribed item has no downloadable content")
+        notify("job.progress", {"jobId": job_id, "phase": "downloading"})
+        saved = {}
+        if depot_items:
+            req = dl_request({"id": app}, {
+                "install_dir": root,
+                "items": [{"id": p["id"], "hcontent": p["hcontent"], "size": p["size"]} for p in depot_items],
+            })
+            result = dl_run("workshop", req, job_id, root, label="Steam Workshop", phase="downloading")
+            for done in (result or {}).get("items") or []:
+                saved[str(done.get("id"))] = int(done.get("hcontent") or 0)
+        if http_items:
+            total = sum(p["size"] for p in http_items)
+            written = 0
+            for p in http_items:
+                written = workshop_http_item(root, p, job_id, written, total)
+                saved[p["id"]] = 0
+    except RPCError as e:
+        with jobs_lock:
+            job = jobs.pop(job_id, {})
+        if job.get("canceled"):
+            return
+        message = tr("need_login_expired") if e.code == CODE_AUTH_REQUIRED else str(e)
+        notify("job.failed", {"jobId": job_id, "error": message})
+        return
+    except (OSError, ValueError, steam_cm.CMError) as e:
+        with jobs_lock:
+            job = jobs.pop(job_id, {})
+        if job.get("canceled"):
+            return
+        notify("job.failed", {"jobId": job_id, "error": f"Steam Workshop: {e}"})
+        return
+    with jobs_lock:
+        job = jobs.pop(job_id, {})
+    if job.get("canceled"):
+        return
+    # Record what is on disk. A collection has no content of its own: it
+    # counts as synced when every child is.
+    state = workshop_state()
+    entry = state.setdefault(app, {})
+    entry.update(saved)
+    for c in collections:
+        if all(cid in entry for cid in c["children"]):
+            entry[c["id"]] = int(c.get("hcontent") or 0)
+    workshop_save_state(state)
+    notify("job.done", {"jobId": job_id})
+
+
+def workshop_http_item(root, plan, job_id, written, total):
+    """A legacy item whose content is one plain file (file_url), not a depot
+    manifest. The file name comes from the store and never becomes a path."""
+    name = os.path.basename(plan["filename"] or f"{plan['id']}.bin")
+    if not name or name in (".", ".."):
+        raise RPCError(f"workshop item {plan['id']} has no usable file name")
+    dest_dir = os.path.join(root, plan["id"])
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, name)
+    tmp = dest + ".part"
+    with urllib.request.urlopen(plan["file_url"], timeout=60) as r, open(tmp, "wb") as f:
+        while True:
+            chunk = r.read(1 << 20)
+            if not chunk:
+                break
+            f.write(chunk)
+            written += len(chunk)
+            notify("job.progress", {"jobId": job_id, "phase": "downloading", "bytes": written, "total": total})
+    os.replace(tmp, dest)
+    return written
+
+
 # --- verify (protocol 1.4) ---------------------------------------------------
 #
 # game.verify runs platypus-steam-dl's verify subcommand as a job, like
@@ -4151,12 +4439,12 @@ def chat_unread_counts(_params):
 def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
-    protocol = "1.19" if "1.19" in offered else (
-        "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14"))
-    return {"name": "Steam (standalone)", "version": "0.25.0", "api": API,
+    protocol = "1.22" if "1.22" in offered else ("1.19" if "1.19" in offered else (
+        "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")))
+    return {"name": "Steam (standalone)", "version": "0.26.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
-                             "verify", "achievements", "playtime", "cloud-saves", "social", "chat", "settings"],
+                             "verify", "achievements", "playtime", "cloud-saves", "social", "chat", "settings", "workshop"],
             # Password branches unlock through their private-beta section,
             # proven live on real Steam (Valheim public-test, No Man's Sky
             # experimental: unlock, section gids, manifest code + download).
@@ -4397,6 +4685,8 @@ METHODS = {
     "game.relocated": game_relocated,
     "achievements.list": achievements_list,
     "playtime.list": playtime_list,
+    "workshop.list": workshop_list,
+    "workshop.sync": start_workshop,
     "versions.list": versions_list,
     "versions.unlock": versions_unlock,
     "job.cancel": job_cancel,

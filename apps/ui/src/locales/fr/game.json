@@ -259,6 +259,18 @@
     "unknownFolder": "inconnu de Platypus",
     "jobFailed": "« {{kind}} » n'a pas abouti."
   },
+  "workshop": {
+    "heading": "Atelier",
+    "count_one": "{{count}} élément abonné",
+    "count_other": "{{count}} éléments abonnés",
+    "installed": "Installé",
+    "needsUpdate": "Mise à jour disponible",
+    "notInstalled": "Non téléchargé",
+    "updated": "Mis à jour le {{date}}",
+    "sync": "Synchroniser",
+    "syncing": "Synchronisation…",
+    "jobFailed": "La synchronisation de l'atelier n'a pas abouti."
+  },
   "achievements": {
     "heading": "Succès",
     "countKnown": "{{unlocked}}/{{total}} · {{percent}} %",

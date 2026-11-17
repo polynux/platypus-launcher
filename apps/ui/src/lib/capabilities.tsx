@@ -6,7 +6,7 @@ import type { Game, StorePlugin } from '../types';
 export type Capability =
   | 'library' | 'install' | 'launch' | 'auth' | 'discard' | 'cloud-saves'
   | 'install-options' | 'versions' | 'verify' | 'move' | 'social' | 'achievements' | 'playtime' | 'redeem' | 'family' | 'settings'
-  | 'chat' | 'terms';
+  | 'chat' | 'terms' | 'workshop';
 
 /** Why a surface is unavailable:
  *  - no-plugin: the game doesn't come from a store plugin
@@ -45,6 +45,7 @@ const BRING_LABEL: Record<string, string> = {
   redeem: 'Redeem codes',
   family: 'Family',
   chat: 'Chat',
+  workshop: 'Workshop',
 };
 
 /** A capability id in user words, or null when it is internal. (Named

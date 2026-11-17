@@ -11,6 +11,7 @@
     "verify": "Vérification",
     "move": "Déplacement",
     "backup": "Sauvegarde",
+    "workshop": "Synchronisation atelier",
     "restore": "Restauration",
     "remove": "Suppression"
   },
@@ -33,7 +34,8 @@
     "move": "déplacement",
     "backup": "Sauvegarde",
     "restore": "Restauration",
-    "remove": "suppression"
+    "remove": "suppression",
+    "workshop": "Synchronisation atelier"
   },
   "state": {
     "queued": "en attente",

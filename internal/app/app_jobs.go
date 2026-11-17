@@ -62,6 +62,8 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 		return b.a.startCoreRemove(j) // core deletes; reports through the queue
 	case jobs.KindRunnerInstall:
 		return b.a.startCoreRunnerInstall(j) // core downloads; reports through the queue
+	case jobs.KindWorkshop:
+		return b.a.startWorkshopSync(ctx, j) // the plugin syncs; reports through the queue
 	}
 	if j.Target != nil {
 		if err := b.a.jobTargetGate(j); err != nil {
@@ -182,7 +184,8 @@ func (a *App) jobFinished(j types.Job) {
 	a.recordJobActivity(j)
 	// A verify only reports: it changes no bytes and lists nothing new, so
 	// the library and disk caches stay (issue #145 records it, nothing more).
-	if j.Kind == jobs.KindVerify {
+	// A Workshop sync writes only mod content, not the game or its listing.
+	if j.Kind == jobs.KindVerify || j.Kind == jobs.KindWorkshop {
 		return
 	}
 	a.invalidateLibrary(j.Source)

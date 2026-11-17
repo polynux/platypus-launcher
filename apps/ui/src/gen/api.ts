@@ -64,6 +64,7 @@ export interface CoreApi {
   GetGameStatus(gameID: string): Promise<types.GameStatusInfo>;
   GetGameTerms(game: types.Game): Promise<types.GameTerm[]>;
   GetGameVersions(game: types.Game): Promise<types.VersionInfo>;
+  GetGameWorkshop(game: types.Game): Promise<types.WorkshopItem[]>;
   GetInstallFreeSpace(game: types.Game): Promise<number>;
   GetInstallLocations(game: types.Game): Promise<types.InstallLocation[]>;
   GetInstallSize(game: types.Game): Promise<number>;
@@ -194,6 +195,7 @@ export interface CoreApi {
   SetTheme(id: string): Promise<types.LauncherSettings>;
   SocialViews(): Promise<social.View[]>;
   StopGame(gameID: string): Promise<void>;
+  SyncWorkshop(game: types.Game): Promise<types.Job>;
   UninstallGame(game: types.Game): Promise<types.Job>;
   UninstallGameWithoutBackup(game: types.Game): Promise<types.Job>;
   UninstallPlugin(id: string, removeGames: boolean): Promise<void>;
@@ -266,6 +268,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'GetGameStatus',
   'GetGameTerms',
   'GetGameVersions',
+  'GetGameWorkshop',
   'GetInstallFreeSpace',
   'GetInstallLocations',
   'GetInstallSize',
@@ -396,6 +399,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetTheme',
   'SocialViews',
   'StopGame',
+  'SyncWorkshop',
   'UninstallGame',
   'UninstallGameWithoutBackup',
   'UninstallPlugin',

@@ -11,6 +11,7 @@
     "verify": "Verify",
     "move": "Move",
     "backup": "Backup",
+    "workshop": "Workshop sync",
     "restore": "Restore",
     "remove": "Remove"
   },
@@ -33,7 +34,8 @@
     "move": "move",
     "backup": "Backup",
     "restore": "Restore",
-    "remove": "remove"
+    "remove": "remove",
+    "workshop": "Workshop sync"
   },
   "state": {
     "queued": "queued",

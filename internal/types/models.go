@@ -721,6 +721,20 @@ type NetState struct {
 	Since  int64 `json:"since"`
 }
 
+// WorkshopItem is one subscribed Workshop item of a game (protocol 1.22):
+// what the game page lists and what a sync writes to disk.
+type WorkshopItem struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	PreviewURL string `json:"preview_url,omitempty"`
+	SizeBytes  int64  `json:"size_bytes,omitempty"`
+	UpdatedAt  int64  `json:"updated_at,omitempty"` // unix seconds
+	Installed  bool   `json:"installed"`
+	// NeedsUpdate is the plugin's knowledge: an update was published after
+	// the content it wrote. Never a guess.
+	NeedsUpdate bool `json:"needs_update"`
+}
+
 // Job is an install, update or uninstall run by a store plugin.
 type Job struct {
 	ID          string  `json:"id"`

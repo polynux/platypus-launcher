@@ -53,6 +53,9 @@ EMSG_CLIENT_LOGON_RESPONSE = 751
 EMSG_CLIENT_LOGGED_OFF = 757
 EMSG_CLIENT_LOGON = 5514
 EMSG_CLIENT_HELLO = 9805
+# UCM (steam/enums_clientserver.proto): the user's subscribed published files,
+# with each item's content handle (steammessages_clientserver_ucm.proto).
+EMSG_CLIENT_UCM_ENUMERATE_USER_SUBSCRIBED_FILES_WITH_UPDATES = 7378
 PROTO_MASK = 0x80000000
 
 # Logon constants, matching SteamKit2's SteamUser (PROTOCOL_VERSION 65580)
@@ -476,6 +479,83 @@ class CMSession:
                 return b
             self._side_message(emsg)
         raise CMError(f"Steam didn't answer {target_job_name} within {timeout} seconds")
+
+    def subscribed_files(self, app_id, start_index=0, timeout=30):
+        """The user's subscribed published files for one app, with each item's
+        content handle (CMsgClientUCMEnumerateUserSubscribedFilesWithUpdates,
+        EMsg 7378/7379): app_id = 1, start_index = 2, desired_revision = 4;
+        the answer carries eresult = 1, repeated subscribed_files = 2
+        (published_file_id = 1, rtime32_subscribed = 2, appid = 3,
+        file_hcontent = 4, file_size = 5, rtime32_last_updated = 6,
+        is_depot_content = 7) and total_results = 3."""
+        self.jobid += 1
+        jobid = self.jobid
+        body = pb_int(1, app_id) + pb_int(2, start_index) + pb_int(4, 0)
+        hdr = header(steamid=self.steamid, sessionid=self.sessionid,
+                     jobid_source=jobid)
+        self.ws.send_binary(pack_emsg(
+            EMSG_CLIENT_UCM_ENUMERATE_USER_SUBSCRIBED_FILES_WITH_UPDATES, hdr, body))
+        for emsg, h, b in self._messages(deadline=time.time() + timeout):
+            if emsg == EMSG_CLIENT_HEARTBEAT:
+                self._side_message(emsg)
+                continue
+            if h.get(11, [None])[0] == jobid:
+                msg = pb_parse(b)
+                eresult = msg.get(1, [2])[0]
+                if eresult != 1:
+                    auth = eresult in ERESULTS_TOKEN_REJECTED
+                    raise CMError(
+                        f"Steam rejected the subscription list with {eresult_name(eresult)}",
+                        eresult=eresult, auth=auth)
+                out = []
+                for raw in msg.get(2, []):
+                    item = pb_parse(raw)
+                    out.append({
+                        "published_file_id": str(item.get(1, [0])[0]),
+                        "subscribed": item.get(2, [0])[0],
+                        "appid": item.get(3, [0])[0],
+                        "hcontent": item.get(4, [0])[0],
+                        "size": item.get(5, [0])[0],
+                        "updated": item.get(6, [0])[0],
+                        "depot_content": bool(item.get(7, [0])[0]),
+                    })
+                return out, msg.get(3, [len(out)])[0]
+            self._side_message(emsg)
+        raise CMError(f"Steam didn't answer the subscription list within {timeout} seconds")
+
+    def published_file_details(self, app_id, ids, timeout=30):
+        """PublishedFile.GetDetails#1: the titles and previews of published
+        files (publishedfileids = 1, includetchildren = 4, appid = 14). Each
+        answer entry carries result = 1, publishedfileid = 2, file_size = 8,
+        file_url = 10, preview_url = 11, hcontent_file = 14, title = 16,
+        time_updated = 20, file_type = 34 and children = 53."""
+        body = b"".join(pb_fixed64(1, int(i)) for i in ids)
+        body += pb_int(4, 1) + pb_int(14, app_id)
+        raw = self.call("PublishedFile.GetDetails#1", body, timeout)
+        msg = pb_parse(raw)
+        out = []
+        for blob in msg.get(1, []):
+            d = pb_parse(blob)
+            children = []
+            for child in d.get(53, []):
+                cm = pb_parse(child)
+                if cm.get(1):
+                    children.append(str(cm[1][0]))
+            out.append({
+                "id": str(d.get(2, [0])[0]),
+                "result": d.get(1, [2])[0],
+                "consumer_appid": d.get(5, [0])[0],
+                "filename": d.get(7, [b""])[0].decode(errors="replace"),
+                "size": d.get(8, [0])[0],
+                "file_url": d.get(10, [b""])[0].decode(errors="replace"),
+                "preview_url": d.get(11, [b""])[0].decode(errors="replace"),
+                "hcontent": d.get(14, [0])[0],
+                "title": d.get(16, [b""])[0].decode(errors="replace"),
+                "updated": d.get(20, [0])[0],
+                "file_type": d.get(34, [0])[0],
+                "children": children,
+            })
+        return out
 
     def logoff(self):
         """ClientLogOff and a clean close; Steam answers with ClientLoggedOff

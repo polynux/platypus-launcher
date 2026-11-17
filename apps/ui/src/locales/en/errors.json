@@ -307,6 +307,9 @@
     "queued": "{{title}} already has a save backup queued.",
     "unknown": "Unknown save backup version."
   },
+  "workshop": {
+    "unsupported": "{{name}} doesn't offer Workshop items."
+  },
   "theme": {
     "unknown": "There's no theme called {{theme}}.",
     "unusable": "The theme {{theme}} can't be used. Check its warnings in Settings."

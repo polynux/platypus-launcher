@@ -993,6 +993,11 @@ export function AppContent() {
       jobs={jobs}
       onJob={(kind) => runJob(kind, game)}
       onJobAction={jobAction}
+      onSyncWorkshop={() => {
+        Effect.runPromise(LauncherApi.syncGameWorkshop(game))
+          .then(() => notify(t('downloads:queued', { action: t('downloads:action.workshop'), title: game.title }), 'busy'))
+          .catch((err) => notify(coreErrMsg(err), 'err'));
+      }}
       onAllowFolder={(folder) => allowFolder(game, folder)}
       onNavigate={setView}
       onNotify={notify}

@@ -41,6 +41,7 @@ const KIND_KEY: Record<Job['kind'], string> = {
   restore: 'downloads:kind.restore',
   remove: 'downloads:kind.remove',
   'runner-install': 'downloads:kind.install',
+  workshop: 'downloads:kind.workshop',
 };
 
 const STATE_STYLE: Record<Job['state'], string> = {

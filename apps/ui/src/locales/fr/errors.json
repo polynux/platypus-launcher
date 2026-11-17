@@ -307,6 +307,9 @@
     "queued": "{{title}} a déjà une sauvegarde en file d’attente.",
     "unknown": "Version de sauvegarde inconnue."
   },
+  "workshop": {
+    "unsupported": "{{name}} ne propose pas d'éléments d'atelier."
+  },
   "theme": {
     "unknown": "Aucun thème ne s'appelle {{theme}}.",
     "unusable": "Le thème {{theme}} n'est pas utilisable. Consultez ses avertissements dans les paramètres."
