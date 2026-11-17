@@ -451,6 +451,13 @@ type WorkshopItem struct {
 	UpdatedAt   int64  `json:"updatedAt"`
 	Installed   bool   `json:"installed"`
 	NeedsUpdate bool   `json:"needsUpdate"`
+	// PlacementKind and PlacementPath are optional (protocol 1.22, issue
+	// #214): where the plugin puts this game's content ("steam-library",
+	// "install-subfolder" or "client-only") and the display path relative
+	// to the game folder (or the Steam library root for the Steam layout).
+	// Absent for games with no placement rule.
+	PlacementKind string `json:"placementKind,omitempty"`
+	PlacementPath string `json:"placementPath,omitempty"`
 }
 
 // JobUpdate is the params of job.progress, job.done and job.failed.

@@ -746,6 +746,11 @@ type WorkshopItem struct {
 	// NeedsUpdate is the plugin's knowledge: an update was published after
 	// the content it wrote. Never a guess.
 	NeedsUpdate bool `json:"needs_update"`
+	// PlacementKind and PlacementPath say where the plugin puts this game's
+	// content (optional, protocol 1.22, issue #214). Empty for games with no
+	// placement rule; the UI then shows its generic Workshop folder note.
+	PlacementKind string `json:"placement_kind,omitempty"`
+	PlacementPath string `json:"placement_path,omitempty"`
 }
 
 // Job is an install, update or uninstall run by a store plugin.

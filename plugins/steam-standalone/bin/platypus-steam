@@ -3128,7 +3128,58 @@ def playtime_list(_params):
 # installed through the Steam client keeps that layout. A game Platypus
 # installed itself lives under the user's games folder, outside any steamapps
 # tree, so its content goes to <installDir>/workshop/<publishedfileid> (see
-# README.md).
+# README.md). A few games need their content elsewhere; WORKSHOP_PLACEMENT
+# names them (issue #214) and workshop.list reports the choice. Only games
+# verified from the games' own docs are listed: anything else keeps today's
+# layout and no placement fields.
+#
+# Kinds: "steam-library" is today's Steam layout; "install-subfolder" is a
+# path inside the game's own folder (relative, confined below); "client-only"
+# syncs into the Steam layout like "steam-library" but the game only sees the
+# items when it runs through the Steam client (a live ISteamUGC session).
+
+WORKSHOP_STEAM_LIBRARY = "steam-library"
+WORKSHOP_INSTALL_SUBFOLDER = "install-subfolder"
+WORKSHOP_CLIENT_ONLY = "client-only"
+WORKSHOP_PLACEMENT = {
+    # Portal 2 (620): the Steam client downloads chambers to the game-local
+    # portal2/maps/workshop/<id>/ ({name}.bsp and thumb<id>.jpg at the item
+    # root; there is no steamapps/workshop/content/620) and the in-game
+    # Community Chambers browser lists them, which needs an online Steam
+    # session. Sources: Steam Community discussion "How to play community
+    # maps when in offline mode?" (app 620: portal2/maps/workshop/<id>/
+    # layout, console `map` fallback, online requirement) and the Steam
+    # Workshop page for Portal 2 (steamcommunity.com/workshop/browse?appid=620).
+    "620": (WORKSHOP_INSTALL_SUBFOLDER, "portal2/maps/workshop"),
+    # Counter-Strike (730): subscribed maps are auto-downloaded and listed in
+    # the in-game Workshop Maps tab (subscribable even from the Steam Overlay
+    # while playing); the game only sees them through the Steam client.
+    # Sources: the official Maps Workshop F.A.Q. (counter-strike.net/workshop/
+    # workshopfaq) and the CSDB "How to Play Workshop Maps in CS2" guide.
+    "730": (WORKSHOP_CLIENT_ONLY, ""),
+    # Garry's Mod (4000): subscribed addons are enumerated through the live
+    # Steam session (engine.GetAddons lists "addons the player have
+    # subscribed to on the workshop") and the game pulls them in itself at
+    # runtime (steamworks.DownloadUGC); the .gma files it mounts live as
+    # floating garrysmod/addons/<title>_<wsid>.gma managed by the game
+    # under the client. Flattening synced depot content into addons/ would be
+    # a file transform, so the sync keeps the Steam layout with the note.
+    # Source: the official Garry's Mod Wiki (wiki.facepunch.com/gmod/
+    # engine.GetAddons and /gmod/resource.AddWorkshop).
+    "4000": (WORKSHOP_CLIENT_ONLY, ""),
+    # Rocket League (252950): maps are played in-game at Play > Extras >
+    # Workshop after launching through Steam (the Epic build needs BakkesMod
+    # instead); items stay in the Steam layout.
+    # Source: rocketleague-help.com/workshop ("Setup Workshop Maps (Steam)").
+    "252950": (WORKSHOP_CLIENT_ONLY, ""),
+    # Wallpaper Engine (431960): wallpapers live in
+    # steamapps/workshop/content/431960/<id>/ ({preview.jpg, project.json,
+    # scene.pkg}), downloaded and managed by Steam; the app needs a live
+    # Steamworks connection to Steam.
+    # Sources: help.wallpaperengine.io/en/steam/backup.html (the 431960
+    # folder) and /en/steam/steamworks.html ("Steamworks is unavailable").
+    "431960": (WORKSHOP_CLIENT_ONLY, ""),
+}
 
 WORKSHOP_FILE_TYPE_COLLECTION = 3
 WORKSHOP_PAGE = 100
@@ -3232,14 +3283,68 @@ def workshop_details(app, ids, session=None):
             session.logoff()
 
 
+def workshop_placement(app):
+    """The placement rule for app as (kind, relpath). Anything unlisted keeps
+    today's behaviour: the steam-library kind with no subfolder."""
+    return WORKSHOP_PLACEMENT.get(str(app), (WORKSHOP_STEAM_LIBRARY, ""))
+
+
+def workshop_rule_root(app, install_dir):
+    """The install-subfolder root for app, confined inside install_dir: the
+    table's path stays relative (no `..`, no absolute path) and no component
+    may be a symlink (Lstat guard, like the sync's prune). None when no rule
+    applies; a bad table entry fails the sync instead of writing elsewhere."""
+    kind, rel = workshop_placement(app)
+    if kind != WORKSHOP_INSTALL_SUBFOLDER or not rel:
+        return None
+    if not isinstance(rel, str) or os.path.isabs(rel) or rel != os.path.normpath(rel):
+        raise RPCError(f"workshop placement for {app} is not a clean relative path", -32000)
+    parts = rel.split("/")
+    if any(p in ("", ".", "..") for p in parts):
+        raise RPCError(f"workshop placement for {app} is not a clean relative path", -32000)
+    cur = os.path.normpath(install_dir)
+    for p in parts:
+        cur = os.path.join(cur, p)
+        if os.path.islink(cur):
+            raise RPCError(f"workshop placement for {app} passes through a link", -32000)
+    try:
+        inside = os.path.commonpath([os.path.realpath(install_dir), os.path.realpath(cur)]) == os.path.realpath(install_dir)
+    except (OSError, ValueError):
+        inside = False
+    if not inside:
+        raise RPCError(f"workshop placement for {app} escapes the game folder", -32000)
+    return cur
+
+
 def workshop_root(app, install_dir):
     """Where this game's workshop content goes (see the section comment)."""
+    rule = workshop_rule_root(app, install_dir)
+    if rule is not None:
+        return rule
     norm = os.path.normpath(install_dir)
     marker = os.sep + os.path.join("steamapps", "common") + os.sep
     idx = norm.find(marker)
     if idx != -1:
         return os.path.join(norm[:idx], "steamapps", "workshop", "content", app)
     return os.path.join(install_dir, "workshop")
+
+
+def workshop_placement_display(app, install_dir):
+    """The (kind, display path) workshop.list reports, only for apps with a
+    placement rule: anything unlisted keeps today's layout and reports no
+    placement. The path is relative to the game folder, or to the Steam
+    library root for the Steam layout: never an absolute home path. Empty
+    when the install isn't known."""
+    if not install_dir or str(app) not in WORKSHOP_PLACEMENT:
+        return "", ""
+    kind, rel = workshop_placement(app)
+    if kind == WORKSHOP_INSTALL_SUBFOLDER and rel:
+        return kind, rel
+    norm = os.path.normpath(install_dir)
+    marker = os.sep + os.path.join("steamapps", "common") + os.sep
+    if norm.find(marker) != -1:
+        return kind, os.path.join("steamapps", "workshop", "content", app)
+    return kind, "workshop"
 
 
 def workshop_items(app):
@@ -3265,6 +3370,7 @@ def workshop_items(app):
     state = workshop_state().get(app) or {}
     install_dir = (load_state("installed.json", {}).get(app) or {}).get("path") or ""
     root = workshop_root(app, install_dir) if install_dir else ""
+    placement_kind, placement_path = workshop_placement_display(app, install_dir)
     out = []
     for s in subs:
         d = details.get(s["id"]) or {}
@@ -3304,6 +3410,8 @@ def workshop_items(app):
             "child_details": child_details,
             "installed": installed,
             "needs_update": needs_update,
+            "placement_kind": placement_kind,
+            "placement_path": placement_path,
         })
     return out
 
@@ -3320,11 +3428,19 @@ def workshop_list(params):
     if hit and time.time() - hit[0] < WORKSHOP_CACHE_TTL:
         return hit[1]
     items = workshop_items(app)
-    out = [{
-        "id": it["id"], "title": it["title"], "previewUrl": it["preview"],
-        "sizeBytes": it["size"], "updatedAt": it["updated"],
-        "installed": it["installed"], "needsUpdate": it["needs_update"],
-    } for it in items]
+    out = []
+    for it in items:
+        e = {
+            "id": it["id"], "title": it["title"], "previewUrl": it["preview"],
+            "sizeBytes": it["size"], "updatedAt": it["updated"],
+            "installed": it["installed"], "needsUpdate": it["needs_update"],
+        }
+        # Placement (issue #214) is optional and only present for apps with a
+        # placement rule; older readers ignore the extra keys.
+        if it.get("placement_kind") and it.get("placement_path"):
+            e["placementKind"] = it["placement_kind"]
+            e["placementPath"] = it["placement_path"]
+        out.append(e)
     with workshop_cache_lock:
         workshop_cache[app] = (time.time(), out)
     return out
@@ -3387,15 +3503,20 @@ def apply_workshop_plans(app, items):
     return plans, collections
 
 
-def workshop_prune(root, keep):
+def workshop_prune(root, keep, owned=None):
     """Removes item folders no longer subscribed (folders only, names stay
-    ids): the sync owns this root and nothing else lives in it."""
+    ids). With owned=None the sync owns the whole root (<install>/workshop of
+    a game Platypus installed); otherwise the root is shared with the Steam
+    client (a Steam library or a game-local folder like Portal 2's maps/
+    workshop) and only ids Platypus synced there itself are removed."""
     try:
         names = os.listdir(root)
     except OSError:
         return
     for name in names:
         if name in keep or not name.isdigit():
+            continue
+        if owned is not None and name not in owned:
             continue
         path = os.path.join(root, name)
         if os.path.isdir(path) and not os.path.islink(path):
@@ -3458,6 +3579,7 @@ def follow_workshop(job_id, app, install_dir):
     # counts as synced when every child is.
     state = workshop_state()
     entry = state.setdefault(app, {})
+    synced_before = set(entry)
     entry.update(saved)
     for c in collections:
         if all(cid in entry for cid in c["children"]):
@@ -3469,7 +3591,8 @@ def follow_workshop(job_id, app, install_dir):
     roots = workshop_roots()
     roots[app] = root
     workshop_save_roots(roots)
-    workshop_prune(root, keep)
+    own_root = os.path.normpath(root) == os.path.normpath(os.path.join(install_dir, "workshop"))
+    workshop_prune(root, keep, None if own_root else synced_before | set(saved))
     workshop_cache_drop(app)
     notify("job.done", {"jobId": job_id})
 
@@ -5007,7 +5130,7 @@ def initialize(params):
                 "1.19" if "1.19" in offered else
                 "1.18" if "1.18" in offered else
                 "1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.30.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.31.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat", "settings", "install-options", "workshop"],

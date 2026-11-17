@@ -98,10 +98,20 @@ library (`steamapps/common/...`) gets `<library>/steamapps/workshop/content/
 itself has no `steamapps` tree, so its content goes to
 `<install folder>/workshop/<item>` and leaves with the game. A game that finds
 its mods through the Steamworks API may still need the Steam client at
-runtime; the client-required launch mode covers that. There are no per-game
-placement rules yet: a Platypus-installed game always gets `workshop/<item>`
-(issue #214 tracks the rules). Subscribing and unsubscribing are account
-writes and aren't offered yet.
+runtime; the client-required launch mode covers that. A small per-app table
+(`WORKSHOP_PLACEMENT` in `bin/platypus-steam`, issue #214) covers the games
+that don't follow the default layout; only games verified from the games' own
+docs are listed. The game page shows the placement with each listing.
+
+| app id | placement | where the files go |
+|---|---|---|
+| 620 | `install-subfolder` | `portal2/maps/workshop/<item>` inside the game folder |
+| 730 | `client-only` | the Steam layout; the game only sees items through the Steam client |
+| 4000 | `client-only` | the Steam layout; the game pulls subscriptions in itself through the Steam client |
+| 431960 | `client-only` | the Steam layout; the app needs a live Steamworks connection |
+| 252950 | `client-only` | the Steam layout; the game only sees items through the Steam client |
+
+Subscribing and unsubscribing are account writes and aren't offered yet.
 
 ## Steam Families
 

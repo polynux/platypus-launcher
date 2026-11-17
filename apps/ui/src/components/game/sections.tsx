@@ -722,6 +722,19 @@ export function InstallationPanel({
   );
 }
 
+/** Where the synced files go (issue #214): the plugin names the placement
+ *  with the listing when the game has a rule, as a display path relative to
+ *  the game folder (or the Steam library root for the Steam layout). */
+function placementNote(t: (key: string, opts?: Record<string, unknown>) => string, items: WorkshopItem[]): string {
+  const rule = items.find((it) => it.placement_kind && it.placement_path);
+  if (!rule?.placement_kind || !rule?.placement_path) return t('game:workshop.pathNote');
+  const path = rule.placement_path;
+  if (rule.placement_kind === 'install-subfolder') return t('game:workshop.placementSubfolder', { path });
+  if (rule.placement_kind === 'client-only') return t('game:workshop.placementClientOnly', { path });
+  if (rule.placement_kind === 'steam-library') return t('game:workshop.placementSteamLibrary', { path });
+  return t('game:workshop.pathNote');
+}
+
 /** The game's subscribed Workshop items (protocol 1.22): what is on disk, what
  *  an update is waiting for, and one Sync action that queues the store's job.
  *  Progress and cancel ride the same queue as an update. */
@@ -752,8 +765,9 @@ export function WorkshopSection({
           {t('game:workshop.count', { count: items.length })}
         </span>
       </div>
-      {/* Where the files go (S1): one line, no per-game table. */}
-      <p className="mb-3 text-hint leading-snug text-text-muted">{t('game:workshop.pathNote')}</p>
+      {/* Where the files go: the plugin's placement when it names one for
+          this game (issue #214), else the generic folder note. */}
+      <p className="mb-3 text-hint leading-snug text-text-muted">{placementNote(t, items)}</p>
       {error ? (
         <ErrorNotice message={error} fallback={t('game:workshop.listFailed')} onRetry={onRetry} />
       ) : null}

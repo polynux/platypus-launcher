@@ -1086,5 +1086,7 @@ export namespace types {
     updated_at?: number;
     installed: boolean;
     needs_update: boolean;
+    placement_kind?: string;
+    placement_path?: string;
   }
 }

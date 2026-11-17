@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"platypus/internal/apperr"
@@ -62,9 +64,38 @@ func normalizeWorkshop(items []plugins.WorkshopItem) []types.WorkshopItem {
 			ID: it.ID, Title: title, PreviewURL: httpURL(it.PreviewURL),
 			SizeBytes: it.SizeBytes, UpdatedAt: it.UpdatedAt,
 			Installed: it.Installed, NeedsUpdate: it.NeedsUpdate,
+			PlacementKind: normalizePlacementKind(it.PlacementKind),
+			PlacementPath: normalizePlacementPath(it.PlacementPath),
 		})
 	}
 	return out
+}
+
+// normalizePlacementKind keeps the protocol's three placement kinds (issue
+// #214) and drops anything else; normalizePlacementPath keeps a short
+// relative display path and drops absolute paths and `..` escapes.
+func normalizePlacementKind(kind string) string {
+	switch kind {
+	case "steam-library", "install-subfolder", "client-only":
+		return kind
+	default:
+		return ""
+	}
+}
+
+func normalizePlacementPath(path string) string {
+	if path == "" || len(path) > 200 {
+		return ""
+	}
+	if filepath.IsAbs(path) {
+		return ""
+	}
+	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
+		if part == "" || part == "." || part == ".." {
+			return ""
+		}
+	}
+	return path
 }
 
 // SyncWorkshop queues a job that downloads or updates the game's subscribed

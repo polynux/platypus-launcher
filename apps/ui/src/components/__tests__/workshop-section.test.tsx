@@ -4,6 +4,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import i18n from '../../lib/i18n';
 import { Effect } from 'effect';
 import type { Game, StorePlugin } from '../../types';
 
@@ -90,5 +91,50 @@ describe('Workshop section (protocol 1.22)', () => {
     page(plugin(['library', 'install', 'launch']));
     await waitFor(() => expect(api.getGameWorkshop).not.toHaveBeenCalled());
     expect(screen.queryByText('Echo Extra Level')).not.toBeInTheDocument();
+  });
+});
+
+describe('Workshop placement note (issue #214)', () => {
+  it('shows the subfolder placement for a ruled game', async () => {
+    api.getGameWorkshop.mockResolvedValue([
+      { ...items[0], placement_kind: 'install-subfolder', placement_path: 'portal2/maps/workshop' },
+    ]);
+    page(plugin(['library', 'install', 'launch', 'workshop']));
+    expect(await screen.findByText('Synced into the game folder at portal2/maps/workshop.')).toBeInTheDocument();
+  });
+
+  it('shows the client-only note for a game that needs the Steam client', async () => {
+    api.getGameWorkshop.mockResolvedValue([
+      { ...items[0], placement_kind: 'client-only', placement_path: 'steamapps/workshop/content/730' },
+    ]);
+    page(plugin(['library', 'install', 'launch', 'workshop']));
+    expect(await screen.findByText(/only sees Workshop items when launched through the Steam client/)).toBeInTheDocument();
+  });
+
+  it('keeps the generic folder note when the plugin names no placement', async () => {
+    api.getGameWorkshop.mockResolvedValue(items);
+    page(plugin(['library', 'install', 'launch', 'workshop']));
+    expect(await screen.findByText(/Files are written to this game's Workshop folder/)).toBeInTheDocument();
+  });
+
+  it('shows the Steam library placement for a store-layout game', async () => {
+    api.getGameWorkshop.mockResolvedValue([
+      { ...items[0], placement_kind: 'steam-library', placement_path: 'steamapps/workshop/content/4321' },
+    ]);
+    page(plugin(['library', 'install', 'launch', 'workshop']));
+    expect(await screen.findByText('Synced into the Steam library at steamapps/workshop/content/4321.')).toBeInTheDocument();
+  });
+
+  it('translates the placement note to French', async () => {
+    await i18n.changeLanguage('fr');
+    try {
+      api.getGameWorkshop.mockResolvedValue([
+        { ...items[0], placement_kind: 'install-subfolder', placement_path: 'portal2/maps/workshop' },
+      ]);
+      page(plugin(['library', 'install', 'launch', 'workshop']));
+      expect(await screen.findByText('Synchronisé dans le dossier du jeu sous portal2/maps/workshop.')).toBeInTheDocument();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
   });
 });

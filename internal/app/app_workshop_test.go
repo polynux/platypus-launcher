@@ -194,3 +194,45 @@ func TestWorkshopSyncRefusesAPluginWithoutTheCapability(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// Placement (protocol 1.22, issue #214) rides through normalizeWorkshop:
+// known kinds and relative display paths survive, anything else is dropped
+// so a hostile or stale plugin can't smuggle absolute paths into the UI.
+func TestNormalizeWorkshopPlacement(t *testing.T) {
+	t.Parallel()
+	got := normalizeWorkshop([]plugins.WorkshopItem{
+		{ID: "1", Title: "Sub", PlacementKind: "install-subfolder", PlacementPath: "portal2/maps/workshop"},
+		{ID: "2", Title: "Client", PlacementKind: "client-only", PlacementPath: "steamapps/workshop/content/730"},
+		{ID: "3", Title: "Steam", PlacementKind: "steam-library", PlacementPath: "steamapps/workshop/content/4321"},
+		{ID: "4", Title: "Bogus", PlacementKind: "elsewhere", PlacementPath: "workshop"},
+		{ID: "5", Title: "Absolute", PlacementKind: "install-subfolder", PlacementPath: "/home/u/workshop"},
+		{ID: "6", Title: "Escape", PlacementKind: "steam-library", PlacementPath: "../content/4321"},
+		{ID: "7", Title: "Plain"},
+	})
+	if len(got) != 7 {
+		t.Fatalf("items = %+v", got)
+	}
+	if got[0].PlacementKind != "install-subfolder" || got[0].PlacementPath != "portal2/maps/workshop" {
+		t.Fatalf("subfolder = %+v", got[0])
+	}
+	if got[1].PlacementKind != "client-only" || got[1].PlacementPath != "steamapps/workshop/content/730" {
+		t.Fatalf("client-only = %+v", got[1])
+	}
+	if got[2].PlacementKind != "steam-library" || got[2].PlacementPath != "steamapps/workshop/content/4321" {
+		t.Fatalf("steam-library = %+v", got[2])
+	}
+	for _, tc := range []struct {
+		item types.WorkshopItem
+		kind string
+		path string
+	}{
+		{got[3], "", "workshop"},
+		{got[4], "install-subfolder", ""},
+		{got[5], "steam-library", ""},
+		{got[6], "", ""},
+	} {
+		if tc.item.PlacementKind != tc.kind || tc.item.PlacementPath != tc.path {
+			t.Fatalf("dropped placement mishandled: %+v", tc.item)
+		}
+	}
+}
