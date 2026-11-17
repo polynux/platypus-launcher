@@ -41,6 +41,38 @@ func TestNormalizeIgnoresUnknownKindsAndBrokenGroups(t *testing.T) {
 	}
 }
 
+func TestMultiDefaultTicksListedValues(t *testing.T) {
+	groups := NormalizeGroups([]OptionGroup{
+		{ID: "dlc", Kind: OptionMulti, DLC: true, Default: []any{"pass", "nope"},
+			Values: []OptionValue{{ID: "pass"}, {ID: "deluxe"}}},
+		{ID: "packs", Kind: OptionMulti, Default: "hd",
+			Values: []OptionValue{{ID: "hd"}, {ID: "docs"}}},
+	})
+	if len(groups) != 2 {
+		t.Fatalf("normalized to %+v", groups)
+	}
+	if def, _ := groups[0].Default.([]string); !slices.Equal(def, []string{"pass"}) {
+		t.Fatalf("dlc default = %#v, want [pass]", groups[0].Default)
+	}
+	if def, _ := groups[1].Default.([]string); len(def) != 0 {
+		t.Fatalf("packs default = %#v, want nothing ticked", groups[1].Default)
+	}
+	got, err := ResolveOptions(groups, nil, Check{Strict: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got["dlc"].([]string), []string{"pass"}) || len(got["packs"].([]string)) != 0 {
+		t.Fatalf("resolved = %v, want the defaults", got)
+	}
+	got, err = ResolveOptions(groups, InstallOptions{"dlc": []any{}}, Check{Strict: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got["dlc"].([]string)) != 0 {
+		t.Fatalf("explicit empty choice resolved to %v, want unticked", got["dlc"])
+	}
+}
+
 func TestResolveFillsDefaultsForEveryGroup(t *testing.T) {
 	got, err := ResolveOptions(testGroups(), nil, Check{Strict: true})
 	if err != nil {

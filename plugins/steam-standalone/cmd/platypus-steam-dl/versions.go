@@ -419,6 +419,67 @@ func sortedKeys(m map[string]string) []string {
 	return out
 }
 
+// branchesForRequest parses the PICS branches and merges the private-beta
+// sections of password branches, so depot selection sees plain manifests.
+// A locked branch carries no plain manifests (live shape): its gids come
+// from the private-beta section. A password branch is normally hidden from
+// PICS entirely, so when the requested branch is missing it resolves here
+// and joins the list; a listed locked branch just merges its gids. Either
+// way the target below sees plain manifests. Shared by fetchDepots and the
+// DLC catalog (which degrades to the open sections when the password is
+// missing or refused).
+func branchesForRequest(cm *steamcm.Session, kv *steam.KV, appID uint32, token uint64, req request) ([]branchInfo, error) {
+	branches, err := parseBranches(kv)
+	if err != nil {
+		return nil, fmt.Errorf("app %d: %v", appID, err)
+	}
+	if name, pw := privateBranchRequest(req); name != "" && pw != "" {
+		// An open branch resolves from plain PICS; only a hidden or
+		// locked one needs its private-beta section.
+		if listed := findBranch(branches, name); listed == nil || listed.PwdRequired {
+			pbi, err := privateBranchInfo(cm, kv, appID, token, name, pw)
+			if err != nil {
+				return nil, err
+			}
+			if listed == nil {
+				branches = append(branches, *pbi)
+			}
+		}
+	} else if t := req.Target; t != nil && t.Build != "" && t.Channel == "" {
+		// A build with no channel names no branch: resolve the stored
+		// branches PICS hides so branchForBuild sees them, and merge the
+		// private gids for listed locked ones. Only branches without a
+		// password resolve from plain PICS. A refused password only fails
+		// the install when no branch holds the build; otherwise the wrong
+		// branch is not this one.
+		var firstErr error
+		for _, name := range sortedKeys(req.BranchPasswords) {
+			pw := req.BranchPasswords[name]
+			if pw == "" {
+				continue
+			}
+			listed := findBranch(branches, name)
+			if listed != nil && !listed.PwdRequired {
+				continue
+			}
+			pbi, err := privateBranchInfo(cm, kv, appID, token, name, pw)
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			if listed == nil {
+				branches = append(branches, *pbi)
+			}
+		}
+		if branchForBuild(branches, t.Build) == nil && firstErr != nil {
+			return nil, firstErr
+		}
+	}
+	return branches, nil
+}
+
 // privateBranchRequest names the explicitly requested branch and its
 // password, if any: the plain branch or the target's channel, mirroring
 // resolveTarget's password lookup. Empty unless both are set.
@@ -518,6 +579,12 @@ func versionResult(rt resolvedTarget, depots []fetchedDepot, res map[string]any)
 	for _, d := range depots {
 		manifests[d.ref.DepotID] = d.ref.GID
 	}
+	depotDLC := map[uint32]uint32{}
+	for _, d := range depots {
+		if d.ref.DLCAppID != 0 {
+			depotDLC[d.ref.DepotID] = d.ref.DLCAppID
+		}
+	}
 	build := rt.build
 	if build == "" && rt.branch != "" && len(manifests) > 0 {
 		// A private section without branch metadata names no build:
@@ -529,6 +596,7 @@ func versionResult(rt resolvedTarget, depots []fetchedDepot, res map[string]any)
 	res["build"] = build
 	res["version_name"] = rt.versionName
 	res["manifests"] = manifests
+	res["depot_dlc"] = depotDLC
 	return res
 }
 

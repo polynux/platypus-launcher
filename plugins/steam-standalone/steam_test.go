@@ -819,6 +819,17 @@ func TestSteamLibraryInstallLaunchUninstall(t *testing.T) {
 	}
 }
 
+// The plugin declares protocol 1.21 (issue #207): the core may then send the
+// global download cap, and the plugin hands it to the downloader (covered by
+// TestSteamDownloadLimitInRequest).
+func TestSteamSpeaksDownloadLimitProtocol(t *testing.T) {
+	e := setup(t)
+	e.login()
+	if got := e.m.Runtime(id).Protocol; got != "1.21" {
+		t.Fatalf("negotiated protocol = %q, want 1.21", got)
+	}
+}
+
 // Mode (b): with a Steamworks library planted, the spec still launches
 // directly but carries SteamAppId/SteamGameId, and the game page says
 // "optional".

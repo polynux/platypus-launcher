@@ -147,6 +147,11 @@ export const LauncherApi = {
 
   launchGame: (game: Game) => call<string>('LaunchGame', () => App.LaunchGame(backend(game))),
 
+  // Installs or repairs a store client's own prefix (protocol 1.20): queues
+  // the client.setup job. Without confirmed, a client that asks for download
+  // confirmation fails with client.confirmDownload instead of queueing.
+  setupClient: (source: string, confirmed: boolean) => call<Job>('SetupClient', () => App.SetupClient(source, confirmed)),
+
   // Graceful stop (SIGTERM, then SIGKILL after a few seconds); progress arrives
   // as session events ("stopping", then "stopped").
   stopGame: (gameId: string) => call<void>('StopGame', () => App.StopGame(gameId)),
@@ -571,6 +576,16 @@ export const LauncherApi = {
   // How long a canceled download's data is kept before Platypus deletes it (0 = right away).
   setCancelCleanupDays: (days: number) =>
     call<LauncherSettings>('SetCancelCleanupDays', () => App.SetCancelCleanupDays(days)),
+
+  // The global download speed cap in bytes per second (issue #207);
+  // 0 is unlimited and sends no cap to the plugins.
+  setDownloadLimit: (bytesPerSec: number) =>
+    call<LauncherSettings>('SetDownloadLimit', () => App.SetDownloadLimit(bytesPerSec)),
+
+  // The daily window when queued updates may start (issue #207): local
+  // HH:MM times, an end before the start crosses midnight. Installs never wait.
+  setUpdateWindow: (enabled: boolean, start: string, end: string) =>
+    call<LauncherSettings>('SetUpdateWindow', () => App.SetUpdateWindow(enabled, start, end)),
 
   // Where Wine prefixes are created (issue #37). "" resets it to the
   // default; changing it never moves or deletes existing prefixes.

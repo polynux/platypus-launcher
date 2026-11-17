@@ -73,6 +73,20 @@ func (s *Session) checkOptions(t *testing.T, game types.Game, unknownIDErrors bo
 			if def, _ := grp.Default.(string); grp.Default != nil && !ids[def] {
 				t.Errorf("group %q defaults to %v, which is not one of its values", grp.ID, grp.Default)
 			}
+		case types.OptionMulti:
+			if grp.Default == nil {
+				break
+			}
+			list, ok := grp.Default.([]any)
+			if !ok {
+				t.Errorf("multi group %q defaults to %v, want a list of value ids", grp.ID, grp.Default)
+				break
+			}
+			for _, item := range list {
+				if id, ok := item.(string); !ok || !ids[id] {
+					t.Errorf("multi group %q defaults to %v, which is not one of its values", grp.ID, item)
+				}
+			}
 		case types.OptionBool:
 			if _, ok := grp.Default.(bool); grp.Default != nil && !ok {
 				t.Errorf("bool group %q defaults to %v, want true or false", grp.ID, grp.Default)

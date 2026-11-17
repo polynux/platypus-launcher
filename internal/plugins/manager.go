@@ -533,6 +533,23 @@ func (m *Manager) Has(id, capability string) bool {
 	return slices.Contains(m.Runtime(id).Capabilities, capability)
 }
 
+// OffersProtocol reports whether the plugin can be sent a protocol v param:
+// the negotiated protocol once it has initialized, else what its manifest
+// declares (negotiation picks the highest version both sides speak, so a
+// manifest offering v negotiates v or later). It never starts the plugin, so
+// a job's params can be built before the first call.
+func (m *Manager) OffersProtocol(id string, v Version) bool {
+	if rt := m.Runtime(id); rt.Initialized {
+		return rt.Speaks(v)
+	}
+	p, ok := m.Plugin(id)
+	if !ok || p.Manifest.Protocol == nil {
+		return false
+	}
+	offered, _ := p.Manifest.Offered()
+	return offered.Contains(v)
+}
+
 // process returns the plugin's process, creating it if the plugin may run.
 func (m *Manager) process(id string) (*process, error) {
 	m.mu.Lock()

@@ -7,11 +7,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"platypus/internal/depot"
+	"platypus/internal/steam"
+	"sort"
+	"strings"
 	"sync"
 	"time"
-
-	"platypus/internal/depot"
 )
+
+// newScheduler is one depot's downloader: connections seeded by hosts and
+// chunks, plus the run's bandwidth limiter (nil when the user set no cap).
+// The limiter is built once per run, so a multi-depot job shares one bucket.
+func newScheduler(client *depot.Client, lim *depot.Limiter, hosts, chunks int) *depot.Scheduler {
+	return depot.NewScheduler(client, depot.SchedulerConfig{
+		InitialConns: seededInitialConns(hosts, 4, chunks),
+		Limiter:      lim,
+	})
+}
 
 func runSize(ctx context.Context, req request) error {
 	cm, err := dialCM(ctx, req.RefreshToken)
@@ -71,6 +83,7 @@ func runInstall(ctx context.Context, req request) error {
 	}
 	total := countChunks(depots)
 	client := depot.NewClient()
+	lim := depot.NewLimiter(req.DownloadLimit)
 	onProg, _, _ := progress(totalBytes(depots))
 	state := &depot.JobState{AppID: req.AppID, ManifestID: manifestGID(depots), Done: map[string]bool{}, Total: total}
 	for id := range stagingIDs(ss.dataDir, jobID) {
@@ -106,7 +119,7 @@ func runInstall(ctx context.Context, req request) error {
 		// depots so the bar never jumps backwards.
 		// STEAM-5: seed connections by hosts*slots and chunks so small
 		// depots start wide instead of waiting for growth ticks.
-		sched := depot.NewScheduler(client, depot.SchedulerConfig{InitialConns: seededInitialConns(len(d.hosts), 4, len(d.man.UniqueChunks()))})
+		sched := newScheduler(client, lim, len(d.hosts), len(d.man.UniqueChunks()))
 		dlErr := sched.DownloadStream(ctx, d.man, d.ref.DepotID, d.hosts, d.key, skip, sink, withBase(onProg, base))
 		cErr := w.Close()
 		if dlErr != nil {
@@ -155,6 +168,7 @@ func runUpdate(ctx context.Context, req request) error {
 		return err
 	}
 	client := depot.NewClient()
+	lim := depot.NewLimiter(req.DownloadLimit)
 	onProg, _, _ := progress(totalBytes(depots))
 	// STEAM-12: updates share the install staging/job path, so a
 	// cancelled update resumes instead of restarting from zero.
@@ -210,7 +224,7 @@ func runUpdate(ctx context.Context, req request) error {
 			w.Close()
 			return err
 		}
-		sched := depot.NewScheduler(client, depot.SchedulerConfig{InitialConns: seededInitialConns(len(d.hosts), 4, len(d.man.UniqueChunks()))})
+		sched := newScheduler(client, lim, len(d.hosts), len(d.man.UniqueChunks()))
 		dlErr := sched.DownloadStream(ctx, d.man, d.ref.DepotID, d.hosts, d.key, skip, func(id string, data []byte) error {
 			if err := w.Write(id, data); err != nil {
 				return err
@@ -230,6 +244,16 @@ func runUpdate(ctx context.Context, req request) error {
 		if err := depot.SaveManifest(ss.dataDir, req.AppID, d.ref.DepotID, d.ref.GID, d.raw); err != nil {
 			return err
 		}
+	}
+	// Deselected DLC (protocol 1.5): depots that fell out of the download
+	// set leave their files behind the per-depot loop above, so remove
+	// them here — only files no kept depot carries, like the gone pass.
+	kept := map[uint32]bool{}
+	for _, d := range depots {
+		kept[d.ref.DepotID] = true
+	}
+	if err := removeRetiredDepots(ss, req.AppID, kept, installedManifests(depots), req.InstallDir); err != nil {
+		return err
 	}
 	// Same success-path order as runInstall: the flusher's checkpoint
 	// happens before the job file is removed (see flusher.stop).
@@ -304,6 +328,7 @@ func runVerify(ctx context.Context, req request) error {
 	}
 	onProg, _, _ := progress(repairTotal)
 	client := depot.NewClient()
+	lim := depot.NewLimiter(req.DownloadLimit)
 	var base uint64
 	for _, d := range depots {
 		var want []string
@@ -322,7 +347,7 @@ func runVerify(ctx context.Context, req request) error {
 		if err != nil {
 			return err
 		}
-		sched := depot.NewScheduler(client, depot.SchedulerConfig{InitialConns: seededInitialConns(len(d.hosts), 4, len(sub.UniqueChunks()))})
+		sched := newScheduler(client, lim, len(d.hosts), len(sub.UniqueChunks()))
 		dlErr := sched.DownloadStream(ctx, sub, d.ref.DepotID, d.hosts, d.key, nil, func(id string, data []byte) error {
 			return w.Write(id, data)
 		}, withBase(onProg, base))
@@ -696,6 +721,183 @@ func removeGone(installDir string, gone []string) error {
 		if err := os.RemoveAll(filepath.Join(installDir, filepath.FromSlash(name))); err != nil {
 			errs = append(errs, name+": "+err.Error())
 		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("removing obsolete files: %s", errs)
+	}
+	return nil
+}
+
+// removeRetiredDepots deletes the files of depots that have saved manifests
+// but are no longer in the download set (a deselected DLC, protocol 1.5).
+// Every saved manifest of a retired depot is diffed against the new
+// combined manifest, like the per-depot gone pass, so files a kept depot
+// still carries stay. Filenames-encrypted manifests need the depot's key,
+// fetched like any other depot key; the retired depot's saved manifests
+// are forgotten, so reselecting downloads from scratch.
+func removeRetiredDepots(s *session, appID uint32, kept map[uint32]bool, combined *depot.Manifest, installDir string) error {
+	dir := filepath.Join(s.dataDir, "manifests", fmt.Sprint(appID))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil // nothing ever installed: nothing retired
+	}
+	retired := retiredDepotIDs(entries, kept)
+	if len(retired) == 0 {
+		return nil
+	}
+	// One PICS read resolves the retired depots' key apps (shared depots
+	// key to their source app unless the game is free, like fetchDepots).
+	var kv *steam.KV
+	var free bool
+	pics := func() error {
+		if kv != nil {
+			return nil
+		}
+		toks, err := s.cm.PICSAccessTokens([]uint32{appID}, nil, 0)
+		if err != nil {
+			return callErr("product info tokens", err)
+		}
+		kv, _, err = s.cm.ProductInfo(appID, toks[appID], 0)
+		if err != nil {
+			return callErr("product info", err)
+		}
+		free = kv.Get("common") != nil && kv.Get("common").String("freetodownload") == "1"
+		return nil
+	}
+	for _, depotID := range retired {
+		olds := loadInstalledAll(s.dataDir, appID, depotID)
+		if len(olds) == 0 {
+			continue
+		}
+		needKey := false
+		for _, old := range olds {
+			if old.Meta.FilenamesEncrypted {
+				needKey = true
+				break
+			}
+		}
+		var key []byte
+		if needKey {
+			if err := pics(); err != nil {
+				return err
+			}
+			app := appID
+			if !free {
+				if depots := kv.Get("depots"); depots != nil {
+					var src uint32
+					fmt.Sscanf(depots.String(fmt.Sprint(depotID), "depotfromapp"), "%d", &src)
+					if src != 0 && src != appID {
+						app = src
+					}
+				}
+			}
+			// The key is gone with the licence (or unreachable):
+			// leave the files and forget the manifests rather
+			// than failing the update. A reselect downloads
+			// from scratch.
+			key, err = s.cm.DepotKey(depotID, app, 0)
+			if err != nil {
+				forgetManifests(dir, entries, depotID)
+				continue
+			}
+		}
+		if err := retireDepot(s.dataDir, installDir, appID, depotID, olds, combined, key); err != nil {
+			return err
+		}
+		forgetManifests(dir, entries, depotID)
+	}
+	return nil
+}
+
+// retiredDepotIDs lists the saved-manifest depot ids outside the kept set.
+func retiredDepotIDs(entries []os.DirEntry, kept map[uint32]bool) []uint32 {
+	var retired []uint32
+	seenRetired := map[uint32]bool{}
+	for _, e := range entries {
+		name := e.Name()
+		i := strings.IndexByte(name, '_')
+		if i <= 0 {
+			continue
+		}
+		var id uint64
+		if _, err := fmt.Sscanf(name[:i], "%d", &id); err != nil || id == 0 {
+			continue
+		}
+		if !kept[uint32(id)] && !seenRetired[uint32(id)] {
+			seenRetired[uint32(id)] = true
+			retired = append(retired, uint32(id))
+		}
+	}
+	return retired
+}
+
+// retireDepot decrypts a retired depot's saved manifests with its key (nil
+// when the names were never encrypted) and deletes the files no kept depot
+// carries. A bad key is an error: the caller decides whether to fail or to
+// leave the files and forget the manifests.
+func retireDepot(dataDir, installDir string, appID, depotID uint32, olds []*depot.Manifest, combined *depot.Manifest, key []byte) error {
+	for _, old := range olds {
+		if old.Meta.FilenamesEncrypted {
+			if err := old.DecryptFilenames(key); err != nil {
+				return depErrf(depotID, err)
+			}
+		}
+	}
+	var gone []string
+	seenGone := map[string]bool{}
+	for _, old := range olds {
+		_, g := depot.Diff(old, combined)
+		for _, name := range g {
+			if !seenGone[name] {
+				seenGone[name] = true
+				gone = append(gone, name)
+			}
+		}
+	}
+	return removeRetiredFiles(installDir, olds, gone)
+}
+
+// forgetManifests drops a retired depot's saved manifests, so reselecting
+// it downloads from scratch instead of reusing a stale branch.
+func forgetManifests(dir string, entries []os.DirEntry, depotID uint32) {
+	prefix := fmt.Sprintf("%d_", depotID)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), prefix) {
+			os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+}
+
+// removeRetiredFiles deletes a retired depot's files but only directories
+// left empty: a user file inside a DLC folder (screenshots, saves) keeps
+// the folder, and a folder a kept depot still lists is never named here.
+func removeRetiredFiles(installDir string, olds []*depot.Manifest, gone []string) error {
+	dirs := map[string]bool{}
+	for _, old := range olds {
+		for _, f := range old.Files {
+			if f.IsDir() {
+				dirs[f.Name] = true
+			}
+		}
+	}
+	var errs []string
+	var dirGone []string
+	for _, name := range gone {
+		if dirs[name] {
+			dirGone = append(dirGone, name)
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(installDir, filepath.FromSlash(name))); err != nil {
+			errs = append(errs, name+": "+err.Error())
+		}
+	}
+	// Deepest first, so a parent is empty when attempted; Remove fails on
+	// a directory that still holds user files, which then stays.
+	sort.Slice(dirGone, func(i, j int) bool {
+		return strings.Count(dirGone[i], "/") > strings.Count(dirGone[j], "/")
+	})
+	for _, name := range dirGone {
+		_ = os.Remove(filepath.Join(installDir, filepath.FromSlash(name)))
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("removing obsolete files: %s", errs)

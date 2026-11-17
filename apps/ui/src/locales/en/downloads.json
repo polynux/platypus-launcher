@@ -13,7 +13,8 @@
     "backup": "Backup",
     "workshop": "Workshop sync",
     "restore": "Restore",
-    "remove": "Remove"
+    "remove": "Remove",
+    "client-setup": "Set up"
   },
   "actionFailed": {
     "install": "install failed",
@@ -24,6 +25,7 @@
     "backup": "backup failed",
     "restore": "restore failed",
     "remove": "remove failed",
+    "client-setup": "client setup failed",
     "runner-install": "runner install failed"
   },
   "kind": {
@@ -35,6 +37,7 @@
     "backup": "Backup",
     "restore": "Restore",
     "remove": "remove",
+    "client-setup": "client setup",
     "workshop": "Workshop sync"
   },
   "state": {
@@ -97,7 +100,9 @@
       "move": "Moved",
       "backup": "Backed up",
       "restore": "Restored",
-      "remove": "Removed"
+      "remove": "Removed",
+      "client-setup": "Set up",
+      "workshop": "Synced"
     },
     "queue": "Queue",
     "pauseAll": "Pause all",

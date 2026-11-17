@@ -36,18 +36,54 @@ func TestSteamBranchPasswordInRequest(t *testing.T) {
 import threading
 hs.refresh_token = lambda: "tok"
 reqs = []
-def fake_run(sub, req, job_id=None, game_dir=None):
+def fake_run(sub, req, job_id=None, game_dir=None, **k):
     reqs.append((sub, dict(req)))
+    if sub == "dlc":
+        return {"dlc": [], "depots": {}, "base": []}
     return {"os_used": "linux", "disk_bytes": 1, "download_bytes": 1}
 hs.dl_run = fake_run
+hs.owned_games = lambda: {"response": {"games": []}}
 hs.record_install = lambda *a: None
 hs.notify = lambda *a: None
 hs.install_size({"id": "4321", "branch": "beta", "branchPassword": "s3cret"})
 hs.follow_install("j1", "4321", "/tmp/g", "update", {"branch": "beta", "branchPassword": "s3cret"})
 hs.follow_install("j2", "4321", "/tmp/g", "install")
-print([(s, r["branch"], r.get("branch_password")) for s, r in reqs])
+print([(s, r["branch"], r.get("branch_password")) for s, r in reqs if s != "dlc"])
 `)
 	want := "[('size', 'beta', 's3cret'), ('update', 'beta', 's3cret'), ('install', 'public', None)]"
+	if got != want {
+		t.Fatalf("requests = %s, want %s", got, want)
+	}
+}
+
+// The global download speed cap (protocol 1.21, issue #207) reaches
+// platypus-steam-dl's stdin request as download_limit; unlimited sends none.
+func TestSteamDownloadLimitInRequest(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+hs.refresh_token = lambda: "tok"
+hs.game_dir_name = lambda app: "g"
+import os
+d = os.path.join(os.environ["PLATYPUS_PLUGIN_DATA"], "games")
+reqs = []
+def fake_run(sub, req, job_id=None, game_dir=None, **kw):
+    reqs.append((sub, dict(req)))
+    return {"os_used": "linux"}
+hs.dl_run = fake_run
+hs.record_install = lambda *a: None
+hs.notify = lambda *a: None
+class T:
+    def __init__(self, target, args=(), daemon=False): self.target, self.args = target, args
+    def start(self): self.target(*self.args)
+hs.threading.Thread = T
+hs.start_job({"id": "4321", "jobId": "j1", "installDir": d, "downloadLimit": 1048576}, "install")
+hs.start_job({"id": "4321", "jobId": "j2", "installDir": d}, "update")
+hs.verify_version = lambda app: {}
+hs.follow_verify("j3", "4321", d, True, 1048576)
+# The DLC catalog lookup (issue #198) downloads nothing: only the jobs count.
+print([(s, r.get("download_limit")) for s, r in reqs if s != "dlc"])
+`)
+	want := "[('install', 1048576), ('update', None), ('verify', 1048576)]"
 	if got != want {
 		t.Fatalf("requests = %s, want %s", got, want)
 	}

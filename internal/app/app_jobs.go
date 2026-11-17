@@ -11,6 +11,8 @@ import (
 	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
 	"platypus/internal/types"
 )
 
@@ -40,7 +42,9 @@ func (b jobBackend) Size(ctx context.Context, j types.Job) (plugins.InstallSize,
 func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 	switch j.Kind {
 	case jobs.KindVerify:
-		return b.a.plugins.Call(ctx, j.Source, "game.verify", verifyParams(j), nil)
+		params := verifyParams(j)
+		b.a.attachDownloadLimit(j, params) // a repair downloads the damaged files
+		return b.a.plugins.Call(ctx, j.Source, "game.verify", params, nil)
 	case jobs.KindMove:
 		if !b.a.plugins.Has(j.Source, "move") {
 			return b.a.startCoreMove(j) // runs on its own; reports through the queue
@@ -62,6 +66,8 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 		return b.a.startCoreRemove(j) // core deletes; reports through the queue
 	case jobs.KindRunnerInstall:
 		return b.a.startCoreRunnerInstall(j) // core downloads; reports through the queue
+	case jobs.KindClientSetup:
+		return b.a.startClientSetup(j) // core runs the installer's spec; reports through the queue
 	case jobs.KindWorkshop:
 		return b.a.startWorkshopSync(ctx, j) // the plugin syncs; reports through the queue
 	}
@@ -74,7 +80,9 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 	if err != nil {
 		return err
 	}
-	return b.a.plugins.Call(ctx, j.Source, "game."+j.Kind, installParams(j, options), nil)
+	params := installParams(j, options)
+	b.a.attachDownloadLimit(j, params)
+	return b.a.plugins.Call(ctx, j.Source, "game."+j.Kind, params, nil)
 }
 
 // jobTargetGate runs the versions gate for a job that names a version. A job
@@ -136,23 +144,37 @@ func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
 		b.a.runnerInstalls.stop(ctx, j.ID)
 		return nil
 	}
+	if j.Kind == jobs.KindClientSetup {
+		// Core runs the installer itself: canceling kills it and stops the
+		// prefix's wineserver, and the run's unwind does both.
+		b.a.clientSetups.stop(ctx, j.ID)
+		return nil
+	}
 	return b.a.plugins.Call(ctx, j.Source, "job.cancel", map[string]any{"jobId": j.ID}, nil)
 }
 
 // RunsInCore says whether core is running the job itself, in a goroutine of
-// its own (see CoreRunner in the queue): core's own moves and removals, and
-// its backup/restore jobs.
+// its own (see CoreRunner in the queue): core's own moves and removals, its
+// backup/restore and client-setup jobs, and runner installs.
 func (b jobBackend) RunsInCore(j types.Job) bool {
 	if j.Kind == jobs.KindBackup || j.Kind == jobs.KindRestore {
 		return true
 	}
-	return b.a.moves.active(j.ID) || b.a.removes.active(j.ID) || b.a.runnerInstalls.active(j.ID)
+	return b.a.moves.active(j.ID) || b.a.removes.active(j.ID) || b.a.runnerInstalls.active(j.ID) || b.a.clientSetups.active(j.ID)
 }
 
 // heldByJob refuses a launch while a move, a check, a backup, a restore or a
 // removal holds the game: the game would start from files that are being
-// moved, checked, rewritten or deleted.
+// moved, checked, rewritten or deleted. A game its store client launches
+// also waits for the client's own setup (protocol 1.20); wine-client
+// launches without that flag are checked again after the launch spec is
+// known (see launchGame).
 func (a *App) heldByJob(game types.Game) error {
+	if game.ClientLaunch {
+		if _, ok := a.jobs.Holding(stores.ClientGameID(game.Source), jobs.KindClientSetup); ok {
+			return apperr.New("game.launchBusy", fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title), map[string]string{"title": game.Title, "what": "set up"})
+		}
+	}
 	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindBackup, jobs.KindRestore, jobs.KindRemove)
 	if !ok {
 		return nil
@@ -350,6 +372,47 @@ func (a *App) ResumeAllJobs() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// attachDownloadLimit adds the global speed cap to the jobs that download
+// (install, update, and a verify that repairs), for a plugin that speaks
+// protocol 1.21 (the revision that added the param). The plugin passes it to
+// its own downloader; a plugin that doesn't speak it gets nothing and
+// downloads at its own pace.
+func (a *App) attachDownloadLimit(j types.Job, params map[string]any) {
+	switch {
+	case j.Kind == jobs.KindInstall, j.Kind == jobs.KindUpdate:
+	case j.Kind == jobs.KindVerify && j.Repair:
+	default:
+		return
+	}
+	limit := a.settings.DownloadLimit()
+	if limit <= 0 || !a.plugins.OffersProtocol(j.Source, plugins.DownloadLimitVersion) {
+		return
+	}
+	params["downloadLimit"] = limit
+}
+
+// SetDownloadLimit saves the global download speed cap in bytes per second
+// (0 = unlimited). It applies to the next install or update each downloader
+// starts; a running one keeps its pace.
+func (a *App) SetDownloadLimit(bytesPerSec int64) (types.LauncherSettings, error) {
+	if err := a.settings.SetDownloadLimit(bytesPerSec); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
+}
+
+// SetUpdateWindow saves the daily window when queued updates may start. The
+// queue reads it from now on: an update queued outside the window waits,
+// installs never do.
+func (a *App) SetUpdateWindow(enabled bool, start, end string) (types.LauncherSettings, error) {
+	w := settings.UpdateWindow{Enabled: enabled, Start: start, End: end}
+	if err := a.settings.SetUpdateWindow(w); err != nil {
+		return a.launcherSettings(), err
+	}
+	a.jobs.SetUpdateWindow(w)
+	return a.launcherSettings(), nil
 }
 
 // SetCancelCleanupDays sets how many days a canceled download's data is kept

@@ -126,6 +126,7 @@ EMSG_CLIENT_HEARTBEAT = 703
 EMSG_CLIENT_LOGOFF = 706
 EMSG_CLIENT_LOGON_RESPONSE = 751
 EMSG_CLIENT_LOGGED_OFF = 757
+EMSG_CLIENT_LICENSE_LIST = 780
 EMSG_CLIENT_GET_DEPOT_KEY = 5438
 EMSG_CLIENT_CHECK_BETA_PASSWORD = 5450
 EMSG_CLIENT_LOGON = 5514
@@ -509,6 +510,12 @@ def serve_logged_in(conn, hdr, body, st):
                     push_frame(147, incoming_body(msg),
                                "FriendMessagesClient.IncomingMessage#1")
 
+    # The licence list arrives after logon, like the real CM: package ids
+    # from the "licenses" state, so licence-based tests can own DLC.
+    if st.get("licenses"):
+        lic = b"".join(pb_msg(2, pb_int(1, p)) for p in st["licenses"])
+        conn.send_frame(2, pack(EMSG_CLIENT_LICENSE_LIST,
+                                pb_int(1, steamid) + pb_int(2, sessionid), lic))
     seed_chat(st, steamid)
 
     send_pushes(0)
@@ -1065,8 +1072,14 @@ def serve_content(conn, emsg, hdr, body, st, steamid, sessionid):
     if emsg == EMSG_CLIENT_GET_DEPOT_KEY:
         req = pb_parse(body)
         depot_id = req.get(1, [st.get("depot_id", 11)])[0]
-        key = bytes.fromhex(st.get("depot_key", "00" * 32))
         record(f"depot_key {depot_id}")
+        if depot_id in (st.get("depot_key_deny") or []):
+            # A refunded or unshared licence: AccessDenied, like the real
+            # CM answers for a depot key the account may not fetch.
+            conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid, 15),
+                                    pb_int(1, 15)))
+            return
+        key = bytes.fromhex(st.get("depot_key", "00" * 32))
         conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid),
                                 pb_int(1, 1) + pb_int(2, depot_id) + pb_str(3, key)))
     elif emsg == EMSG_CLIENT_PICS_ACCESS_TOKEN:
@@ -1089,8 +1102,18 @@ def serve_content(conn, emsg, hdr, body, st, steamid, sessionid):
         kv = st.get("appinfo_%d" % app) or st.get("appinfo") or product_kv(st)
         entry = (pb_int(1, app) + pb_int(2, 42)
                  + pb_str(5, kv.encode()))
-        conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid),
-                                pb_msg(1, entry)))
+        resp = pb_msg(1, entry)
+        # PICS package info ("package_apps": {pkgid: [appids]}) answers
+        # the packages = 1 side of the request as packages = 2, so
+        # licence-based tests can own DLC.
+        for raw in req.get(1, []):
+            pkg = pb_parse(raw).get(1, [0])[0]
+            record(f"pics_package {pkg}")
+            apps = (st.get("package_apps") or {}).get(str(pkg), [])
+            kv = '"packageinfo"\n{\n"appids"\n{\n' + "".join(
+                '"%d"\t\t"%d"\n' % (i, a) for i, a in enumerate(apps)) + '}\n}\n'
+            resp += pb_msg(2, pb_int(1, pkg) + pb_int(2, 42) + pb_str(5, kv.encode()))
+        conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid), resp))
     elif emsg == EMSG_CLIENT_CHECK_BETA_PASSWORD:
         # beta_password_eresult refuses the password (a wrong-password live
         # shape the unlock tests drive); the default 1 accepts it. Each

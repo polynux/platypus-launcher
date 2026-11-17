@@ -899,10 +899,11 @@ func TestSteamVersionsTargetInRequest(t *testing.T) {
 hs.refresh_token = lambda: "tok"
 hs.beta_passwords = lambda: {"4321": {"beta": "pw"}}
 reqs = []
-hs.dl_run = lambda sub, req, *a, **k: reqs.append((sub, dict(req))) or {"os_used": "linux", "disk_bytes": 8, "download_bytes": 4}
+hs.dl_run = lambda sub, req, *a, **k: reqs.append((sub, dict(req))) or ({"dlc": [], "depots": {}, "base": []} if sub == "dlc" else {"os_used": "linux", "disk_bytes": 8, "download_bytes": 4})
+hs.owned_games = lambda: {"response": {"games": []}}
 hs.install_size({"id": "4321", "target": {"channel": "beta"}})
 hs.install_size({"id": "4321", "branch": "old", "branchPassword": "pw2"})
-print([(s, r.get("branch"), r.get("target"), r.get("branch_passwords")) for s, r in reqs])
+print([(s, r.get("branch"), r.get("target"), r.get("branch_passwords")) for s, r in reqs if s != "dlc"])
 `)
 	want := `[('size', 'public', {'channel': 'beta'}, {'beta': 'pw'}), ('size', 'old', None, None)]`
 	if got != want {
@@ -917,7 +918,7 @@ func TestSteamVersionsInstalledEntry(t *testing.T) {
 hs.refresh_token = lambda: "tok"
 hs.dl_run = lambda *a, **k: {"os_used": "linux", "branch": "beta", "build": "200",
                              "version_name": "beta", "manifests": {"11": 112}}
-hs.record_install = lambda app, d, o, v=None: v
+hs.record_install = lambda app, d, o, v=None, dlc=None, depot_dlc=None: v
 hs.find_executable = lambda *a, **k: "game.sh"
 hs.detect_mode = lambda d: "none"
 hs.store_app = lambda app: {"name": "G"}

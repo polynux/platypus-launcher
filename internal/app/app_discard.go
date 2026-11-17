@@ -46,8 +46,9 @@ func discardParamsFor(j types.Job, gamesRoot, home string) (map[string]any, erro
 	if j.Kind == jobs.KindUninstall {
 		return nil, fmt.Errorf("an uninstall has no downloaded data")
 	}
-	if j.Kind == jobs.KindVerify || j.Kind == jobs.KindMove || j.Kind == jobs.KindBackup || j.Kind == jobs.KindRestore || j.Kind == jobs.KindRemove {
-		// These work on the installed game: discarding would delete it.
+	if j.Kind == jobs.KindVerify || j.Kind == jobs.KindMove || j.Kind == jobs.KindBackup || j.Kind == jobs.KindRestore || j.Kind == jobs.KindRemove || j.Kind == jobs.KindClientSetup {
+		// These work on the installed game (or the core-owned client
+		// prefix): discarding would delete it.
 		return nil, jobs.ErrNoData
 	}
 	if err := checkDiscardDirFor(j.InstallDir, gamesRoot, home); err != nil {

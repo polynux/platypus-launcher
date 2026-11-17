@@ -9,6 +9,7 @@ import type { ActivityEvent, Game, GameJobKind, Job, SessionEvent, StorePlugin }
 import { ActivityFeed } from '../ActivityFeed';
 import { PlayButton } from '../PlayButton';
 import { JobProgress } from '../JobProgress';
+import { ClientSetupAction } from '../ClientSetupAction';
 import { CompatFacts, tierMeaning } from '../CompatBadges';
 import { useCompat } from '../../lib/useCompat';
 import { Badge } from '@/components/ds/badge';
@@ -312,7 +313,7 @@ export function GameHeroHeading({ game, fix, storeLogo, storeName, needsConnecti
  *  Play / Update, game settings and the store link. Required (it holds
  *  Install, Play and Update); the game page shows it inside the Hero frame
  *  until #103 places it in a layout. */
-export function GameHeroActions({ game, plugin, job, active, session, launching, hours, last, playtimeTitle, canChooseOptions, onJob, onJobAction, onPlay, onStop, onForceStop, onInstall, onInstallTo, onSettings, onOpenStore }: {
+export function GameHeroActions({ game, plugin, job, active, session, launching, hours, last, playtimeTitle, canChooseOptions, onJob, onJobAction, onPlay, onStop, onForceStop, onInstall, onInstallTo, onSettings, onOpenStore, clientSetup, onNotify }: {
   game: Game;
   plugin?: StorePlugin;
   job?: Job;
@@ -332,6 +333,9 @@ export function GameHeroActions({ game, plugin, job, active, session, launching,
   onInstallTo?: () => void;
   onSettings: () => void;
   onOpenStore?: () => void;
+  /** The store-client setup prompt while one holds this game (protocol 1.20). */
+  clientSetup?: { client: string; source: string; message: string | null; job?: Job };
+  onNotify?: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
 }) {
   const { t } = useTranslation('game');
   const chips = useVariant('game-hero.chips');
@@ -356,6 +360,15 @@ export function GameHeroActions({ game, plugin, job, active, session, launching,
             onInstall={onInstall}
             onInstallTo={onInstallTo}
             onCancel={(id) => onJobAction('cancel', id)}
+          />
+        ) : clientSetup ? (
+          <ClientSetupAction
+            client={clientSetup.client}
+            source={clientSetup.source}
+            message={clientSetup.message}
+            job={clientSetup.job}
+            onNotify={onNotify}
+            buttonClassName="rounded-2xl px-8 py-3.5 text-[15px]"
           />
         ) : (
           <PlayButton session={session} launching={launching} disabled={game.outside_folder} onPlay={onPlay} onStop={onStop} onForceStop={onForceStop} />

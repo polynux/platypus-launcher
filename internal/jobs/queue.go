@@ -20,6 +20,7 @@ import (
 	"platypus/internal/jsonrpc"
 	"platypus/internal/platform"
 	"platypus/internal/plugins"
+	"platypus/internal/settings"
 	"platypus/internal/types"
 )
 
@@ -52,6 +53,12 @@ const (
 	// AddRunnerInstall constructor, no size check, RunsInCore, and progress
 	// through the queue.
 	KindRunnerInstall = "runner-install"
+	// KindClientSetup installs or repairs a store client in its own
+	// Platypus-managed prefix (protocol 1.20, issue #191): the plugin's
+	// client.setup job. The job's GameID is the client's pseudo id (see
+	// stores.ClientGameID), so a client has at most one setup job like a
+	// game has at most one active job.
+	KindClientSetup = "client-setup"
 
 	StateQueued   = "queued"
 	StateRunning  = "running"
@@ -134,6 +141,11 @@ type Queue struct {
 	cleanupAfter time.Duration
 	discarding   map[string]bool
 	cleanupWake  chan struct{}
+	// updateWindow holds queued updates until it opens (issue #207);
+	// windowTimer is the single wake-up scheduled for the next opening.
+	updateWindow settings.UpdateWindow
+	windowTimer  *time.Timer
+	windowAt     time.Time
 	jobs         []*types.Job
 	lastSave     time.Time
 	lastEmit     time.Time
@@ -224,6 +236,32 @@ func (q *Queue) signal() {
 	}
 }
 
+// wakeAt asks for another pass when the update window opens or, if that is
+// further off, at least every windowCheck (a suspend or clock change must not
+// hide the opening). It keeps one timer: an earlier deadline replaces it, a
+// later one never postpones it, and a timer that already fired is re-armed.
+// Callers hold q.mu.
+func (q *Queue) wakeAt(t time.Time) {
+	now := q.now()
+	at := t
+	if at.Sub(now) > windowCheck {
+		at = now.Add(windowCheck)
+	}
+	if q.windowTimer != nil {
+		switch {
+		case !q.windowAt.After(now):
+			// The timer fired or the clock moved past it: re-arm.
+			q.windowTimer.Stop()
+		case !q.windowAt.After(at):
+			return // an earlier wake is already armed
+		default:
+			q.windowTimer.Stop()
+		}
+	}
+	q.windowAt = at
+	q.windowTimer = time.AfterFunc(at.Sub(now), q.signal)
+}
+
 // cleanupLoop deletes the data of canceled jobs past the threshold: once at
 // startup, hourly, and whenever a cancel or a threshold change asks for it.
 // It runs apart from the job loop because a plugin can take a while to wind a
@@ -246,16 +284,29 @@ func (q *Queue) cleanupLoop(ctx context.Context) {
 func (q *Queue) next(ctx context.Context) {
 	q.mu.Lock()
 	var job *types.Job
+	var opens time.Time
 	for _, j := range q.jobs {
 		if j.State == StateRunning {
 			q.mu.Unlock()
 			return
 		}
-		if job == nil && j.State == StateQueued {
-			job = j
+		if j.State != StateQueued || job != nil {
+			continue
 		}
+		// An update outside its window waits; a later install still runs
+		// (issue #207: installs never wait for the schedule).
+		if at, waiting := q.waitsForWindow(j); waiting {
+			if opens.IsZero() || at.Before(opens) {
+				opens = at
+			}
+			continue
+		}
+		job = j
 	}
 	if job == nil {
+		if !opens.IsZero() {
+			q.wakeAt(opens)
+		}
 		q.mu.Unlock()
 		return
 	}
@@ -299,7 +350,7 @@ func startTimeoutFor(kind string) time.Duration {
 
 // prepare checks free space and creates the install folder.
 func (q *Queue) prepare(ctx context.Context, job types.Job) error {
-	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindBackup || job.Kind == KindRestore || job.Kind == KindRemove || job.Kind == KindRunnerInstall || job.Kind == KindWorkshop {
+	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindBackup || job.Kind == KindRestore || job.Kind == KindRemove || job.Kind == KindRunnerInstall || job.Kind == KindClientSetup || job.Kind == KindWorkshop {
 		return nil // no download, so nothing to size; a move checks its space when it is queued
 	}
 	sizeCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -487,6 +538,21 @@ func (q *Queue) AddRunnerInstall(source, gameID, tag, title, installDir string) 
 	return q.enqueue(&types.Job{
 		Kind: KindRunnerInstall, Source: source, GameID: gameID, StoreGameID: tag,
 		Title: title, InstallDir: installDir,
+	})
+}
+
+// AddClientSetup queues installing or repairing a store client in installDir,
+// its own Platypus-managed prefix (protocol 1.20, issue #191). gameID is the
+// client's pseudo id, so a client has at most one setup job; confirmed says
+// the user accepted the installer's download prompt. The core runs the
+// installer's spec itself and reports the outcome through the queue.
+func (q *Queue) AddClientSetup(source, gameID, title, installDir string, confirmed bool) (types.Job, error) {
+	if !filepath.IsAbs(installDir) {
+		return types.Job{}, fmt.Errorf("client prefix %q is not an absolute path", installDir)
+	}
+	return q.enqueue(&types.Job{
+		Kind: KindClientSetup, Source: source, GameID: gameID, StoreGameID: "client",
+		Title: title, InstallDir: installDir, Confirmed: confirmed,
 	})
 }
 
@@ -1074,7 +1140,7 @@ func (q *Queue) Discard(ctx context.Context, id string) error {
 		q.mu.Unlock()
 		return fmt.Errorf("no job %s", id)
 	}
-	if j.Kind == KindVerify || j.Kind == KindMove || j.Kind == KindBackup || j.Kind == KindRestore || j.Kind == KindRemove || j.Kind == KindRunnerInstall {
+	if j.Kind == KindVerify || j.Kind == KindMove || j.Kind == KindBackup || j.Kind == KindRestore || j.Kind == KindRemove || j.Kind == KindRunnerInstall || j.Kind == KindClientSetup {
 		q.mu.Unlock()
 		return fmt.Errorf("%s: %w", j.Title, ErrNoData)
 	}

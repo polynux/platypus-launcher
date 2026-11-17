@@ -137,7 +137,13 @@ func Build(k Knobs) *Fixture {
 		specs = append(specs, fileSpec{name: fmt.Sprintf("data/extra%02d.bin", i),
 			body: bytes.Repeat([]byte{byte(i + 1)}, 2048)})
 	}
-	fix := &Fixture{Key: key, DepotID: 11, GID: 999, OSUsed: osUsed, Chunks: map[string][]byte{}}
+	fix := assemble(key, 11, 999, osUsed, specs, false)
+	return fix
+}
+
+// assemble encrypts specs into a fixture depot, for Build and BuildDLC.
+func assemble(key []byte, depotID uint32, gid uint64, osUsed string, specs []fileSpec, encryptNames bool) *Fixture {
+	fix := &Fixture{Key: key, DepotID: depotID, GID: gid, OSUsed: osUsed, Chunks: map[string][]byte{}}
 	var files []depot.File
 	for _, sp := range specs {
 		plain := sp.body
@@ -160,7 +166,7 @@ func Build(k Knobs) *Fixture {
 	}
 	meta := depot.Metadata{DepotID: fix.DepotID, GID: fix.GID, DiskOriginal: fix.DiskBytes,
 		DiskCompressed: fix.CompressedBytes, UniqueChunks: uint32(len(fix.Chunks))}
-	raw, err := depot.BuildManifest(meta, files, key, false)
+	raw, err := depot.BuildManifest(meta, files, key, encryptNames)
 	if err != nil {
 		panic(err)
 	}
@@ -173,6 +179,32 @@ func Build(k Knobs) *Fixture {
 	return fix
 }
 
+// BuildDLC builds the fixture for a DLC depot of the default game: depot
+// 12 holds the base game's launcher (identical bytes, so the depots share
+// a chunk) plus its own add-on file. Same key as Build, so one depot key
+// unlocks both.
+func BuildDLC() *Fixture {
+	key := TestKey()
+	return assemble(key, 12, 1000, "linux", []fileSpec{
+		{name: "game.sh",
+			body:  []byte("#!/bin/sh\necho 'steam standalone game'\n"),
+			flags: depot.FlagExecutable},
+		{name: "dlc.dat", body: bytes.Repeat([]byte{0xD1}, 2048)},
+	}, false)
+}
+
+// BuildDLCEncrypted is BuildDLC with encrypted filenames, for the retire
+// path that must decrypt saved manifests with the depot key.
+func BuildDLCEncrypted() *Fixture {
+	key := TestKey()
+	return assemble(key, 12, 1000, "linux", []fileSpec{
+		{name: "game.sh",
+			body:  []byte("#!/bin/sh\necho 'steam standalone game'\n"),
+			flags: depot.FlagExecutable},
+		{name: "dlc.dat", body: bytes.Repeat([]byte{0xD1}, 2048)},
+	}, true)
+}
+
 // CDN is a fake content server farm serving one fixture.
 type CDN struct {
 	t       *testing.T
@@ -183,24 +215,45 @@ type CDN struct {
 	fix   *Fixture
 }
 
-// StartCDN serves fix from two httptest hosts (so multi-host spread is
-// exercised even in plugin tests).
-func StartCDN(t *testing.T, fix *Fixture) *CDN {
+// StartCDN serves fixtures from two httptest hosts (so multi-host spread
+// is exercised even in plugin tests). Extra fixtures add depots (a DLC
+// test passes Build and BuildDLC): manifests route by depot id, chunks
+// are served from the merged pool.
+func StartCDN(t *testing.T, fix *Fixture, more ...*Fixture) *CDN {
 	t.Helper()
+	fixes := append([]*Fixture{fix}, more...)
+	manifests := map[string][]byte{}
+	chunks := map[string][]byte{}
+	for _, f := range fixes {
+		manifests[fmt.Sprint(f.DepotID)] = f.Raw
+		for id, enc := range f.Chunks {
+			chunks[id] = enc
+		}
+	}
 	c := &CDN{t: t, Hits: new(int64), fix: fix}
 	delay := time.Duration(ReadKnobs().ChunkDelayMs) * time.Millisecond
 	var chunkMu sync.Mutex // serves chunks one at a time when a delay is set
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt64(c.Hits, 1)
 			path := strings.TrimPrefix(r.URL.Path, "/")
 			parts := strings.Split(path, "/")
 			if len(parts) >= 4 && parts[0] == "depot" && parts[2] == "manifest" {
-				w.Write(fix.Raw)
+				raw, ok := manifests[parts[1]]
+				if !ok && len(fixes) == 1 {
+					// A lone fixture stands in for every depot (a
+					// shared depot resolves to the same gid).
+					raw, ok = fixes[0].Raw, true
+				}
+				if !ok {
+					http.NotFound(w, r)
+					return
+				}
+				w.Write(raw)
 				return
 			}
 			if len(parts) == 4 && parts[0] == "depot" && parts[2] == "chunk" {
-				if enc, ok := fix.Chunks[parts[3]]; ok {
+				if enc, ok := chunks[parts[3]]; ok {
 					if delay > 0 {
 						chunkMu.Lock()
 						defer chunkMu.Unlock()
@@ -238,6 +291,47 @@ func WriteCMState(t *testing.T, cmState string, cdn *CDN, fix *Fixture) {
 	st["manifest_gid"] = fix.GID
 	st["oslist"] = fix.OSUsed
 	st["request_code"] = 4242
+	raw, _ := json.Marshal(st)
+	if err := os.WriteFile(cmState, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// WriteCMStateDLC points the fake CM at two depots: the base game's depot
+// plus a DLC depot carrying dlcappid 100, with extended.listofdlc naming
+// DLC 100 (owned in tests) and 101 (unowned: catalogued, no depot here).
+// Both fixtures share the test key, so one depot key unlocks both.
+func WriteCMStateDLC(t *testing.T, cmState string, cdn *CDN, base, dlc *Fixture) {
+	t.Helper()
+	var st map[string]any
+	if raw, err := os.ReadFile(cmState); err == nil {
+		json.Unmarshal(raw, &st)
+	}
+	if st == nil {
+		st = map[string]any{}
+	}
+	st["depot_key"] = hex.EncodeToString(base.Key)
+	st["cdn_hosts"] = cdn.Hosts
+	st["request_code"] = 4242
+	st["appinfo"] = fmt.Sprintf(`"extended"
+{
+"listofdlc" "100,101"
+}
+"depots"
+{
+"%d"
+{
+"config" { "oslist" "linux" }
+"manifests" { "public" { "gid" "%d" "size" "%d" } }
+}
+"%d"
+{
+"config" { "oslist" "linux" }
+"dlcappid" "100"
+"manifests" { "public" { "gid" "%d" "size" "%d" } }
+}
+}
+`, base.DepotID, base.GID, base.DiskBytes, dlc.DepotID, dlc.GID, dlc.DiskBytes)
 	raw, _ := json.Marshal(st)
 	if err := os.WriteFile(cmState, raw, 0o644); err != nil {
 		t.Fatal(err)

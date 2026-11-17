@@ -109,6 +109,41 @@ func TestPluginWithTooNewMinorOfTheSameMajor(t *testing.T) {
 	}
 }
 
+// A job's params are built before the plugin's first call: OffersProtocol
+// answers from the manifest until the plugin has negotiated, then from the
+// negotiation.
+func TestOffersProtocolBeforeAndAfterInitialize(t *testing.T) {
+	t.Setenv("ECHO_PROTOCOLS", "1.0,1.19,1.21")
+	e, _ := approvedEnv(t, nil, useProtocol([]string{"1.0", "1.19", "1.21"}, ""))
+	if e.m.Runtime("echo").Initialized {
+		t.Fatal("the plugin initialized too early")
+	}
+	if !e.m.OffersProtocol("echo", Version{1, 21}) {
+		t.Fatal("manifest offering 1.21 must accept the 1.21 param before the first call")
+	}
+	if e.m.OffersProtocol("echo", Version{1, 22}) {
+		t.Fatal("manifest stops at 1.21")
+	}
+	if _, err := e.m.Initialize(ctx(t), "echo"); err != nil {
+		t.Fatal(err)
+	}
+	if !e.m.OffersProtocol("echo", Version{1, 21}) {
+		t.Fatalf("negotiated %q, want the 1.21 param accepted", e.m.Runtime("echo").Protocol)
+	}
+
+	t.Setenv("ECHO_PROTOCOLS", "1.0,1.19")
+	old, _ := approvedEnv(t, nil, useProtocol([]string{"1.0", "1.19"}, ""))
+	if old.m.OffersProtocol("echo", Version{1, 21}) {
+		t.Fatal("a plugin that stops at 1.19 must not get the 1.21 param")
+	}
+	if _, err := old.m.Initialize(ctx(t), "echo"); err != nil {
+		t.Fatal(err)
+	}
+	if old.m.OffersProtocol("echo", Version{1, 21}) {
+		t.Fatal("a plugin that negotiated 1.19 must not get the 1.21 param")
+	}
+}
+
 func TestPluginTooOldForThisPlatypus(t *testing.T) {
 	_, p := approvedEnv(t, platypusSpeaks(Version{2, 0}, Version{2, 1}), useProtocol([]string{"1.0"}, ""))
 	if p.Status != StatusTooOld || !strings.Contains(p.Problem, "too old") {

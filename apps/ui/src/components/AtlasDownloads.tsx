@@ -23,6 +23,8 @@ const VERB_KEY: Record<Job['kind'], string> = {
   restore: 'downloads:action.restore',
   remove: 'downloads:action.remove',
   'runner-install': 'downloads:action.install',
+  'client-setup': 'downloads:action.client-setup',
+  workshop: 'downloads:action.workshop',
 };
 
 const STATE_KEY: Record<Job['state'], string> = {
@@ -46,6 +48,8 @@ const FINISHED_KEY: Record<Job['kind'], string> = {
   restore: 'downloads:atlas.finished.restore',
   remove: 'downloads:atlas.finished.remove',
   'runner-install': 'downloads:atlas.finished.install',
+  'client-setup': 'downloads:atlas.finished.client-setup',
+  workshop: 'downloads:atlas.finished.workshop',
 };
 
 export type AtlasDownloadsProps = {
@@ -229,7 +233,7 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
                         <RotateCcw className="h-3 w-3" /> {t('common:retry')}
                       </Button>
                     )}
-                    {j.state === 'canceled' && j.cleaned_at == null && j.kind !== 'verify' && j.kind !== 'move' && j.kind !== 'remove' && (
+                    {j.state === 'canceled' && j.cleaned_at == null && j.kind !== 'verify' && j.kind !== 'move' && j.kind !== 'remove' && j.kind !== 'client-setup' && (
                       <Button variant="neutral" size="sm" onClick={() => onAction('discard', j.id)} aria-label={t('downloads:aria.discardJob', { title: j.title })}>
                         <Trash2 className="h-3 w-3" /> {t('downloads:job.discard')}
                       </Button>

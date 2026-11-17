@@ -128,15 +128,16 @@ other errors can contain.
 | `game.details` | `{ id, terms? }` | `GameDetails` (with `terms` from 1.11, media from 1.12, news from 1.19) |
 | `game.saveContext` | `{ id }` | `{ roots?, storeUserId?, prefix?, windows?, proton?, winUser? }` |
 | `game.installSize` | `{ id, target?, options? }` | `{ downloadBytes, diskBytes }` |
-| `game.install` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
-| `game.update` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
+| `game.install` | `{ id, installDir, jobId, title?, target?, options?, downloadLimit? }` | `{}` once started (`downloadLimit` 1.21, [Download limit](#download-limit-121)) |
+| `game.update` | `{ id, installDir, jobId, title?, target?, options?, downloadLimit? }` | `{}` once started (`downloadLimit` 1.21, [Download limit](#download-limit-121)) |
 | `game.uninstall` | `{ id, jobId }` | `{}` once started |
 | `game.verify` | `{ id, installDir, jobId, repair }` | `{}` once started (1.4, [Verify and move](#verify-and-move-14)) |
 | `game.move` | `{ id, from, to, jobId }` | `{}` once started (1.4, [Verify and move](#verify-and-move-14)) |
 | `game.relocated` | `{ id, from, to }` | `{}` (optional, 1.4, [Verify and move](#verify-and-move-14)) |
 | `job.cancel` | `{ jobId }` | `{}` |
 | `job.discard` | `{ jobId, id, installDir }` | `{}` |
-| `game.launchSpec` | `{ id, preview, via?, executable? }` | `LaunchSpec` (`executable` 1.15, [Offline launches](#offline-launches-115)) |
+| `client.setup` | `{ jobId, prefix }` | `{ exe, args?, env?, redact?, size?, confirm? }` (1.20, [Wine clients](#wine-clients-120)) |
+| `game.launchSpec` | `{ id, preview, via?, executable?, prefix? }` | `LaunchSpec` (`executable` 1.15, [Offline launches](#offline-launches-115); `prefix` 1.20, [Wine clients](#wine-clients-120)) |
 | `game.clientStatus` | `{ id, since }` (`since` is launch time, Unix seconds) | `{ state, label?, progress?, bytes?, total? }` (1.18, [Client launch status](#client-launch-status-118)) |
 | `cloud.status` | `{ id, ctx }` | `CloudStatus` (1.2, [Cloud saves](#cloud-saves-12)) |
 | `cloud.pull` | `{ id, ctx, jobId }` | `CloudStatus` |
@@ -430,7 +431,11 @@ Report progress with notifications:
 | `job.failed` | `{ jobId, error }` |
 | `log` | `{ level, message }` (goes to the plugin's log file) |
 
-Platypus runs one job at a time and saves the queue. If Platypus or the plugin dies
+Platypus runs one job at a time and saves the queue. An update waits while the
+user's update window is closed (Settings → Downloads): Platypus holds queued
+`game.update` jobs until the window opens, and a later install still starts at
+once. The plugin is not told about the schedule; it only sees the job when it
+starts. If Platypus or the plugin dies
 mid-install, Platypus calls `game.install` again with the same `jobId`, so installs
 must be resumable or at least idempotent: a `jobId` that is already running starts
 no second copy and ends with one `job.done`. A paused job is the same thing: Platypus
@@ -530,6 +535,71 @@ store-client spec for the game; a plugin that has none answers `-32000` with a m
 `executable` (optional, 1.15) is the user's per-game executable override. Platypus
 sends it when the user set one, instead of bypassing the plugin: answer with a
 direct spec for that file.
+
+## Wine clients (1.20)
+
+For games a store's own Windows client has to start (Ubisoft Connect runs its
+games from its own prefix), a plugin answers a wine-client launch: the client
+executable and its arguments, the client prefix, and how to recognise the game.
+Platypus runs the client under the runner in that prefix like a normal Wine
+launch, then follows the game through `find` like a store-client launch (same
+`startTimeout` failure). Stopping the game signals only the found game pid and
+its descendants: the client (and any other game in the prefix) keeps running,
+and the runner's stop action never runs for a wine-client game.
+
+```json
+{
+  "delegate": "wine-client", "client": "Ubisoft Connect",
+  "exe": "C:\\Program Files\\Ubisoft\\Ubisoft Game Launcher\\UbisoftConnect.exe",
+  "args": ["uplay://launch/635/0"], "prefix": "client",
+  "find": { "cmdline": ["Game.exe"] }, "startTimeout": 180
+}
+```
+
+`"prefix": "client"` is the only key: the Platypus-managed prefix keyed per
+plugin (`prefixes/p.<plugin>.client`), which counts as an allowed folder for
+the plugin. `exe` is an absolute Linux path inside that prefix (or inside a
+folder the user allowed), or a Windows path (`C:\...`, resolved against the
+prefix's `drive_c`, or `pfx/drive_c` under Proton). The same `env` denylist as
+direct launches applies (login webview flags like
+`WEBKIT_DISABLE_DMABUF_RENDERER` are allowed); `args` carries the client's own
+launch request (a `uplay://` URL). Platypus sends `prefix` (the client's
+prefix dir) with every `game.launchSpec` to a plugin that speaks 1.20 or
+later, so the plugin can name its executables without remembering the
+prefix from setup.
+
+`find` must match the game, not the client command itself: the tracked pid is
+what stopping signals. A client that self-updates, logs in, or compiles
+shaders on first run should report `game.clientStatus` (1.18) while it works,
+or the start timeout fails the launch.
+
+A wine-client launch needs the runner plugin: without one Platypus refuses
+with `game.noRunner`, and per-game Wine settings don't apply (the client runs
+with the default runner and none of the game's wrappers, env or runtime
+bindings — they belong to games, and the client belongs to no game). Platypus
+creates the prefix but never fills it: a launch whose client executable is
+missing fails with `client.notSetUp`, and the game page offers the setup
+instead.
+
+`client.setup { jobId, prefix } -> { exe, args?, env?, redact?, size?, confirm? }`
+answers the installer spec the core runs (an optional method of `launch`,
+protocol 1.20). Fetch the installer before answering and keep it under
+`PLATYPUS_PLUGIN_DATA` across restarts; the `exe` validates like a direct
+launch spec (absolute or `C:\` path, inside the prefix or an allowed folder,
+present) and `size` is the installer's download bytes for the free-space
+check. When `confirm` is set, its text asks the user to approve the download
+("This downloads ~800 MB from ..."): the core runs the installer only after
+the user confirms. `jobId` is empty when the core only inspects the spec
+(the confirmation check); the plugin answers the same spec either way.
+
+The core runs the installer under the runner in the client's pinned prefix
+as a core-run job: indeterminate `job.progress` (a phase, no byte counts), a
+per-game-settings-free wrap with the default runner, the installer's output
+in the client's session log. `job.done` ends the setup; `job.cancel` kills
+the installer and stops the prefix's wineserver. While a setup job holds the
+client, its games refuse to launch; the setup job itself shows in the queue
+like any other job and has nothing to discard. Platypus sends `client.setup`
+only to a plugin that settled on 1.20 or later.
 
 ## Cloud saves (1.2)
 
@@ -637,7 +707,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.22"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21", "1.22"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -682,13 +752,15 @@ that doesn't know it.
   `LibraryGame.clientLaunch`; 1.18: the split ratings and protection state of
   `compat.lookup` (`protectionOnline`, see [Compat facts](#compat-facts-117))
   and `game.clientStatus` (see [Client launch status](#client-launch-status-118)); 1.19: the game's
-  news links on `game.details` (`news`, see [News](#news-119)); 1.22: the `workshop` capability
+  news links on `game.details` (`news`, see [News](#news-119)); 1.20: the
+  wine-client launch delegate and the `client.setup` job (a store client in a
+  Platypus-managed prefix; see [Wine clients](#wine-clients-120)); 1.21: the optional `downloadLimit` param of
+  `game.install` and `game.update` (see [Download limit](#download-limit-121)); 1.22: the `workshop` capability
   (`workshop.list`, `workshop.sync`, see [Workshop](#workshop-122)); see [Compat facts](#compat-facts-117),
-  [Runner](#runner-117), and [Save context](#save-context-117)). 1.20 and 1.21 are reserved by
-  other open branches, so this revision is 1.22.
+  [Runner](#runner-117), and [Save context](#save-context-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19 or 1.22 method.
+  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20, 1.21 or 1.22 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -705,7 +777,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 |---|---|---|---|---|
 | `library` | 1.0 | `library.list` | `game.details` | yes |
 | `install` | 1.0 | `game.installSize`, `game.install`, `game.update`, `game.uninstall`, `job.cancel` | | yes |
-| `launch` | 1.0 | `game.launchSpec` | | yes |
+| `launch` | 1.0 | `game.launchSpec` | `client.setup` (1.20) | yes |
 | `auth` | 1.0 | `auth.status`, `auth.begin`, `auth.complete`, `auth.logout` | | yes |
 | `discard` | 1.0 | `job.discard` | | yes |
 | `cloud-saves` | 1.2 | `cloud.status`, `cloud.pull`, `cloud.push`, `cloud.resolve` | | yes |
@@ -950,7 +1022,7 @@ on an installed game under "Add-ons & options".
 ```
 game.options { id } -> { groups: [
   { id: "language", label: "Language", kind: "select", values: [{ id: "en", label: "English" }], default: "en" },
-  { id: "dlc", label: "Add-ons", kind: "multi", dlc: true,
+  { id: "dlc", label: "Add-ons", kind: "multi", dlc: true, default: ["123"],
     values: [{ id: "123", label: "Season Pass", sizeBytes: 1048576, owned: true, installed: false },
              { id: "456", label: "Deluxe", owned: false, storeUrl: "https://store.example/deluxe" }] },
   { id: "packs", label: "Optional packs", kind: "multi", values: [...] },
@@ -960,9 +1032,11 @@ game.installSize { id, options? } -> { downloadBytes, diskBytes }
 ```
 
 - **Groups.** `kind` is `select` (one value; `default` is its id), `multi` (any
-  number of values) or `bool` (on or off; `default` is true or false, no
-  `values`). A group with `dlc: true` is DLC: its values say whether the user
-  `owned` them and whether they are `installed`. An unowned value is shown
+  number of values; `default` is the list ticked when the dialog opens) or
+  `bool` (on or off; `default` is true or false, no `values`). A group with
+  `dlc: true` is DLC: its values say whether the user `owned` them and whether
+  they are `installed`. A DLC group ticks its installed values, or every
+  owned value for a fresh install. An unowned value is shown
   greyed out, with `storeUrl` (an https link) when the store has one. Core
   ignores a group of any other `kind`, so a plugin can add kinds without
   breaking older Platypus versions.
@@ -1569,10 +1643,35 @@ workshop.sync { id, installDir, jobId } -> {}
   it (or beside it) the store's runtime expects Workshop content. Platypus
   sends `jobId`, reports progress through `job.progress` and the outcome
   through `job.done`/`job.failed`; `job.cancel` stops it. A repeated `jobId`
-  starts no second copy. A game that isn't installed, or a store with nothing
-  to sync, fails with a readable `-32000`/`-32002`.
+  starts no second copy. A game that isn't installed fails with a readable
+  `-32000`; a store with nothing subscribed for it answers `job.done` and
+  writes nothing.
 - **Gating.** A plugin that negotiated 1.21 or older never receives these
   methods, and the game page shows no Workshop section.
+
+## Download limit (1.21)
+
+Protocol 1.21 adds one optional param to `game.install` and `game.update`: the
+user's global download speed cap, an integer in bytes per second. A verify that
+repairs also downloads, so `game.verify` with `repair: true` carries it too.
+
+```
+game.install { id, installDir, jobId, ..., downloadLimit? }
+game.update  { id, installDir, jobId, ..., downloadLimit? }
+game.verify  { id, installDir, jobId, repair: true, downloadLimit? }
+```
+
+- **When it is sent.** Only to a plugin that declares 1.21 or later and negotiates
+  it, and only when the user set a cap (Settings → Downloads). Unlimited sends
+  nothing: the param's absence means "no cap", not "zero bytes".
+- **What to do with it.** Hand it to the process that downloads the files, as a
+  rate cap for the whole job (all depots, chunks or files together). A plugin
+  whose downloader has no rate control must not fake one: ignore the param and
+  keep downloading at its own pace.
+- **Not a promise about a running job.** Platypus reads the setting when it
+  starts the job; changing it mid-download affects the next install or update.
+- **Not on the wire anywhere else.** `game.installSize` and the rest carry no
+  `downloadLimit`; a plain verify (no repair) has nothing to cap.
 
 ## Out of scope
 

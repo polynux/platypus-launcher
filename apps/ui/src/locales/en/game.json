@@ -50,7 +50,13 @@
       "validating": "validating files",
       "launching": "starting the game"
     },
-    "clientFinished": "{{client}} finished its work but didn’t start the game. Press Play again."
+    "clientFinished": "{{client}} finished its work but didn’t start the game. Press Play again.",
+    "clientSetup": {
+      "setUp": "Set up {{client}}",
+      "settingUp": "Setting up {{client}}…",
+      "download": "Download",
+      "cancel": "Cancel"
+    }
   },
   "hero": {
     "notInstalled": "not installed",
