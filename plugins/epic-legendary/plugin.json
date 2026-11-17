@@ -1,7 +1,7 @@
 {
   "id": "epic-legendary",
   "name": "Epic Games (legendary)",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "Platypus",
   "description": "Your Epic Games library through legendary: log in, install, update and launch owned games without the Epic launcher.",
   "manifestVersion": 1,

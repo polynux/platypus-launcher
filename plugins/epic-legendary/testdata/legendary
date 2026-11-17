@@ -14,6 +14,8 @@ import time
 STATE = os.environ["FAKE_LEGENDARY_STATE"]
 GOOD_CODE = "abcdef0123456789abcdef0123456789"
 ACCOUNT_ID = "0123456789abcdef0123456789abcdef"
+# A normal install records this as the app's base URL (InstalledGame.base_urls).
+FAKE_CDN = "https://cdn1.epicgames.com/Builds/Fake/"
 
 CATALOG = [
     {"app_name": "Goose", "app_title": "Untitled Goose Game", "latest": "1.0", "platforms": ["Windows"],
@@ -164,9 +166,16 @@ def main():
         platform = rest[rest.index("--platform") + 1] if "--platform" in rest else \
             st["installed"].get(app, {}).get("platform", "Windows")
         override = rest[rest.index("--manifest") + 1] if "--manifest" in rest else None
+        if override and app not in st["installed"] and "--base-url" not in rest:
+            err("No base URLs found, please try again.")
+        # Like the real tool: an install without --manifest takes its base URLs
+        # from the store metadata, one with it has none of its own
+        # (core.py:prepare_download).
+        base_urls = [] if override else [FAKE_CDN]
         version = read_manifest(override)["build_version"] if override else latest_version(st, app)
         if update:
-            st["installed"][app]["version"] = version
+            st["installed"][app].update({"version": version, "manifest_path": override or "",
+                                         "base_urls": base_urls})
             write_manifest(app, platform, version)
             save(st)
             print("[cli] INFO: Finished installation process in 0.10 seconds.", file=sys.stderr)
@@ -200,7 +209,8 @@ def main():
         write_manifest(app, platform, version)  # save_manifest, as prepare_download does
         st["installed"][app] = {"install_path": path, "title": game["app_title"], "version": version,
                                 "platform": platform, "install_size": 12 * 1024 * 1024, "is_dlc": False,
-                                "executable": "Binaries\\Game.exe", "can_run_offline": True}
+                                "executable": "Binaries\\Game.exe", "can_run_offline": True,
+                                "manifest_path": override or "", "base_urls": base_urls}
         save(st)
         print("[cli] INFO: Finished installation process in 0.30 seconds.", file=sys.stderr)
     elif cmd == "move":

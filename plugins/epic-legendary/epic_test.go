@@ -704,8 +704,11 @@ func TestEpicOldLegendaryHidesAchievements(t *testing.T) {
 // those back through `legendary install --manifest` (its documented downgrade
 // path). The fake legendary writes a manifest per install, like the real one.
 func TestEpicVersionsArchiveAndDowngrade(t *testing.T) {
+	const fakeCDN = "https://cdn1.epicgames.com/Builds/Fake/"
 	e := setup(t)
 	e.login(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	var installedMu sync.Mutex
 	installed := map[string]types.Installed{}
 	e.q.SetOnInstalled(func(j types.Job, in types.Installed) {
@@ -789,14 +792,31 @@ func TestEpicVersionsArchiveAndDowngrade(t *testing.T) {
 		t.Fatalf("downgrade installed: %+v", in)
 	}
 	info = versions(nil, nil)
-	if b := builds(info); !b["1.0"].Current || !info.UpdateAvailable {
+	if b := builds(info); !b["1.0"].Current || b["1.0"].Source != "archive" || !info.UpdateAvailable {
 		t.Fatalf("after downgrade: %+v", info)
 	}
 	if pinned := versions(map[string]any{"kind": "build", "id": "1.0"}, nil); pinned.UpdateAvailable {
 		t.Fatalf("update offered while pinned: %+v", pinned)
 	}
+	// The downgrade's installed record has no base URLs of its own; the
+	// sidecar keeps the ones from the normal install for the next reinstall.
+	var sidecar struct {
+		BaseURLs []string `json:"baseUrls"`
+	}
+	data, err := os.ReadFile(filepath.Join(archive, "1.0.json"))
+	if err != nil || json.Unmarshal(data, &sidecar) != nil || len(sidecar.BaseURLs) == 0 {
+		t.Fatalf("archive lost its base URLs: %+v, %v", sidecar, err)
+	}
+	// legendary records the manifest path of a --manifest install, so the
+	// launch skips its version check (the build is older than the store's).
+	if _, err := e.store.Launch(ctx, goose, false); err != nil {
+		t.Fatalf("launch after downgrade: %v", err)
+	}
+	if !strings.Contains(e.calls(t), "launch Goose --json --skip-version-check") {
+		t.Fatalf("downgraded launch call: %s", e.calls(t))
+	}
 
-	// Bounded: three saved builds per game, oldest pruned.
+	// Bounded: the installed build plus three older ones.
 	for _, v := range []string{"1.2", "1.3", "1.4"} {
 		e.setLatest(t, "Goose", v)
 		if u := e.run(t, jobs.KindUpdate, goose); u.State != jobs.StateDone {
@@ -804,42 +824,100 @@ func TestEpicVersionsArchiveAndDowngrade(t *testing.T) {
 		}
 	}
 	manifests, _ := filepath.Glob(filepath.Join(archive, "*.manifest"))
-	if len(manifests) != 3 {
+	if len(manifests) != 4 {
 		t.Fatalf("archives not bounded: %v", manifests)
 	}
-	if _, err := os.Stat(filepath.Join(archive, "1.0.manifest")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("the oldest archive survived pruning: %v", err)
+	if _, err := os.Stat(filepath.Join(archive, "1.1.manifest")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the least recently saved archive survived pruning: %v", err)
 	}
 
 	// A pruned build is listed from the install history, but not installable.
-	gone := versions(nil, []any{map[string]any{"build": "1.0", "versionName": "1.0", "date": "2025-01-01"}})
-	if b := builds(gone); b["1.0"].Available == nil || *b["1.0"].Available || b["1.0"].Source != "archive" {
+	gone := versions(nil, []any{map[string]any{"build": "1.1", "versionName": "1.1", "date": "2025-01-01"}})
+	if b := builds(gone); b["1.1"].Available == nil || *b["1.1"].Available || b["1.1"].Source != "archive" {
 		t.Fatalf("pruned build listed as installable: %+v", gone)
 	}
-	err := e.call(t, "game.update", map[string]any{"id": "Goose", "jobId": "gone-1", "installDir": e.folder,
-		"target": map[string]any{"build": "1.0", "archiveRef": target()}}, nil)
+	err = e.call(t, "game.update", map[string]any{"id": "Goose", "jobId": "gone-1", "installDir": e.folder,
+		"target": map[string]any{"build": "1.1", "archiveRef": json.RawMessage(`"1.1.manifest"`)}}, nil)
 	if err == nil || !strings.Contains(err.Error(), "no longer saved") {
 		t.Fatalf("a pruned build was installable: %v", err)
 	}
 
-	// A fresh install of an archived build works too (base path, not update-only).
+	// The archive before an update must not prune the manifest it installs.
+	stale := filepath.Join(archive, "0.9.manifest")
+	if data, err := os.ReadFile(filepath.Join(archive, "1.4.manifest")); err != nil {
+		t.Fatal(err)
+	} else if err := os.WriteFile(stale, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	staleJSON := filepath.Join(archive, "0.9.json")
+	if err := os.WriteFile(staleJSON, []byte(`{"build":"0.9","versionName":"0.9","date":"2024-01-01"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(stale, past, past); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(staleJSON, past, past); err != nil {
+		t.Fatal(err)
+	}
+	j = e.runTarget(t, jobs.KindUpdate, goose, &types.VersionTarget{Build: "1.0", ArchiveRef: target()})
+	if j.State != jobs.StateDone {
+		t.Fatalf("update to a build whose archive was the oldest: %+v", j)
+	}
+	if _, err := os.Stat(filepath.Join(archive, "1.0.manifest")); err != nil {
+		t.Fatalf("pruning removed the target manifest: %v", err)
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the stale archive survived pruning: %v", err)
+	}
+
+	// A fresh install of an archived build works too (base path, not
+	// update-only) and needs the saved base URL: a metadata refetch drops it.
 	if u := e.run(t, jobs.KindUninstall, goose); u.State != jobs.StateDone {
 		t.Fatalf("uninstall: %+v", u)
+	}
+	if info = versions(nil, nil); info.UpdateAvailable || builds(info)["1.4"].Source != "store" {
+		t.Fatalf("uninstalled game's versions: %+v", info)
+	}
+	// A manifest with no sidecar, and a leftover temp file, are cleaned up.
+	orphan := filepath.Join(archive, "9.9.manifest")
+	if err := os.WriteFile(orphan, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	leftover := filepath.Join(archive, "1.2.json.new")
+	if err := os.WriteFile(leftover, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	j = e.runTarget(t, jobs.KindInstall, goose, &types.VersionTarget{Build: "1.2", ArchiveRef: json.RawMessage(`"1.2.manifest"`)})
 	if j.State != jobs.StateDone {
 		t.Fatalf("install archived build: %+v", j)
 	}
 	if !strings.Contains(e.calls(t), "install Goose --base-path "+e.folder+" --skip-sdl --platform Windows --manifest "+
-		filepath.Join(archive, "1.2.manifest")) {
+		filepath.Join(archive, "1.2.manifest")+" --base-url "+fakeCDN) {
 		t.Fatalf("archived install call: %s", e.calls(t))
 	}
 	if g := e.library(t)["Goose"]; !g.IsInstalled || g.Version != "1.2" {
 		t.Fatalf("after archived install: %+v", g)
 	}
+	for _, path := range []string{orphan, leftover} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s wasn't cleaned up: %v", path, err)
+		}
+	}
+	if temps, _ := filepath.Glob(filepath.Join(archive, "*.new")); len(temps) != 0 {
+		t.Fatalf("temp files left behind: %v", temps)
+	}
 
 	var junk json.RawMessage
 	if err := e.call(t, "versions.list", map[string]any{"id": "Nope"}, &junk); err == nil {
 		t.Fatal("versions listed for an app the account doesn't own")
+	}
+	for _, id := range []string{"..", "..."} {
+		if err := e.call(t, "versions.list", map[string]any{"id": id}, &junk); err == nil {
+			t.Fatalf("versions listed for the dots-only app id %q", id)
+		}
+	}
+	if err := e.call(t, "versions.list", map[string]any{"id": "Goose", "pinned": "not a pin"}, &junk); err != nil {
+		t.Fatalf("versions.list with a non-object pin: %v", err)
 	}
 }
