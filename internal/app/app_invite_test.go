@@ -85,7 +85,10 @@ func inviteParams(friend, name, storeID, kind, frag string) json.RawMessage {
 // A 1.22 plugin's invite never reaches the view; a 1.24 plugin's does, but
 // only for a friend on its own list.
 func TestInviteGateNeeds124AndAFriend(t *testing.T) {
-	// No t.Parallel: inviteEnv sets ECHO_PROTOCOLS for the plugin process.
+	// No t.Parallel: the envs below set ECHO_PROTOCOLS for the plugin process.
+	// The old plugin speaks 1.22 at most: the repo manifest now declares
+	// through 1.25, so its speech is pinned here.
+	t.Setenv("ECHO_PROTOCOLS", "1.0,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,1.10,1.11,1.12,1.13,1.14,1.15,1.16,1.17,1.18,1.19,1.20,1.21,1.22")
 	old, _ := socialEnv(t)
 	old.syncSocial()
 	waitSocial(t, "echo friends", func() bool { return len(old.social.View("echo").Friends) > 0 })
@@ -94,7 +97,6 @@ func TestInviteGateNeeds124AndAFriend(t *testing.T) {
 	if v := old.social.View("echo"); len(v.Invites) != 0 {
 		t.Fatalf("1.22 invite reached the view: %+v", v.Invites)
 	}
-
 	a := inviteEnv(t)
 	a.syncSocial()
 	waitSocial(t, "echo friends", func() bool { return len(a.social.View("echo").Friends) > 0 })

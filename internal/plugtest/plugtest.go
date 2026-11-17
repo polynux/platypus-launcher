@@ -984,7 +984,7 @@ var (
 	ClientRunKeys     = []string{"exe", "args", "env", "redact"}
 	// The standalone client spec client.openSpec answers (protocol 1.25,
 	// "Wine clients").
-	OpenSpecKeys = []string{"exe", "args", "cwd"}
+	OpenSpecKeys = []string{"exe", "args", "cwd", "redact"}
 	// The versions capability (docs/plugins/protocol.md, "Versions").
 	VersionListKeys    = []string{"channels", "builds", "manual", "links", "updateAvailable", "pinned"}
 	VersionChannelKeys = []string{"id", "name", "description", "updatedAt", "buildId", "requires", "unlocked", "current"}

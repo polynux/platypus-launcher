@@ -332,15 +332,15 @@ type StorePlugin struct {
 }
 
 // ClientState is what the plugin card shows for a wine-client store
-// (protocol 1.20): whether its client is set up and what holds it. The UI
+// (protocol 1.25): whether its client is set up and what holds it. The UI
 // calls App.ClientState per store plugin; the setup job rides along so the
 // card shows its progress without reading the whole queue.
 type ClientState struct {
 	Supported     bool `json:"supported"`
 	SetUp         bool `json:"setUp"`
 	Running       bool `json:"running"`
-	SetupJob      *Job `json:"setupJob,omitempty"`
-	ClientRunBusy bool `json:"clientRunBusy,omitempty"`
+	SetupJob      *Job `json:"setupJob"`
+	ClientRunBusy bool `json:"clientRunBusy"`
 }
 
 // PluginCapability is one declared capability as the Plugins view shows it.

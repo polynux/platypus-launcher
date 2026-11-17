@@ -30,6 +30,17 @@ vi.mock('../../effect/runtime', () => ({
 import { ClientCardActions } from '../ClientCardActions';
 import type { PluginCapability, StorePlugin } from '../../types';
 
+function codedError(code: string, params: Record<string, string>, message: string) {
+  return Object.assign(new Error(message), { data: { code, params } });
+}
+
+function state(o = {}) {
+  return {
+    supported: true, setUp: false, running: false, setupJob: null, clientRunBusy: false, ...o,
+  };
+}
+
+const notify = vi.fn();
 const cap = (name: string): PluginCapability =>
   ({ name, on: true, known: true, orchestrated: true, features: {} });
 
@@ -44,14 +55,6 @@ function plugin(): StorePlugin {
     running: false, install_folder: '/g', default_install_folder: '/g', extra_folders: [],
   };
 }
-
-function state(o = {}) {
-  return {
-    supported: true, setUp: false, running: false, setupJob: null, clientRunBusy: false, ...o,
-  };
-}
-
-const notify = vi.fn();
 
 beforeEach(() => {
   api.clientState.mockReset();
@@ -89,12 +92,37 @@ describe('ClientCardActions', () => {
     expect(screen.getByText('Ubisoft Connect is already running.')).toBeTruthy();
   });
 
-  it('opens the client on click and reports the refusal', async () => {
+  it('opens the client on click and reports the result', async () => {
     api.clientState.mockResolvedValue(state({ setUp: true }));
     render(<ClientCardActions plugin={plugin()} onNotify={notify} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Open Ubisoft Connect' }));
     await waitFor(() => expect(api.openClient).toHaveBeenCalledWith('ubisoft-connect'));
     await waitFor(() => expect(notify).toHaveBeenCalledWith('Opened Ubisoft Connect (PID 1)'));
+  });
+
+  it('reports a refused open as an error', async () => {
+    api.clientState.mockResolvedValue(state({ setUp: true }));
+    api.openClient.mockRejectedValueOnce(codedError('client.running', { client: 'Ubisoft Connect' }, 'Ubisoft Connect is already running.'));
+    render(<ClientCardActions plugin={plugin()} onNotify={notify} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Ubisoft Connect' }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('Ubisoft Connect is already running.', 'err'));
+  });
+
+  it('shows Setting up while the setup job holds the client', async () => {
+    api.clientState.mockResolvedValue(state({
+      setUp: false,
+      setupJob: { id: 'job-1', game_id: 'p.ubisoft-connect.client', kind: 'client-setup', state: 'running', title: 'Ubisoft Connect client' } as never,
+    }));
+    render(<ClientCardActions plugin={plugin()} onNotify={notify} />);
+    expect(await screen.findByText('Setting up Ubisoft Connect…')).toBeTruthy();
+  });
+
+  it('disables Open and explains while a client command runs', async () => {
+    api.clientState.mockResolvedValue(state({ setUp: true, clientRunBusy: true }));
+    render(<ClientCardActions plugin={plugin()} onNotify={notify} />);
+    const button = await screen.findByRole('button', { name: 'Open Ubisoft Connect' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Ubisoft Connect is busy; try again in a moment.')).toBeTruthy();
   });
 
   it('renders nothing for a store without a wine client', async () => {

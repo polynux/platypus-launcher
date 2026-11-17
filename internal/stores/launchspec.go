@@ -331,9 +331,10 @@ func ValidateClientRun(spec plugins.ClientRunSpec, man plugins.Manifest, folders
 // ClientOpen is a validated client.openSpec answer (protocol 1.25): the store
 // client Platypus runs under the runner in its own prefix with no game.
 type ClientOpen struct {
-	Exe  string
-	Args []string
-	Dir  string
+	Exe    string
+	Args   []string
+	Dir    string
+	Redact []string
 }
 
 // ValidateClientOpen checks a client.openSpec answer (protocol 1.25): the
@@ -392,9 +393,10 @@ func ValidateClientOpen(spec plugins.ClientOpenSpec, man plugins.Manifest, folde
 		dir = realWd
 	}
 	return &ClientOpen{
-		Exe:  real,
-		Args: slices.Clone(spec.Args),
-		Dir:  dir,
+		Exe:    real,
+		Args:   slices.Clone(spec.Args),
+		Dir:    dir,
+		Redact: validateRedact(spec.Redact),
 	}, nil
 }
 

@@ -436,9 +436,10 @@ type ClientRunSpec struct {
 // pinned client prefix, tracked like a client session. The method is
 // optional: -32601 means the plugin has no standalone client to open.
 type ClientOpenSpec struct {
-	Exe  string   `json:"exe"`
-	Args []string `json:"args,omitempty"`
-	Cwd  string   `json:"cwd,omitempty"`
+	Exe    string   `json:"exe"`
+	Args   []string `json:"args,omitempty"`
+	Cwd    string   `json:"cwd,omitempty"`
+	Redact []string `json:"redact,omitempty"`
 }
 
 // InstallAnswer is what game.install, game.update and game.uninstall answer:

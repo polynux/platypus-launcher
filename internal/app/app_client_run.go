@@ -322,7 +322,7 @@ func (a *App) runClientCommand(ctx context.Context, j types.Job, run *stores.Cli
 		// Never stop the prefix's wineserver while a client session is
 		// live: it would kill the running game along with the command.
 		if !a.wineClientRunning(j.Source) {
-			a.stopClientWineserver(j, wrapped)
+			a.stopClientWineserver(wrapped)
 		}
 		return ctx.Err()
 	}

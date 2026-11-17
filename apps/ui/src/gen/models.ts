@@ -173,8 +173,8 @@ export namespace types {
     supported: boolean;
     setUp: boolean;
     running: boolean;
-    setupJob?: types.Job | null;
-    clientRunBusy?: boolean;
+    setupJob: types.Job | null;
+    clientRunBusy: boolean;
   }
 
   export interface ClientStatus {

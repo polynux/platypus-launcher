@@ -79,6 +79,11 @@ type App struct {
 	// clientRun job, so launches hold while the client's command runs.
 	clientRunMu     sync.Mutex
 	clientRunSource map[string]clientRunTarget
+	// clientOpens tracks the standalone clients opened from the plugin card
+	// (protocol 1.25), one run per source, so shutdown stops them and the
+	// tests can stop them too. They are not sessions: no session event, no
+	// playlog row, no tray or auto-update hold.
+	clientOpens openTracker
 	// wineMu guards wineSessions: game ids running through a wine client, by
 	// source, so SetupClient refuses while the client runs (issue #191).
 	wineMu       sync.Mutex
@@ -542,6 +547,10 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 	// The debounced chat previews flush with the other data files.
 	a.flushChatRecents()
+	// Standalone clients opened from the plugin card are Platypus's own
+	// processes, like direct launches: stop them before the plugins (and
+	// the runner they need for the wineserver stop) go away.
+	a.clientOpens.stopAll(ctx)
 	if a.plugins != nil {
 		a.plugins.Shutdown()
 	}

@@ -1,9 +1,10 @@
-# Ubisoft Connect (setup + launch + client-run installs, protocol 1.23)
+# Ubisoft Connect (setup + launch + client-run installs, protocol 1.25)
 
 Ubisoft games through the official Ubisoft Connect client in one
 Platypus-managed Wine prefix. The client owns installs and launches; this
-plugin answers the installer spec, the wine-client launch spec, and the
-client-run install/uninstall commands, and reads the client's on-disk state.
+plugin answers the installer spec, the wine-client launch spec, the
+client-run install/uninstall commands, the standalone client spec for the
+plugin card's Open button, and reads the client's on-disk state.
 See `docs/research/ubisoft-options.md` and issues
 [#193](https://github.com/polynux/platypus-launcher/issues/193),
 [#194](https://github.com/polynux/platypus-launcher/issues/194),
@@ -12,7 +13,7 @@ See `docs/research/ubisoft-options.md` and issues
 
 The plugin starts no process of its own: only the core runs Wine (installer,
 client, client commands), from the specs this plugin answers. It speaks
-protocol 1.20 and 1.23 (the `install` capability is on only over 1.23).
+protocol 1.20, 1.23 and 1.25 (the `install` capability is on only over 1.23).
 
 ## Verified vs pending (live checks L-U1/L-U2, #195)
 

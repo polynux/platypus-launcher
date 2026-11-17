@@ -247,11 +247,11 @@ func TestValidateClientOpen(t *testing.T) {
 	man := plugins.Manifest{ID: "echo", Name: "Echo"}
 	folders := []string{filepath.Join(root, "Games", "echo"), prefix}
 
-	got, err := ValidateClientOpen(plugins.ClientOpenSpec{Exe: exe}, man, folders, prefix)
+	got, err := ValidateClientOpen(plugins.ClientOpenSpec{Exe: exe, Redact: []string{"--token="}}, man, folders, prefix)
 	if err != nil {
 		t.Fatalf("valid open spec: %v", err)
 	}
-	if got.Exe != exe || len(got.Args) != 0 || got.Dir != binDir {
+	if got.Exe != exe || len(got.Args) != 0 || got.Dir != binDir || len(got.Redact) != 1 {
 		t.Fatalf("open spec = %+v, want the exe with its folder", got)
 	}
 	win, err := ValidateClientOpen(plugins.ClientOpenSpec{Exe: `C:\client\client.exe`}, man, folders, prefix)

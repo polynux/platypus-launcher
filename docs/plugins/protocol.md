@@ -137,7 +137,7 @@ other errors can contain.
 | `job.cancel` | `{ jobId }` | `{}` |
 | `job.discard` | `{ jobId, id, installDir }` | `{}` |
 | `client.setup` | `{ jobId, prefix }` | `{ exe, args?, env?, redact?, size?, confirm? }` (1.20, [Wine clients](#wine-clients-120)) |
-| `client.openSpec` | `{ prefix }` | `{ exe, args?, cwd? }` (1.25, [Wine clients](#wine-clients-120)) |
+| `client.openSpec` | `{ prefix }` | `{ exe, args?, cwd?, redact? }` (1.25, [Wine clients](#wine-clients-120)) |
 | `game.launchSpec` | `{ id, preview, via?, executable?, prefix? }` | `LaunchSpec` (`executable` 1.15, [Offline launches](#offline-launches-115); `prefix` 1.20, [Wine clients](#wine-clients-120)) |
 | `game.clientStatus` | `{ id, since }` (`since` is launch time, Unix seconds) | `{ state, label?, progress?, bytes?, total? }` (`signin` 1.23, [Client-run commands](#client-run-commands-123); 1.18, [Client launch status](#client-launch-status-118)) |
 | `cloud.status` | `{ id, ctx }` | `CloudStatus` (1.2, [Cloud saves](#cloud-saves-12)) |
@@ -605,19 +605,25 @@ only to a plugin that settled on 1.20 or later. Installs through the same
 client run as core-run commands of the plugin's job (protocol 1.23, see
 [Client-run commands](#client-run-commands-123)).
 
-`client.openSpec { prefix } -> { exe, args?, cwd? }` answers the standalone
-client spec the core runs to open the client with no game (an optional
-method of `launch`, protocol 1.25): the plugin card's "Open" button, so the
-user can sign into the client when the library lists no game to launch from.
-The `exe` is the client's own executable (an absolute or `C:\` path, inside
-the prefix or an allowed folder, present now, validated like a `clientRun`
-exe); a missing executable inside the prefix reads as `client.notSetUp`,
-like a wine-client launch. `args` (default none) carries the client's own
-arguments, and `cwd` (default the executable's folder) its working directory,
-resolved the same way. Answer `-32601` when the store has no standalone
-client to open. Platypus sends `client.openSpec` only to a plugin that
-settled on 1.25 or later, and a plugin never relies on a version it didn't
-negotiate.
+`client.openSpec { prefix } -> { exe, args?, cwd?, redact? }` answers the
+standalone client spec the core runs to open the client with no game (an
+optional method of `launch`, protocol 1.25): the plugin card's "Open"
+button, so the user can sign into the client when the library lists no game
+to launch from. The `exe` is the client's own executable (an absolute or
+`C:\` path, inside the prefix or an allowed folder, present now, validated
+like a `clientRun` exe); a missing executable inside the prefix reads as
+`client.notSetUp`, like a wine-client launch. `args` (default none) carries
+the client's own arguments, `cwd` (default the executable's folder) its
+working directory, resolved the same way, and `redact` hides argument
+values from the session log, like a `clientRun`. Answer `-32601` when the
+store has no standalone client to open. Platypus sends `client.openSpec`
+only to a plugin that settled on 1.25 or later, and a plugin never relies
+on a version it didn't negotiate. The card needs 1.25: a wine-client store
+that settled on 1.20–1.24 keeps the game-page setup path only, with no Set
+up / Open row on its card. The core tracks the started process, not the
+client behind it: when the exe daemonizes at once (the starter exits while
+the client stays up in the prefix), the card reads as stopped once the
+starter is gone.
 
 ## Cloud saves (1.2)
 

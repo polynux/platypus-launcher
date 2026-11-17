@@ -202,14 +202,14 @@ func (a *App) runClientInstaller(ctx context.Context, j types.Job, setup *stores
 	case <-ctx.Done():
 		killProcessTree(cmd)
 		<-done
-		a.stopClientWineserver(j, wrapped)
+		a.stopClientWineserver(wrapped)
 		return ctx.Err()
 	}
 }
 
 // stopClientWineserver asks the prefix's wineserver to terminate after a
-// setup cancel, like the stop hook does for direct launches.
-func (a *App) stopClientWineserver(j types.Job, wrapped *prepared) {
+// client command is killed, like the stop hook does for direct launches.
+func (a *App) stopClientWineserver(wrapped *prepared) {
 	launch := map[string]any{"env": wrapped.env, "runner": wrapped.runner}
 	stopCtx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
