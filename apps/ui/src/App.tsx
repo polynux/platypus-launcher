@@ -86,6 +86,7 @@ export function toActivityRow(
   const type = CORE_KIND_TO_TYPE[e.kind] ?? 'scan';
   const title = byId.get(e.game_id ?? '')?.title ?? e.args?.title ?? e.game_id ?? '';
   const verb = (k: string) => {
+    if (k === 'update' && e.args?.auto) return t('activity:log.jobVerbAutoUpdated');
     switch (k) {
       case 'install': return t('activity:log.jobVerbInstalled');
       case 'update': return t('activity:log.jobVerbUpdated');
@@ -612,6 +613,10 @@ export function AppContent() {
   // the library, so it refreshes it: the backend dropped that source from its
   // cache when the job finished, so the refresh re-lists only it.
   const jobStates = useRef(new Map<string, string>());
+  // Automatic updates fail without the user asking: only the first failure of
+  // a game toasts, the rest stay in Downloads (issue #209). A success clears
+  // it so a later failure is news again.
+  const autoFailToasted = useRef(new Set<string>());
   const loadRef = useRef(loadData);
   loadRef.current = loadData;
   // Leaving the embedded store view: what was bought there appears in the
@@ -638,6 +643,7 @@ export function AppContent() {
           // Optimistic flip so the game page updates before the refresh
           // round-trip (FE-4); the refresh reconciles afterwards.
           setGames((prev) => optimisticGamesAfterJob(prev, j));
+          if (j.auto) autoFailToasted.current.delete(j.game_id);
           notify(t(`downloads:${verbKey}`, { title: j.title }));
           // Finished installs, updates, uninstalls, verifies and moves also
           // arrive on the persisted feed (issue #145): only the rest log here.
@@ -645,7 +651,12 @@ export function AppContent() {
             log({ type: 'download', game: j.game_id, detail: t('activity:log.jobDone', { action, title: j.title }), meta: j.source });
           }
         } else if (j.state === 'failed') {
-          notify(t('downloads:jobFailed', { title: j.title, error: j.error ?? t(`downloads:actionFailed.${j.kind}`) }), 'err');
+          const auto = j.auto === true && j.kind === 'update';
+          const repeatAuto = auto && autoFailToasted.current.has(j.game_id);
+          if (auto) autoFailToasted.current.add(j.game_id);
+          if (!repeatAuto) {
+            notify(t('downloads:jobFailed', { title: j.title, error: j.error ?? t(`downloads:actionFailed.${j.kind}`) }), 'err');
+          }
           log({ type: 'download', game: j.game_id, detail: t('activity:log.jobFailed', { kind: t(jobKindKey(j.kind)), title: j.title }), meta: j.error });
         }
       }

@@ -129,7 +129,7 @@ export function DownloadsSetting({ onNotify }: { onNotify: (msg: string, kind?: 
             <Input type="time" value={windowStart} onChange={(e) => { setWindowStart(e.target.value); setError(null); }} disabled={!saved || busy || !windowOn} aria-label={t('downloads.start')} className="w-28" />
             <span className="text-[12px] text-text-muted">{t('downloads.to')}</span>
             <Input type="time" value={windowEnd} onChange={(e) => { setWindowEnd(e.target.value); setError(null); }} disabled={!saved || busy || !windowOn} aria-label={t('downloads.end')} className="w-28" />
-            <Button variant="primary" disabled={!windowDirty || busy} onClick={() => saveWindow(windowOn, windowStart, windowEnd)}>{t('common:save')}</Button>
+            <Button variant="primary" disabled={!windowDirty || busy} aria-label={t('downloads.saveWindow')} onClick={() => saveWindow(windowOn, windowStart, windowEnd)}>{t('common:save')}</Button>
           </div>
         </AtlasSRow>
         <AtlasSRow label={t('cleanup.heading')} desc={t('cleanup.description')}>
@@ -168,7 +168,7 @@ export function DownloadsSetting({ onNotify }: { onNotify: (msg: string, kind?: 
         <Input type="time" value={windowStart} onChange={(e) => { setWindowStart(e.target.value); setError(null); }} disabled={!saved || busy || !windowOn} aria-label={t('downloads.start')} className="w-28" />
         <span className="text-[12.5px] text-text-body">{t('downloads.to')}</span>
         <Input type="time" value={windowEnd} onChange={(e) => { setWindowEnd(e.target.value); setError(null); }} disabled={!saved || busy || !windowOn} aria-label={t('downloads.end')} className="w-28" />
-        <Button type="submit" variant="primary" disabled={!windowDirty || busy}>{t('common:save')}</Button>
+        <Button type="submit" variant="primary" disabled={!windowDirty || busy} aria-label={t('downloads.saveWindow')}>{t('common:save')}</Button>
       </form>
       <p className="mt-1 max-w-[75ch] text-[12px] leading-relaxed text-text-muted">{t('downloads.windowDescription')}</p>
       <form className="mt-4 flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (cleanupDirty && typeof cleanupDays === 'number') saveCleanupDays(cleanupDays); }}>

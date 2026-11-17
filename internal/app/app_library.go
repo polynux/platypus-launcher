@@ -177,7 +177,8 @@ func (a *App) getLibrary(force bool) (types.Library, error) {
 	if err != nil {
 		return lib, err
 	}
-	a.autoUpdateCheck(lib)
+	a.pruneAutoUpdateOff(lib)
+	a.scheduleAutoUpdateCheck(lib)
 	return lib, nil
 }
 

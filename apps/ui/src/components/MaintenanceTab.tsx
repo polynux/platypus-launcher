@@ -538,11 +538,16 @@ export function AutoUpdateRow({ game, onNotify }: {
 }) {
   const { t } = useTranslation(['gameSettings', 'common']);
   const [auto, setAuto] = useState<boolean | null>(null);
+  // The global switch: when it is off, the per-game box changes nothing yet,
+  // and the row says so (issue #209).
+  const [globalOn, setGlobalOn] = useState(true);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let live = true;
     Effect.runPromise(LauncherApi.getGameAutoUpdate(game.id))
       .then((v) => { if (live) setAuto(v); }, () => { if (live) setAuto(true); });
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => { if (live) setGlobalOn(!!s.auto_update); }, () => {});
     return () => { live = false; };
   }, [game.id]);
   const toggle = (on: boolean) => {
@@ -554,7 +559,7 @@ export function AutoUpdateRow({ game, onNotify }: {
       .finally(() => setBusy(false));
   };
   return (
-    <Row title={t('gameSettings:maintenance.autoUpdate.title')} text={t('gameSettings:maintenance.autoUpdate.text')}>
+    <Row title={t('gameSettings:maintenance.autoUpdate.title')} text={globalOn ? t('gameSettings:maintenance.autoUpdate.text') : t('gameSettings:maintenance.autoUpdate.textOff')}>
       <label className="flex items-center gap-2 text-[12.5px] text-text-body">
         <input
           type="checkbox"

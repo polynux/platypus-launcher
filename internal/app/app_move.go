@@ -242,6 +242,7 @@ func (a *App) MoveGame(game types.Game, parent string) (types.Job, error) {
 	if err != nil {
 		return types.Job{}, err
 	}
+	a.dropAutoForApply(game.ID)
 	return a.jobs.AddMove(game.Source, game.ID, game.StoreAppID, game.Title, from, check.To)
 }
 

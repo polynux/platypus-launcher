@@ -135,8 +135,13 @@ type App struct {
 	library libraryCache
 	scanMu  sync.Mutex
 	// autoUpdateMu serializes the automatic-update checks (issue #209): a
-	// library refresh and the periodic tick may overlap.
+	// library refresh and the periodic tick may overlap. autoChecks tracks the
+	// checks started after a read, so shutdown waits for them, and autoMu
+	// guards autoTries, each game's last automatic update attempt.
 	autoUpdateMu sync.Mutex
+	autoChecks   sync.WaitGroup
+	autoMu       sync.Mutex
+	autoTries    map[string]autoTry
 	// auth caches one login state per plugin: the Plugins view asks on every
 	// visit, and asking costs the plugin a store round trip (app_auth.go,
 	// issue #28). Served immediately, refreshed in the background.
@@ -317,6 +322,19 @@ func (a *App) startup(ctx context.Context) {
 			if !a.gameRunning() {
 				a.drainDeferred()
 			}
+			// A queued automatic update waits while its game runs; a session
+			// end may be what lets it start (issue #209). A client-watched
+			// launch emits "stopped" before the tracker drops it, so a wake
+			// once the game is really gone covers that too.
+			if a.jobs != nil {
+				a.jobs.Wake()
+				go func(gameID string) {
+					for i := 0; i < 100 && a.isRunning(gameID); i++ {
+						time.Sleep(10 * time.Millisecond)
+					}
+					a.jobs.Wake()
+				}(e.GameID)
+			}
 		}
 	})
 
@@ -400,6 +418,8 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.jobs.SetOnInstalled(a.recordInstall)
 	a.jobs.SetOnFinished(a.jobFinished)
+	a.jobs.SetOnEnded(a.autoEnded)
+	a.jobs.SetGameRunning(a.isRunning)
 
 	// The session log opens after the data folder move above, so a crash
 	// recovery reads the folder in use. Dangling sessions close at their
@@ -490,6 +510,9 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.stop != nil {
 		a.stop()
 	}
+	// An automatic-update check started after a library read may still be
+	// queueing (issue #209): let it finish before the plugins go away.
+	a.autoChecks.Wait()
 	// Syncs get a few seconds to finish; a push cut short stays owed and runs
 	// at the next start.
 	if a.cloud != nil {

@@ -143,7 +143,7 @@
   "kib": "Kio/s",
   "limitSaved": "Limite de vitesse enregistrée",
   "autoLabel": "Mises à jour automatiques",
-  "autoDescription": "Met à jour les jeux installés en arrière-plan, dans la plage ci-dessous. Les jeux épinglés à une version et ceux que vous excluez ne sont jamais mis à jour.",
+  "autoDescription": "Activées par défaut. Met à jour les jeux installés en arrière-plan, dans la plage ci-dessous. Les boutiques qui signalent les mises à jour sont vérifiées (Steam et GOG aujourd'hui, ainsi que les plugins de boutique qui listent des versions) ; les jeux épinglés à une version et ceux que vous excluez ne sont jamais mis à jour.",
   "autoSaved": "Mises à jour automatiques enregistrées",
   "windowLabel": "Mettre à jour automatiquement seulement entre {{start}} et {{end}}",
   "windowDescription": "Les mises à jour automatiques en attente patientent jusqu'à cette plage ; celles que vous lancez vous-même démarrent toujours aussitôt. Une plage qui finit avant de commencer passe minuit.",
@@ -152,6 +152,7 @@
   "end": "Fin de la plage",
   "to": "et",
   "scheduleSaved": "Plage de mise à jour enregistrée",
+  "saveWindow": "Enregistrer la plage de mise à jour",
   "scheduleOff": "Les mises à jour peuvent démarrer à tout moment",
   "saveError": "Platypus n'a pas pu enregistrer les réglages de téléchargement."
  },

@@ -1422,6 +1422,75 @@ def launch_hints(app, installed):
     return hints
 
 
+# --- update detection in the library (issue #209) ---------------------------
+#
+# library.list says whether an installed game has an update, so automatic
+# updates don't need a versions dialog first. The recorded build is compared
+# with its channel's tip; tips are cached for HEAD_TTL, and a cold or stale
+# entry costs one versions read per listing only while a small budget lasts.
+# Client-managed installs are the Steam client's to update: they stay out.
+
+HEAD_TTL = 6 * 3600  # seconds a cached channel tip is trusted
+HEAD_BUDGET = 8      # seconds of tip lookups per library.list
+head_cache = None
+
+
+def load_heads():
+    global head_cache
+    if head_cache is None:
+        head_cache = load_state("build-heads.json", {})
+        if not isinstance(head_cache, dict):
+            head_cache = {}
+    return head_cache
+
+
+def save_heads():
+    if head_cache is not None:
+        save_state("build-heads.json", head_cache)
+
+
+def branch_tip(app, channel, deadline):
+    """The build the installed channel points at now, from the cache while it
+    is fresh, else one versions read while the listing's budget lasts. A
+    failed read keeps the last known tip (or reports none)."""
+    heads = load_heads()
+    entry = heads.get(str(app)) or {}
+    key = channel or "public"
+    if (entry.get("channel") or "public") == key and entry.get("build") and \
+            time.time() - float(entry.get("at") or 0) < HEAD_TTL:
+        return str(entry["build"])
+    if time.time() < deadline:
+        branches = []
+        try:
+            branches = versions_branches(str(app), timeout=max(1, min(15, int(deadline - time.time()) + 1)))
+        except Exception as e:
+            log("info", "couldn't read the current builds of app {}: {}".format(app, e))
+        for b in branches:
+            if (b.get("name") or "public") == key:
+                tip = str(b.get("build_id") or "")
+                if tip:
+                    heads[str(app)] = {"channel": key, "build": tip, "at": time.time()}
+                    save_heads()
+                    return tip
+    if (entry.get("channel") or "public") == key:
+        return str(entry.get("build") or "")
+    return ""
+
+
+def mark_update_available(entry, ig, deadline):
+    """Library `updateAvailable` for an installed Steam game (issue #209):
+    the recorded build against its channel's tip. Client-managed installs and
+    games with no build record report nothing."""
+    if (ig.get("mode") or "") == "client":
+        return
+    build = str(ig.get("build") or "")
+    if not build:
+        return
+    tip = branch_tip(entry["id"], str(ig.get("channel") or ""), deadline)
+    if tip:
+        entry["updateAvailable"] = build != tip
+
+
 def library_list(_params):
     data = owned_games()
     token = access_token()
@@ -1503,6 +1572,13 @@ def library_list(_params):
     for entry in out:
         if entry["id"] in overrides:
             entry.update(overrides[entry["id"]])
+    # Update detection (issue #209) runs over the final list, so owned,
+    # installed-missing and family-merged entries all carry the flag.
+    heads_deadline = time.time() + HEAD_BUDGET
+    for entry in out:
+        ig = installed.get(entry["id"])
+        if ig:
+            mark_update_available(entry, ig, heads_deadline)
     # The friends list links a game the friend plays when it is in this
     # library (protocol 1.6); refreshed on every listing.
     LIBRARY_IDS.clear()
@@ -2645,17 +2721,19 @@ def game_options(params):
 # game.details or other calls a game page makes — and a failed read errors
 # instead of answering an empty list that could install the wrong build.
 
-def versions_branches(app):
+def versions_branches(app, timeout=None):
     """PICS branches for the app via platypus-steam-dl, or raise. Stored
     passwords ride along so branches PICS hides come back unlocked. Names
     the helper refused are dropped and come back as locked skeletons, so
-    the unlock form and the no-public-fallback rule still see them."""
+    the unlock form and the no-public-fallback rule still see them.
+    `timeout` bounds the helper run (library.list uses it: a silent CM must
+    not hold a listing)."""
     req = dl_request({"id": app})
     stored = (beta_passwords().get(app) or {})
     if stored:
         req["branch_passwords"] = dict(stored)
     result = dl_run("versions", req,
-                    label="Steam versions", err_code=-32002)
+                    label="Steam versions", err_code=-32002, timeout=timeout)
     branches = result.get("branches") or []
     for name in result.get("refused") or []:
         drop_beta_password(app, name)

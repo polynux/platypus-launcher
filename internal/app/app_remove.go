@@ -421,7 +421,7 @@ func (a *App) CheckRemove(gameID string, opts types.RemoveOptions) (types.Remove
 	}
 	if j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindRemove); ok {
 		return check, apperr.New("remove.busy",
-			fmt.Sprintf("%s already has a %s queued", game.Title, j.Kind),
+			fmt.Sprintf("%s already has %s queued", game.Title, jobs.KindNoun(j.Kind)),
 			map[string]string{"title": game.Title, "kind": j.Kind})
 	}
 	targets, err := a.removeTargets(game, opts)
@@ -475,7 +475,7 @@ func (a *App) RemoveGame(gameID string, opts types.RemoveOptions) (types.Job, er
 	}
 	if j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindRemove); ok {
 		return types.Job{}, apperr.New("remove.busy",
-			fmt.Sprintf("%s already has a %s queued", game.Title, j.Kind),
+			fmt.Sprintf("%s already has %s queued", game.Title, jobs.KindNoun(j.Kind)),
 			map[string]string{"title": game.Title, "kind": j.Kind})
 	}
 	targets, err := a.removeTargets(game, opts)
@@ -485,6 +485,7 @@ func (a *App) RemoveGame(gameID string, opts types.RemoveOptions) (types.Job, er
 	if _, err := a.checkRemoveTargets(game.ID, targets); err != nil {
 		return types.Job{}, err
 	}
+	a.dropAutoForApply(game.ID)
 	return a.jobs.AddRemove(game.Source, game.ID, game.StoreAppID, game.Title,
 		opts.DeletePrefix, opts.DeleteFiles, opts.AllowNoSaves)
 }

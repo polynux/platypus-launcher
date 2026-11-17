@@ -184,3 +184,32 @@ func TestParseClock(t *testing.T) {
 		}
 	}
 }
+
+func TestPruneAutoUpdateOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	s, err := OpenWithHome(path, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"gone", "kept"} {
+		if err := s.SetGameAutoUpdate(id, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.PruneAutoUpdateOff(map[string]bool{"kept": true}); err != nil {
+		t.Fatal(err)
+	}
+	if !s.GameAutoUpdate("gone") {
+		t.Fatal("prune kept a removed game's exclusion")
+	}
+	if s.GameAutoUpdate("kept") {
+		t.Fatal("prune forgot a game still in the library")
+	}
+	again, err := OpenWithHome(path, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !again.GameAutoUpdate("gone") || again.GameAutoUpdate("kept") {
+		t.Fatalf("reloaded exclusions: gone automatic=%v kept automatic=%v", again.GameAutoUpdate("gone"), again.GameAutoUpdate("kept"))
+	}
+}

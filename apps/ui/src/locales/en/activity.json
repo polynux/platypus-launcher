@@ -53,6 +53,7 @@
   "tweakDefault": "Launcher settings changed",
   "jobVerbInstalled": "installed",
   "jobVerbUpdated": "updated",
+  "jobVerbAutoUpdated": "automatic update",
   "jobVerbUninstalled": "uninstalled",
   "jobDone": "{{action}} {{title}}",
   "jobFailed": "{{kind}} of {{title}} failed",

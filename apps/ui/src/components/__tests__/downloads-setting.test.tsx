@@ -69,11 +69,10 @@ describe('Downloads settings', () => {
     setUpdateWindow.mockReturnValue(Effect.succeed({
       ...settings, update_window_enabled: true, update_window_start: '22:00', update_window_end: '06:00',
     }));
-    const { getByRole, getByText, getAllByRole } = render(<DownloadsSetting onNotify={() => {}} />);
+    const { getByRole, getByText } = render(<DownloadsSetting onNotify={() => {}} />);
     await waitFor(() => expect(getByText('Only auto-update between 22:00 and 06:00')).toBeTruthy());
     fireEvent.click(getByRole('switch', { name: 'Only auto-update in the window' }));
-    const save = getAllByRole('button', { name: 'Save' }).find((b) => !(b as HTMLButtonElement).disabled)!;
-    fireEvent.click(save);
+    fireEvent.click(getByRole('button', { name: 'Save update schedule' }));
     await waitFor(() => expect(setUpdateWindow).toHaveBeenCalledWith(true, '22:00', '06:00'));
   });
 });

@@ -143,7 +143,7 @@
   "kib": "KiB/s",
   "limitSaved": "Download speed limit saved",
   "autoLabel": "Automatic updates",
-  "autoDescription": "Update installed games in the background, inside the window below. Games held at a version and games you exclude are never updated.",
+  "autoDescription": "On by default. Updates installed games in the background, inside the window below. Stores that report updates are checked (Steam and GOG today, plus store plugins that list versions); games held at a version and games you exclude are never updated.",
   "autoSaved": "Automatic updates saved",
   "windowLabel": "Only auto-update between {{start}} and {{end}}",
   "windowDescription": "Queued automatic updates wait for this window; updates you start yourself always run right away. A window that ends before it starts crosses midnight.",
@@ -152,6 +152,7 @@
   "end": "Window end",
   "to": "to",
   "scheduleSaved": "Update schedule saved",
+  "saveWindow": "Save update schedule",
   "scheduleOff": "Updates can start at any time",
   "saveError": "Platypus couldn't save the download settings."
  },

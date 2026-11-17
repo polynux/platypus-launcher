@@ -53,6 +53,7 @@
   "tweakDefault": "Réglages du lanceur modifiés",
   "jobVerbInstalled": "installé",
   "jobVerbUpdated": "mis à jour",
+  "jobVerbAutoUpdated": "mise à jour automatique",
   "jobVerbUninstalled": "désinstallé",
   "jobVerbVerified": "vérifié",
   "jobVerbMoved": "déplacé",

@@ -178,3 +178,43 @@ func TestWindowWakeRearms(t *testing.T) {
 		t.Fatalf("wake not re-armed: %v then %v", first, second)
 	}
 }
+
+// An automatic update queued before a session starts waits while the game
+// runs and starts when the session ends; a job the user asked for still runs
+// (issue #209).
+func TestAutoUpdateWaitsForRunningGame(t *testing.T) {
+	b := &fakeBackend{size: plugins.InstallSize{DownloadBytes: 100, DiskBytes: 200}}
+	q, _ := newQueue(t, b)
+	dir := filepath.Join(t.TempDir(), "Games", "echo")
+	up, err := q.AddAuto("echo", "p.echo.tiny", "tiny", "Tiny", dir, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	running := true
+	q.SetGameRunning(func(id string) bool { return id == up.GameID && running })
+
+	// The waiting auto update doesn't block the user's own update.
+	manual, err := q.Add(KindUpdate, "echo", "p.echo.other", "other", "Other", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := waitState(t, q, manual.ID, StateRunning); got.ID != manual.ID {
+		t.Fatalf("started job = %+v, want the manual update", got)
+	}
+	if got := q.List(); len(got) != 2 {
+		t.Fatalf("jobs = %+v", got)
+	}
+	for _, j := range q.List() {
+		if j.ID == up.ID && j.State != StateQueued {
+			t.Fatalf("auto update state = %s, want queued while the game runs", j.State)
+		}
+	}
+	q.Notify("echo", "job.done", plugins.JobUpdate{JobID: manual.ID})
+	waitState(t, q, manual.ID, StateDone)
+
+	running = false
+	q.Wake()
+	if got := waitState(t, q, up.ID, StateRunning); got.Kind != KindUpdate {
+		t.Fatalf("window job = %+v", got)
+	}
+}

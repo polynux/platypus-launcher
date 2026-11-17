@@ -236,7 +236,10 @@ func (a *App) queueJobWith(kind string, game types.Game, target *types.VersionTa
 // queueJobIn is queueJobWith for a fresh install into a folder the user picked
 // ("" is the plugin's own install folder). The folder is checked first and,
 // once the job is queued, remembered and allowed for the plugin's launches.
+// A job the user asked for replaces a queued (not running) automatic update of
+// the game (issue #209), which never keeps the user waiting.
 func (a *App) queueJobIn(kind string, game types.Game, target *types.VersionTarget, options types.InstallOptions, picked string) (types.Job, error) {
+	a.dropAutoForApply(game.ID)
 	return a.queueJobInAuto(kind, game, target, options, picked, false)
 }
 
@@ -428,15 +431,43 @@ func (a *App) SetUpdateWindow(enabled bool, start, end string) (types.LauncherSe
 // library (issue #209), besides every library refresh.
 const autoUpdateEvery = 2 * time.Hour
 
+// autoRetryAfter is how long a failed automatic update waits before the game
+// is tried again (issue #209): a store outage must not retry every check.
+const autoRetryAfter = 6 * time.Hour
+
+// The outcomes of an automatic update attempt (autoTry.outcome). "" means it
+// was queued and hasn't ended yet.
+const (
+	autoCanceled = "canceled"
+	autoFailed   = "failed"
+)
+
+// autoTry is one game's last automatic update attempt (issue #209), kept in
+// memory: the installed version the store reported then, when it was tried,
+// and how it ended. A canceled attempt isn't retried while the same update is
+// offered; a failed one waits out autoRetryAfter.
+type autoTry struct {
+	version string
+	at      time.Time
+	outcome string
+}
+
 // SetAutoUpdate saves the "Automatic updates" switch (issue #209). Turning it
 // on checks the library right away, so a game already waiting for an update
-// is queued without another manual refresh.
+// is queued without another manual refresh; turning it off cancels the
+// automatic updates that haven't started yet (a running one may finish).
 func (a *App) SetAutoUpdate(on bool) (types.LauncherSettings, error) {
 	if err := a.settings.SetAutoUpdate(on); err != nil {
 		return a.launcherSettings(), err
 	}
 	if on {
-		go a.checkAutoUpdates()
+		a.autoChecks.Add(1)
+		go func() {
+			defer a.autoChecks.Done()
+			a.checkAutoUpdates()
+		}()
+	} else {
+		a.cancelQueuedAuto("")
 	}
 	return a.launcherSettings(), nil
 }
@@ -448,16 +479,24 @@ func (a *App) GetGameAutoUpdate(gameID string) (bool, error) {
 }
 
 // SetGameAutoUpdate saves one game's "Don't update automatically" override
-// (on returns the game to following the global switch).
+// (on returns the game to following the global switch). Excluding a game
+// cancels its automatic update that hasn't started yet.
 func (a *App) SetGameAutoUpdate(gameID string, on bool) error {
-	return a.settings.SetGameAutoUpdate(gameID, on)
+	if err := a.settings.SetGameAutoUpdate(gameID, on); err != nil {
+		return err
+	}
+	if !on {
+		a.cancelQueuedAuto(gameID)
+	}
+	return nil
 }
 
 // autoUpdateCheck queues an automatic update for each installed game whose
 // store reports one (issue #209). A game is skipped when it is pinned, when
-// the user excluded it, and while it runs: its update waits for the next
-// check instead. A game that already has a job is skipped too (the queue
-// would refuse a second one).
+// the user excluded it, when it can't be installed by its store, and while it
+// runs: its update waits for the next check instead. A game that already has
+// a job is skipped too (the queue would refuse a second one), and so is one
+// whose canceled or failed attempt still stands.
 func (a *App) autoUpdateCheck(lib types.Library) {
 	if a.settings == nil || !a.settings.AutoUpdate() {
 		return
@@ -465,8 +504,9 @@ func (a *App) autoUpdateCheck(lib types.Library) {
 	a.autoUpdateMu.Lock()
 	defer a.autoUpdateMu.Unlock()
 	pins := a.settings.Pins()
+	now := time.Now()
 	for _, g := range lib.Games {
-		if !g.IsInstalled || !g.UpdateAvailable || g.Pinned != nil {
+		if !g.IsInstalled || !g.UpdateAvailable || g.Pinned != nil || !g.Installable {
 			continue
 		}
 		if _, pinned := pins[g.ID]; pinned {
@@ -475,21 +515,139 @@ func (a *App) autoUpdateCheck(lib types.Library) {
 		if !a.settings.GameAutoUpdate(g.ID) || a.isRunning(g.ID) {
 			continue
 		}
-		if _, err := a.queueJobInAuto(jobs.KindUpdate, g, nil, a.savedOptions(g), "", true); err != nil {
+		if wait, ok := a.autoTry(g.ID); ok {
+			switch wait.outcome {
+			case autoCanceled:
+				// The user canceled this update; wait for the store to offer
+				// a different one (a new installed version, or the update
+				// itself going away).
+				if wait.version == "" || wait.version == g.Version {
+					continue
+				}
+			case autoFailed:
+				if now.Sub(wait.at) < autoRetryAfter {
+					continue
+				}
+			}
+		}
+		// The saved choices go along unchecked: the job checks them against
+		// the store when it starts, so this read makes no plugin call (S4).
+		options, _ := a.settings.Options(g.ID)
+		if _, err := a.queueJobInAuto(jobs.KindUpdate, g, nil, options, "", true); err != nil {
 			continue // a job already holds the game, or the store can't update it now
+		}
+		a.setAutoTry(g.ID, autoTry{version: g.Version, at: now})
+	}
+}
+
+// autoEnded remembers how an automatic update ended (issue #209): a canceled
+// one isn't tried again while the store offers the same update, a failed one
+// waits autoRetryAfter, and a finished one clears the record.
+func (a *App) autoEnded(j types.Job) {
+	if j.Kind != jobs.KindUpdate || !j.Auto {
+		return
+	}
+	now := time.Now()
+	a.autoMu.Lock()
+	defer a.autoMu.Unlock()
+	if j.State != jobs.StateDone && a.autoTries == nil {
+		a.autoTries = map[string]autoTry{}
+	}
+	try := a.autoTries[j.GameID]
+	switch j.State {
+	case jobs.StateDone:
+		delete(a.autoTries, j.GameID)
+	case jobs.StateCanceled:
+		try.outcome, try.at = autoCanceled, now
+		a.autoTries[j.GameID] = try
+	case jobs.StateFailed:
+		try.outcome, try.at = autoFailed, now
+		a.autoTries[j.GameID] = try
+	}
+}
+
+func (a *App) autoTry(gameID string) (autoTry, bool) {
+	a.autoMu.Lock()
+	defer a.autoMu.Unlock()
+	try, ok := a.autoTries[gameID]
+	return try, ok
+}
+
+func (a *App) setAutoTry(gameID string, try autoTry) {
+	a.autoMu.Lock()
+	defer a.autoMu.Unlock()
+	if a.autoTries == nil {
+		a.autoTries = map[string]autoTry{}
+	}
+	a.autoTries[gameID] = try
+}
+
+func (a *App) forgetAutoTry(gameID string) {
+	a.autoMu.Lock()
+	defer a.autoMu.Unlock()
+	delete(a.autoTries, gameID)
+}
+
+// cancelQueuedAuto cancels automatic updates that haven't started, for one
+// game or every game (""): switching automatic updates off stops what is
+// still waiting (issue #209). A running one may finish.
+func (a *App) cancelQueuedAuto(gameID string) {
+	for _, j := range a.jobs.List() {
+		if j.Auto && j.Kind == jobs.KindUpdate && j.State == jobs.StateQueued && (gameID == "" || j.GameID == gameID) {
+			if err := a.jobs.Cancel(a.ctx, j.ID); err != nil {
+				a.warnf("automatic updates: canceling %s: %v", j.Title, err)
+			}
 		}
 	}
 }
 
+// dropAutoForApply cancels a queued automatic update of the game before an
+// action the user asked for takes it (issue #209): a waiting auto update never
+// blocks verify, move, remove or the user's own install or update. Its
+// canceled attempt is forgotten: the user didn't cancel the update itself.
+func (a *App) dropAutoForApply(gameID string) {
+	a.cancelQueuedAuto(gameID)
+	a.forgetAutoTry(gameID)
+}
+
+// pruneAutoUpdateOff forgets the automatic-update exclusions of games that
+// left the library (issue #209), like PruneGames does for plugin settings.
+func (a *App) pruneAutoUpdateOff(lib types.Library) {
+	if a.settings == nil {
+		return
+	}
+	keep := make(map[string]bool, len(lib.Games))
+	for _, g := range lib.Games {
+		keep[g.ID] = true
+	}
+	if err := a.settings.PruneAutoUpdateOff(keep); err != nil {
+		a.warnf("automatic updates: forgetting removed games: %v", err)
+	}
+}
+
+// scheduleAutoUpdateCheck runs the check after a library read returned: the
+// queueing it does (terms, install options) never holds the scan. The check
+// is tracked so shutdown waits for it.
+func (a *App) scheduleAutoUpdateCheck(lib types.Library) {
+	if a.settings == nil || !a.settings.AutoUpdate() {
+		return
+	}
+	a.autoChecks.Add(1)
+	go func() {
+		defer a.autoChecks.Done()
+		a.autoUpdateCheck(lib)
+	}()
+}
+
 // checkAutoUpdates lists the library for the periodic check; a library
-// refresh runs autoUpdateCheck on what it lists.
+// refresh schedules the check itself.
 func (a *App) checkAutoUpdates() {
 	if a == nil || a.settings == nil || a.ctx == nil || !a.settings.AutoUpdate() {
 		return
 	}
-	if _, err := a.GetLibrary(); err != nil {
-		a.warnf("automatic updates: %v", err)
-	}
+	// The library carries a warning for a source that is logged out or
+	// unreachable, so this adds no log line of its own (S4).
+	_, _ = a.GetLibrary()
 }
 
 // autoUpdateLoop re-checks the library every autoUpdateEvery (issue #209).

@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -164,6 +165,35 @@ func (s *Store) SetGameAutoUpdate(gameID string, on bool) error {
 		} else if !on {
 			s.data.AutoUpdateOff = prev
 		}
+		return err
+	}
+	return nil
+}
+
+// PruneAutoUpdateOff forgets the automatic-update exclusions of games that are
+// no longer in the library (issue #209). Call it with a library that was
+// listed in full, so a game from a failed source keeps its exclusion.
+func (s *Store) PruneAutoUpdateOff(keep map[string]bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	changed := false
+	for id := range s.data.AutoUpdateOff {
+		if !keep[id] {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		return nil
+	}
+	prev := maps.Clone(s.data.AutoUpdateOff)
+	for id := range s.data.AutoUpdateOff {
+		if !keep[id] {
+			delete(s.data.AutoUpdateOff, id)
+		}
+	}
+	if err := s.save(); err != nil {
+		s.data.AutoUpdateOff = prev
 		return err
 	}
 	return nil
