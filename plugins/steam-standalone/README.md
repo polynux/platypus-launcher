@@ -50,8 +50,11 @@ manifests (Linux depots first, Windows fallback — the same order an install
 uses). Installs are resumable: staged chunks survive a crash under
 `PLATYPUS_PLUGIN_DATA/jobs/`, and Platypus re-issues the same job after a crash.
 The scheduler spreads chunk fetches over many CDN hosts like the Steam
-client ( honouring the Steam client's download region, `PLATYPUS_STEAM_CELLID`
-to override).
+client. Its region is a plugin setting (Plugins → Steam → Downloads):
+**Automatic** keeps the Steam client's own region (`CellIDServerOverride`) when
+it has one, else Steam's geolocation; a chosen region asks Steam's Content
+Server Directory for that region's cell id instead. `PLATYPUS_STEAM_CELLID`
+still overrides both when automatic.
 
 ## Launch modes
 
