@@ -24,6 +24,8 @@ import { useNetState } from '../useNetState';
 import { formatHours } from '../../lib/format';
 import { recencyOf, renderRecency } from '../../lib/gameLocale';
 import { LauncherApi } from '../../effect/runtime';
+import { coreErrorDataOf, coreErrMsg } from '../../lib/coreError';
+import { ClientSetupAction } from '../ClientSetupAction';
 import { useVariant, useThemeLayout } from '../../lib/theme';
 import { ThemeLayout } from '../../lib/layout';
 import { BUILTIN_LAYOUTS } from '../../gen/builtinLayouts';
@@ -228,6 +230,39 @@ export function GamePage(p: GamePageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heroTop]);
   useEffect(() => { setShot(0); setLightbox(false); setSettingsTab(null); setInstallTo(false); setOptionsOpen(false); }, [game.id]);
+  // A launch that failed with client.notSetUp names the store client to set
+  // up (protocol 1.20): the page offers the setup instead of Play until the
+  // client's setup job is done. Cleared when the game changes or the setup
+  // finishes.
+  const [setupNeeded, setSetupNeeded] = useState<{ client: string; source: string; message: string } | null>(null);
+  useEffect(() => { setSetupNeeded(null); }, [game.id]);
+  const clientId = `p.${game.source}.client`;
+  const setupJob = (p.jobs ?? []).find((j) => j.game_id === clientId &&
+    (j.state === 'queued' || j.state === 'running' || j.state === 'paused'));
+  useEffect(() => {
+    if (setupNeeded && !setupJob && (p.jobs ?? []).some((j) => j.game_id === clientId && j.state === 'done')) {
+      setSetupNeeded(null);
+    }
+  }, [p.jobs, setupNeeded, clientId]);
+  // The page owns the launch (like the other core calls here), so a
+  // notSetUp failure can offer the setup instead of only toasting.
+  const handlePlay = () => {
+    if (p.launching || sessionActive) return;
+    setSetupNeeded(null);
+    Effect.runPromise(LauncherApi.launchGame(game))
+      .then((res) => p.onNotify?.(res || t('game:launching', { title: game.title }), 'busy'))
+      .catch((err) => {
+        const data = coreErrorDataOf(err);
+        const client = data?.code === 'client.notSetUp' && typeof data.params?.client === 'string' && data.params.client
+          ? data.params.client
+          : null;
+        if (client) {
+          setSetupNeeded({ client, source: game.source, message: coreErrMsg(err) });
+        } else {
+          p.onNotify?.(coreErrMsg(err), 'err');
+        }
+      });
+  };
   // The palette's "Open game settings" (issue #124): open the tab it asked for,
   // then clear the request so closing the dialog keeps it closed.
   useEffect(() => {
@@ -262,6 +297,14 @@ export function GamePage(p: GamePageProps) {
   const plugin = p.plugin;
   const job = p.job;
   const active = job && (job.state === 'queued' || job.state === 'running');
+  const clientSetup = !sessionActive && (setupNeeded || setupJob)
+    ? {
+      client: setupNeeded?.client ?? plugin?.name ?? game.source,
+      source: game.source,
+      message: setupNeeded?.message ?? null,
+      job: setupJob,
+    }
+    : undefined;
   const fix = game.fix_info;
   const ratingBadge = info?.badges?.find((b) => b.kind === 'rating');
   const deck = steamDeckFact(info?.badges);
@@ -410,7 +453,8 @@ export function GamePage(p: GamePageProps) {
             activity={activity}
             backLabel={p.backLabel}
             onBack={p.onBack}
-            onPlay={p.onPlay}
+            onPlay={handlePlay}
+            clientSetup={clientSetup}
             onStop={p.onStop}
             onForceStop={p.onForceStop}
             launching={p.launching}
@@ -509,7 +553,8 @@ export function GamePage(p: GamePageProps) {
       canChooseOptions,
       onJob: p.onJob,
       onJobAction: p.onJobAction,
-      onPlay: p.onPlay,
+      onPlay: handlePlay,
+      clientSetup,
       onStop: p.onStop,
       onForceStop: p.onForceStop,
       onInstall: () => (canChooseOptions ? setOptionsOpen(true) : p.onJob('install')),
@@ -686,6 +731,8 @@ interface GameData {
   onJob: (kind: GameJobKind) => void;
   onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
   onPlay: () => void;
+  /** The store-client setup prompt while one holds this game (protocol 1.20). */
+  clientSetup?: { client: string; source: string; message: string | null; job?: Job };
   onStop: () => void;
   onForceStop: () => void;
   onInstall: () => void;
@@ -758,6 +805,8 @@ function gameBlocks(d: GameData, _layout?: GameLayoutData): Record<string, React
         onJob={d.onJob}
         onJobAction={d.onJobAction}
         onPlay={d.onPlay}
+        clientSetup={d.clientSetup}
+        onNotify={d.onNotify}
         onStop={d.onStop}
         onForceStop={d.onForceStop}
         onInstall={d.onInstall}

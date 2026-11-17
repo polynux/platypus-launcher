@@ -14,6 +14,10 @@
 //	flaky    the plugin crashes once mid-install, then resumes
 //	client   always installed; "launches" through a store client (a sleep whose
 //	         command line is unique to this plugin process)
+//	wine     always installed; launches through a fake store client in a
+//	         Platypus-managed prefix (protocol 1.20): run client.setup first,
+//	         then launch; the fake client is a shell script standing in for
+//	         the real client executable (Wine isn't available in tests)
 //	escape   always installed outside the install folder; Platypus must refuse it
 //	ana, ben borrowed from the family (family.go): installed, launched through a store client
 //	shared   lent by ana and ben, whose copies differ (family.go): the user picks one
@@ -34,7 +38,7 @@
 //	ECHO_UNAVAILABLE   methods that answer -32002 "unavailable right now"
 //	ECHO_MISSING       methods that answer -32601 "method not found"
 //	ECHO_INIT_OMIT     set: initialize leaves `capabilities` out (means "all declared")
-//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.14); it answers the highest Platypus also offers
+//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.20); it answers the highest Platypus also offers
 //	ECHO_NO_PROTOCOL   set: initialize leaves `protocol` out, like a plugin from before negotiation
 //	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
 //	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Platypus knows
@@ -53,6 +57,8 @@
 //	ECHO_TERMS_ASKED_ONLY set: game.details lists terms only when asked with terms:true (a store that keeps them out of the game page)
 //	ECHO_LIBRARY_DELAY_MS  milliseconds library.list waits before it answers (a slow store)
 //	ECHO_AUTH_STATUS_DELAY_MS milliseconds auth.status waits before it answers (a slow login check)
+//	ECHO_INSTALLER_SLEEP seconds the fake client installer waits before installing (a cancel window for client.setup tests)
+//	ECHO_SETUP_CONFIRM text making client.setup ask for download confirmation (protocol 1.20)
 //	ECHO_GAMES        number of extra games to list, with covers served locally (bulk.go), to try the UI at scale
 //
 // Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there, and
@@ -115,6 +121,7 @@ type game struct {
 	note     string
 	external string // always installed here, outside Platypus's folder
 	client   bool
+	wine     bool   // launches through a store client in a Platypus-managed prefix (protocol 1.20)
 	details  bool   // answers game.details with store metadata
 	terms    bool   // lists terms in game.details (terms.go)
 	lentBy   string // a family member's game: installed, launched through the client (family.go)
@@ -126,6 +133,7 @@ var games = map[string]game{
 	"huge":   {title: "Echo Huge", size: 32 << 50, steps: 10, stepMs: 100, native: true},
 	"flaky":  {title: "Echo Flaky", size: 8 << 20, steps: 20, stepMs: 100, native: true, note: "The plugin crashes once while installing this."},
 	"client": {title: "Echo Client", client: true, note: "Launches through a store client (a 5 s sleep)."},
+	"wine":   {title: "Echo Wine Game", wine: true, note: "Launches through a fake store client in a Platypus-managed prefix (the client stays up, protocol 1.20)."},
 	"escape": {title: "Echo Escape", external: "/usr/bin", note: "Installed outside the plugin's folder: Platypus must refuse to launch it."},
 	"ana":    {title: "Echo Borrowed Quest", lentBy: "ana", native: true},
 	"ben":    {title: "Echo Borrowed Kart", lentBy: "ben", native: true},
@@ -135,7 +143,7 @@ var games = map[string]game{
 	"licensed": {title: "Echo Licensed", size: 4 << 20, steps: 10, stepMs: 100, native: true, details: true, terms: true},
 }
 
-var order = []string{"tiny", "slow", "huge", "flaky", "client", "escape", "ana", "ben", "shared", "licensed"}
+var order = []string{"tiny", "slow", "huge", "flaky", "client", "wine", "escape", "ana", "ben", "shared", "licensed"}
 
 // state is persisted in $PLATYPUS_PLUGIN_DATA/state.json.
 type state struct {
@@ -159,6 +167,9 @@ type state struct {
 	// AcceptedTerms are the "id@version" terms the user accepted, by game id
 	// (game.acceptTerms, terms.go).
 	AcceptedTerms map[string][]string `json:"acceptedTerms"`
+	// ClientPrefix remembers where client.setup installed the fake store
+	// client, for cores that don't pass the prefix in game.launchSpec.
+	ClientPrefix string `json:"clientPrefix,omitempty"`
 }
 
 var (
@@ -204,9 +215,9 @@ type knobs struct {
 	SettingsDelayMs int  `json:"settingsDelayMs"`
 }
 
-// defaultProtocols is what echo speaks: 1.0 to 1.17, so it meets the highest
+// defaultProtocols is what echo speaks: 1.0 to 1.20, so it meets the highest
 // revision Platypus offers (the negotiation picks the best both speak).
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20"}
 
 var (
 	knobMu  sync.Mutex
@@ -551,6 +562,10 @@ type params struct {
 	Repair bool   `json:"repair"`
 	From   string `json:"from"`
 	To     string `json:"to"`
+	// client.setup and game.launchSpec (protocol 1.20): the Platypus-managed
+	// client prefix. The core creates the folder and passes it in; echo only
+	// writes into it.
+	Prefix string `json:"prefix"`
 	// options of game.installSize, game.install and game.update.
 	Options map[string]any `json:"options"`
 	// social.setStatus: the status to set.
@@ -735,6 +750,8 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return nil, nil
 	case "job.discard":
 		return discardJob(p)
+	case "client.setup":
+		return startClientSetup(p)
 	case "game.launchSpec":
 		return launchSpec(p)
 	case "cloud.status", "cloud.pull", "cloud.push", "cloud.resolve":
@@ -843,15 +860,18 @@ func library() (any, error) {
 		if g.external != "" {
 			path, installed = g.external, true
 		}
-		if g.client {
+		if g.client || g.wine {
 			installed = true
 		}
 		if g.lentBy != "" {
 			installed = true
 		}
 		e := map[string]any{
-			"id": id, "title": g.title, "installed": installed, "installable": g.external == "" && !g.client && g.lentBy == "",
+			"id": id, "title": g.title, "installed": installed, "installable": g.external == "" && !g.client && !g.wine && g.lentBy == "",
 			"version": "1.0", "note": g.note, "native": g.native,
+		}
+		if g.wine {
+			e["clientLaunch"] = true
 		}
 		// Offline-launch fixtures (protocol 1.15, issue #44).
 		if off := offlineFor(id); off != "" {
@@ -1054,6 +1074,8 @@ func launchSpec(p params) (any, error) {
 		}
 	}
 	switch {
+	case g.wine:
+		return wineLaunchSpec(p)
 	case g.client || g.lentBy != "" || p.Via == "client":
 		return map[string]any{
 			"delegate": "store-client", "client": "Echo client",
@@ -1084,6 +1106,87 @@ func launchSpec(p params) (any, error) {
 	// prefix for it (issue #69); native fixtures run directly as before.
 	if spec, ok := fixtureSpecs[p.ID]; ok && spec.Wine {
 		out["needsWine"] = true
+	}
+	return out, nil
+}
+
+// wineClientSleep is the marker the fake store client runs its "game" with
+// (find.cmdline → session.FindByCmdline, a scan of /proc). Like clientSleep
+// it carries this plugin process's pid so one test run never finds another's
+// launch (issue #112).
+var wineClientSleep = fmt.Sprintf("7.%d", os.Getpid())
+
+// wineClientExe is the fake client executable the installer writes, relative
+// to the client prefix.
+const wineClientExe = "drive_c/echo-client/echo-client.sh"
+
+// wineLaunchSpec answers a wine-client launch (protocol 1.20): the core runs
+// the client executable under the runner in its own prefix and follows the
+// game through find. The core passes the prefix in; the remembered one from
+// client.setup covers cores that don't.
+func wineLaunchSpec(p params) (any, error) {
+	prefix := p.Prefix
+	if prefix == "" {
+		stMu.Lock()
+		prefix = st.ClientPrefix
+		stMu.Unlock()
+	}
+	if prefix == "" {
+		return nil, fmt.Errorf("Echo client isn't set up yet (no client prefix)")
+	}
+	return map[string]any{
+		"delegate": "wine-client", "client": "Echo client",
+		"exe": filepath.Join(prefix, wineClientExe), "args": []string{wineClientSleep},
+		"prefix":       "client",
+		"find":         map[string]any{"cmdline": []string{"sleep\x00" + wineClientSleep}},
+		"startTimeout": 60,
+	}, nil
+}
+
+// startClientSetup answers client.setup (protocol 1.20) with the installer
+// spec the core runs: a shell script standing in for the real client
+// installer (Wine isn't available in tests, so it runs natively). The core
+// runs it under the runner in the prefix, then launches the client it
+// installs. ECHO_INSTALLER_SLEEP delays the installer (a cancel window for
+// tests); ECHO_SETUP_CONFIRM makes the answer ask for download confirmation.
+func startClientSetup(p params) (any, error) {
+	// jobId is empty when the core inspects the installer (SetupClient's
+	// confirmation check) without queueing a job.
+	if !filepath.IsAbs(p.Prefix) {
+		return nil, &rpcError{Code: -32602, Message: "invalid params: prefix is required"}
+	}
+	script := "#!/bin/sh\n" +
+		"# Echo's fake client installer (protocol 1.20): waits, then installs the fake client.\n" +
+		"sleep \"${ECHO_INSTALLER_SLEEP:-0}\"\n" +
+		"prefix=\"$1\"\n" +
+		"mkdir -p \"$prefix/drive_c/echo-client\"\n" +
+		"cat > \"$prefix/drive_c/echo-client/echo-client.sh\" <<'CLIENT_EOF'\n" +
+		"#!/bin/sh\n" +
+		"# Echo's fake store client: runs the \"game\" (sleep carrying the find marker)\n" +
+		"# as a child and waits for it, so stopping the game never kills the client.\n" +
+		"# The client stays up afterwards like a real one; the core never kills\n" +
+		"# it on a game stop (the tests kill it themselves).\n" +
+		"echo \"client up $1\"\n" +
+		"sleep \"$1\" &\n" +
+		"wait $!\n" +
+		"exec sleep 300\n" +
+		"CLIENT_EOF\n" +
+		"chmod +x \"$prefix/drive_c/echo-client/echo-client.sh\"\n"
+	dir := filepath.Join(p.Prefix, "drive_c", "echo-installer")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	exe := filepath.Join(dir, "install-echo-client.sh")
+	if err := os.WriteFile(exe, []byte(script), 0o755); err != nil {
+		return nil, err
+	}
+	stMu.Lock()
+	st.ClientPrefix = p.Prefix
+	save()
+	stMu.Unlock()
+	out := map[string]any{"exe": exe, "args": []string{p.Prefix}, "size": int64(8 << 20)}
+	if confirm := os.Getenv("ECHO_SETUP_CONFIRM"); confirm != "" {
+		out["confirm"] = confirm
 	}
 	return out, nil
 }

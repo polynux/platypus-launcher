@@ -78,6 +78,10 @@ type entry struct {
 	onExits  []func(ExitInfo)
 	stopping bool // the user asked to stop it
 	forceReq bool // ... and asked for SIGKILL before a pid was known
+	// sessLog is an output log the launch writes to besides its own
+	// process (a wine-client launch's client command, protocol 1.20);
+	// closed when the launch is no longer tracked.
+	sessLog io.WriteCloser
 }
 
 func NewTracker(emit Emit) *Tracker {
@@ -169,6 +173,10 @@ func (t *Tracker) clearEntry(gameID string, e *entry) {
 	defer t.mu.Unlock()
 	if cur, ok := t.active[gameID]; ok && cur == e {
 		delete(t.active, gameID)
+	}
+	if e.sessLog != nil {
+		_ = e.sessLog.Close()
+		e.sessLog = nil
 	}
 	e.doneOnce.Do(func() { close(e.done) })
 }
@@ -691,4 +699,33 @@ func openLogIn(dir, gameID string) (*os.File, string, error) {
 	path := filepath.Join(dir, gameID+".log")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	return f, path, err
+}
+
+// OpenSessionLog opens the game's session log for a launch whose output the
+// tracker doesn't capture itself (a wine-client launch's client command,
+// protocol 1.20): one empty file per session, secrets redacted like
+// StartDirect, capped like every session log. Attach it with
+// WithSessionLog; the tracker closes it when the launch ends.
+func (t *Tracker) OpenSessionLog(gameID, header string, redact []string) (io.WriteCloser, error) {
+	log, _, err := t.openLog(gameID)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Fprintf(log, "\n=== %s · %s\n", time.Now().Format(time.RFC3339), header)
+	out := &limitWriter{w: log, left: maxSessionLog}
+	tw := &redactWriter{w: out, prefixes: redact}
+	return &flushWriteCloser{tw: tw, c: log}, nil
+}
+
+// flushWriteCloser redacts trailing output without a newline on close.
+type flushWriteCloser struct {
+	tw *redactWriter
+	c  io.Closer
+}
+
+func (f *flushWriteCloser) Write(p []byte) (int, error) { return f.tw.Write(p) }
+
+func (f *flushWriteCloser) Close() error {
+	f.tw.Flush()
+	return f.c.Close()
 }

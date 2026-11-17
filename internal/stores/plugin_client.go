@@ -22,7 +22,10 @@ func (s *Plugin) LaunchViaClient(ctx context.Context, game types.Game) (*ClientL
 	if err := s.m.Call(ctx, s.ID(), "game.launchSpec", params, &spec); err != nil {
 		return nil, err
 	}
-	l, err := ValidateSpec(spec, s.p.Manifest, s.folders())
+	if spec.Delegate == "wine-client" {
+		return nil, errors.New(s.p.Manifest.Name + " didn't return a launch through its client")
+	}
+	l, err := ValidateSpec(spec, s.p.Manifest, s.folders(), "")
 	if err != nil {
 		return nil, err
 	}

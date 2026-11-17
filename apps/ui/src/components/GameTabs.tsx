@@ -19,6 +19,7 @@ import { CopyCompareDialog } from './CopyCompareDialog';
 import { PluginLogo } from './PluginLogo';
 import { ErrorNotice } from './ErrorNotice';
 import { CrashHintsPanel } from './CrashHints';
+import { ClientSetupAction } from './ClientSetupAction';
 import { CapabilitySurface, offers } from '../lib/capabilities';
 import { agoLabel, asCloudMode, modeHelp, modeName, stateChip } from '../lib/cloud';
 import { CloudConflictDialog } from './CloudSavesConflict';
@@ -119,6 +120,9 @@ export interface GameTabsData {
   onSaveNotes?: (id: string, text: string) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
   /** The status or notes changed: the library should reload to carry it. */
   onStatusChanged?: () => void;
+  /** The store-client setup prompt while one holds this game (protocol 1.20):
+      the strip shows it instead of Play. */
+  clientSetup?: { client: string; source: string; message: string | null; job?: Job };
 }
 
 /** Ticks once a second while mounted, so the strip elapsed time stays live. */
@@ -311,6 +315,20 @@ export function AtlasMainAction({ job, session, sessionStartedAt, launching, onJ
 export function StripPlay({ d }: { d: GameTabsData }) {
   const { t } = useTranslation('game');
   const { game, launching } = d;
+  if (d.clientSetup) {
+    return (
+      <AtlasMainAction job={undefined} session={d.session} sessionStartedAt={d.sessionStartedAt} launching={launching} onJobAction={d.onJobAction} onStop={d.onStop}>
+        <ClientSetupAction
+          client={d.clientSetup.client}
+          source={d.clientSetup.source}
+          message={d.clientSetup.message}
+          job={d.clientSetup.job}
+          onNotify={d.onNotify}
+          buttonClassName="h-[42px] px-6 pl-5 text-[15px] font-extrabold"
+        />
+      </AtlasMainAction>
+    );
+  }
   let idle: React.ReactNode;
   if (game.is_installed) {
     idle = (

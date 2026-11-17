@@ -12,6 +12,7 @@ import (
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
 	"platypus/internal/settings"
+	"platypus/internal/stores"
 	"platypus/internal/types"
 )
 
@@ -65,6 +66,8 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 		return b.a.startCoreRemove(j) // core deletes; reports through the queue
 	case jobs.KindRunnerInstall:
 		return b.a.startCoreRunnerInstall(j) // core downloads; reports through the queue
+	case jobs.KindClientSetup:
+		return b.a.startClientSetup(j) // core runs the installer's spec; reports through the queue
 	}
 	if j.Target != nil {
 		if err := b.a.jobTargetGate(j); err != nil {
@@ -139,23 +142,37 @@ func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
 		b.a.runnerInstalls.stop(ctx, j.ID)
 		return nil
 	}
+	if j.Kind == jobs.KindClientSetup {
+		// Core runs the installer itself: canceling kills it and stops the
+		// prefix's wineserver, and the run's unwind does both.
+		b.a.clientSetups.stop(ctx, j.ID)
+		return nil
+	}
 	return b.a.plugins.Call(ctx, j.Source, "job.cancel", map[string]any{"jobId": j.ID}, nil)
 }
 
 // RunsInCore says whether core is running the job itself, in a goroutine of
-// its own (see CoreRunner in the queue): core's own moves and removals, and
-// its backup/restore jobs.
+// its own (see CoreRunner in the queue): core's own moves and removals, its
+// backup/restore and client-setup jobs, and runner installs.
 func (b jobBackend) RunsInCore(j types.Job) bool {
 	if j.Kind == jobs.KindBackup || j.Kind == jobs.KindRestore {
 		return true
 	}
-	return b.a.moves.active(j.ID) || b.a.removes.active(j.ID) || b.a.runnerInstalls.active(j.ID)
+	return b.a.moves.active(j.ID) || b.a.removes.active(j.ID) || b.a.runnerInstalls.active(j.ID) || b.a.clientSetups.active(j.ID)
 }
 
 // heldByJob refuses a launch while a move, a check, a backup, a restore or a
 // removal holds the game: the game would start from files that are being
-// moved, checked, rewritten or deleted.
+// moved, checked, rewritten or deleted. A game its store client launches
+// also waits for the client's own setup (protocol 1.20); wine-client
+// launches without that flag are checked again after the launch spec is
+// known (see launchGame).
 func (a *App) heldByJob(game types.Game) error {
+	if game.ClientLaunch {
+		if _, ok := a.jobs.Holding(stores.ClientGameID(game.Source), jobs.KindClientSetup); ok {
+			return apperr.New("game.launchBusy", fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title), map[string]string{"title": game.Title, "what": "set up"})
+		}
+	}
 	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindBackup, jobs.KindRestore, jobs.KindRemove)
 	if !ok {
 		return nil

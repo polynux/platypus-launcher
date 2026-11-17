@@ -194,6 +194,7 @@ export interface CoreApi {
   SetSystemLanguages(langs: string[]): Promise<string>;
   SetTheme(id: string): Promise<types.LauncherSettings>;
   SetUpdateWindow(enabled: boolean, start: string, end: string): Promise<types.LauncherSettings>;
+  SetupClient(source: string, confirmed: boolean): Promise<types.Job>;
   SocialViews(): Promise<social.View[]>;
   StopGame(gameID: string): Promise<void>;
   UninstallGame(game: types.Game): Promise<types.Job>;
@@ -398,6 +399,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetSystemLanguages',
   'SetTheme',
   'SetUpdateWindow',
+  'SetupClient',
   'SocialViews',
   'StopGame',
   'UninstallGame',

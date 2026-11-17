@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -28,6 +29,11 @@ type Plugin struct {
 	// folders returns where the plugin's games may be launched from: its
 	// install folder plus folders the user allowed.
 	folders func() []string
+	// clientPrefix is the plugin's Platypus-managed client prefix (protocol
+	// 1.20): wine-client executables validate against it like an install
+	// folder, and game.launchSpec carries it in `prefix`. Empty when the
+	// App didn't set one.
+	clientPrefix string
 	// moved says where core moved a game's folder, when it did (see
 	// WithRelocations). Nil means core moved nothing.
 	moved func(gameID string) (types.Relocation, bool)
@@ -35,6 +41,13 @@ type Plugin struct {
 
 func NewPlugin(m *plugins.Manager, p plugins.Plugin, folders func() []string) *Plugin {
 	return &Plugin{m: m, p: p, folders: folders}
+}
+
+// WithClientPrefix tells the store where its own prefix lives (the one the
+// core creates and owns for a wine-client plugin, protocol 1.20).
+func (s *Plugin) WithClientPrefix(dir string) *Plugin {
+	s.clientPrefix = dir
+	return s
 }
 
 // WithRelocations tells the store where core moved its games' folders. A
@@ -324,10 +337,18 @@ func (s *Plugin) Launch(ctx context.Context, game types.Game, preview bool) (*La
 	if game.Executable != "" && s.speaksOffline() {
 		params["executable"] = game.Executable
 	}
+	// The plugin's own prefix (protocol 1.20): a wine-client plugin names
+	// its executables under it without remembering it from client.setup.
+	if s.clientPrefix != "" && s.m.Runtime(s.ID()).Speaks(plugins.WineClientVersion) {
+		params["prefix"] = s.clientPrefix
+	}
 	if err := s.m.Call(ctx, s.ID(), "game.launchSpec", params, &spec); err != nil {
 		return nil, err
 	}
 	folders := s.folders()
+	if s.clientPrefix != "" {
+		folders = append(slices.Clip(folders), s.clientPrefix)
+	}
 	if override, ok := params["executable"].(string); ok && sameFile(spec.Exe, override) {
 		// The user picked this executable for the game: its folder is theirs
 		// to launch from, even outside the plugin's install folders.
@@ -338,9 +359,12 @@ func (s *Plugin) Launch(ctx context.Context, game types.Game, preview bool) (*La
 		spec = rebaseSpec(spec, rel.From, rel.To)
 		folders = append(slices.Clip(folders), rel.To)
 	}
-	launch, err := ValidateSpec(spec, s.p.Manifest, folders)
+	launch, err := ValidateSpec(spec, s.p.Manifest, folders, s.clientPrefix)
 	if err != nil {
 		return nil, err
+	}
+	if launch.Client != nil && launch.Client.Wine != nil && !s.m.Runtime(s.ID()).Speaks(plugins.WineClientVersion) {
+		return nil, fmt.Errorf("%s speaks an older protocol and can't launch through a wine client", s.p.Manifest.Name)
 	}
 	if launch.Client != nil {
 		if s.m.Runtime(s.ID()).Speaks(plugins.ClientStatusVersion) {
