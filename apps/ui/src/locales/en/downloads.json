@@ -13,7 +13,8 @@
     "move": "Move",
     "backup": "Backup",
     "restore": "Restore",
-    "remove": "Remove"
+    "remove": "Remove",
+    "client-setup": "Set up"
   },
   "actionFailed": {
     "install": "install failed",
@@ -24,6 +25,7 @@
     "backup": "backup failed",
     "restore": "restore failed",
     "remove": "remove failed",
+    "client-setup": "client setup failed",
     "runner-install": "runner install failed"
   },
   "kind": {
@@ -34,7 +36,8 @@
     "move": "move",
     "backup": "Backup",
     "restore": "Restore",
-    "remove": "remove"
+    "remove": "remove",
+    "client-setup": "client setup"
   },
   "state": {
     "queued": "queued",
@@ -97,7 +100,8 @@
       "move": "Moved",
       "backup": "Backed up",
       "restore": "Restored",
-      "remove": "Removed"
+      "remove": "Removed",
+      "client-setup": "Set up"
     },
     "queue": "Queue",
     "pauseAll": "Pause all",

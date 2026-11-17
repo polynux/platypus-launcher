@@ -131,11 +131,11 @@ type GameSaveContext struct {
 }
 
 type ClientStatus struct {
-	State string `json:"state"`
-	Label string `json:"label,omitempty"`
+	State    string   `json:"state"`
+	Label    string   `json:"label,omitempty"`
 	Progress *float64 `json:"progress,omitempty"`
-	Bytes int64 `json:"bytes,omitempty"`
-	Total int64 `json:"total,omitempty"`
+	Bytes    int64    `json:"bytes,omitempty"`
+	Total    int64    `json:"total,omitempty"`
 }
 
 // CompatLookupGame is one game in a batched compat.lookup request (1.17).
@@ -216,7 +216,10 @@ type RunnerInfo struct {
 // LaunchSpec answers game.launchSpec. Either Platypus runs Exe through its
 // runner pipeline, or (Delegate == "store-client") Platypus runs Command, which
 // asks the store's own client to start the game, and follows the game through
-// Find.
+// Find. A "wine-client" delegate (protocol 1.20) is a store client that runs
+// in a Platypus-managed Wine prefix: Platypus runs Exe with Args under the
+// runner in the client's prefix and follows the game through Find, like a
+// store-client launch once the client is going.
 type LaunchSpec struct {
 	Exe       string            `json:"exe,omitempty"`
 	Args      []string          `json:"args,omitempty"`
@@ -227,9 +230,12 @@ type LaunchSpec struct {
 	// are hidden in the command preview and the launch log.
 	Redact []string `json:"redact,omitempty"`
 
-	Delegate     string    `json:"delegate,omitempty"`
-	Client       string    `json:"client,omitempty"` // client name for messages
-	Command      []string  `json:"command,omitempty"`
+	Delegate string   `json:"delegate,omitempty"`
+	Client   string   `json:"client,omitempty"` // client name for messages
+	Command  []string `json:"command,omitempty"`
+	// Prefix is the wine-client delegate's prefix key (protocol 1.20): only
+	// "client" is defined, the Platypus-managed prefix keyed per plugin.
+	Prefix       string    `json:"prefix,omitempty"`
 	Find         *FindSpec `json:"find,omitempty"`
 	StartTimeout int       `json:"startTimeout,omitempty"` // seconds
 }
@@ -238,6 +244,24 @@ type LaunchSpec struct {
 // (/proc/<pid>/cmdline) contains every string in Cmdline.
 type FindSpec struct {
 	Cmdline []string `json:"cmdline"`
+}
+
+// ClientSetupSpec is what client.setup answers (protocol 1.20): the installer
+// the core runs under the runner in the client's prefix. The plugin fetches
+// the installer before answering (it stays in PLATYPUS_PLUGIN_DATA across
+// restarts); the core validates the spec like a direct launch spec, asks the
+// user when Confirm is set, and runs the installer as a core-run job.
+type ClientSetupSpec struct {
+	Exe    string            `json:"exe"`
+	Args   []string          `json:"args,omitempty"`
+	Env    map[string]string `json:"env,omitempty"`
+	Redact []string          `json:"redact,omitempty"`
+	// Size is the installer's download bytes, for the free-space check.
+	Size int64 `json:"size,omitempty"`
+	// Confirm is the user-facing download prompt ("This downloads ~800 MB
+	// from ..."). When set, the core runs the installer only after the user
+	// confirms.
+	Confirm string `json:"confirm,omitempty"`
 }
 
 // GameDetails answers game.details: the game page's metadata. A plugin

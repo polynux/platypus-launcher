@@ -50,7 +50,13 @@
       "validating": "vérification des fichiers",
       "launching": "démarrage du jeu"
     },
-    "clientFinished": "{{client}} a terminé son travail sans démarrer le jeu. Relancez-le avec Jouer."
+    "clientFinished": "{{client}} a terminé son travail sans démarrer le jeu. Relancez-le avec Jouer.",
+    "clientSetup": {
+      "setUp": "Configurer {{client}}",
+      "settingUp": "Configuration de {{client}} en cours…",
+      "download": "Télécharger",
+      "cancel": "Annuler"
+    }
   },
   "hero": {
     "notInstalled": "non installé",

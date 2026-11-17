@@ -556,6 +556,7 @@ export namespace types {
     verify?: types.VerifyReport | null;
     options?: types.InstallOptions;
     auto?: boolean;
+    confirmed?: boolean;
   }
 
   export interface LauncherSettings {

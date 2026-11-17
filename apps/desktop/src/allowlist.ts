@@ -190,6 +190,7 @@ export const APP_PAGE_METHODS: readonly string[] = [
   'SetSocialStatus',
   'SetTheme',
   'SetUpdateWindow',
+  'SetupClient',
   'SocialViews',
   'StopGame',
   'UninstallGame',

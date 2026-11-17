@@ -146,6 +146,11 @@ export const LauncherApi = {
 
   launchGame: (game: Game) => call<string>('LaunchGame', () => App.LaunchGame(backend(game))),
 
+  // Installs or repairs a store client's own prefix (protocol 1.20): queues
+  // the client.setup job. Without confirmed, a client that asks for download
+  // confirmation fails with client.confirmDownload instead of queueing.
+  setupClient: (source: string, confirmed: boolean) => call<Job>('SetupClient', () => App.SetupClient(source, confirmed)),
+
   // Graceful stop (SIGTERM, then SIGKILL after a few seconds); progress arrives
   // as session events ("stopping", then "stopped").
   stopGame: (gameId: string) => call<void>('StopGame', () => App.StopGame(gameId)),

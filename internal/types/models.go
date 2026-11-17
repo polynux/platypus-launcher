@@ -788,6 +788,10 @@ type Job struct {
 	// anything the user asked for starts right away. Automatic updates
 	// (#209) queue these when the library reports one.
 	Auto bool `json:"auto,omitempty"`
+	// Confirmed says the user accepted the client.setup download prompt (the
+	// `confirm` text of the installer's spec, protocol 1.20): only a
+	// confirmed setup job runs its installer.
+	Confirmed bool `json:"confirmed,omitempty"`
 }
 
 // VerifyReport is what a game's files check found. Checked counts the files

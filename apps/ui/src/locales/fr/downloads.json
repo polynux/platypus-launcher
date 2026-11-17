@@ -13,7 +13,8 @@
     "move": "Déplacement",
     "backup": "Sauvegarde",
     "restore": "Restauration",
-    "remove": "Suppression"
+    "remove": "Suppression",
+    "client-setup": "Configuration"
   },
   "actionFailed": {
     "install": "l'installation a échoué",
@@ -24,6 +25,7 @@
     "backup": "échec de la sauvegarde",
     "restore": "échec de la restauration",
     "remove": "échec de la suppression",
+    "client-setup": "échec de la configuration du client",
     "runner-install": "échec de l'installation du runner"
   },
   "kind": {
@@ -34,7 +36,8 @@
     "move": "déplacement",
     "backup": "Sauvegarde",
     "restore": "Restauration",
-    "remove": "suppression"
+    "remove": "suppression",
+    "client-setup": "configuration du client"
   },
   "state": {
     "queued": "en attente",
@@ -98,7 +101,8 @@
       "move": "Déplacé",
       "backup": "Sauvegardé",
       "restore": "Restauré",
-      "remove": "Supprimé"
+      "remove": "Supprimé",
+      "client-setup": "Configuré"
     },
     "pauseAll": "Tout mettre en pause",
     "recent": "Récents",
