@@ -198,6 +198,7 @@ func setup(t *testing.T) *env {
 	      "movies": [{"name": "Trailer", "thumbnail": "https://cdn.steam/4321_tr.jpg",
 	        "mp4": {"480": "https://cdn.steam/4321_tr.mp4", "max": "https://cdn.steam/4321_tr_max.mp4"}}],
 	      "developers": ["Dev"], "publishers": ["Pub"], "release_date": {"date": "2019-09-20"},
+	      "platforms": {"windows": true, "mac": false, "linux": true},
 	      "detailed_description": "<p>A standalone <b>game</b>.</p><script>alert(1)</script>",
 	      "supported_languages": "English<strong>*</strong>, French",
 	      "controller_support": "full",
@@ -349,6 +350,46 @@ func TestClientLaunchFactComesFromInstalledLaunchMode(t *testing.T) {
 	e.setLaunchMode("4321", "none")
 	if game := e.find(e.library(), "4321"); game.ClientLaunch {
 		t.Fatalf("clientLaunch = true for direct mode")
+	}
+}
+
+// The 1.15 library hints come from what the plugin already knows (issue
+// #199): a client-mode install needs Steam, so a connection; any other
+// install runs directly; a game with no install record has an unknown mode
+// and gets no hint. A saved game's store last-played time rides along, and
+// the store never owns cloud saves (Platypus does).
+func TestSteamLibraryLaunchHints(t *testing.T) {
+	e := setup(t)
+	e.login()
+	rewriteAPI(t, []any{
+		map[string]any{"appid": float64(4321), "name": "Standalone Game",
+			"playtime_forever": float64(90), "rtime_last_played": float64(1700000000)},
+		map[string]any{"appid": float64(4322), "name": "Tool Thing"},
+		map[string]any{"appid": float64(4323), "name": "Not Installed"},
+	})
+	installed := map[string]map[string]any{
+		"4321": {"path": filepath.Join(e.folder, "Standalone_Game"), "title": "Standalone Game", "mode": "client"},
+		"4322": {"path": filepath.Join(e.folder, "Tool_Thing"), "title": "Tool Thing", "mode": "none"},
+	}
+	data, _ := json.Marshal(installed)
+	if err := os.WriteFile(filepath.Join(e.pluginData(), "installed.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lib := e.library()
+	client := e.find(lib, "4321")
+	if client.Offline != "network" || client.CloudSync || client.LastPlayed != 1700000000 {
+		t.Fatalf("client game hints = offline %q, cloudSync %v, lastPlayed %d",
+			client.Offline, client.CloudSync, client.LastPlayed)
+	}
+	direct := e.find(lib, "4322")
+	if direct.Offline != "ok" || direct.CloudSync || direct.LastPlayed != 0 {
+		t.Fatalf("direct game hints = offline %q, cloudSync %v, lastPlayed %d",
+			direct.Offline, direct.CloudSync, direct.LastPlayed)
+	}
+	uninstalled := e.find(lib, "4323")
+	if uninstalled.Offline != "unknown" || uninstalled.CloudSync {
+		t.Fatalf("uninstalled game hints = offline %q, cloudSync %v",
+			uninstalled.Offline, uninstalled.CloudSync)
 	}
 }
 
@@ -1557,5 +1598,79 @@ func TestSteamQRStatusPollShowsPersona(t *testing.T) {
 	}
 	if st.User != "TestPersona" {
 		t.Fatalf("want persona TestPersona on the first loggedIn status, got %q", st.User)
+	}
+}
+
+// Compat facts (protocol 1.10, issue #201): the game page's ratings need the
+// store's own AppID instead of a title match, and the platform flags name the
+// OS support. Steam states no DRM fact, so none is sent: no guessed badge.
+func TestSteamDetailsCompatFacts(t *testing.T) {
+	e := setup(t)
+	game := types.Game{
+		ID: stores.GameID(id, "4321"), Source: id, Store: "steam",
+		StoreAppID: "4321", Title: "Standalone Game",
+	}
+	d, err := e.store.Details(context.Background(), game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.SteamAppID != "4321" {
+		t.Fatalf("steamAppId = %q, want the game's own app id", d.SteamAppID)
+	}
+	if !slices.Equal(d.Platforms, []string{"windows", "linux"}) {
+		t.Fatalf("platforms = %v, want windows and linux", d.Platforms)
+	}
+	if d.DRM != nil {
+		t.Fatalf("drm = %+v, want absent (Steam states no DRM facts)", d.DRM)
+	}
+}
+
+// News (protocol 1.19, issue #203): the game page's news links come from the
+// keyless ISteamNews API. Only titled https entries are kept, and the answer
+// is cached (news.json) so the game page doesn't poll the Web API.
+func TestSteamDetailsNews(t *testing.T) {
+	e := setup(t)
+	api := os.Getenv("PLATYPUS_STEAM_API_FILE")
+	raw, err := os.ReadFile(api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file map[string]any
+	if err := json.Unmarshal(raw, &file); err != nil {
+		t.Fatal(err)
+	}
+	file["_routes"] = map[string]any{
+		"ISteamNews/GetNewsForApp/v2": map[string]any{"appnews": map[string]any{
+			"appid": 4321,
+			"newsitems": []any{
+				map[string]any{"title": "Patch 1.2", "url": "https://store.steampowered.com/news/app/4321/view/1",
+					"date": float64(1700000000)},
+				map[string]any{"title": "No link"},
+				map[string]any{"title": "Insecure", "url": "http://example.com/insecure"},
+			},
+		}},
+	}
+	data, _ := json.Marshal(file)
+	if err := os.WriteFile(api, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	game := types.Game{
+		ID: stores.GameID(id, "4321"), Source: id, Store: "steam",
+		StoreAppID: "4321", Title: "Standalone Game",
+	}
+	d, err := e.store.Details(context.Background(), game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.News) != 1 {
+		t.Fatalf("news = %+v, want only the titled https entry", d.News)
+	}
+	got := d.News[0]
+	if got.Title != "Patch 1.2" || got.URL != "https://store.steampowered.com/news/app/4321/view/1" ||
+		got.Date != 1700000000 {
+		t.Fatalf("news item = %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(e.pluginData(), "news.json")); err != nil {
+		t.Fatalf("news answer wasn't cached: %v", err)
 	}
 }

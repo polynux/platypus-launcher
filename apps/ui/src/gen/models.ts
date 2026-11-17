@@ -425,6 +425,7 @@ export namespace types {
     age_rating?: string;
     tags?: string[];
     videos?: types.GameVideo[];
+    news?: types.GameNews[];
   }
 
   export interface GameFixInfo {
@@ -441,6 +442,12 @@ export namespace types {
     is_default: boolean;
     exists: boolean;
     free_bytes: number;
+  }
+
+  export interface GameNews {
+    title: string;
+    url: string;
+    date?: number;
   }
 
   export interface GameOptions {
