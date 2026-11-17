@@ -15,7 +15,7 @@ the core offers highest): the `install` capability is on only over 1.23,
 where game.install/game.update/game.uninstall answer a clientRun command
 (`uplay://install/<id>` / `uplay://uninstall/<id>`) the core runs in the
 pinned client prefix as part of the plugin's job, and the plugin ends the
-job from its watch of the client's on-disk install records.
+job from its watch of the client's on-disk install state.
 
 What is real here and what is a stand-in (live checks L-U1/L-U2, issue #195):
 
@@ -27,10 +27,11 @@ What is real here and what is a stand-in (live checks L-U1/L-U2, issue #195):
   Lutris recipe also applies winetricks `d3dcompiler_43` + `corefonts` and
   disables the overlay; nothing applies those yet (see README).
 - `game.launchSpec` answers the `wine-client` delegate: the client exe with
-  `uplay://launch/<id>/0`, and `find` carries the game's exe name from its
-  install record, never anything matching the client command. When the client
-  exe is missing the spec is still answered (Windows paths): the core's
-  validation reports `client.notSetUp` and the game page offers the setup.
+  `uplay://launch/<id>/0`, and `find` carries the game's exe name from the
+  client's own product catalogue, never anything matching the client command.
+  When the client exe is missing the spec is still answered (Windows paths):
+  the core's validation reports `client.notSetUp` and the game page offers the
+  setup.
 - `game.clientStatus` maps what the prefix shows onto the accepted states:
   no client exe → `idle`, game installed → `launching`, client process up
   without the game past a short grace → `signin` (the user must act in the
@@ -38,20 +39,23 @@ What is real here and what is a stand-in (live checks L-U1/L-U2, issue #195):
   (waiting for sign-in). A first-run client self-update or sign-in can take a
   while, hence the generous `startTimeout`; a dedicated waiting-for-signin
   state is protocol 1.23 (issue #213).
-- `library.list` is empty: the local-cache reader (issue #192) is blocked on
-  the licence decision (issue #197).
-
-The per-game install records stand in for the real client records until L-U1
-pins down their location and format (candidates: Wine system.reg
-HKLM\\SOFTWARE\\(WOW6432Node\\)\\Ubisoft\\Launcher\\Installs\\<id>\\InstallDir per
-Playnite, uplay_install.manifest/.state per Optima). The plugin only reads
-them; whatever the client (real or test double) wrote is the state.
+- `library.list` reads the client's own caches in the prefix (issue #192;
+  docs/research/ubisoft-library-format.md is the clean-room format note this
+  reader was written from): the product catalogue
+  `AppData/Local/Ubisoft Game Launcher/cache/configuration/configurations`, the
+  account's `cache/ownership/<userId>`, and the install records in Wine's
+  `system.reg` (`HKLM\\Software\\Wow6432Node\\Ubisoft\\Launcher\\Installs\\<id>\\InstallDir`).
+  Owned, launchable games are listed; DLC/add-ons are filtered out; installed
+  ones carry the registry path. When the caches are missing, encrypted (the
+  2026 `.vdat` container), or unreadable, the plugin answers one clear status
+  instead of a per-call error: "Start Ubisoft Connect once and sign in so
+  Platypus can read your games", localized from the protocol `locale` (1.14).
 
 Signin heuristic (no account, no client API): the plugin scans /proc for a
 process naming the client executable (UbisoftConnect.exe / upc.exe) whose
 WINEPREFIX is this prefix (or whose command line holds it when no environ
 is visible; other users' processes never count; rescanned at most every
-2 s). A launchable game (an install record naming a game exe) whose client
+2 s). A launchable game (a catalogue record naming a game exe) whose client
 runs in this prefix without the game past SIGNIN_GRACE_SECONDS is a client
 waiting for the user (`signin`); a running game is `launching` as before.
 First-seen times are kept in memory only. PLATYPUS_UBISOFT_SIGNIN_GRACE
@@ -68,6 +72,7 @@ PLATYPUS_UBISOFT_SIGNIN_GRACE overrides the signin grace.
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -120,11 +125,37 @@ WATCH_POLL_SECONDS = 0.5
 # Wine and Proton prefix layouts, probed in this order.
 LAYOUTS = ("drive_c", os.path.join("pfx", "drive_c"))
 
-# Where the client's per-game install records live in the prefix. INTERIM,
-# read-only (see module docstring): one JSON file per product id,
-# {"exe": "<game exe name>"}, owned by the client. Replaced by the L-U1
-# findings, never written by this plugin.
-RECORDS_REL = os.path.join("drive_c", "platypus-ubisoft", "records")
+# The client's on-disk library state in the prefix (issue #192; see
+# docs/research/ubisoft-library-format.md). Both cache files are read-only.
+CONFIG_DIRS = ("cache", "configuration")
+CONFIG_NAME = "configurations"
+CONFIG_VDAT = "configurations.vdat"
+OWNERSHIP_DIRS = ("cache", "ownership")
+INSTALLS_RE = (r"(?i)^software\\(wow6432node\\)?ubisoft\\launcher\\"
+               r"installs\\([0-9]+)$")
+MAX_CACHE_BYTES = 32 << 20      # a real configurations file is a few MB
+MAX_REG_BYTES = 32 << 20        # system.reg is ~1 MB in a normal prefix
+MAX_CACHE_RECORDS = 50000
+
+# The user's BCP 47 locale from initialize {locale} (protocol 1.14), kept
+# current through locale.changed {locale}: the empty-library status is
+# returned already-localized for it (issue #39), English by default.
+LOCALE = "en"
+LOCALES = {
+    "en": {
+        "needs_client": "Start Ubisoft Connect once and sign in so Platypus "
+                        "can read your games",
+    },
+    "fr": {
+        "needs_client": "Lancez Ubisoft Connect une fois et connectez-vous "
+                        "pour que Platypus puisse lire vos jeux",
+    },
+}
+
+# The "library not readable" state: -32002 is the protocol's "unavailable
+# right now", which the core shows as a library warning with the message as
+# written and no login prompt (there is no auth capability here).
+CODE_UNAVAILABLE = -32002
 
 # Test-only pin overrides (see module docstring).
 HOOK_URL = "PLATYPUS_UBISOFT_INSTALLER_URL"
@@ -136,7 +167,8 @@ HOOK_SIGNIN_GRACE = "PLATYPUS_UBISOFT_SIGNIN_GRACE"
 
 out_lock = threading.Lock()
 _state_lock = threading.Lock()
-_warned_empty = False
+# The .vdat detail is logged once per process, not per library.list call.
+_warned_vdat = False
 # The negotiated protocol ("1.20" until initialize runs); the install
 # capability is on only over 1.23.
 _negotiated = "1.20"
@@ -145,6 +177,10 @@ _negotiated = "1.20"
 _client_seen = {}
 # Stop flags for install/uninstall watches, by jobId.
 _watch_stops = {}
+# Stat-keyed parse caches: the library (a few MB of protobuf/YAML) and the
+# install registry (read by the 2 s clientStatus polls and the job watch).
+_library_cache = {}
+_installs_cache = {}
 
 
 class RPCError(Exception):
@@ -207,33 +243,504 @@ def find_client_exe(prefix):
     return None
 
 
-def record_path(prefix, app):
-    safe = "".join(c for c in app if c.isalnum() or c in ("-", "_", "."))
-    if not safe or safe != app:
-        raise RPCError(f"{app!r} is not a Ubisoft product id")
-    return os.path.join(prefix, RECORDS_REL, safe + ".json")
+def set_locale(tag):
+    """The user's BCP 47 locale (protocol 1.14); English when empty."""
+    global LOCALE
+    LOCALE = str(tag or "").strip() or "en"
 
 
-def read_record(prefix, app):
-    """The client's install record for the game, or None (read-only)."""
+def tr(key):
+    """A user-facing string for the current locale, English per key."""
+    tag = LOCALE.strip().lower().replace("_", "-")
+    table = LOCALES.get(tag.split("-")[0]) or LOCALES["en"]
+    return table.get(key) or LOCALES["en"][key]
+
+
+# The client's caches are protobuf containers of bounded varint/
+# length-delimited fields (docs/research/ubisoft-library-format.md §§2-3).
+# The walker below refuses truncated or oversized input instead of reading
+# past it, and every caller turns a refusal into the one "unreadable" state.
+
+def _varint(buf, i):
+    """(value, next index) of one base-128 varint."""
+    value = 0
+    shift = 0
+    while True:
+        if i >= len(buf) or shift > 63:
+            raise ValueError("truncated varint")
+        byte = buf[i]
+        i += 1
+        value |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return value, i
+        shift += 7
+
+
+def _fields(buf):
+    """(field, int | bytes) for each protobuf field in buf, in order.
+
+    Varint and length-delimited fields only: the client's caches use no
+    packed fixed-width fields. A truncated or malformed field raises
+    ValueError, which every caller turns into the unreadable-cache state."""
+    i = 0
+    while i < len(buf):
+        key, i = _varint(buf, i)
+        field, wire = key >> 3, key & 7
+        if field == 0:
+            raise ValueError("field 0")
+        if wire == 0:
+            value, i = _varint(buf, i)
+            yield field, value
+        elif wire == 2:
+            size, i = _varint(buf, i)
+            if size > len(buf) - i:
+                raise ValueError("truncated field")
+            yield field, buf[i:i + size]
+            i += size
+        elif wire == 1:
+            if len(buf) - i < 8:
+                raise ValueError("truncated field")
+            i += 8
+        elif wire == 5:
+            if len(buf) - i < 4:
+                raise ValueError("truncated field")
+            i += 4
+        else:
+            raise ValueError(f"wire type {wire}")
+
+
+def parse_configurations(data):
+    """[(product id, YAML text)] from a `configurations` payload.
+
+    ConfigurationCache's repeated field 1 holds one Configuration per
+    product: field 1 product id, field 2 uplay id, field 3 the YAML blob."""
+    out = []
+    for field, value in _fields(data):
+        if field != 1 or not isinstance(value, bytes):
+            continue
+        product = 0
+        text = ""
+        for sub, inner in _fields(value):
+            if sub == 1 and isinstance(inner, int):
+                product = inner
+            elif sub == 3 and isinstance(inner, bytes):
+                text = inner.decode("utf-8", "replace")
+        if product and text:
+            out.append((product, text))
+            if len(out) >= MAX_CACHE_RECORDS:
+                break
+    return out
+
+
+def parse_ownership(data):
+    """The product ids an `ownership/<userId>` payload says the account owns.
+
+    OwnershipCache: field 1 is one OwnedGame per product (product id in
+    field 1), field 2 the same set as plain/packed uint32 ids. Field 3
+    (visible or installable) is a superset that includes add-ons, so it is
+    not read on its own."""
+    owned = set()
+    for field, value in _fields(data):
+        if field == 1 and isinstance(value, bytes):
+            try:
+                for sub, inner in _fields(value):
+                    if sub == 1 and isinstance(inner, int) and inner:
+                        owned.add(inner)
+                continue
+            except ValueError:
+                pass  # not an OwnedGame list: read it as packed ids below
+            i = 0
+            while i < len(value):
+                product, i = _varint(value, i)
+                if product:
+                    owned.add(product)
+        elif field == 2 and isinstance(value, int) and value:
+            owned.add(value)
+        elif field == 2 and isinstance(value, bytes):
+            i = 0
+            while i < len(value):
+                product, i = _varint(value, i)
+                if product:
+                    owned.add(product)
+    return owned
+
+
+def _yaml_value(text):
+    text = text.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1]
+    return text
+
+
+def config_hints(text):
+    """(title, is_ulc, third_party, exe) from one product's YAML config.
+
+    A deliberately small key scanner, not a YAML parser: it follows the
+    `root:` block by indentation and reads only the keys the library needs
+    (docs/research/ubisoft-library-format.md §2). `exe` is the basename of
+    the first `start_game` executable."""
+    title = ""
+    identifier = ""
+    is_ulc = False
+    third_party = False
+    exe = ""
+    in_root = False
+    child_indent = None
+    installer_indent = None
+    start_indent = None
+    exec_indent = None
+    for raw in text.splitlines():
+        line = raw.rstrip("\r")
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" \t"))
+        if indent == 0:
+            in_root = stripped == "root:"
+            child_indent = installer_indent = start_indent = exec_indent = None
+            continue
+        if not in_root:
+            continue
+        if child_indent is None and not stripped.startswith("-"):
+            child_indent = indent
+        key, _sep, rest = stripped.partition(":")
+        key = key.strip()
+        value = rest.strip()
+        if installer_indent is not None:
+            if indent <= installer_indent:
+                installer_indent = None
+            elif key == "game_identifier" and not identifier:
+                identifier = _yaml_value(value)
+        if start_indent is not None:
+            if indent <= start_indent:
+                start_indent = exec_indent = None
+            elif key == "executables":
+                exec_indent = indent
+            elif exec_indent is not None:
+                # The list items sit either below the key or at its own
+                # indent ("executables:" then "- path:"); the first
+                # relative path in the block is the game executable (an
+                # updater entry may follow it).
+                if indent <= exec_indent and not stripped.startswith("- "):
+                    exec_indent = None
+                elif key == "relative" and not exe:
+                    exe = os.path.basename(
+                        _yaml_value(value).replace("\\", "/"))
+        if indent != child_indent or stripped.startswith("-"):
+            continue
+        start_indent = exec_indent = None
+        if key == "name":
+            title = _yaml_value(value)
+        elif key == "is_ulc":
+            is_ulc = _yaml_value(value).lower() in ("yes", "true")
+        elif key == "third_party_platform":
+            third_party = True
+        elif key == "installer":
+            installer_indent = indent
+        elif key == "start_game":
+            start_indent = indent
+    return (title or identifier, is_ulc, third_party, exe)
+
+
+def _reg_quoted(text):
+    """(unquoted string, text after the closing quote), or (None, text)."""
+    if not text.startswith('"'):
+        return None, text
+    out = []
+    i = 1
+    while i < len(text):
+        char = text[i]
+        if char == "\\" and i + 1 < len(text):
+            nxt = text[i + 1]
+            out.append({"\\": "\\", '"': '"', "n": "\n", "r": "\r",
+                        "t": "\t"}.get(nxt, nxt))
+            i += 2
+            continue
+        if char == '"':
+            return "".join(out), text[i + 1:]
+        out.append(char)
+        i += 1
+    return None, text
+
+
+def parse_installs(text):
+    """product id -> Windows install dir from a Wine `system.reg` (read-only).
+
+    Only the client's own install keys count:
+    HKLM\\Software[\\Wow6432Node]\\Ubisoft\\Launcher\\Installs\\<id>.
+    Keys and strings are escaped like any .reg text (\\\\ and \\")."""
+    out = {}
+    current = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith(";"):
+            continue
+        if line.startswith("["):
+            end = line.find("]")
+            current = None
+            if end > 0:
+                key = line[1:end].replace("\\\\", "\\")
+                match = re.match(INSTALLS_RE, key)
+                if match:
+                    current = match.group(2)
+            continue
+        if current is None or not line.startswith('"'):
+            continue
+        name, rest = _reg_quoted(line)
+        if name is None:
+            continue
+        rest = rest.lstrip()
+        if not rest.startswith("="):
+            continue
+        value, _end = _reg_quoted(rest[1:].lstrip())
+        if name == "InstallDir" and value:
+            out.setdefault(current, value)
+    return out
+
+
+def installs(prefix):
+    """The client's install registry in this prefix (stat-cached)."""
+    path = os.path.join(prefix, "system.reg")
     try:
-        with open(record_path(prefix, app)) as f:
-            rec = json.load(f)
-    except (OSError, ValueError):
+        st = os.stat(path)
+    except OSError:
+        return {}
+    stamp = (st.st_mtime_ns, st.st_size)
+    with _state_lock:
+        hit = _installs_cache.get(prefix)
+        if hit and hit[0] == stamp:
+            return hit[1]
+    try:
+        with open(path, "rb") as f:
+            data = f.read(MAX_REG_BYTES)
+    except OSError:
+        return {}
+    parsed = parse_installs(data.decode("utf-8", "replace"))
+    with _state_lock:
+        _installs_cache[prefix] = (stamp, parsed)
+    return parsed
+
+
+def install_dir(prefix, app):
+    """The Windows install dir the client recorded for app, or ""."""
+    return installs(prefix).get(str(app), "")
+
+
+def windows_path(prefix, winpath):
+    """The Linux path of a registry Windows path, or "" if unmappable."""
+    text = str(winpath or "").replace("/", "\\")
+    drive, sep, rest = text.partition(":")
+    if not sep or len(drive) != 1:
+        return ""
+    parts = [part for part in rest.split("\\") if part]
+    if drive.upper() == "C":
+        base = next((d for d in layouts(prefix) if os.path.isdir(d)),
+                    os.path.join(prefix, "drive_c"))
+    else:
+        base = os.path.realpath(os.path.join(prefix, "dosdevices",
+                                             drive.lower() + ":"))
+        if not os.path.isdir(base):
+            return ""
+    return os.path.join(base, *parts) if parts else base
+
+
+def launcher_roots(prefix):
+    """The `Ubisoft Game Launcher` folders a prefix may hold, users first."""
+    roots = []
+    for drive in layouts(prefix):
+        users = os.path.join(drive, "users")
+        try:
+            names = sorted(os.listdir(users))
+        except OSError:
+            names = []
+        for name in names:
+            roots.append(os.path.join(users, name, "AppData", "Local",
+                                      "Ubisoft Game Launcher"))
+        roots.append(os.path.join(drive, "Program Files (x86)", "Ubisoft",
+                                  "Ubisoft Game Launcher"))
+    return roots
+
+
+def cache_files(root):
+    """(configurations, configurations.vdat, [ownership], [ownership .vdat])
+    under one launcher root; empty strings and lists when absent."""
+    config_dir = os.path.join(root, *CONFIG_DIRS)
+    config = os.path.join(config_dir, CONFIG_NAME)
+    vdat = os.path.join(config_dir, CONFIG_VDAT)
+    own_dir = os.path.join(root, *OWNERSHIP_DIRS)
+    try:
+        names = sorted(os.listdir(own_dir))
+    except OSError:
+        names = []
+    own, own_vdat = [], []
+    for name in names:
+        path = os.path.join(own_dir, name)
+        if not os.path.isfile(path):
+            continue
+        if name.endswith(".vdat"):
+            own_vdat.append(path)
+        else:
+            own.append(path)
+    return (config if os.path.isfile(config) else "",
+            vdat if os.path.isfile(vdat) else "", own, own_vdat)
+
+
+def cache_state(prefix):
+    """The cache files of the first launcher root that has a catalogue."""
+    for root in launcher_roots(prefix):
+        config, vdat, own, own_vdat = cache_files(root)
+        if config or vdat:
+            return root, config, vdat, own, own_vdat
+    return "", "", "", [], []
+
+
+def cache_stamp(prefix):
+    """The identity of the cache files now: changes when the client rewrites
+    them, which is what the install watch and the parse cache key on."""
+    root, config, vdat, own, own_vdat = cache_state(prefix)
+    stamp = [root, config, vdat]
+    for path in own + own_vdat:
+        try:
+            st = os.stat(path)
+            stamp.append((path, st.st_size, st.st_mtime_ns))
+        except OSError:
+            stamp.append((path, None, None))
+    return tuple(stamp)
+
+
+def _read_cache(path):
+    if os.path.getsize(path) > MAX_CACHE_BYTES:
+        raise ValueError("cache file too large")
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def vdat_info(data):
+    """(version, scheme) of an encrypted `versioned_storage` envelope.
+
+    Detection only, never decryption: the 2026 client wraps the cache in
+    this container and keeps the AES-256-GCM key DPAPI-protected outside the
+    prefix (docs/research/ubisoft-library-format.md §5)."""
+    try:
+        for field, value in _fields(data):
+            if field != 1 or not isinstance(value, bytes):
+                continue
+            for sub, header in _fields(value):
+                if sub != 1 or not isinstance(header, bytes):
+                    continue
+                version, scheme = 0, -1
+                for hf, hv in _fields(header):
+                    if hf == 1 and isinstance(hv, int):
+                        version = hv
+                    elif hf == 2 and isinstance(hv, bytes):
+                        for cf, cv in _fields(hv):
+                            if cf == 1 and isinstance(cv, int):
+                                scheme = cv
+                return (version, scheme)
+    except ValueError:
         return None
-    return rec if isinstance(rec, dict) else None
+    return None
+
+
+def _warn_vdat(path):
+    """Log the .vdat detail once (the user-facing state is the same hint)."""
+    global _warned_vdat
+    with _state_lock:
+        if _warned_vdat:
+            return
+        _warned_vdat = True
+    info = None
+    try:
+        info = vdat_info(_read_cache(path))
+    except (OSError, ValueError):
+        pass
+    detail = ""
+    if info:
+        detail = (f" (envelope version {info[0]}, encryption scheme "
+                  f"{info[1]})")
+    log("warning", "the Ubisoft Connect cache is encrypted (.vdat)"
+        + detail + ": Platypus can't read the library from it")
+
+
+def read_library(prefix):
+    """(games, unreadable, {game id: exe}) from the client's caches.
+
+    Never raises. Missing, encrypted or garbage caches all answer
+    ([], True, {}); a cache that parses with nothing owned answers
+    ([], False, {}) — the account simply has no games."""
+    stamp = cache_stamp(prefix)
+    with _state_lock:
+        hit = _library_cache.get(prefix)
+        if hit and hit[0] == stamp:
+            return hit[1]
+    result = _read_library(prefix)
+    with _state_lock:
+        _library_cache[prefix] = (stamp, result)
+    return result
+
+
+def _read_library(prefix):
+    _root, config, vdat, own, own_vdat = cache_state(prefix)
+    if not config:
+        if vdat or own_vdat:
+            _warn_vdat(vdat or own_vdat[0])
+        return [], True, {}
+    if not own:
+        return [], True, {}
+    try:
+        configs = parse_configurations(_read_cache(config))
+        if not configs:
+            return [], True, {}
+        owned = set()
+        for path in own:
+            owned |= parse_ownership(_read_cache(path))
+    except (OSError, ValueError):
+        return [], True, {}
+    installed = installs(prefix)
+    games = []
+    exes = {}
+    seen = set()
+    for product, text in configs:
+        if product not in owned or product in seen:
+            continue
+        seen.add(product)
+        title, ulc, third_party, exe = config_hints(text)
+        if ulc or third_party or not exe:
+            continue
+        game = {"id": str(product),
+                "title": title or f"Ubisoft {product}",
+                "installed": False, "installable": True}
+        win = installed.get(str(product))
+        if win:
+            game["installed"] = True
+            path = windows_path(prefix, win)
+            if path:
+                game["installPath"] = path
+        exes[game["id"]] = exe
+        games.append(game)
+    games.sort(key=lambda g: g["title"].casefold())
+    return games, False, exes
 
 
 def game_exe_name(prefix, app):
     """The exe name launchSpec tracks, or None when the game isn't installed
-    (or the record names the client itself, which find must never match)."""
-    rec = read_record(prefix, app)
-    if not rec:
+    (or the catalogue names no game exe, or names the client itself, which
+    find must never match)."""
+    if not install_dir(prefix, app):
         return None
-    base = os.path.basename(str(rec.get("exe") or "").replace("\\", "/"))
-    if not base or base.lower() in CLIENT_NAMES_LOWER:
+    _games, _unreadable, exes = read_library(prefix)
+    exe = exes.get(str(app), "")
+    if not exe or exe.lower() in CLIENT_NAMES_LOWER:
         return None
-    return base
+    return exe
+
+
+def install_snapshot(prefix, app):
+    """The client's on-disk install state for app: (install dir, cache stamp).
+
+    The install/update watch ends on a change from this: the client writes
+    the product's InstallDir (install) or rewrites the catalogue cache."""
+    return (install_dir(prefix, app), cache_stamp(prefix))
 
 
 def sha256_file(path):
@@ -309,6 +816,7 @@ def initialize(params):
     offered = params.get("protocols") or []
     if not isinstance(offered, list):
         offered = []
+    set_locale(params.get("locale"))
     _negotiated = pick_protocol([str(v) for v in offered])
     caps = ["library", "launch"]
     if _negotiated == "1.23":
@@ -439,20 +947,6 @@ def game_running(prefix, exe_name):
         return False
     return _proc_in_prefix(_scan_processes(), prefix, {exe_name.lower()})
 
-def snapshot_record(prefix, app):
-    """The install record's current (bytes, mtime), or (None, None)."""
-    try:
-        path = record_path(prefix, app)
-    except RPCError:
-        return (None, None)
-    try:
-        with open(path, "rb") as f:
-            data = f.read()
-        return (data, os.path.getmtime(path))
-    except OSError:
-        return (None, None)
-
-
 def client_url(action, app):
     if action == "uninstall":
         return f"uplay://uninstall/{app}"
@@ -472,18 +966,19 @@ def answer_client_run(app, action):
 
 def watch_job(job_id, prefix, app, action, before, stop):
     """End the job from a CHANGE in the client's on-disk state, observed
-    after the answer was sent: an install/update completes when the game's
-    record appears or changes, an uninstall when it is gone (bounded wait;
-    a readable failure on timeout). A canceled watch sends nothing, per the
-    Jobs contract."""
+    after the answer was sent: an install completes when the client records
+    the game's InstallDir, an update when it rewrites the catalogue cache,
+    an uninstall when the install key is gone (bounded wait; a readable
+    failure on timeout). A canceled watch sends nothing, per the Jobs
+    contract."""
     deadline = time.monotonic() + watch_timeout()
     try:
         while time.monotonic() < deadline:
             if stop.is_set():
                 return
-            current = snapshot_record(prefix, app)
+            current = install_snapshot(prefix, app)
             if action == "uninstall":
-                done = current[0] is None
+                done = not current[0]
             else:
                 done = current != before
             if done:
@@ -508,8 +1003,8 @@ def watch_job(job_id, prefix, app, action, before, stop):
 
 def start_client_command(params, action):
     """Answer a game.install/game.update/game.uninstall with the clientRun
-    command the core runs (protocol 1.23), and watch the client's records
-    to end the job. Over 1.20 the capability is off: -32601, as if the
+    command the core runs (protocol 1.23), and watch the client's install
+    state to end the job. Over 1.20 the capability is off: -32601, as if the
     method didn't exist."""
     if not negotiated_123():
         raise RPCError(f"method not found: game.{action}", code=-32601)
@@ -522,12 +1017,12 @@ def start_client_command(params, action):
     if not prefix:
         raise RPCError("invalid params: the client prefix is unknown "
                        "(run client.setup first)", code=-32602)
-    if action == "uninstall" and read_record(prefix, app) is None:
+    if action == "uninstall" and not install_dir(prefix, app):
         raise RPCError(f"{app} is not installed in Ubisoft Connect")
-    # Snapshot the records and register the cancel before answering, so the
+    # Snapshot the state and register the cancel before answering, so the
     # watch only ends on a change from this answer on and a cancel can never
     # slip in between.
-    before = snapshot_record(prefix, app)
+    before = install_snapshot(prefix, app)
     stop = threading.Event()
     with _state_lock:
         _watch_stops[job_id] = stop
@@ -559,20 +1054,30 @@ def job_cancel(params):
 
 
 def library_list(_params):
-    # Empty on purpose: the local-cache reader (issue #192) is blocked on the
-    # licence decision (issue #197). Warn once per process, not per call.
-    global _warned_empty
-    if not _warned_empty:
-        _warned_empty = True
-        log("warning", "the Ubisoft library is empty: the local-cache reader "
-            "(issue #192) is blocked on the licence decision (issue #197)")
-    return {"games": []}
+    """Owned games from the client's caches (issue #192). A cache that is
+    missing, encrypted or unreadable answers the one localized status the
+    library shows, not a per-call error."""
+    prefix = remembered_prefix()
+    if not prefix:
+        raise RPCError(tr("needs_client"), CODE_UNAVAILABLE)
+    games, unreadable, _exes = read_library(prefix)
+    if unreadable:
+        raise RPCError(tr("needs_client"), CODE_UNAVAILABLE)
+    return {"games": games}
 
 
 def game_details(params):
-    app = params["id"]
-    raise RPCError(f"{app} is unknown: the Ubisoft library is empty until the "
-                   "local-cache reader lands (issues #192, #197)")
+    """No metadata source: a known game answers {}, an unknown id errors."""
+    app = str(params["id"])
+    prefix = remembered_prefix()
+    if not prefix:
+        raise RPCError(tr("needs_client"), CODE_UNAVAILABLE)
+    games, unreadable, _exes = read_library(prefix)
+    if unreadable:
+        raise RPCError(tr("needs_client"), CODE_UNAVAILABLE)
+    if any(game["id"] == app for game in games):
+        return {}
+    raise RPCError(f"{app} is unknown to the Ubisoft library")
 
 
 def client_setup(params):
@@ -611,6 +1116,9 @@ def launch_spec(params):
         raise RPCError("invalid params: prefix is required", code=-32602)
     exe = game_exe_name(prefix, app)
     if exe is None:
+        if install_dir(prefix, app):
+            raise RPCError(f"{app} is installed, but its game executable "
+                           "isn't in Ubisoft Connect's catalogue cache")
         raise RPCError(f"{app} is not installed in Ubisoft Connect")
     return {"delegate": "wine-client", "client": "Ubisoft Connect",
             "exe": CLIENT_DIR_WINDOWS + "\\" + CLIENT_NAMES[0],
@@ -621,7 +1129,7 @@ def launch_spec(params):
 
 def client_status(params):
     """Client-side launch status (protocol 1.18, plus signin over 1.23).
-    Process state, not install records: a launchable game whose client runs
+    Process state, not the install registry: a launchable game whose client runs
     in this prefix without the game past the signin grace is a client
     waiting for the user (signin); a running game is launching as today."""
     app = params["id"]
@@ -702,7 +1210,11 @@ def main():
             send({"error": {"code": -32700, "message": str(e)}})
             continue
         if "id" not in msg:
-            continue  # notifications need no answer
+            # Notifications need no answer; the only one this plugin uses is
+            # the core's language switch (protocol 1.14).
+            if msg.get("method") == "locale.changed":
+                set_locale((msg.get("params") or {}).get("locale"))
+            continue
         threading.Thread(target=handle, args=(msg,), daemon=True).start()
 
 

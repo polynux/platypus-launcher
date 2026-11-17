@@ -1,11 +1,14 @@
-// Tests the Ubisoft Connect plugin (issues #193/#194: setup + launch only)
-// through Platypus's real plugin path (manager, JSON-RPC). The installer
-// fetch drives the real download code against a loopback server with a
-// patched pin (testenv allows loopback); client state is planted in a temp
-// prefix. No network, no Wine, no Ubisoft account.
+// Tests the Ubisoft Connect plugin (issues #192/#193/#194) through
+// Platypus's real plugin path (manager, JSON-RPC). The installer fetch drives
+// the real download code against a loopback server with a patched pin
+// (testenv allows loopback); the client's caches, install registry and
+// executable are synthetic fixtures in a temp prefix, encoded here by hand
+// from docs/research/ubisoft-library-format.md. No network, no Wine, no
+// Ubisoft account, no real Ubisoft file.
 package ubisoft_test
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -17,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -83,18 +87,167 @@ func wantCode(t *testing.T, s *plugtest.Session, method string, params any, code
 	}
 }
 
-// plantRecord writes a client-owned install record (the interim stand-in the
-// plugin reads; see the plugin docstring).
-func plantRecord(t *testing.T, prefix, app, exe string) {
+// The client's caches, encoded by hand: protobuf varint and
+// length-delimited fields only, as docs/research/ubisoft-library-format.md
+// describes them (ConfigurationCache/Configuration in §2, OwnershipCache in
+// §3, the install registry text in §4).
+
+func pbVarint(value uint64) []byte {
+	var out []byte
+	for {
+		b := byte(value & 0x7f)
+		value >>= 7
+		if value == 0 {
+			return append(out, b)
+		}
+		out = append(out, b|0x80)
+	}
+}
+
+func pbInt(field int, value uint64) []byte {
+	return append(pbVarint(uint64(field)<<3), pbVarint(value)...)
+}
+
+func pbBytes(field int, payload []byte) []byte {
+	out := append(pbVarint(uint64(field)<<3|2), pbVarint(uint64(len(payload)))...)
+	return append(out, payload...)
+}
+
+// configRecord is one Configuration message: product id 1, uplay id 2, the
+// product's YAML blob 3.
+func configRecord(product, uplay uint64, yaml string) []byte {
+	body := pbInt(1, product)
+	if uplay != 0 {
+		body = append(body, pbInt(2, uplay)...)
+	}
+	return pbBytes(1, append(body, pbBytes(3, []byte(yaml))...))
+}
+
+// ownershipFile is an OwnershipCache: field 1 per owned game (product id 1)
+// plus field 2, the same ids as packed uint32.
+func ownershipFile(ids ...uint64) []byte {
+	var out []byte
+	packed := []byte{}
+	for _, id := range ids {
+		out = append(out, pbBytes(1, pbInt(1, id))...)
+		packed = append(packed, pbVarint(id)...)
+	}
+	return append(out, pbBytes(2, packed)...)
+}
+
+// gameYAML is a launchable product's v2.0 YAML blob.
+func gameYAML(name, exe string) string {
+	return "version: 2.0\nroot:\n  name: \"" + name + "\"\n" +
+		"  start_game:\n    online:\n      executables:\n" +
+		"        - path:\n            relative: \"" + exe + "\"\n" +
+		"    offline:\n      executables:\n" +
+		"        - path:\n            relative: \"" + exe + "\"\n" +
+		"  installer:\n    game_identifier: " + name + "\n"
+}
+
+// dlcYAML is an add-on product: is_ulc, no start_game.
+func dlcYAML(name string) string {
+	return "version: 2.0\nroot:\n  name: \"" + name + "\"\n" +
+		"  is_visible: no\n  is_ulc: yes\n"
+}
+
+// thirdPartyYAML is a product sold on another store: no Ubisoft library entry.
+func thirdPartyYAML(name string) string {
+	return "version: 2.0\nroot:\n  name: \"" + name + "\"\n" +
+		"  start_game:\n    online:\n      executables:\n" +
+		"        - path:\n            relative: \"Game.exe\"\n" +
+		"  third_party_platform:\n    name: Steam\n"
+}
+
+// cacheDir is the client's per-user data folder in the prefix.
+func cacheDir(prefix string) string {
+	return filepath.Join(prefix, "drive_c", "users", "steamuser", "AppData",
+		"Local", "Ubisoft Game Launcher")
+}
+
+// plantCaches writes the plaintext catalogue and ownership cache. Passing
+// owned also writes the ownership file (an empty list writes an empty one).
+func plantCaches(t *testing.T, prefix string, records [][]byte, owned ...uint64) {
 	t.Helper()
-	dir := filepath.Join(prefix, "drive_c", "platypus-ubisoft", "records")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	configDir := filepath.Join(cacheDir(prefix), "cache", "configuration")
+	ownDir := filepath.Join(cacheDir(prefix), "cache", "ownership")
+	for _, dir := range []string{configDir, ownDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	catalogue := []byte{}
+	for _, record := range records {
+		catalogue = append(catalogue, record...)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "configurations"), catalogue, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, app+".json"),
-		[]byte(`{"exe": "`+exe+`"}`), 0o644); err != nil {
+	if owned != nil {
+		if err := os.WriteFile(filepath.Join(ownDir, "1234"), ownershipFile(owned...), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// plantEncryptedCache writes the 2026 .vdat container instead of the
+// plaintext files: a versioned_storage FileRoot with version 1, an
+// AES-256-GCM config and ciphertext-shaped bytes.
+func plantEncryptedCache(t *testing.T, prefix string) {
+	t.Helper()
+	configDir := filepath.Join(cacheDir(prefix), "cache", "configuration")
+	ownDir := filepath.Join(cacheDir(prefix), "cache", "ownership")
+	for _, dir := range []string{configDir, ownDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	crypto := append(pbInt(1, 1), pbBytes(2, []byte("0640adc5590d47b6a556f0d2e5dcd4e0"))...)
+	crypto = append(crypto, pbBytes(3, bytes.Repeat([]byte{1}, 12))...)
+	crypto = append(crypto, pbBytes(4, bytes.Repeat([]byte{2}, 16))...)
+	header := append(pbInt(1, 1), pbBytes(2, crypto)...)
+	body := append(pbBytes(1, header), pbBytes(2, bytes.Repeat([]byte{0xaa}, 64))...)
+	data := pbBytes(1, body)
+	if err := os.WriteFile(filepath.Join(configDir, "configurations.vdat"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(ownDir, "1234.vdat"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// plantInstalls writes the client's install registry into Wine's text
+// system.reg (HKLM), both of which the reader must tolerate.
+func plantInstalls(t *testing.T, prefix string, installs map[string]string) {
+	t.Helper()
+	ids := make([]string, 0, len(installs))
+	for id := range installs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	lines := []string{"WINE REGISTRY Version 2", "#arch=win64"}
+	for _, id := range ids {
+		escaped := strings.ReplaceAll(installs[id], `\`, `\\`)
+		lines = append(lines, "",
+			`[Software\\Wow6432Node\\Ubisoft\\Launcher\\Installs\\`+id+`] 1700000000`,
+			`"InstallDir"="`+escaped+`"`)
+	}
+	if err := os.WriteFile(filepath.Join(prefix, "system.reg"),
+		[]byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// libraryError is library.list's RPC error, for message checks.
+func libraryError(t *testing.T, s *plugtest.Session) *jsonrpc.Error {
+	t.Helper()
+	var raw json.RawMessage
+	err := s.Call("library.list", nil, &raw)
+	var rpcErr *jsonrpc.Error
+	if !errors.As(err, &rpcErr) {
+		t.Fatalf("library.list: got %s (%v), want the unreadable-cache status", raw, err)
+	}
+	return rpcErr
 }
 
 // plantClient writes a client executable into a drive layout.
@@ -253,16 +406,205 @@ func TestUbisoftClientSetupPinMismatch(t *testing.T) {
 	})
 }
 
-func TestUbisoftLibraryEmpty(t *testing.T) {
+// startWithPin starts a session whose installer pin is a loopback server, so
+// client.setup (which every library test needs to remember the prefix) never
+// touches the network.
+func startWithPin(t *testing.T) *plugtest.Session {
+	t.Helper()
+	data := fakeInstaller()
+	srv, _ := pinServer(t, data)
+	return suite(pinEnv(srv, data)).Start(t)
+}
+
+func rememberPrefix(t *testing.T, sess *plugtest.Session, prefix string) {
+	t.Helper()
+	call(t, sess, "client.setup", map[string]any{"jobId": "", "prefix": prefix}, nil)
+}
+
+// statusMessage is the plugin's single "can't read the library yet" status.
+func statusMessage(t *testing.T, sess *plugtest.Session) string {
+	t.Helper()
+	err := libraryError(t, sess)
+	if err.Code != -32002 {
+		t.Fatalf("library.list error code = %d (%s), want the -32002 status",
+			err.Code, err.Message)
+	}
+	return err.Message
+}
+
+func TestUbisoftLibraryNeedsClient(t *testing.T) {
+	// No client.setup ran: no prefix is known.
 	sess := suite(nil).Start(t)
+	if msg := statusMessage(t, sess); !strings.Contains(msg, "Start Ubisoft Connect once") {
+		t.Fatalf("status = %q, want the start-the-client hint", msg)
+	}
+	wantCode(t, sess, "game.details", map[string]any{"id": "635"}, -32002)
+
+	// The locale from initialize is the language of the status (1.14).
+	call(t, sess, "initialize",
+		map[string]any{"api": 1, "protocols": []string{"1.23"}, "locale": "fr-FR"}, nil)
+	if msg := statusMessage(t, sess); !strings.Contains(msg, "Lancez Ubisoft Connect une fois") {
+		t.Fatalf("status = %q, want the French start-the-client hint", msg)
+	}
+	// A bare "fr" tag and a switch notification work the same way.
+	call(t, sess, "initialize",
+		map[string]any{"api": 1, "protocols": []string{"1.23"}, "locale": "fr"}, nil)
+	if msg := statusMessage(t, sess); !strings.Contains(msg, "Lancez Ubisoft Connect une fois") {
+		t.Fatalf("status under fr = %q, want French", msg)
+	}
+	call(t, sess, "initialize",
+		map[string]any{"api": 1, "protocols": []string{"1.23"}, "locale": "en-GB"}, nil)
+	if msg := statusMessage(t, sess); !strings.Contains(msg, "Start Ubisoft Connect once") {
+		t.Fatalf("status under en-GB = %q, want English", msg)
+	}
+}
+
+func TestUbisoftLibraryLocalCache(t *testing.T) {
+	sess := startWithPin(t)
+	prefix := filepath.Join(t.TempDir(), "client")
+	rememberPrefix(t, sess, prefix)
+	plantCaches(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Splinter Cell Conviction", `src\system\Conviction_game.exe`)),
+		configRecord(636, 0, gameYAML("Owned Not Installed", "Game2.exe")),
+		configRecord(96, 0, dlcYAML("Conviction DLC")),
+		configRecord(97, 0, thirdPartyYAML("Steam Copy")),
+		configRecord(900, 0, gameYAML("Not Owned", "Other.exe")),
+	}, 635, 636, 96, 97)
+	plantInstalls(t, prefix, map[string]string{
+		"635": `C:\Program Files (x86)\Ubisoft\Game`,
+	})
+
 	var lib struct {
-		Games []any `json:"games"`
+		Games []struct {
+			ID          string `json:"id"`
+			Title       string `json:"title"`
+			Installed   bool   `json:"installed"`
+			InstallPath string `json:"installPath"`
+			Installable bool   `json:"installable"`
+		} `json:"games"`
 	}
 	call(t, sess, "library.list", nil, &lib)
-	if len(lib.Games) != 0 {
-		t.Fatalf("library.list = %+v, want no games until #192", lib.Games)
+	if len(lib.Games) != 2 {
+		t.Fatalf("library.list = %+v, want the two owned launchable games", lib.Games)
 	}
-	wantCode(t, sess, "game.details", map[string]any{"id": "635"}, -32000)
+	byID := map[string]struct {
+		Title       string `json:"title"`
+		Installed   bool   `json:"installed"`
+		InstallPath string `json:"installPath"`
+		Installable bool   `json:"installable"`
+	}{}
+	for _, game := range lib.Games {
+		byID[game.ID] = struct {
+			Title       string `json:"title"`
+			Installed   bool   `json:"installed"`
+			InstallPath string `json:"installPath"`
+			Installable bool   `json:"installable"`
+		}{game.Title, game.Installed, game.InstallPath, game.Installable}
+	}
+	if installed := byID["635"]; installed.Title != "Splinter Cell Conviction" ||
+		!installed.Installed || !installed.Installable {
+		t.Errorf("game = %+v, want 635 installed and installable", installed)
+	}
+	if want := filepath.Join(prefix, "drive_c", "Program Files (x86)", "Ubisoft", "Game"); byID["635"].InstallPath != want {
+		t.Errorf("installPath = %q, want the registry path mapped into the prefix %q",
+			byID["635"].InstallPath, want)
+	}
+	if owned := byID["636"]; owned.Title != "Owned Not Installed" ||
+		owned.Installed || owned.InstallPath != "" || !owned.Installable {
+		t.Errorf("game = %+v, want 636 owned and not installed", owned)
+	}
+
+	// Only protocol keys go on the wire (the DLC/third-party/not-owned
+	// products are dropped, not flagged).
+	var raw struct {
+		Games []json.RawMessage `json:"games"`
+	}
+	call(t, sess, "library.list", nil, &raw)
+	for _, entry := range raw.Games {
+		var fields map[string]any
+		if err := json.Unmarshal(entry, &fields); err != nil {
+			t.Fatal(err)
+		}
+		for key := range fields {
+			if !slices.Contains(plugtest.LibraryKeys, key) {
+				t.Errorf("library.list game has the key %q, which the protocol doesn't define", key)
+			}
+		}
+	}
+
+	// The catalogue's executable is the launch find, not the install path.
+	var launch struct {
+		Find struct {
+			Cmdline []string `json:"cmdline"`
+		} `json:"find"`
+	}
+	call(t, sess, "game.launchSpec",
+		map[string]any{"id": "635", "prefix": prefix, "preview": true}, &launch)
+	if !slices.Equal(launch.Find.Cmdline, []string{"Conviction_game.exe"}) {
+		t.Errorf("find = %v, want the catalogue's game exe", launch.Find.Cmdline)
+	}
+	// A known game has no metadata source: it answers {}; an unknown id errors.
+	var details json.RawMessage
+	call(t, sess, "game.details", map[string]any{"id": "635"}, &details)
+	if string(details) != "{}" {
+		t.Errorf("game.details = %s, want {}", details)
+	}
+	wantCode(t, sess, "game.details", map[string]any{"id": "999"}, -32000)
+
+	// An account with nothing owned is a valid, empty library (not a status).
+	plantCaches(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Splinter Cell Conviction", "Game.exe")),
+	}, []uint64{}...)
+	call(t, sess, "library.list", nil, &lib)
+	if len(lib.Games) != 0 {
+		t.Fatalf("library.list = %+v, want an empty library for no owned games", lib.Games)
+	}
+}
+
+func TestUbisoftLibraryUnreadable(t *testing.T) {
+	sess := startWithPin(t)
+	prefix := filepath.Join(t.TempDir(), "client")
+	rememberPrefix(t, sess, prefix)
+	game := [][]byte{configRecord(635, 0, gameYAML("Game", "Game.exe"))}
+
+	// The prefix exists but the client never wrote its caches.
+	if msg := statusMessage(t, sess); !strings.Contains(msg, "Start Ubisoft Connect once") {
+		t.Fatalf("status = %q, want the start-the-client hint", msg)
+	}
+
+	// A truncated catalogue: the first record declares more bytes than the
+	// file holds.
+	plantCaches(t, prefix, [][]byte{{0x0a, 0xff}}, 635)
+	if msg := statusMessage(t, sess); !strings.Contains(msg, "Start Ubisoft Connect once") {
+		t.Fatalf("truncated catalogue status = %q", msg)
+	}
+
+	// A garbage ownership file (declared length past the end).
+	plantCaches(t, prefix, game, 635)
+	own := filepath.Join(cacheDir(prefix), "cache", "ownership", "1234")
+	if err := os.WriteFile(own, []byte{0x0a, 0x05, 'a'}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	statusMessage(t, sess)
+
+	// The 2026 encrypted container: detected, never guessed.
+	plantEncryptedCache(t, prefix)
+	if msg := statusMessage(t, sess); !strings.Contains(msg, "Start Ubisoft Connect once") {
+		t.Fatalf("encrypted cache status = %q, want the start-the-client hint", msg)
+	}
+
+	// A plaintext file that is actually a .vdat-shaped envelope is garbage
+	// to the plaintext reader: still the same status, no crash.
+	data, err := os.ReadFile(filepath.Join(cacheDir(prefix), "cache", "configuration", "configurations.vdat"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.RemoveAll(filepath.Join(cacheDir(prefix), "cache", "ownership"))
+	os.Remove(filepath.Join(cacheDir(prefix), "cache", "configuration", "configurations.vdat"))
+	if err := os.WriteFile(filepath.Join(cacheDir(prefix), "cache", "configuration", "configurations"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	statusMessage(t, sess)
 }
 
 func TestUbisoftLaunchSpec(t *testing.T) {
@@ -270,7 +612,14 @@ func TestUbisoftLaunchSpec(t *testing.T) {
 	prefix := filepath.Join(t.TempDir(), "client")
 	// No client executable planted: the spec is still answered (Windows
 	// paths), so the core reports client.notSetUp and offers the setup.
-	plantRecord(t, prefix, "635", "Game.exe")
+	plantCaches(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Game", `bin\Game.exe`)),
+		configRecord(637, 0, gameYAML("Client-named", "upc.exe")),
+	}, 635, 637)
+	plantInstalls(t, prefix, map[string]string{
+		"635": `C:\Ubisoft\Game`,
+		"637": `C:\Ubisoft\Client`,
+	})
 
 	var raw json.RawMessage
 	call(t, sess, "game.launchSpec",
@@ -311,16 +660,16 @@ func TestUbisoftLaunchSpec(t *testing.T) {
 		t.Errorf("prefix = %q, want client", launch.Prefix)
 	}
 	if !slices.Equal(launch.Find.Cmdline, []string{"Game.exe"}) {
-		t.Errorf("find = %v, want the game's exe from its record", launch.Find.Cmdline)
+		t.Errorf("find = %v, want the catalogue's game exe", launch.Find.Cmdline)
 	}
 	if launch.StartTimeout != 900 {
 		t.Errorf("startTimeout = %d, want the 900 s client window", launch.StartTimeout)
 	}
-	// No record, no spec: the game isn't installed.
+	// No install entry, no spec: the game isn't installed.
 	wantCode(t, sess, "game.launchSpec",
 		map[string]any{"id": "636", "prefix": prefix}, -32000)
-	// A record naming the client itself is refused (find must track the game).
-	plantRecord(t, prefix, "637", "upc.exe")
+	// A catalogue naming the client itself is refused (find must track the
+	// game).
 	wantCode(t, sess, "game.launchSpec",
 		map[string]any{"id": "637", "prefix": prefix}, -32000)
 }
@@ -350,7 +699,10 @@ func TestUbisoftClientStatus(t *testing.T) {
 	if status.State != "updating" || status.Label == "" {
 		t.Errorf("clientStatus = %+v, want the waiting state", status)
 	}
-	plantRecord(t, prefix, "635", "Game.exe")
+	plantCaches(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Game", "Game.exe")),
+	}, 635)
+	plantInstalls(t, prefix, map[string]string{"635": `C:\Ubisoft\Game`})
 	call(t, sess, "game.clientStatus",
 		map[string]any{"id": "635", "since": 0}, &status)
 	if status.State != "launching" || status.Label == "" {
@@ -361,7 +713,23 @@ func TestUbisoftClientStatus(t *testing.T) {
 	legacy := filepath.Join(t.TempDir(), "legacy")
 	call(t, sess, "client.setup", map[string]any{"jobId": "l", "prefix": legacy}, nil)
 	plantClient(t, legacy, filepath.Join("pfx", "drive_c"), "upc.exe")
-	plantRecord(t, legacy, "635", "Game.exe")
+	legacyDir := filepath.Join(legacy, "pfx", "drive_c", "users", "steamuser",
+		"AppData", "Local", "Ubisoft Game Launcher", "cache")
+	if err := os.MkdirAll(filepath.Join(legacyDir, "configuration"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(legacyDir, "ownership"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, "configuration", "configurations"),
+		configRecord(635, 0, gameYAML("Game", "Game.exe")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, "ownership", "1234"),
+		ownershipFile(635), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plantInstalls(t, legacy, map[string]string{"635": `C:\Ubisoft\Game`})
 	call(t, sess, "game.clientStatus",
 		map[string]any{"id": "635", "since": 0}, &status)
 	if status.State != "launching" {
@@ -445,9 +813,9 @@ func TestUbisoftInstallAnswersClientRun(t *testing.T) {
 	if !ans.ClientOwnsLocation {
 		t.Error("clientOwnsLocation = false, want true (the client owns installs)")
 	}
-	// The plugin ends the job from the client's records: plant the game's
-	// record and the watch reports done.
-	plantRecord(t, prefix, "635", "Game.exe")
+	// The plugin ends the job from the client's state: the install registry
+	// gaining the product's InstallDir completes the install.
+	plantInstalls(t, prefix, map[string]string{"635": `C:\Ubisoft\Game`})
 	waitJobEvent(t, sess, "install-1", []string{"job.done"}, 5*time.Second)
 
 	var upd clientRunAnswer
@@ -456,10 +824,12 @@ func TestUbisoftInstallAnswersClientRun(t *testing.T) {
 	if !slices.Equal(upd.ClientRun.Args, []string{"uplay://install/635"}) {
 		t.Errorf("update args = %v, want the install URL", upd.ClientRun.Args)
 	}
-	// A pre-existing record is not completion: the update must not finish
-	// until the record changes.
+	// A pre-existing install is not completion: the update must not finish
+	// until the client rewrites its catalogue cache.
 	noJobEvent(t, sess, "update-1", []string{"job.done", "job.failed"}, time.Second)
-	plantRecord(t, prefix, "635", "Game2.exe")
+	plantCaches(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Game", "Game.exe")),
+	}, 635)
 	waitJobEvent(t, sess, "update-1", []string{"job.done"}, 5*time.Second)
 
 	var un clientRunAnswer
@@ -468,10 +838,7 @@ func TestUbisoftInstallAnswersClientRun(t *testing.T) {
 	if !slices.Equal(un.ClientRun.Args, []string{"uplay://uninstall/635"}) {
 		t.Errorf("uninstall args = %v, want the uninstall URL", un.ClientRun.Args)
 	}
-	rec := filepath.Join(prefix, "drive_c", "platypus-ubisoft", "records", "635.json")
-	if err := os.Remove(rec); err != nil {
-		t.Fatal(err)
-	}
+	plantInstalls(t, prefix, nil)
 	waitJobEvent(t, sess, "uninstall-1", []string{"job.done"}, 5*time.Second)
 
 	// An uninstall for a game the client doesn't have fails readably.
@@ -483,7 +850,7 @@ func TestUbisoftInstallAnswersClientRun(t *testing.T) {
 	call(t, sess, "game.install",
 		map[string]any{"id": "636", "installDir": t.TempDir(), "jobId": "install-cancel"}, &cancelAns)
 	call(t, sess, "job.cancel", map[string]any{"jobId": "install-cancel"}, nil)
-	plantRecord(t, prefix, "636", "Other.exe")
+	plantInstalls(t, prefix, map[string]string{"636": `C:\Ubisoft\Other`})
 	noJobEvent(t, sess, "install-cancel", []string{"job.done", "job.failed"}, time.Second)
 }
 
@@ -525,14 +892,17 @@ func TestUbisoftClientStatusSignin(t *testing.T) {
 		State string `json:"state"`
 		Label string `json:"label"`
 	}
-	// No install record: not launchable (updating), even with no grace.
+	// No install entry: not launchable (updating), even with no grace.
 	call(t, sess, "game.clientStatus",
 		map[string]any{"id": "635", "since": 0}, &status)
 	if status.State != "updating" {
 		t.Fatalf("clientStatus = %+v, want updating with no record", status)
 	}
-	plantRecord(t, prefix, "635", "Game.exe")
-	// Record present but nothing running: the client starts it (launching).
+	plantCaches(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Game", "Game.exe")),
+	}, 635)
+	plantInstalls(t, prefix, map[string]string{"635": `C:\Ubisoft\Game`})
+	// Installed but nothing running: the client starts it (launching).
 	call(t, sess, "game.clientStatus",
 		map[string]any{"id": "635", "since": 0}, &status)
 	if status.State != "launching" {
