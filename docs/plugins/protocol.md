@@ -1,4 +1,4 @@
-# Store plugin protocol (1.24, draft)
+# Store plugin protocol (1.25, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -137,6 +137,7 @@ other errors can contain.
 | `job.cancel` | `{ jobId }` | `{}` |
 | `job.discard` | `{ jobId, id, installDir }` | `{}` |
 | `client.setup` | `{ jobId, prefix }` | `{ exe, args?, env?, redact?, size?, confirm? }` (1.20, [Wine clients](#wine-clients-120)) |
+| `client.openSpec` | `{ prefix }` | `{ exe, args?, cwd?, redact? }` (1.25, [Wine clients](#wine-clients-120)) |
 | `game.launchSpec` | `{ id, preview, via?, executable?, prefix? }` | `LaunchSpec` (`executable` 1.15, [Offline launches](#offline-launches-115); `prefix` 1.20, [Wine clients](#wine-clients-120)) |
 | `game.clientStatus` | `{ id, since }` (`since` is launch time, Unix seconds) | `{ state, label?, progress?, bytes?, total? }` (`signin` 1.23, [Client-run commands](#client-run-commands-123); 1.18, [Client launch status](#client-launch-status-118)) |
 | `cloud.status` | `{ id, ctx }` | `CloudStatus` (1.2, [Cloud saves](#cloud-saves-12)) |
@@ -604,6 +605,26 @@ only to a plugin that settled on 1.20 or later. Installs through the same
 client run as core-run commands of the plugin's job (protocol 1.23, see
 [Client-run commands](#client-run-commands-123)).
 
+`client.openSpec { prefix } -> { exe, args?, cwd?, redact? }` answers the
+standalone client spec the core runs to open the client with no game (an
+optional method of `launch`, protocol 1.25): the plugin card's "Open"
+button, so the user can sign into the client when the library lists no game
+to launch from. The `exe` is the client's own executable (an absolute or
+`C:\` path, inside the prefix or an allowed folder, present now, validated
+like a `clientRun` exe); a missing executable inside the prefix reads as
+`client.notSetUp`, like a wine-client launch. `args` (default none) carries
+the client's own arguments, `cwd` (default the executable's folder) its
+working directory, resolved the same way, and `redact` hides argument
+values from the session log, like a `clientRun`. Answer `-32601` when the
+store has no standalone client to open. Platypus sends `client.openSpec`
+only to a plugin that settled on 1.25 or later, and a plugin never relies
+on a version it didn't negotiate. The card needs 1.25: a wine-client store
+that settled on 1.20–1.24 keeps the game-page setup path only, with no Set
+up / Open row on its card. The core tracks the started process, not the
+client behind it: when the exe daemonizes at once (the starter exits while
+the client stays up in the prefix), the card reads as stopped once the
+starter is gone.
+
 ## Cloud saves (1.2)
 
 Capability `cloud-saves`, protocol 1.2 and later. A plugin that speaks only 1.0 or 1.1
@@ -710,7 +731,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21", "1.22", "1.23"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21", "1.22", "1.23", "1.24", "1.25"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -764,11 +785,12 @@ that doesn't know it.
   prefix as part of the plugin's job) and the `signin` clientStatus state (the client waits for the user,
   see [Client-run commands](#client-run-commands-123)); 1.24: game invites (the `social.invite`
   notification, the join fields of `Friend.game`, and the `invites` of `social.state`;
-  see [Game invites](#game-invites-124)); see [Compat facts](#compat-facts-117),
+  see [Game invites](#game-invites-124)); 1.25: the `client.openSpec` method (open a wine-client
+  client by itself from the plugin card; see [Wine clients](#wine-clients-120)); see [Compat facts](#compat-facts-117),
   [Runner](#runner-117), and [Save context](#save-context-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20, 1.21, 1.22, 1.23 or 1.24 method.
+  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20, 1.21, 1.22, 1.23, 1.24 or 1.25 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -785,7 +807,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 |---|---|---|---|---|
 | `library` | 1.0 | `library.list` | `game.details` | yes |
 | `install` | 1.0 | `game.installSize`, `game.install`, `game.update`, `game.uninstall`, `job.cancel` | | yes |
-| `launch` | 1.0 | `game.launchSpec` | `client.setup` (1.20) | yes |
+| `launch` | 1.0 | `game.launchSpec` | `client.setup` (1.20), `client.openSpec` (1.25) | yes |
 | `auth` | 1.0 | `auth.status`, `auth.begin`, `auth.complete`, `auth.logout` | | yes |
 | `discard` | 1.0 | `job.discard` | | yes |
 | `cloud-saves` | 1.2 | `cloud.status`, `cloud.pull`, `cloud.push`, `cloud.resolve` | | yes |

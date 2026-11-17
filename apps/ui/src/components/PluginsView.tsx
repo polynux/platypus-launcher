@@ -14,6 +14,7 @@ import { Input } from './ds/input';
 import { PluginCapabilities } from './PluginCapabilities';
 import { PluginLogo } from './PluginLogo';
 import { PluginSettingsPanel } from './PluginSettings';
+import { ClientCardActions } from './ClientCardActions';
 import { offers, offerLabel } from '../lib/capabilities';
 import type { VariantProps } from 'class-variance-authority';
 import { ErrorNotice } from './ErrorNotice';
@@ -329,6 +330,8 @@ export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogo
       {p.status !== 'invalid' && <PluginCapabilities plugin={p} />}
 
       {p.status === 'ready' && <PluginSettingsPanel plugin={p} onNotify={onNotify} />}
+
+      <ClientCardActions plugin={p} onNotify={onNotify} />
 
       {p.missing.length > 0 && (
         <div className="rounded-xl bg-attention/[0.07] px-3.5 py-2.5 ring-1 ring-attention/25">

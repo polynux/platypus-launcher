@@ -328,6 +328,78 @@ func ValidateClientRun(spec plugins.ClientRunSpec, man plugins.Manifest, folders
 	}, nil
 }
 
+// ClientOpen is a validated client.openSpec answer (protocol 1.25): the store
+// client Platypus runs under the runner in its own prefix with no game.
+type ClientOpen struct {
+	Exe    string
+	Args   []string
+	Dir    string
+	Redact []string
+}
+
+// ValidateClientOpen checks a client.openSpec answer (protocol 1.25): the
+// client executable Platypus runs under the runner in the pinned client
+// prefix with no game. Like a clientRun exe it must exist now, inside the
+// prefix or an allowed folder, with no env of its own. A missing executable
+// inside the client's prefix means the client isn't set up yet, which reads
+// as client.notSetUp rather than a broken spec.
+func ValidateClientOpen(spec plugins.ClientOpenSpec, man plugins.Manifest, folders []string, clientDir string) (*ClientOpen, error) {
+	if spec.Exe == "" {
+		return nil, fmt.Errorf("%s returned no client executable", man.ID)
+	}
+	exe, err := resolveWineExe(spec.Exe, clientDir)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", man.ID, err)
+	}
+	real, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		if insideLexical(exe, folders) {
+			client := man.Name
+			if client == "" {
+				client = man.ID
+			}
+			return nil, apperr.New("client.notSetUp",
+				fmt.Sprintf("%s isn't set up yet; set it up first, then open it", client),
+				map[string]string{"client": client, "source": man.ID})
+		}
+		return nil, fmt.Errorf("%s: client executable %s is outside its prefix (%s)", man.ID, spec.Exe, strings.Join(folders, ", "))
+	}
+	if !insideAny(real, folders) {
+		return nil, fmt.Errorf("%s: client executable %s is outside its prefix (%s)", man.ID, spec.Exe, strings.Join(folders, ", "))
+	}
+	if st, err := os.Stat(real); err != nil {
+		return nil, err
+	} else if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: %s is not a file", man.ID, spec.Exe)
+	}
+	dir := filepath.Dir(real)
+	if spec.Cwd != "" {
+		wd, err := resolveWineExe(spec.Cwd, clientDir)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", man.ID, err)
+		}
+		realWd, err := filepath.EvalSymlinks(wd)
+		if err != nil {
+			return nil, fmt.Errorf("%s: working dir %s: %w", man.ID, spec.Cwd, err)
+		}
+		if !insideAny(realWd, folders) {
+			return nil, fmt.Errorf("%s: working dir %s is outside its prefix (%s)", man.ID, spec.Cwd, strings.Join(folders, ", "))
+		}
+		if st, err := os.Stat(realWd); err != nil {
+			return nil, err
+		} else if !st.IsDir() {
+			return nil, fmt.Errorf("%s: %s is not a directory", man.ID, spec.Cwd)
+		}
+		dir = realWd
+	}
+	return &ClientOpen{
+		Exe:    real,
+		Args:   slices.Clone(spec.Args),
+		Dir:    dir,
+		Redact: validateRedact(spec.Redact),
+	}, nil
+}
+
 // validateEnvMap checks plugin env against the denylist. Wine-client launches
 // and client setups share the direct launches' denylist: prefix and DLL
 // overrides are Platypus's.

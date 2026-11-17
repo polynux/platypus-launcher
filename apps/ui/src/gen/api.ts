@@ -34,6 +34,7 @@ export interface CoreApi {
   ChoosePluginInstallFolder(id: string): Promise<string>;
   ChoosePluginZip(): Promise<string>;
   ClearFinishedJobs(): Promise<void>;
+  ClientState(source: string): Promise<types.ClientState>;
   CreateCollection(name: string, smart: types.SmartFilter): Promise<types.Collection[]>;
   CreateSaveBackup(game: types.Game): Promise<types.Job>;
   DeleteCollection(id: string): Promise<types.Collection[]>;
@@ -110,6 +111,7 @@ export interface CoreApi {
   MigrationNotice(): Promise<types.MigrationNotice | null>;
   MoveGame(game: types.Game, parent: string): Promise<types.Job>;
   MoveJobToFront(id: string): Promise<void>;
+  OpenClient(source: string): Promise<string>;
   OpenCrashLog(game: types.Game): Promise<void>;
   OpenGameFolder(game: types.Game): Promise<void>;
   OpenPluginsFolder(): Promise<void>;
@@ -245,6 +247,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ChoosePluginInstallFolder',
   'ChoosePluginZip',
   'ClearFinishedJobs',
+  'ClientState',
   'CreateCollection',
   'CreateSaveBackup',
   'DeleteCollection',
@@ -321,6 +324,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'MigrationNotice',
   'MoveGame',
   'MoveJobToFront',
+  'OpenClient',
   'OpenCrashLog',
   'OpenGameFolder',
   'OpenPluginsFolder',

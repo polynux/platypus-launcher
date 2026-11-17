@@ -229,6 +229,61 @@ func TestValidateClientRun(t *testing.T) {
 	}
 }
 
+// A client.openSpec answer (protocol 1.25) validates like a clientRun exe
+// and defaults its working dir to the executable's folder. A missing
+// executable inside the prefix reads as client.notSetUp, not a broken spec.
+func TestValidateClientOpen(t *testing.T) {
+	root := t.TempDir()
+	prefix := ClientPrefixDir("echo", filepath.Join(root, "prefixes"))
+	binDir := filepath.Join(prefix, "drive_c", "client")
+	os.MkdirAll(binDir, 0o755)
+	exe := filepath.Join(binDir, "client.exe")
+	os.WriteFile(exe, []byte("MZ"), 0o755)
+	outside := filepath.Join(root, "client.exe")
+	os.WriteFile(outside, []byte("MZ"), 0o755)
+	link := filepath.Join(binDir, "escape.exe")
+	os.Symlink(outside, link)
+
+	man := plugins.Manifest{ID: "echo", Name: "Echo"}
+	folders := []string{filepath.Join(root, "Games", "echo"), prefix}
+
+	got, err := ValidateClientOpen(plugins.ClientOpenSpec{Exe: exe, Redact: []string{"--token="}}, man, folders, prefix)
+	if err != nil {
+		t.Fatalf("valid open spec: %v", err)
+	}
+	if got.Exe != exe || len(got.Args) != 0 || got.Dir != binDir || len(got.Redact) != 1 {
+		t.Fatalf("open spec = %+v, want the exe with its folder", got)
+	}
+	win, err := ValidateClientOpen(plugins.ClientOpenSpec{Exe: `C:\client\client.exe`}, man, folders, prefix)
+	if err != nil || win.Exe != exe {
+		t.Fatalf("windows client path: got %+v, %v; want %s", win, err, exe)
+	}
+
+	for name, spec := range map[string]plugins.ClientOpenSpec{
+		"no exe":         {},
+		"exe outside":    {Exe: outside},
+		"symlink escape": {Exe: link},
+		"other drive":    {Exe: `D:\client.exe`},
+		"relative exe":   {Exe: "client.exe"},
+		"escape drive":   {Exe: `C:\..\client.exe`},
+		"bad cwd":        {Exe: exe, Cwd: `D:\client`},
+		"missing cwd":    {Exe: exe, Cwd: filepath.Join(prefix, "drive_c", "gone")},
+	} {
+		if _, err := ValidateClientOpen(spec, man, folders, prefix); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+
+	// A missing executable inside the client's prefix means the client isn't
+	// set up yet (client.notSetUp), not a broken spec.
+	_, err = ValidateClientOpen(plugins.ClientOpenSpec{
+		Exe: filepath.Join(binDir, "not-installed.exe"),
+	}, man, folders, prefix)
+	if apperr.CodeOf(err) != "client.notSetUp" || !strings.Contains(err.Error(), "set it up first") {
+		t.Fatalf("missing client exe: got %v, want the client.notSetUp prompt", err)
+	}
+}
+
 func TestClientPrefixDir(t *testing.T) {
 	if got := ClientPrefixDir("echo", "/data/prefixes"); got != "/data/prefixes/p.echo.client" {
 		t.Errorf("ClientPrefixDir = %q", got)

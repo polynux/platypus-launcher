@@ -11,6 +11,7 @@ import { ATLAS_PAGE, cx } from './ui';
 import { Button } from './ds/button';
 import { PluginLogo } from './PluginLogo';
 import { PluginSettingsPanel } from './PluginSettings';
+import { ClientCardActions } from './ClientCardActions';
 import { offers, offerLabel } from '../lib/capabilities';
 import { coreErrMsg } from '../lib/coreError';
 import { DataPluginCard, PluginsBuiltIn, PluginsData, STATUS, hasAuth } from './PluginsView';
@@ -240,6 +241,7 @@ export function AtlasPluginDetail({ plugin: p, gameCount, authState: a, warning,
         </div>
       )}
       {p.status === 'ready' && <PluginSettingsPanel plugin={p} onNotify={onNotify} />}
+      <ClientCardActions plugin={p} onNotify={onNotify} />
       {offers(p, 'install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[18px] border-b border-hairline py-3.5">
           <div className="grid min-w-0 gap-[3px]">

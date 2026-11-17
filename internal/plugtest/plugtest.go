@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/jsonrpc"
 	"platypus/internal/plugins"
@@ -565,6 +566,13 @@ func (s Suite) Conformance(t *testing.T) {
 		sess.checkClientSetup(t)
 	}
 
+	// A plugin that speaks protocol 1.25 answers client.openSpec with the
+	// standalone client spec the core would run; anything older is never
+	// sent it. The method is optional: -32601 means no standalone client.
+	if has("launch") && sess.m.Runtime(s.ID).Speaks(plugins.ClientOpenVersion) {
+		sess.checkClientOpen(t)
+	}
+
 	// update: a plugin answers game.update with its own update path, and the
 	// game stays installed. 5 library.list run in parallel while it works
 	// (the doc requires answering requests concurrently).
@@ -895,6 +903,41 @@ func (s *Session) checkClientSetup(t *testing.T) {
 		t.Fatalf("the installer executable isn't there to run: %v", err)
 	}
 }
+
+// checkClientOpen drives client.openSpec (protocol 1.25): the plugin answers
+// the standalone client spec, which must validate like a clientRun command
+// against the core-owned prefix the core passes in. The method is optional:
+// -32601 means the plugin has no standalone client to open, and the suite
+// moves on.
+func (s *Session) checkClientOpen(t *testing.T) {
+	t.Helper()
+	prefix := t.TempDir()
+	var raw json.RawMessage
+	err := s.call("client.openSpec", map[string]any{"prefix": prefix}, &raw)
+	var rpcErr *jsonrpc.Error
+	if errors.As(err, &rpcErr) && rpcErr.Code == jsonrpc.CodeMethodNotFound {
+		return // optional method: no standalone client to open
+	}
+	if err != nil {
+		t.Fatalf("client.openSpec: %v", err)
+	}
+	checkKeys(t, "client.openSpec", raw, OpenSpecKeys)
+	var spec plugins.ClientOpenSpec
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		t.Fatalf("client.openSpec isn't a client spec: %s", raw)
+	}
+	p, ok := s.m.Plugin(s.Store.ID())
+	if !ok {
+		t.Fatalf("plugin %s gone", s.Store.ID())
+	}
+	if _, err := stores.ValidateClientOpen(spec, p.Manifest, []string{s.Folder, prefix}, prefix); err != nil {
+		// The client isn't installed in this throwaway prefix: only a spec
+		// that escapes it, or a malformed one, fails the suite.
+		if apperr.CodeOf(err) != "client.notSetUp" {
+			t.Fatalf("client.openSpec answered an unopenable spec: %v", err)
+		}
+	}
+}
 func (s *Session) checkCompatFacts(t *testing.T) {
 	t.Helper()
 	s.wantCode("compat.lookup", map[string]any{}, jsonrpc.CodeInvalidParams)
@@ -939,6 +982,9 @@ var (
 	// (protocol 1.23, "Client-run commands").
 	InstallAnswerKeys = []string{"clientRun", "clientOwnsLocation", "size"}
 	ClientRunKeys     = []string{"exe", "args", "env", "redact"}
+	// The standalone client spec client.openSpec answers (protocol 1.25,
+	// "Wine clients").
+	OpenSpecKeys = []string{"exe", "args", "cwd", "redact"}
 	// The versions capability (docs/plugins/protocol.md, "Versions").
 	VersionListKeys    = []string{"channels", "builds", "manual", "links", "updateAvailable", "pinned"}
 	VersionChannelKeys = []string{"id", "name", "description", "updatedAt", "buildId", "requires", "unlocked", "current"}

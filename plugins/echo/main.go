@@ -220,10 +220,10 @@ type knobs struct {
 	SettingsDelayMs int  `json:"settingsDelayMs"`
 }
 
-// defaultProtocols is what echo speaks: every revision through 1.22, so it
+// defaultProtocols is what echo speaks: every revision through 1.25, so it
 // meets the highest one Platypus offers (the negotiation picks the best both
 // speak).
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21", "1.22"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21", "1.22", "1.23", "1.24", "1.25"}
 
 var (
 	knobMu  sync.Mutex
@@ -758,6 +758,8 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return discardJob(p)
 	case "client.setup":
 		return startClientSetup(p)
+	case "client.openSpec":
+		return clientOpenSpec(p)
 	case "game.launchSpec":
 		return launchSpec(p)
 	case "cloud.status", "cloud.pull", "cloud.push", "cloud.resolve":
@@ -1312,6 +1314,23 @@ func startClientSetup(p params) (any, error) {
 		out["confirm"] = confirm
 	}
 	return out, nil
+}
+
+// clientOpenSpec answers client.openSpec (protocol 1.25) with the fake
+// client the setup installed: the core runs it with no game, tracked like a
+// client session. Answered without preflighting: a missing client exe is the
+// core's client.notSetUp, not a plugin error.
+func clientOpenSpec(p params) (any, error) {
+	prefix := p.Prefix
+	if prefix == "" {
+		stMu.Lock()
+		prefix = st.ClientPrefix
+		stMu.Unlock()
+	}
+	if prefix == "" {
+		return nil, &rpcError{Code: -32602, Message: "invalid params: prefix is required"}
+	}
+	return map[string]any{"exe": filepath.Join(prefix, wineClientExe)}, nil
 }
 
 // echoScreenshots are the screenshots a game page shows for an echo game: six

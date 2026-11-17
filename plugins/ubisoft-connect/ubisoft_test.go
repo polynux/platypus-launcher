@@ -317,9 +317,9 @@ func plantClient(t *testing.T, prefix, layout, name string) {
 
 func TestUbisoftHandshake(t *testing.T) {
 	s := suite(nil).Handshake(t)
-	// The manifest speaks 1.20 (setup + launch) and 1.23 (plus the
-	// core-run client commands); the core offering up to 1.23 negotiates
-	// exactly that.
+	// The manifest speaks 1.20 (setup + launch), 1.23 (plus the core-run
+	// client commands) and 1.25 (plus client.openSpec for the plugin card);
+	// the core offering up to 1.25 negotiates exactly that.
 	data, err := os.ReadFile("plugin.json")
 	if err != nil {
 		t.Fatal(err)
@@ -334,11 +334,11 @@ func TestUbisoftHandshake(t *testing.T) {
 	if err := json.Unmarshal(data, &man); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(man.Protocol.Versions, []string{"1.20", "1.23"}) {
-		t.Fatalf("manifest protocol versions = %v, want [1.20 1.23]", man.Protocol.Versions)
+	if !slices.Equal(man.Protocol.Versions, []string{"1.20", "1.23", "1.25"}) {
+		t.Fatalf("manifest protocol versions = %v, want [1.20 1.23 1.25]", man.Protocol.Versions)
 	}
-	if man.Version != "0.3.0" {
-		t.Fatalf("manifest version = %q, want 0.3.0", man.Version)
+	if man.Version != "0.3.1" {
+		t.Fatalf("manifest version = %q, want 0.3.1", man.Version)
 	}
 	if !slices.Equal(man.Capabilities, []string{"library", "install", "launch"}) {
 		t.Fatalf("manifest capabilities = %v, want [library install launch]", man.Capabilities)
@@ -348,12 +348,17 @@ func TestUbisoftHandshake(t *testing.T) {
 		Capabilities []string `json:"capabilities"`
 	}
 	call(t, s, "initialize",
+		map[string]any{"api": 1, "protocols": []string{"1.20", "1.23", "1.25"}}, &init)
+	if init.Protocol != "1.25" {
+		t.Fatalf("protocol = %q, want the 1.25 pick", init.Protocol)
+	}
+	if !slices.Equal(init.Capabilities, []string{"library", "install", "launch"}) {
+		t.Fatalf("capabilities = %v, want [library install launch] over 1.25", init.Capabilities)
+	}
+	call(t, s, "initialize",
 		map[string]any{"api": 1, "protocols": []string{"1.20", "1.23"}}, &init)
 	if init.Protocol != "1.23" {
 		t.Fatalf("protocol = %q, want the 1.23 pick", init.Protocol)
-	}
-	if !slices.Equal(init.Capabilities, []string{"library", "install", "launch"}) {
-		t.Fatalf("capabilities = %v, want [library install launch] over 1.23", init.Capabilities)
 	}
 	call(t, s, "initialize",
 		map[string]any{"api": 1, "protocols": []string{"1.20"}}, &init)
@@ -839,6 +844,39 @@ func TestUbisoftLaunchSpec(t *testing.T) {
 	// game).
 	wantCode(t, sess, "game.launchSpec",
 		map[string]any{"id": "637", "prefix": prefix}, -32000)
+}
+
+func TestUbisoftClientOpenSpec(t *testing.T) {
+	sess := suite(nil).Start(t)
+	prefix := filepath.Join(t.TempDir(), "client")
+	var raw json.RawMessage
+	call(t, sess, "client.openSpec", map[string]any{"prefix": prefix}, &raw)
+	var spec map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		t.Fatalf("client.openSpec isn't an object: %s", raw)
+	}
+	for k := range spec {
+		if !slices.Contains(plugtest.OpenSpecKeys, k) {
+			t.Errorf("client.openSpec has the key %q, which the protocol doesn't define", k)
+		}
+	}
+	var open struct {
+		Exe  string   `json:"exe"`
+		Args []string `json:"args"`
+	}
+	if err := json.Unmarshal(raw, &open); err != nil {
+		t.Fatalf("client.openSpec isn't a client spec: %s", raw)
+	}
+	// The standalone client is the same preferred exe the launches use,
+	// with no game args: opening signs in, it launches nothing.
+	if want := `C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\UbisoftConnect.exe`; open.Exe != want {
+		t.Errorf("exe = %q, want the preferred client path %q", open.Exe, want)
+	}
+	if len(open.Args) != 0 {
+		t.Errorf("args = %v, want no game args", open.Args)
+	}
+	// No prefix, no spec.
+	wantCode(t, sess, "client.openSpec", map[string]any{}, jsonrpc.CodeInvalidParams)
 }
 
 func TestUbisoftClientStatus(t *testing.T) {
