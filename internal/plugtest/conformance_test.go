@@ -11,6 +11,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -191,11 +192,19 @@ func pick(t *testing.T, games []types.Game, storeID string) types.Game {
 func TestConformanceEpic(t *testing.T) {
 	testenv.RequireSlow(t)
 	state := filepath.Join(t.TempDir(), "legendary-state.json")
+	// Epic's playtime endpoint, answered on loopback: the fake legendary
+	// prints a bearer token it accepts.
+	playtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `[{"accountId":"0123456789abcdef0123456789abcdef","artifactId":"Goose","totalTime":5400}]`)
+	}))
+	t.Cleanup(playtime.Close)
 	plugtest.Suite{
 		ID:      "epic-legendary",
 		CopyDir: "../../plugins/epic-legendary",
 		FakeCLI: map[string]string{"legendary": "../../plugins/epic-legendary/testdata/legendary"},
-		Env:     map[string]string{"FAKE_LEGENDARY_STATE": state},
+		Env: map[string]string{"FAKE_LEGENDARY_STATE": state,
+			"PLATYPUS_EPIC_LIBRARY_URL": playtime.URL},
 		Login: func(t *testing.T, s *plugtest.Session) {
 			var st types.AuthStatus
 			err := s.Call("auth.complete", map[string]any{
