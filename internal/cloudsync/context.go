@@ -3,8 +3,8 @@ package cloudsync
 import (
 	"os"
 	"os/user"
-	"path/filepath"
 
+	"platypus/internal/paths"
 	"platypus/internal/types"
 )
 
@@ -22,8 +22,8 @@ func ContextFor(home string, windows bool, installDir, prefixDir, winUser string
 	cc := types.CloudContext{
 		OS:         "linux",
 		Home:       home,
-		XDGData:    xdgDir("XDG_DATA_HOME", home, ".local/share"),
-		XDGConfig:  xdgDir("XDG_CONFIG_HOME", home, ".config"),
+		XDGData:    paths.BaseDataDirFor(home),
+		XDGConfig:  paths.BaseConfigDirFor(home),
 		InstallDir: installDir,
 	}
 	if windows {
@@ -37,11 +37,4 @@ func ContextFor(home string, windows bool, installDir, prefixDir, winUser string
 		}
 	}
 	return cc
-}
-
-func xdgDir(env, home, fallback string) string {
-	if d := os.Getenv(env); filepath.IsAbs(d) {
-		return d
-	}
-	return filepath.Join(home, fallback)
 }

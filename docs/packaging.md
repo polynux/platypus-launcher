@@ -1,16 +1,31 @@
-# Packaging (issue #41)
+# Packaging (issues #41, #82)
 
-Platypus's own folders resolve from the environment, with today's paths as
-the default. A packager sets variables; a user overrides the same way.
+Platypus's own folders resolve from the environment, with the platform's
+native folders as the default. A packager sets variables; a user overrides
+the same way.
 
 ## Variables
 
 | Folder | Precedence |
 |---|---|
-| data | `$PLATYPUS_DATA_DIR`, else `$XDG_DATA_HOME/platypus`, else `~/.local/share/platypus` |
-| config (resolver only) | `$PLATYPUS_CONFIG_DIR`, else `$XDG_CONFIG_HOME/platypus`, else `~/.config/platypus` |
-| cache (re-fetchable only) | `$PLATYPUS_CACHE_DIR`, else `$XDG_CACHE_HOME/platypus`, else `~/.cache/platypus` |
+| data | `$PLATYPUS_DATA_DIR`, else the default below |
+| config (resolver only) | `$PLATYPUS_CONFIG_DIR`, else the default below |
+| cache (re-fetchable only) | `$PLATYPUS_CACHE_DIR`, else the default below |
 | plugins | `$PLATYPUS_PLUGINS`, else `<data>/plugins` (the core honours it the same way `plugins/install.sh` does) |
+
+The platform defaults are resolved in `internal/paths` (issue #82):
+
+| Folder | Linux | Windows |
+|---|---|---|
+| data | `$XDG_DATA_HOME/platypus`, else `~/.local/share/platypus` | `%LOCALAPPDATA%\platypus` (`os.UserCacheDir`) |
+| config | `$XDG_CONFIG_HOME/platypus`, else `~/.config/platypus` | `%APPDATA%\platypus` (`os.UserConfigDir`) |
+| cache | `$XDG_CACHE_HOME/platypus`, else `~/.cache/platypus` | `%LOCALAPPDATA%\platypus\cache` |
+
+On Windows, config roams with the user's profile and only holds settings;
+data is machine-local (backups, the library and prefixes must not follow the
+user to another machine), so it lives under the local app data folder. Go
+exposes that folder only as `os.UserCacheDir`, and the cache nests under data
+so the two never resolve alike.
 
 An XDG variable counts only when set to an absolute path; relative or empty
 means unset, per the spec. `settings.json` stays in the data dir; only the
@@ -19,9 +34,10 @@ keeps its default `userData` unless `PLATYPUS_CONFIG_DIR` (else
 `PLATYPUS_DATA_DIR`) is set, in which case it uses a `platypus-shell`
 subfolder of it, and passes `PLATYPUS_*` through to the core it spawns.
 
-With no variables set every path is byte-for-byte what it is today. When
-`XDG_DATA_HOME` points elsewhere but only `~/.local/share/platypus` exists,
-the legacy folder wins with one info log; data is never moved automatically.
+With no variables set every path is byte-for-byte what it is today on Linux.
+When `XDG_DATA_HOME` points elsewhere but only `~/.local/share/platypus`
+exists, the legacy folder wins with one info log; data is never moved
+automatically (Windows has no legacy folder to fall back to).
 
 ## What a packager sets
 
@@ -35,9 +51,22 @@ platypus
 ```
 
 `PLATYPUS_PLUGINS` only when the plugin folder must live apart from data.
-Steam installs are still found at `~/.local/share/Steam` first;
-`$XDG_DATA_HOME/Steam` joins as an extra candidate. `PLATYPUS_STEAM_ROOT`
-pins the Steam lookup to one folder (packagers, test fixtures).
+Steam install roots are not in the generic resolver (issue #82): the Steam
+plugins report the roots a game needs (`game.saveContext`) and `internal/steam`,
+which the plugins themselves import, finds the install at
+`~/.local/share/Steam` first with `$XDG_DATA_HOME/Steam` as an extra
+candidate. `PLATYPUS_STEAM_ROOT` pins the Steam lookup to one folder
+(packagers, test fixtures).
+
+## Save discovery
+
+Save backup discovery uses the store plugin's roots (`game.saveContext`) plus
+the OS-native common folders from `internal/paths.SaveDirsFor`: `home`,
+`xdgData` and `xdgConfig` on Linux; `home`, `documents`, `appData`,
+`localAppData`, `localAppDataLow`, `public`, `programData` and `windir` on
+Windows. Ludusavi's `<win…>` placeholders expand inside a Wine/Proton prefix's
+`drive_c` when there is one; a native game on a Windows host uses those
+folders directly, and on Linux they stay unresolved.
 
 ## Bundled plugins (issue #54)
 

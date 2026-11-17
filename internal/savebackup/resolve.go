@@ -7,15 +7,18 @@ import (
 	"strings"
 	"unicode"
 
+	"platypus/internal/paths"
 	"platypus/internal/types"
 )
 
 // Context describes where a game's saves may live: the resolved roots every
 // expanded path must stay inside, plus the Wine identity for placeholders.
 type Context struct {
-	// Roots maps root labels to absolute paths: prefix, install, home,
-	// xdgData, xdgConfig, steam. Expansion records which root a file came
-	// from so restores can rebase later (phase 2 stores the labels).
+	// Roots maps root labels to absolute paths: prefix, install, home, the
+	// platform's save folders (Linux: xdgData, xdgConfig; Windows: appData,
+	// localAppData, documents, …) and the store plugin's own roots (steam).
+	// Expansion records which root a file came from so restores can rebase
+	// later (phase 2 stores the labels).
 	Roots map[string]string
 	// Windows says the game runs through Wine/Proton; Native games use the
 	// linux side of when: filters.
@@ -57,11 +60,9 @@ type StoreContext struct {
 // NewContextFor builds the generic path context from the home, game and
 // filesystem details reported by its runner and store plugins.
 func NewContextFor(game types.Game, home string, prefix Prefix) Context {
-	roots := map[string]string{
-		"home":      home,
-		"xdgData":   xdgDirFor("XDG_DATA_HOME", home, ".local/share"),
-		"xdgConfig": xdgDirFor("XDG_CONFIG_HOME", home, ".config"),
-	}
+	// The platform's own save folders (Linux: XDG; Windows: the profile
+	// folders), then the store plugin's roots and the game's own (issue #82).
+	roots := paths.SaveDirsFor(home)
 	if prefix.Store != nil {
 		for label, root := range prefix.Store.Roots {
 			if label != "" && filepath.IsAbs(root) {
@@ -116,13 +117,6 @@ func currentLogin() string {
 		return h
 	}
 	return "user"
-}
-
-func xdgDirFor(env, home, fallback string) string {
-	if d := os.Getenv(env); filepath.IsAbs(d) {
-		return d
-	}
-	return filepath.Join(home, fallback)
 }
 
 // normalizeTitle folds a title for matching: lowercase, punctuation and
@@ -265,6 +259,9 @@ func expandPattern(pattern string, ctx Context, game types.Game) ([]string, int)
 	out := []string{pattern}
 	unresolved := 0
 	expand := func(token, to string, ok bool) {
+		if len(out) == 0 {
+			return // every branch was dropped by an earlier placeholder
+		}
 		if !strings.Contains(out[0], token) && !containsToken(out, token) {
 			return
 		}
@@ -308,13 +305,31 @@ func expandPattern(pattern string, ctx Context, game types.Game) ([]string, int)
 	if hasInstall {
 		gameDir, rootDir = filepath.Base(install), filepath.Dir(install)
 	}
-	expand("<winAppData>", filepath.Join(driveCUser, "AppData", "Roaming"), driveCUser != "")
-	expand("<winLocalAppData>", filepath.Join(driveCUser, "AppData", "Local"), driveCUser != "")
-	expand("<winLocalAppDataLow>", filepath.Join(driveCUser, "AppData", "LocalLow"), driveCUser != "")
-	expand("<winDocuments>", filepath.Join(driveCUser, "Documents"), driveCUser != "")
-	expand("<winPublic>", filepath.Join(driveC, "users", "Public"), driveC != "")
-	expand("<winProgramData>", filepath.Join(driveC, "ProgramData"), driveC != "")
-	expand("<winDir>", filepath.Join(driveC, "windows"), driveC != "")
+	// Windows placeholders: a Wine/Proton prefix owns them in its drive_c. A
+	// native game on a Windows host keeps saves in the profile folders
+	// (paths.SaveDirsFor); on Linux it has neither, so they stay unresolved
+	// (issue #82).
+	if driveC != "" {
+		expand("<winAppData>", filepath.Join(driveCUser, "AppData", "Roaming"), driveCUser != "")
+		expand("<winLocalAppData>", filepath.Join(driveCUser, "AppData", "Local"), driveCUser != "")
+		expand("<winLocalAppDataLow>", filepath.Join(driveCUser, "AppData", "LocalLow"), driveCUser != "")
+		expand("<winDocuments>", filepath.Join(driveCUser, "Documents"), driveCUser != "")
+		expand("<winPublic>", filepath.Join(driveC, "users", "Public"), true)
+		expand("<winProgramData>", filepath.Join(driveC, "ProgramData"), true)
+		expand("<winDir>", filepath.Join(driveC, "windows"), true)
+	} else {
+		expandNative := func(token, label string) {
+			v, ok := get(label)
+			expand(token, v, ok)
+		}
+		expandNative("<winAppData>", "appData")
+		expandNative("<winLocalAppData>", "localAppData")
+		expandNative("<winLocalAppDataLow>", "localAppDataLow")
+		expandNative("<winDocuments>", "documents")
+		expandNative("<winPublic>", "public")
+		expandNative("<winProgramData>", "programData")
+		expandNative("<winDir>", "windir")
+	}
 	expand("<home>", home, home != "")
 	expand("<xdgData>", xdgData, xdgData != "")
 	expand("<xdgConfig>", xdgConfig, xdgConfig != "")

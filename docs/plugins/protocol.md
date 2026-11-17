@@ -551,7 +551,9 @@ learns Platypus's prefix layout:
 
 `os` is `linux` for a native build and `windows` for a game run through Wine or Proton;
 `prefixDir` and `winUser` are set only for `windows` (`prefixDir` is the folder that holds
-`drive_c`, `winUser` the Windows user name inside it).
+`drive_c`, `winUser` the Windows user name inside it). `xdgData` and `xdgConfig` are the
+host's user data and config bases: the XDG folders on Linux, `%LOCALAPPDATA%` and
+`%APPDATA%` on a Windows host (issue #82).
 
 | Method | Params | Does |
 |---|---|---|

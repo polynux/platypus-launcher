@@ -1,3 +1,5 @@
+//go:build !windows
+
 package paths
 
 import (
@@ -125,21 +127,24 @@ func TestDatadirOverrideWins(t *testing.T) {
 	}
 }
 
-func TestSteamRootsKeepsLegacy(t *testing.T) {
+func TestSaveDirsFor(t *testing.T) {
 	home := t.TempDir()
-	xdg := filepath.Join(home, "xdg")
-	t.Setenv("XDG_DATA_HOME", xdg)
-	roots := SteamRoots(home)
-	if len(roots) == 0 || roots[0] != filepath.Join(home, ".local", "share", "Steam") {
-		t.Fatalf("first root = %v, want legacy first", roots)
+	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	dirs := SaveDirsFor(home)
+	if dirs["home"] != home || dirs["xdgData"] != filepath.Join(home, ".local", "share") || dirs["xdgConfig"] != filepath.Join(home, ".config") {
+		t.Fatalf("default save dirs = %v", dirs)
 	}
-	found := false
-	for _, r := range roots {
-		if r == filepath.Join(xdg, "Steam") {
-			found = true
-		}
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "d"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "c"))
+	dirs = SaveDirsFor(home)
+	if dirs["xdgData"] != filepath.Join(home, "d") || dirs["xdgConfig"] != filepath.Join(home, "c") {
+		t.Fatalf("xdg save dirs = %v", dirs)
 	}
-	if !found {
-		t.Fatalf("roots = %v, want XDG candidate included", roots)
+	t.Setenv("XDG_DATA_HOME", "relative/data")
+	t.Setenv("XDG_CONFIG_HOME", "relative/config")
+	dirs = SaveDirsFor(home)
+	if dirs["xdgData"] != filepath.Join(home, ".local", "share") || dirs["xdgConfig"] != filepath.Join(home, ".config") {
+		t.Fatalf("relative xdg save dirs = %v", dirs)
 	}
 }
