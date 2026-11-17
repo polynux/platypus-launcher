@@ -517,3 +517,23 @@ print(json.dumps({"codes": codes, "nothing": nothing, "disk": hg.dlc_disk_bytes(
 		t.Fatalf("dlc disk bytes = %d, want 7 (its language plus *)", out.Disk)
 	}
 }
+
+func TestGogExtraWithInstallersListsNoOptions(t *testing.T) {
+	// Some goodies collections list catalog installers gogdl's content
+	// system cannot install; options must answer empty groups, not an error.
+	raw := pyRun(t, `
+import json
+hg.credentials = lambda: {"access_token": "t"}
+hg.gogdl = lambda *a, **k: (1, "", "[GENERIC DOWNLOAD_MANAGER] ERROR: Game doesn't support content system api, unable to proceed using platform windows")
+hg.api_get = lambda url, token="", headers=None: {"downloads": {"installers": [{"os": "windows"}]}}
+hg.platform_of = lambda app: "windows"
+print(json.dumps(hg.game_options({"id": "1980301910"})))
+`)
+	var out map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		t.Fatalf("options: %v (%s)", err, raw)
+	}
+	if groups, ok := out["groups"].([]any); !ok || len(groups) != 0 {
+		t.Fatalf("extra product options: %+v", out)
+	}
+}
