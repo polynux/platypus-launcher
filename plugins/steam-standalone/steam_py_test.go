@@ -63,7 +63,7 @@ hs.game_dir_name = lambda app: "g"
 import os
 d = os.path.join(os.environ["PLATYPUS_PLUGIN_DATA"], "games")
 reqs = []
-def fake_run(sub, req, job_id=None, game_dir=None):
+def fake_run(sub, req, job_id=None, game_dir=None, **kw):
     reqs.append((sub, dict(req)))
     return {"os_used": "linux"}
 hs.dl_run = fake_run
@@ -75,9 +75,11 @@ class T:
 hs.threading.Thread = T
 hs.start_job({"id": "4321", "jobId": "j1", "installDir": d, "downloadLimit": 1048576}, "install")
 hs.start_job({"id": "4321", "jobId": "j2", "installDir": d}, "update")
+hs.verify_version = lambda app: {}
+hs.follow_verify("j3", "4321", d, True, 1048576)
 print([(s, r.get("download_limit")) for s, r in reqs])
 `)
-	want := "[('install', 1048576), ('update', None)]"
+	want := "[('install', 1048576), ('update', None), ('verify', 1048576)]"
 	if got != want {
 		t.Fatalf("requests = %s, want %s", got, want)
 	}

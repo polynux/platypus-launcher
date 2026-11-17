@@ -225,18 +225,30 @@ func (q *Queue) signal() {
 	}
 }
 
-// wakeAt asks for another pass when the update window opens, keeping one
-// timer: an earlier deadline replaces it, a later one never postpones it.
+// wakeAt asks for another pass when the update window opens or, if that is
+// further off, at least every windowCheck (a suspend or clock change must not
+// hide the opening). It keeps one timer: an earlier deadline replaces it, a
+// later one never postpones it, and a timer that already fired is re-armed.
 // Callers hold q.mu.
 func (q *Queue) wakeAt(t time.Time) {
-	if q.windowTimer != nil && !q.windowAt.After(t) {
-		return
+	now := q.now()
+	at := t
+	if at.Sub(now) > windowCheck {
+		at = now.Add(windowCheck)
 	}
 	if q.windowTimer != nil {
-		q.windowTimer.Stop()
+		switch {
+		case !q.windowAt.After(now):
+			// The timer fired or the clock moved past it: re-arm.
+			q.windowTimer.Stop()
+		case !q.windowAt.After(at):
+			return // an earlier wake is already armed
+		default:
+			q.windowTimer.Stop()
+		}
 	}
-	q.windowAt = t
-	q.windowTimer = time.AfterFunc(time.Until(t), q.signal)
+	q.windowAt = at
+	q.windowTimer = time.AfterFunc(at.Sub(now), q.signal)
 }
 
 // cleanupLoop deletes the data of canceled jobs past the threshold: once at

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { render, fireEvent, waitFor, within } from '@testing-library/react';
 import { Effect } from 'effect';
 import { DownloadsView } from '../DownloadsView';
 import type { Job } from '../../types';
@@ -114,27 +114,31 @@ import { LauncherSettingsView } from '../LauncherSettingsView';
 
 describe('FE-15 cleanup-days setting', () => {
   it('saves a changed threshold and shows it coming back from the backend', async () => {
-    const { findByLabelText, findAllByRole, findByDisplayValue } = render(<LauncherSettingsView onNotify={noop} plugins={[]} />);
+    const { findByLabelText } = render(<LauncherSettingsView onNotify={noop} plugins={[]} />);
     // The input starts at the saved threshold once settings arrive.
-    const input = await findByLabelText("Days to keep canceled downloads' data");
-    await waitFor(() => expect((input as HTMLInputElement).value).toBe('7'));
+    const input = (await findByLabelText("Days to keep canceled downloads' data")) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe('7'));
     fireEvent.change(input, { target: { value: '3' } });
     fireEvent.blur(input);
-    fireEvent.click((await findAllByRole('button', { name: 'Save' }))[0]);
-    expect(await findByDisplayValue('3')).toBeTruthy();
+    const form = input.closest('form')!;
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+    expect(((await findByLabelText("Days to keep canceled downloads' data")) as HTMLInputElement).value).toBe('3');
+    // A saved field is no longer dirty, so the backend answered.
+    await waitFor(() => expect((within(form).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true));
   });
 
   it('offers 0 (delete right away) and clamps anything above 365', async () => {
-    const { findByLabelText, findAllByRole, findByDisplayValue } = render(<LauncherSettingsView onNotify={noop} plugins={[]} />);
-    const input = await findByLabelText("Days to keep canceled downloads' data");
-    await waitFor(() => expect((input as HTMLInputElement).value).toBe('7'));
+    const { findByLabelText } = render(<LauncherSettingsView onNotify={noop} plugins={[]} />);
+    const input = (await findByLabelText("Days to keep canceled downloads' data")) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe('7'));
     fireEvent.change(input, { target: { value: '0' } });
     fireEvent.blur(input);
-    fireEvent.click((await findAllByRole('button', { name: 'Save' }))[0]);
-    expect(await findByDisplayValue('0')).toBeTruthy();
+    fireEvent.click(within(input.closest('form')!).getByRole('button', { name: 'Save' }));
+    // 0 is a real choice: the field keeps it after the save.
+    await waitFor(() => expect(input.value).toBe('0'));
     // The field clamps anything past the max (on blur) before it can reach the backend.
     fireEvent.change(input, { target: { value: '9999' } });
     fireEvent.blur(input);
-    expect((input as HTMLInputElement).value).toBe('365');
+    expect(input.value).toBe('365');
   });
 });

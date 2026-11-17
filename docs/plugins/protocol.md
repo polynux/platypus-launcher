@@ -1543,11 +1543,13 @@ news = [{ title, url, date? }]
 ## Download limit (1.21)
 
 Protocol 1.21 adds one optional param to `game.install` and `game.update`: the
-user's global download speed cap, an integer in bytes per second.
+user's global download speed cap, an integer in bytes per second. A verify that
+repairs also downloads, so `game.verify` with `repair: true` carries it too.
 
 ```
 game.install { id, installDir, jobId, ..., downloadLimit? }
 game.update  { id, installDir, jobId, ..., downloadLimit? }
+game.verify  { id, installDir, jobId, repair: true, downloadLimit? }
 ```
 
 - **When it is sent.** Only to a plugin that declares 1.21 or later and negotiates
@@ -1559,8 +1561,8 @@ game.update  { id, installDir, jobId, ..., downloadLimit? }
   keep downloading at its own pace.
 - **Not a promise about a running job.** Platypus reads the setting when it
   starts the job; changing it mid-download affects the next install or update.
-- **Not on the wire anywhere else.** `game.installSize`, `game.verify` and the
-  rest carry no `downloadLimit`.
+- **Not on the wire anywhere else.** `game.installSize` and the rest carry no
+  `downloadLimit`; a plain verify (no repair) has nothing to cap.
 
 ## Out of scope
 

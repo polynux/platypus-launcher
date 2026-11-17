@@ -1,6 +1,6 @@
-// Download speed cap: a token bucket the scheduler feeds each landed chunk
-// through, so the whole install (every depot, every chunk) holds the user's
-// rate. A nil Limiter is unlimited.
+// Download speed cap: a token bucket the scheduler feeds each chunk through
+// before it asks the CDN, so the whole install (every depot, every chunk)
+// holds the user's rate. A nil Limiter is unlimited.
 package depot
 
 import (
@@ -10,14 +10,15 @@ import (
 	"time"
 )
 
-// Limiter caps downloaded bytes per second (issue #207). The bucket holds at
-// most one second of the cap, so a run starts at full speed for a moment and
-// then settles on the rate; a single chunk larger than the cap still lands,
-// it just waits for its bytes first.
+// Limiter caps downloaded bytes per second (issue #207). It is a debt
+// bucket: a chunk's bytes are subtracted at once, so one big chunk isn't
+// starved behind small ones; the wait is the debt over the rate. The bucket
+// banks at most one second of the cap, so a run starts at full speed for a
+// moment and then settles on the rate.
 type Limiter struct {
 	rate   float64 // bytes per second
 	burst  float64 // tokens saved up, one second of rate
-	tokens float64
+	tokens float64 // may go negative: bytes already granted, not yet waited out
 	last   time.Time
 	// now and sleep are the clock, swapped by tests; WaitN only ever waits
 	// through sleep.
@@ -38,34 +39,27 @@ func NewLimiter(bytesPerSec int64) *Limiter {
 	return &Limiter{rate: rate, burst: rate, tokens: rate, last: now(), now: now, sleep: sleepCtx}
 }
 
-// WaitN blocks until n more bytes fit under the cap, or ctx ends.
+// WaitN blocks until n more bytes fit under the cap, or ctx ends. On ctx
+// cancellation the bytes stay charged: a resume still pays for them.
 func (l *Limiter) WaitN(ctx context.Context, n int) error {
 	if l == nil || n <= 0 {
 		return nil
 	}
-	need := float64(n)
-	for {
-		l.mu.Lock()
-		now := l.now()
-		// A chunk bigger than the bucket may still accumulate enough; the
-		// average after it is back on the rate.
-		limit := math.Max(l.burst, need)
-		l.tokens = math.Min(limit, l.tokens+now.Sub(l.last).Seconds()*l.rate)
-		l.last = now
-		if l.tokens >= need {
-			l.tokens -= need
-			l.mu.Unlock()
-			return nil
-		}
-		wait := time.Duration((need - l.tokens) / l.rate * float64(time.Second))
-		l.mu.Unlock()
-		if wait < time.Millisecond {
-			wait = time.Millisecond // float rounding must not spin
-		}
-		if err := l.sleep(ctx, wait); err != nil {
-			return err
-		}
+	l.mu.Lock()
+	now := l.now()
+	l.tokens = math.Min(l.burst, l.tokens+now.Sub(l.last).Seconds()*l.rate)
+	l.last = now
+	l.tokens -= float64(n)
+	debt := -l.tokens
+	l.mu.Unlock()
+	if debt <= 0 {
+		return nil
 	}
+	wait := time.Duration(debt / l.rate * float64(time.Second))
+	if wait < time.Millisecond {
+		wait = time.Millisecond // float rounding must not spin
+	}
+	return l.sleep(ctx, wait)
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) error {

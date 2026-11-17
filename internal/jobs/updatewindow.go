@@ -7,12 +7,18 @@ import (
 	"platypus/internal/types"
 )
 
-// Update schedule (issue #207): a daily local-time window when queued
-// updates may start. Installs, verifies, uninstalls and the rest are never
-// held; only KindUpdate waits, since that is the download a user schedules
-// for an off-peak hour.
+// Update schedule (issue #207): a daily local-time window when automatic
+// updates may start. Only updates Platypus started by itself wait (Job.Auto);
+// anything the user asked for — an update, a version switch, an install —
+// starts right away. Nothing queues an auto update yet: automatic updates are
+// a follow-up, and the setting stays hidden in the UI until then.
 
-// SetUpdateWindow installs the window the queue holds update jobs to. The
+// windowCheck caps how long one wake timer runs: instead of trusting a single
+// long AfterFunc across a suspend or a clock change, the queue re-checks at
+// least this often.
+var windowCheck = 15 * time.Minute
+
+// SetUpdateWindow installs the window the queue holds auto updates to. The
 // zero Start/End (or equal times) means all day; a disabled window holds
 // nothing. A job already queued starts at once when the change opens the
 // window.
@@ -26,7 +32,7 @@ func (q *Queue) SetUpdateWindow(w settings.UpdateWindow) {
 // waitsForWindow reports whether j may not start now, and when the next
 // window opens. Callers hold q.mu.
 func (q *Queue) waitsForWindow(j *types.Job) (time.Time, bool) {
-	if j.Kind != KindUpdate || !q.updateWindow.Enabled {
+	if j.Kind != KindUpdate || !j.Auto || !q.updateWindow.Enabled {
 		return time.Time{}, false
 	}
 	start, errA := settings.ParseClock(q.updateWindow.Start)

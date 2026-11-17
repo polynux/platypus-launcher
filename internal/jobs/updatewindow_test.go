@@ -55,7 +55,22 @@ func TestNextWindowOpen(t *testing.T) {
 	}
 }
 
-// An update queued outside the window waits; an install behind it starts.
+// markAuto marks a queued job as one Platypus started by itself, the only
+// kind the update window holds.
+func markAuto(t *testing.T, q *Queue, id string) {
+	t.Helper()
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for _, j := range q.jobs {
+		if j.ID == id {
+			j.Auto = true
+			return
+		}
+	}
+	t.Fatalf("no job %s", id)
+}
+
+// An auto update queued outside the window waits; an install behind it starts.
 func TestUpdateWaitsForWindow(t *testing.T) {
 	b := &fakeBackend{size: plugins.InstallSize{DownloadBytes: 100, DiskBytes: 200}}
 	q, _ := newQueue(t, b)
@@ -67,6 +82,7 @@ func TestUpdateWaitsForWindow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	markAuto(t, q, up.ID)
 	inst, err := q.Add(KindInstall, "echo", "p.echo.other", "other", "Other", dir)
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +106,7 @@ func TestUpdateWaitsForWindow(t *testing.T) {
 	}
 }
 
-// With the window off, an update starts right away.
+// With the window off, an auto update starts right away.
 func TestUpdateStartsWithWindowOff(t *testing.T) {
 	b := &fakeBackend{size: plugins.InstallSize{DownloadBytes: 100, DiskBytes: 200}}
 	q, _ := newQueue(t, b)
@@ -99,5 +115,66 @@ func TestUpdateStartsWithWindowOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	markAuto(t, q, up.ID)
 	waitState(t, q, up.ID, StateRunning)
+}
+
+// An update the user started is never held, window or not (issue #207: the
+// window is for automatic updates only).
+func TestManualUpdateIgnoresWindow(t *testing.T) {
+	b := &fakeBackend{size: plugins.InstallSize{DownloadBytes: 100, DiskBytes: 200}}
+	q, _ := newQueue(t, b)
+	q.SetClock(func() time.Time { return time.Date(2026, 11, 17, 10, 0, 0, 0, time.Local) })
+	q.SetUpdateWindow(settings.UpdateWindow{Enabled: true, Start: "03:00", End: "06:00"})
+	dir := filepath.Join(t.TempDir(), "Games", "echo")
+	up, err := q.Add(KindUpdate, "echo", "p.echo.tiny", "tiny", "Tiny", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, q, up.ID, StateRunning)
+}
+
+// The wake timer re-arms after it fires: a single long AfterFunc would miss
+// the window after a suspend or a clock change (review finding).
+func TestWindowWakeRearms(t *testing.T) {
+	old := windowCheck
+	windowCheck = 15 * time.Millisecond
+	defer func() { windowCheck = old }()
+	b := &fakeBackend{size: plugins.InstallSize{DownloadBytes: 100, DiskBytes: 200}}
+	q, _ := newQueue(t, b)
+	// A one-minute window half an hour from now: the real clock is always
+	// outside it.
+	startAt := time.Now().Add(30 * time.Minute)
+	q.SetUpdateWindow(settings.UpdateWindow{Enabled: true,
+		Start: startAt.Format("15:04"), End: startAt.Add(time.Minute).Format("15:04")})
+	dir := filepath.Join(t.TempDir(), "Games", "echo")
+	up, err := q.Add(KindUpdate, "echo", "p.echo.tiny", "tiny", "Tiny", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	markAuto(t, q, up.ID)
+	deadline := time.Now().Add(3 * time.Second)
+	var first time.Time
+	for time.Now().Before(deadline) {
+		q.mu.Lock()
+		first = q.windowAt
+		q.mu.Unlock()
+		if !first.IsZero() {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if first.IsZero() {
+		t.Fatal("no wake armed for the waiting job")
+	}
+	time.Sleep(60 * time.Millisecond) // several capped periods
+	q.mu.Lock()
+	second, timer := q.windowAt, q.windowTimer
+	q.mu.Unlock()
+	if timer == nil {
+		t.Fatal("the wake timer is gone after firing")
+	}
+	if !second.After(first) {
+		t.Fatalf("wake not re-armed: %v then %v", first, second)
+	}
 }

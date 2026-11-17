@@ -10,12 +10,13 @@ import (
 )
 
 // Downloads settings (issue #207): a global speed cap and the daily window
-// when queued updates may start. Both are store-agnostic: the cap reaches
+// when automatic updates may start. Both are store-agnostic: the cap reaches
 // the plugins that declare protocol 1.21, the window is enforced by the job
-// queue.
+// queue for updates Platypus started by itself (none yet: automatic updates
+// are a follow-up, and the setting stays hidden until then).
 
 // UpdateWindow is a daily local-time window, "HH:MM" to "HH:MM", inclusive
-// start and exclusive end. An end at or before the start crosses midnight
+// start and exclusive end. An end before the start crosses midnight
 // (22:00–06:00); equal times mean all day.
 type UpdateWindow struct {
 	Enabled bool   `json:"enabled"`

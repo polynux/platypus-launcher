@@ -779,6 +779,11 @@ type Job struct {
 	// Options are the install-option choices the install or update sends
 	// (the `install-options` capability), kept with the job like Target.
 	Options InstallOptions `json:"options,omitempty"`
+	// Auto marks an update Platypus started by itself, not one the user
+	// started. Only auto updates respect the update window (issue #207):
+	// anything the user asked for starts right away. Nothing queues an auto
+	// update yet; automatic updates are a follow-up.
+	Auto bool `json:"auto,omitempty"`
 }
 
 // VerifyReport is what a game's files check found. Checked counts the files

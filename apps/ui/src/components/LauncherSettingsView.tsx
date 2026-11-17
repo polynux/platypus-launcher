@@ -64,6 +64,13 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   // (scroll -> tabs, no re-mount) lands on what the user was on. Tab clicks
   // update the persisted section, so this agrees with the state above.
   const activeSection = Math.max(0, sectionNames.indexOf(persistedSettingsSection));
+  // The page itself loads the settings once so a failure shows at the top;
+  // every section loads and saves its own values (the downloads one included).
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .catch((e) => setError(coreErrMsg(e)));
+  }, []);
 
   const sections = [
     <LanguageSetting onNotify={onNotify} />,
@@ -90,7 +97,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   // layout and derives its category navigation from it.
   if (atlas) {
     const settingsBlocks: Record<string, React.ReactNode> = Object.fromEntries(sectionNames.map((name, i) => [name.toLowerCase(), sections[i]]));
-    return <AtlasSettingsPage blocks={settingsBlocks} loadError={null} />;
+    return <AtlasSettingsPage blocks={settingsBlocks} loadError={error} />;
   }
 
   return (
@@ -100,6 +107,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
         title={t('settings:title')}
         subtitle={<p className="mt-0.5 max-w-[75ch] text-[12.5px] text-text-body">{t('subtitle')}</p>}
       />
+      {error && <ErrorNotice className="mt-2" message={error} fallback={t('loadError')} />}
 
       {navigation === 'tabs' ? (
         <div className="grid grid-cols-[10rem_minmax(0,1fr)] gap-5">

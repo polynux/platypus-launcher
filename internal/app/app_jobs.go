@@ -41,7 +41,9 @@ func (b jobBackend) Size(ctx context.Context, j types.Job) (plugins.InstallSize,
 func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 	switch j.Kind {
 	case jobs.KindVerify:
-		return b.a.plugins.Call(ctx, j.Source, "game.verify", verifyParams(j), nil)
+		params := verifyParams(j)
+		b.a.attachDownloadLimit(j, params) // a repair downloads the damaged files
+		return b.a.plugins.Call(ctx, j.Source, "game.verify", params, nil)
 	case jobs.KindMove:
 		if !b.a.plugins.Has(j.Source, "move") {
 			return b.a.startCoreMove(j) // runs on its own; reports through the queue
@@ -352,12 +354,16 @@ func (a *App) ResumeAllJobs() error {
 	return errors.Join(errs...)
 }
 
-// attachDownloadLimit adds the global speed cap to an install or update's
-// params, for a plugin that speaks protocol 1.21 (the revision that added the
-// param). The plugin passes it to its own downloader; a plugin that doesn't
-// speak it gets nothing and downloads at its own pace.
+// attachDownloadLimit adds the global speed cap to the jobs that download
+// (install, update, and a verify that repairs), for a plugin that speaks
+// protocol 1.21 (the revision that added the param). The plugin passes it to
+// its own downloader; a plugin that doesn't speak it gets nothing and
+// downloads at its own pace.
 func (a *App) attachDownloadLimit(j types.Job, params map[string]any) {
-	if j.Kind != jobs.KindInstall && j.Kind != jobs.KindUpdate {
+	switch {
+	case j.Kind == jobs.KindInstall, j.Kind == jobs.KindUpdate:
+	case j.Kind == jobs.KindVerify && j.Repair:
+	default:
 		return
 	}
 	limit := a.settings.DownloadLimit()

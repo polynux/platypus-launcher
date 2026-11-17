@@ -2820,16 +2820,22 @@ def start_verify(params):
     # game folder itself is never discarded.
     if not claim_job(job_id, {"canceled": False, "id": app, "dir": install_dir, "proc": None}):
         return {}
-    threading.Thread(target=follow_verify, args=(job_id, app, install_dir, repair), daemon=True).start()
+    # The global speed cap (protocol 1.21, issue #207): a repair downloads,
+    # so it honours it like an install; a plain check has nothing to cap.
+    limit = int(params.get("downloadLimit") or 0)
+    threading.Thread(target=follow_verify, args=(job_id, app, install_dir, repair, limit), daemon=True).start()
     return {}
 
 
-def follow_verify(job_id, app, install_dir, repair=False):
+def follow_verify(job_id, app, install_dir, repair=False, download_limit=0):
     notify("job.progress", {"jobId": job_id, "phase": "checking"})
     with jobs_lock:
         jobs.setdefault(job_id, {"canceled": False, "id": app, "dir": install_dir})
     try:
-        req = dl_request({"id": app, **verify_version(app)},
+        version = verify_version(app)
+        if download_limit:
+            version["downloadLimit"] = download_limit
+        req = dl_request({"id": app, **version},
                          {"install_dir": install_dir, "job_id": job_id})
         req["repair"] = bool(repair)
         result = dl_run("verify", req, job_id, install_dir,
