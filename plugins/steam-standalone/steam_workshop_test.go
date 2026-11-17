@@ -17,13 +17,15 @@ import (
 )
 
 type workshopItem struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	PreviewURL  string `json:"previewUrl"`
-	SizeBytes   int64  `json:"sizeBytes"`
-	UpdatedAt   int64  `json:"updatedAt"`
-	Installed   bool   `json:"installed"`
-	NeedsUpdate bool   `json:"needsUpdate"`
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	PreviewURL    string `json:"previewUrl"`
+	SizeBytes     int64  `json:"sizeBytes"`
+	UpdatedAt     int64  `json:"updatedAt"`
+	Installed     bool   `json:"installed"`
+	NeedsUpdate   bool   `json:"needsUpdate"`
+	PlacementKind string `json:"placementKind"`
+	PlacementPath string `json:"placementPath"`
 }
 
 // Content placement: a game in a Steam library uses the client's
@@ -169,6 +171,13 @@ func TestSteamWorkshopList(t *testing.T) {
 	}
 	if first.ID != "9001" || !first.Installed || first.NeedsUpdate || first.PreviewURL != "https://cdn.example/9001.jpg" {
 		t.Fatalf("oldest item = %+v", first)
+	}
+	// 4321 has no placement rule: no placement fields ride along (optional
+	// fields, protocol unchanged for unlisted apps).
+	for _, it := range items {
+		if it.PlacementKind != "" || it.PlacementPath != "" {
+			t.Fatalf("unlisted app carries placement: %+v", it)
+		}
 	}
 	// A second page read within the minute is served from the cache: no new
 	// CM session, so the fake sees no second subscription call.
@@ -514,5 +523,94 @@ func TestSteamWorkshopLibraryRootLeavesWithTheGame(t *testing.T) {
 	}
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatalf("the recorded workshop root stayed: %v", err)
+	}
+}
+
+// Placement rules (issue #214): ruled apps resolve to their own layout, an
+// unlisted app keeps today's behaviour (the Steam layout in a library,
+// workshop/ under a standalone folder).
+func TestSteamWorkshopPlacementRoots(t *testing.T) {
+	got := pyRun(t, `
+lib = "/mnt/Steam/steamapps/common/Some Game"
+own = "/home/u/Games/steam/Some_Game_4321"
+print(hs.workshop_root("620", lib))
+print(hs.workshop_root("620", own))
+print(hs.workshop_root("730", lib))
+print(hs.workshop_root("4000", lib))
+print(hs.workshop_root("252950", lib))
+print(hs.workshop_root("431960", lib))
+print(hs.workshop_root("4321", lib))
+print(hs.workshop_root("4321", own))
+print(hs.workshop_placement_display("620", lib))
+print(hs.workshop_placement_display("730", lib))
+print(hs.workshop_placement_display("4321", lib))
+print(hs.workshop_placement_display("620", ""))
+`)
+	want := `/mnt/Steam/steamapps/common/Some Game/portal2/maps/workshop
+/home/u/Games/steam/Some_Game_4321/portal2/maps/workshop
+/mnt/Steam/steamapps/workshop/content/730
+/mnt/Steam/steamapps/workshop/content/4000
+/mnt/Steam/steamapps/workshop/content/252950
+/mnt/Steam/steamapps/workshop/content/431960
+/mnt/Steam/steamapps/workshop/content/4321
+/home/u/Games/steam/Some_Game_4321/workshop
+('install-subfolder', 'portal2/maps/workshop')
+('client-only', 'steamapps/workshop/content/730')
+('', '')
+('', '')`
+	if got != want {
+		t.Fatalf("roots = %q, want %q", got, want)
+	}
+}
+
+// A placement entry that escapes the game folder (.., absolute) or passes
+// through a symlink is refused; the sync fails instead of writing elsewhere.
+func TestSteamWorkshopPlacementConfinement(t *testing.T) {
+	got := pyRun(t, `
+import os, tempfile
+base = tempfile.mkdtemp()
+os.mkdir(os.path.join(base, "real"))
+os.symlink(os.path.join(base, "real"), os.path.join(base, "link"))
+hs.WORKSHOP_PLACEMENT["9901"] = ("install-subfolder", "../escape")
+hs.WORKSHOP_PLACEMENT["9902"] = ("install-subfolder", "/abs/path")
+hs.WORKSHOP_PLACEMENT["9903"] = ("install-subfolder", "link/mods")
+hs.WORKSHOP_PLACEMENT["9904"] = ("install-subfolder", "real/mods")
+for app in ("9901", "9902", "9903"):
+    try:
+        hs.workshop_rule_root(app, base)
+        print(app, "no error")
+    except hs.RPCError as e:
+        print(app, "error:", e)
+print("9904", hs.workshop_rule_root("9904", base))
+`)
+	want := "9901 error: workshop placement for 9901 is not a clean relative path\n" +
+		"9902 error: workshop placement for 9902 is not a clean relative path\n" +
+		"9903 error: workshop placement for 9903 passes through a link\n9904 "
+	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, string(os.PathSeparator)+"real"+string(os.PathSeparator)+"mods") {
+		t.Fatalf("confinement = %q", got)
+	}
+}
+
+// workshop.list carries the placement for a ruled app (optional fields only).
+func TestSteamWorkshopListCarriesPlacement(t *testing.T) {
+	e := setup(t)
+	e.login()
+	gameDir := t.TempDir()
+	installed, _ := json.Marshal(map[string]any{"620": map[string]any{"path": gameDir, "title": "Standalone Game"}})
+	if err := os.WriteFile(filepath.Join(e.m.DataDirOf(id), "installed.json"), installed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.setCMState("workshop_items", []map[string]any{
+		{"published_file_id": uint64(9501), "appid": 620, "hcontent": uint64(5501), "size": 1024, "subscribed": 10, "updated": 1791000000, "depot_content": true},
+	})
+	e.setCMState("workshop_details", []map[string]any{
+		{"id": uint64(9501), "appid": 620, "title": "Ruled Chamber", "hcontent": uint64(5501), "size": 1024, "updated": 1791000000, "file_type": 1},
+	})
+	var items []map[string]any
+	if err := e.call("workshop.list", map[string]any{"id": "620"}, &items); err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0]["placementKind"] != "install-subfolder" || items[0]["placementPath"] != "portal2/maps/workshop" {
+		t.Fatalf("ruled items = %+v", items)
 	}
 }

@@ -1660,7 +1660,7 @@ are not offered yet: the plugin only reads the account's current
 subscriptions.
 
 ```
-workshop.list { id } -> [{ id, title, previewUrl?, sizeBytes?, updatedAt?, installed, needsUpdate }]
+workshop.list { id } -> [{ id, title, previewUrl?, sizeBytes?, updatedAt?, installed, needsUpdate, placementKind?, placementPath? }]
 workshop.sync { id, installDir, jobId } -> {}
 ```
 
@@ -1673,13 +1673,21 @@ workshop.sync { id, installDir, jobId } -> {}
   seconds; either may be absent. `installed` says the item's content is on
   disk and `needsUpdate` says an update was published since it was written —
   both are the plugin's own knowledge of the files it synced, never a guess.
-  Missing `id` is `-32602`. A store without Workshop items for the game
-  answers `[]`, not an error.
+  answers `[]`, not an error. Since 1.22 (no bump: optional only), an item may
+  also carry `placementKind` and `placementPath`: where the plugin puts this
+  game's content. `placementKind` is `steam-library` (the store client's
+  `steamapps/workshop/content` layout), `install-subfolder` (a folder inside
+  the game folder) or `client-only` (the Steam layout, but the game only sees
+  the items when it runs through the store client). `placementPath` is the
+  display path: relative to the game folder, or to the Steam library root
+  for the Steam layout — never an absolute path. Both are absent for games
+  with no placement rule; readers ignore unknown values.
 - **workshop.sync** is a job like `game.update`: it downloads or updates every
   subscribed item's content for that game. `installDir` is the game's own
   folder (`library.list`'s `installPath`), and the plugin decides where inside
-  it (or beside it) the store's runtime expects Workshop content; no per-game
-  placement rules exist yet (Steam's follow-up is #214). Platypus
+  it (or beside it) the store's runtime expects Workshop content (a small
+  per-app placement table, Steam's #214, covers the games that don't follow
+  the default layout). Platypus
   sends `jobId`, reports progress through `job.progress` and the outcome
   through `job.done`/`job.failed`; `job.cancel` stops it. A repeated `jobId`
   starts no second copy. A game that isn't installed fails with a readable
