@@ -186,10 +186,18 @@ func (s VersionSet) MarshalJSON() ([]byte, error) {
 // userNotes, a suggestion the user's own value always wins); 1.17 adds
 // batched compatibility facts, runner and save-context capabilities, and
 // LibraryGame.clientLaunch; 1.18 adds game.clientStatus and the split ratings
-// and protection state of compat.lookup.
-var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12}, {1, 13}, {1, 14}, {1, 15}, {1, 16}, {1, 17}, {1, 18}}
+// and protection state of compat.lookup; 1.19 adds the wine-client launch
+// delegate (a store client in a Platypus-managed Wine prefix) and the
+// client.setup job that installs it.
+var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12}, {1, 13}, {1, 14}, {1, 15}, {1, 16}, {1, 17}, {1, 18}, {1, 19}}
 
 var ClientStatusVersion = Version{1, 18}
+
+// WineClientVersion is the first protocol revision with the wine-client
+// launch delegate and the client.setup job (a store client in a
+// Platypus-managed Wine prefix, issue #191). Platypus sends neither to a
+// plugin that settled on an older revision.
+var WineClientVersion = Version{1, 19}
 
 // Negotiate picks the highest version both sides speak.
 func Negotiate(offered VersionSet, supported []Version) (Version, bool) {

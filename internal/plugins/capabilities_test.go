@@ -127,8 +127,11 @@ func TestJobCancelIsServedToACloudOnlyPlugin(t *testing.T) {
 	if !MethodOffered("job.cancel", "install", []string{"cloud-saves"}) {
 		t.Fatal("a plugin with cloud-saves and no install must still be sent job.cancel")
 	}
+	if !MethodOffered("job.cancel", "install", []string{"launch"}) {
+		t.Fatal("a plugin with launch and no install must still be sent job.cancel (client.setup, protocol 1.19)")
+	}
 	if MethodOffered("job.cancel", "install", []string{"library"}) {
-		t.Fatal("job.cancel reached a plugin with neither install nor cloud-saves")
+		t.Fatal("job.cancel reached a plugin with neither install, cloud-saves nor launch")
 	}
 	if MethodOffered("game.install", "install", []string{"cloud-saves"}) {
 		t.Fatal("only job.cancel is shared")

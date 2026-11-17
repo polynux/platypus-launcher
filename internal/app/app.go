@@ -549,7 +549,11 @@ func (a *App) pluginStores() []stores.Store {
 func (a *App) pluginStore(p plugins.Plugin) *stores.Plugin {
 	id := p.Manifest.ID
 	return stores.NewPlugin(a.plugins, p, func() []string {
-		return a.plugins.Folders(id, a.settings.GamesFolder())
+		folders := a.plugins.Folders(id, a.settings.GamesFolder())
+		// A wine-client launch runs from the plugin's own prefix (protocol
+		// 1.19), so its executable validates against it like an install
+		// folder.
+		return append(folders, stores.ClientPrefixDir(id, a.effectivePrefixesFolder()))
 	}).WithRelocations(a.settings.Relocation)
 }
 
@@ -1092,6 +1096,8 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 	// disk, like a sideloaded game: no store, no launch spec.
 
 	switch {
+	case launch != nil && launch.Client != nil && launch.Client.Wine != nil:
+		return a.prepareWineClient(game, launch.Client, preview)
 	case launch != nil && launch.Client != nil:
 		// The store client starts the game, so the command runs as it is: a
 		// runner wrapper would wrap the client, not the game.
@@ -1113,6 +1119,30 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 		dir = filepath.Dir(game.Executable)
 	}
 	return a.wrapLaunch(game, []string{game.Executable}, nil, dir, !game.Native, preview, nil)
+}
+
+// prepareWineClient runs the store client itself under the runner in its own
+// Platypus-managed prefix (protocol 1.19): the client starts the game, and
+// the session follows the game through find. The client's prefix is pinned
+// (the game's own WinePrefix would point at the game's prefix), so the
+// runner creates and uses the client's folder instead.
+func (a *App) prepareWineClient(game types.Game, cl *stores.ClientLaunch, preview bool) (*prepared, error) {
+	clientDir := stores.ClientPrefixDir(game.Source, a.effectivePrefixesFolder())
+	if !preview {
+		if err := os.MkdirAll(clientDir, 0o755); err != nil {
+			return nil, err
+		}
+	}
+	w := cl.Wine
+	clientGame := game
+	clientGame.ID = stores.ClientGameID(game.Source)
+	clientGame.Settings.WinePrefix = clientDir
+	p, err := a.wrapLaunch(clientGame, append([]string{w.Exe}, w.Args...), w.Env, filepath.Dir(w.Exe), true, preview, w.Redact)
+	if err != nil {
+		return nil, err
+	}
+	p.client = cl
+	return p, nil
 }
 
 func (a *App) prepareSideload(game types.Game, preview bool) (*prepared, error) {
@@ -1258,7 +1288,7 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 	cmd.Dir = p.dir
 
 	if cl := p.client; cl != nil {
-		return a.startClient(game, cmd, cl)
+		return a.startClient(game, cmd, cl, session.WithStopHook(p.stopHook()))
 	}
 	opts := []session.StartOption{session.WithStopHook(p.stopHook())}
 	push, note, blocked := a.cloudBeforeLaunch(game, anyway)
@@ -1290,12 +1320,12 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 // Either way, follow the game itself (Steam: its reaper process), not this PID.
 // The after-session backup hook runs when the client-tracked session ends,
 // like for direct launches.
-func (a *App) startClient(game types.Game, cmd *exec.Cmd, cl *stores.ClientLaunch) (string, error) {
+func (a *App) startClient(game types.Game, cmd *exec.Cmd, cl *stores.ClientLaunch, extra ...session.StartOption) (string, error) {
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
 	}
 	go func() { _ = cmd.Wait() }()
-	opts := []session.StartOption{a.afterSessionHook(game)}
+	opts := append([]session.StartOption{a.afterSessionHook(game)}, extra...)
 	// The status is always polled: it is what keeps a client that updates or
 	// compiles shaders from being called a failed launch. "Store client
 	// notices" off only hides it from the user (issue #149).

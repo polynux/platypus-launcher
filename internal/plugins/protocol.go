@@ -216,7 +216,10 @@ type RunnerInfo struct {
 // LaunchSpec answers game.launchSpec. Either Platypus runs Exe through its
 // runner pipeline, or (Delegate == "store-client") Platypus runs Command, which
 // asks the store's own client to start the game, and follows the game through
-// Find.
+// Find. A "wine-client" delegate (protocol 1.19) is a store client that runs
+// in a Platypus-managed Wine prefix: Platypus runs Exe with Args under the
+// runner in the client's prefix and follows the game through Find, like a
+// store-client launch once the client is going.
 type LaunchSpec struct {
 	Exe       string            `json:"exe,omitempty"`
 	Args      []string          `json:"args,omitempty"`
@@ -227,9 +230,12 @@ type LaunchSpec struct {
 	// are hidden in the command preview and the launch log.
 	Redact []string `json:"redact,omitempty"`
 
-	Delegate     string    `json:"delegate,omitempty"`
-	Client       string    `json:"client,omitempty"` // client name for messages
-	Command      []string  `json:"command,omitempty"`
+	Delegate string   `json:"delegate,omitempty"`
+	Client   string   `json:"client,omitempty"` // client name for messages
+	Command  []string `json:"command,omitempty"`
+	// Prefix is the wine-client delegate's prefix key (protocol 1.19): only
+	// "client" is defined, the Platypus-managed prefix keyed per plugin.
+	Prefix       string    `json:"prefix,omitempty"`
 	Find         *FindSpec `json:"find,omitempty"`
 	StartTimeout int       `json:"startTimeout,omitempty"` // seconds
 }

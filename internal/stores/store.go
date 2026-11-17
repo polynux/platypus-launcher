@@ -4,6 +4,7 @@ package stores
 
 import (
 	"context"
+	"path/filepath"
 	"time"
 
 	"platypus/internal/types"
@@ -47,6 +48,20 @@ type ClientLaunch struct {
 	// session default.
 	StartTimeout time.Duration
 	ClientStatus func(time.Time) (*types.ClientStatus, error)
+	// Wine is set for wine-client launches (protocol 1.19): the client
+	// itself runs under the runner in its own Platypus-managed prefix. The
+	// App wraps Command there; Command stays the raw client command.
+	Wine *WineClientLaunch
+}
+
+// WineClientLaunch is how a wine-client launch runs: the client's
+// executable and arguments in its own prefix, with the plugin's validated
+// environment.
+type WineClientLaunch struct {
+	Exe    string
+	Args   []string
+	Env    map[string]string
+	Redact []string
 }
 
 // DirectLaunch is a validated plugin launch spec Platypus runs itself.
@@ -58,6 +73,20 @@ type DirectLaunch struct {
 	NeedsWine bool
 	// Redact lists argument prefixes whose values are hidden in previews and logs.
 	Redact []string
+}
+
+// ClientPrefixKey is the only wine-client prefix key (protocol 1.19): the
+// Platypus-managed prefix keyed per plugin.
+const ClientPrefixKey = "client"
+
+// ClientGameID is the pseudo game id a plugin's client setup job holds, so a
+// client has at most one setup job like a game has at most one active job.
+func ClientGameID(source string) string { return "p." + source + ".client" }
+
+// ClientPrefixDir is the Platypus-managed prefix a plugin's store client
+// runs in: one folder per plugin under the prefixes folder.
+func ClientPrefixDir(source, prefixesFolder string) string {
+	return filepath.Join(prefixesFolder, ClientGameID(source))
 }
 
 // Registry holds the built-in stores plus the plugin stores available right

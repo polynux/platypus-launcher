@@ -1,4 +1,4 @@
-# Store plugin protocol (1.18, draft)
+# Store plugin protocol (1.19, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -136,6 +136,7 @@ other errors can contain.
 | `game.relocated` | `{ id, from, to }` | `{}` (optional, 1.4, [Verify and move](#verify-and-move-14)) |
 | `job.cancel` | `{ jobId }` | `{}` |
 | `job.discard` | `{ jobId, id, installDir }` | `{}` |
+| `client.setup` | `{ jobId, prefix }` | `{}` once started (1.19, [Wine clients](#wine-clients-119)) |
 | `game.launchSpec` | `{ id, preview, via?, executable? }` | `LaunchSpec` (`executable` 1.15, [Offline launches](#offline-launches-115)) |
 | `game.clientStatus` | `{ id, since }` (`since` is launch time, Unix seconds) | `{ state, label?, progress?, bytes?, total? }` (1.18, [Client launch status](#client-launch-status-118)) |
 | `cloud.status` | `{ id, ctx }` | `CloudStatus` (1.2, [Cloud saves](#cloud-saves-12)) |
@@ -527,6 +528,43 @@ store-client spec for the game; a plugin that has none answers `-32000` with a m
 sends it when the user set one, instead of bypassing the plugin: answer with a
 direct spec for that file.
 
+## Wine clients (1.19)
+
+For games a store's own Windows client has to start (Ubisoft Connect runs its
+games from its own prefix), a plugin answers a wine-client launch: the client
+executable and its arguments, the client prefix, and how to recognise the game.
+Platypus runs the client under the runner in that prefix like a normal Wine
+launch, then follows the game through `find` like a store-client launch (same
+`startTimeout` failure, same stop/kill rules).
+
+```json
+{
+  "delegate": "wine-client", "client": "Ubisoft Connect",
+  "exe": "/home/u/.local/share/platypus/prefixes/p.example.client/drive_c/Program Files/Ubisoft/Ubisoft Game Launcher/UbisoftConnect.exe",
+  "args": ["uplay://launch/635/0"], "prefix": "client",
+  "find": { "cmdline": ["Game.exe"] }, "startTimeout": 180
+}
+```
+
+`"prefix": "client"` is the only key: the Platypus-managed prefix keyed per
+plugin (`prefixes/p.<plugin>.client`). `exe` must be an absolute path inside
+that prefix or inside a folder the user allowed, with the same `env` denylist
+as direct launches (login webview flags like `WEBKIT_DISABLE_DMABUF_RENDERER`
+are allowed); `args` carries the client's own launch request (a `uplay://`
+URL). Platypus creates the prefix but never fills it: a launch whose client
+executable is missing fails with "<client> isn't set up yet", and the game
+page offers the setup instead.
+
+`client.setup { jobId, prefix } -> {}` once started installs or repairs the
+client in `prefix` (the folder Platypus created and owns). It is a job like
+`game.install`: report `job.progress` while it works (phases, honestly
+indeterminate when the client downloads itself — send no byte counts rather
+than a fake percentage), `job.done` when the client executable is in place,
+`job.failed` otherwise; `job.cancel` stops it. While a setup job holds the
+client, its games refuse to launch; the setup job itself shows in the queue
+like any other job. Platypus sends `client.setup` only to a plugin that
+settled on 1.19 or later.
+
 ## Cloud saves (1.2)
 
 Capability `cloud-saves`, protocol 1.2 and later. A plugin that speaks only 1.0 or 1.1
@@ -633,7 +671,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -678,10 +716,12 @@ that doesn't know it.
   `LibraryGame.clientLaunch`; 1.18: the split ratings and protection state of
   `compat.lookup` (`protectionOnline`, see [Compat facts](#compat-facts-117))
   and `game.clientStatus` (see [Client launch status](#client-launch-status-118)); see [Compat facts](#compat-facts-117),
-  [Runner](#runner-117), and [Save context](#save-context-117)).
+  [Runner](#runner-117), and [Save context](#save-context-117)). 1.19: the
+  wine-client launch delegate and the `client.setup` job (a store client in a
+  Platypus-managed prefix; see [Wine clients](#wine-clients-119)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16 or 1.17 method.
+  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18 or 1.19 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,

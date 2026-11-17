@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -327,6 +328,9 @@ func (s *Plugin) Launch(ctx context.Context, game types.Game, preview bool) (*La
 	launch, err := ValidateSpec(spec, s.p.Manifest, folders)
 	if err != nil {
 		return nil, err
+	}
+	if launch.Client != nil && launch.Client.Wine != nil && !s.m.Runtime(s.ID()).Speaks(plugins.WineClientVersion) {
+		return nil, fmt.Errorf("%s speaks an older protocol and can't launch through a wine client", s.p.Manifest.Name)
 	}
 	if launch.Client != nil {
 		if s.m.Runtime(s.ID()).Speaks(plugins.ClientStatusVersion) {

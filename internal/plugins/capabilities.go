@@ -121,8 +121,9 @@ func OptionalWithoutCapability(method string) bool {
 }
 
 // sharedMethods are requests that more than one capability uses besides the
-// one that owns them: job.cancel stops an install, and also a cloud sync.
-var sharedMethods = map[string][]string{"job.cancel": {"cloud-saves"}}
+// one that owns them: job.cancel stops an install, and also a cloud sync or
+// a client setup (protocol 1.19).
+var sharedMethods = map[string][]string{"job.cancel": {"cloud-saves", "launch"}}
 
 // MethodOffered reports whether a plugin offering caps serves method, which
 // belongs to capability (see CapabilityForMethod).

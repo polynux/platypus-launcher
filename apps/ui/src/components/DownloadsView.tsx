@@ -29,6 +29,7 @@ const VERB_KEY: Record<Job['kind'], string> = {
   restore: 'downloads:action.restore',
   remove: 'downloads:action.remove',
   'runner-install': 'downloads:action.install',
+  'client-setup': 'downloads:action.client-setup',
 };
 
 const KIND_KEY: Record<Job['kind'], string> = {
@@ -41,6 +42,7 @@ const KIND_KEY: Record<Job['kind'], string> = {
   restore: 'downloads:kind.restore',
   remove: 'downloads:kind.remove',
   'runner-install': 'downloads:kind.install',
+  'client-setup': 'downloads:kind.client-setup',
 };
 
 const STATE_STYLE: Record<Job['state'], string> = {

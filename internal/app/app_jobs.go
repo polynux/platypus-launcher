@@ -11,6 +11,7 @@ import (
 	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
+	"platypus/internal/stores"
 	"platypus/internal/types"
 )
 
@@ -62,6 +63,8 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 		return b.a.startCoreRemove(j) // core deletes; reports through the queue
 	case jobs.KindRunnerInstall:
 		return b.a.startCoreRunnerInstall(j) // core downloads; reports through the queue
+	case jobs.KindClientSetup:
+		return b.a.startClientSetup(ctx, j) // the plugin installs its client; reports through the queue
 	}
 	if j.Target != nil {
 		if err := b.a.jobTargetGate(j); err != nil {
@@ -149,8 +152,14 @@ func (b jobBackend) RunsInCore(j types.Job) bool {
 
 // heldByJob refuses a launch while a move, a check, a backup, a restore or a
 // removal holds the game: the game would start from files that are being
-// moved, checked, rewritten or deleted.
+// moved, checked, rewritten or deleted. A game its store client launches
+// waits for the client's own setup too (protocol 1.19).
 func (a *App) heldByJob(game types.Game) error {
+	if game.ClientLaunch {
+		if _, ok := a.jobs.Holding(stores.ClientGameID(game.Source), jobs.KindClientSetup); ok {
+			return apperr.New("game.launchBusy", fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title), map[string]string{"title": game.Title, "what": "set up"})
+		}
+	}
 	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindBackup, jobs.KindRestore, jobs.KindRemove)
 	if !ok {
 		return nil

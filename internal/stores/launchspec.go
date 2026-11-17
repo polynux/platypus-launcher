@@ -45,13 +45,17 @@ func envAllowed(key string) bool {
 
 // ValidateSpec checks a plugin's launch spec before Platypus runs anything:
 //   - direct: the executable and working dir must be inside one of folders
-//     (the plugin's install folder, or folders the user allowed), after
-//     resolving symlinks, and no env key may be on the denylist;
+//     (the plugin's install folder, the client's prefix, or folders the user
+//     allowed), after resolving symlinks, and no env key may be on the denylist;
 //   - store-client: the command must be one of the tools the manifest
-//     requires, and the game must be identifiable by its command line.
+//     requires, and the game must be identifiable by its command line;
+//   - wine-client (protocol 1.19): the client's executable must be an
+//     absolute path inside one of folders (its prefix, which the App adds to
+//     the folders), with the same env denylist, and the game must be
+//     identifiable by its command line.
 func ValidateSpec(spec plugins.LaunchSpec, man plugins.Manifest, folders []string) (*Launch, error) {
 	if spec.Delegate != "" {
-		return validateDelegate(spec, man)
+		return validateDelegate(spec, man, folders)
 	}
 	if spec.Exe == "" {
 		return nil, fmt.Errorf("%s returned no executable", man.ID)
@@ -115,7 +119,10 @@ func ValidateSpec(spec plugins.LaunchSpec, man plugins.Manifest, folders []strin
 	}}, nil
 }
 
-func validateDelegate(spec plugins.LaunchSpec, man plugins.Manifest) (*Launch, error) {
+func validateDelegate(spec plugins.LaunchSpec, man plugins.Manifest, folders []string) (*Launch, error) {
+	if spec.Delegate == "wine-client" {
+		return validateWineClient(spec, man, folders)
+	}
 	if spec.Delegate != "store-client" {
 		return nil, fmt.Errorf("%s: unknown delegate %q", man.ID, spec.Delegate)
 	}
@@ -129,8 +136,100 @@ func validateDelegate(spec plugins.LaunchSpec, man plugins.Manifest) (*Launch, e
 	if _, err := exec.LookPath(bin); err != nil {
 		return nil, fmt.Errorf("%s: %s is not installed", man.ID, bin)
 	}
+	find, err := validateFind(spec, man)
+	if err != nil {
+		return nil, err
+	}
+	client := spec.Client
+	if client == "" {
+		client = man.Name
+	}
+	return &Launch{Client: &ClientLaunch{
+		Client:       client,
+		Command:      spec.Command,
+		Find:         find,
+		StartTimeout: validateTimeout(spec.StartTimeout),
+	}}, nil
+}
+
+// validateWineClient checks a wine-client launch spec (protocol 1.19): the
+// store client Platypus runs under the runner in its own prefix. The folders
+// the App passes already include the client's prefix, so the executable
+// containment is the same check direct launches get. A missing executable
+// inside the client's prefix means the client isn't set up yet, which reads
+// as a setup prompt rather than a broken spec.
+func validateWineClient(spec plugins.LaunchSpec, man plugins.Manifest, folders []string) (*Launch, error) {
+	if spec.Prefix != ClientPrefixKey {
+		return nil, fmt.Errorf("%s: unknown wine-client prefix %q (want %q)", man.ID, spec.Prefix, ClientPrefixKey)
+	}
+	if spec.Exe == "" {
+		return nil, fmt.Errorf("%s returned no client executable", man.ID)
+	}
+	if !filepath.IsAbs(spec.Exe) {
+		return nil, fmt.Errorf("%s: client executable %q must be an absolute path", man.ID, spec.Exe)
+	}
+	exe := spec.Exe
+	resolved := false
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe, resolved = real, true
+	}
+	if resolved {
+		if !insideAny(exe, folders) {
+			return nil, fmt.Errorf("%s: client executable %s is outside its prefix (%s)", man.ID, spec.Exe, strings.Join(folders, ", "))
+		}
+		if st, err := os.Stat(exe); err != nil {
+			return nil, err
+		} else if !st.Mode().IsRegular() {
+			return nil, fmt.Errorf("%s: %s is not a file", man.ID, spec.Exe)
+		}
+	} else {
+		if !insideLexical(spec.Exe, folders) {
+			return nil, fmt.Errorf("%s: client executable %s is outside its prefix (%s)", man.ID, spec.Exe, strings.Join(folders, ", "))
+		}
+		client := spec.Client
+		if client == "" {
+			client = man.Name
+		}
+		return nil, fmt.Errorf("%s isn't set up yet; set it up first, then launch the game", client)
+	}
+	env := make(map[string]string, len(spec.Env))
+	for k, v := range spec.Env {
+		if !envAllowed(k) {
+			return nil, fmt.Errorf("%s: wine-client launch sets %s, which plugins may not set", man.ID, k)
+		}
+		env[k] = v
+	}
+	var redact []string
+	for _, r := range spec.Redact {
+		if r != "" {
+			redact = append(redact, r)
+		}
+	}
+	find, err := validateFind(spec, man)
+	if err != nil {
+		return nil, err
+	}
+	client := spec.Client
+	if client == "" {
+		client = man.Name
+	}
+	return &Launch{Client: &ClientLaunch{
+		Client:       client,
+		Command:      append([]string{exe}, spec.Args...),
+		Find:         find,
+		StartTimeout: validateTimeout(spec.StartTimeout),
+		Wine: &WineClientLaunch{
+			Exe:    exe,
+			Args:   slices.Clone(spec.Args),
+			Env:    env,
+			Redact: redact,
+		},
+	}}, nil
+}
+
+func validateFind(spec plugins.LaunchSpec, man plugins.Manifest) (func() int, error) {
 	if spec.Find == nil || len(spec.Find.Cmdline) == 0 {
-		return nil, fmt.Errorf("%s: store-client launch must say how to find the game (find.cmdline)", man.ID)
+		return nil, fmt.Errorf("%s: %s launch must say how to find the game (find.cmdline)", man.ID, spec.Delegate)
 	}
 	parts := slices.Clone(spec.Find.Cmdline)
 	for _, p := range parts {
@@ -138,20 +237,31 @@ func validateDelegate(spec plugins.LaunchSpec, man plugins.Manifest) (*Launch, e
 			return nil, fmt.Errorf("%s: find.cmdline entry %q is too short to identify a game", man.ID, p)
 		}
 	}
-	client := spec.Client
-	if client == "" {
-		client = man.Name
-	}
-	timeout := time.Duration(spec.StartTimeout) * time.Second
+	return func() int { return session.FindByCmdline(parts...) }, nil
+}
+
+func validateTimeout(seconds int) time.Duration {
+	timeout := time.Duration(seconds) * time.Second
 	if timeout < 0 || timeout > 30*time.Minute {
-		timeout = 0
+		return 0
 	}
-	return &Launch{Client: &ClientLaunch{
-		Client:       client,
-		Command:      spec.Command,
-		Find:         func() int { return session.FindByCmdline(parts...) },
-		StartTimeout: timeout,
-	}}, nil
+	return timeout
+}
+
+// insideLexical reports whether path is one of the folders or below one,
+// without resolving symlinks: for paths that don't exist yet (a client that
+// isn't set up), where EvalSymlinks has nothing to resolve.
+func insideLexical(path string, folders []string) bool {
+	for _, f := range folders {
+		if f == "" {
+			continue
+		}
+		rel, err := filepath.Rel(f, path)
+		if err == nil && (rel == "." || filepath.IsLocal(rel)) {
+			return true
+		}
+	}
+	return false
 }
 
 // insideAny reports whether path is one of the folders or below one. Folders

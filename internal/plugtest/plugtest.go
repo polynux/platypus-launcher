@@ -882,7 +882,7 @@ var (
 	RequirementsKeys = []string{"minimum", "recommended"}
 	VideoKeys        = []string{"url", "thumbnail", "title", "mime"}
 	LaunchKeys       = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
-		"delegate", "client", "command", "find", "startTimeout"}
+		"delegate", "client", "command", "prefix", "find", "startTimeout"}
 
 	// The versions capability (docs/plugins/protocol.md, "Versions").
 	VersionListKeys    = []string{"channels", "builds", "manual", "links", "updateAvailable", "pinned"}

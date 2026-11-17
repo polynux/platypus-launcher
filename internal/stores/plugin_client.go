@@ -26,7 +26,7 @@ func (s *Plugin) LaunchViaClient(ctx context.Context, game types.Game) (*ClientL
 	if err != nil {
 		return nil, err
 	}
-	if l.Client == nil {
+	if l.Client == nil || l.Client.Wine != nil {
 		return nil, errors.New(s.p.Manifest.Name + " didn't return a launch through its client")
 	}
 	return l.Client, nil

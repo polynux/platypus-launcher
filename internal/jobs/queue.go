@@ -47,6 +47,12 @@ const (
 	// AddRunnerInstall constructor, no size check, RunsInCore, and progress
 	// through the queue.
 	KindRunnerInstall = "runner-install"
+	// KindClientSetup installs or repairs a store client in its own
+	// Platypus-managed prefix (protocol 1.19, issue #191): the plugin's
+	// client.setup job. The job's GameID is the client's pseudo id (see
+	// stores.ClientGameID), so a client has at most one setup job like a
+	// game has at most one active job.
+	KindClientSetup = "client-setup"
 
 	StateQueued   = "queued"
 	StateRunning  = "running"
@@ -294,7 +300,7 @@ func startTimeoutFor(kind string) time.Duration {
 
 // prepare checks free space and creates the install folder.
 func (q *Queue) prepare(ctx context.Context, job types.Job) error {
-	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindBackup || job.Kind == KindRestore || job.Kind == KindRemove || job.Kind == KindRunnerInstall {
+	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindBackup || job.Kind == KindRestore || job.Kind == KindRemove || job.Kind == KindRunnerInstall || job.Kind == KindClientSetup {
 		return nil // no download, so nothing to size; a move checks its space when it is queued
 	}
 	sizeCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -469,6 +475,20 @@ func (q *Queue) AddRunnerInstall(source, gameID, tag, title, installDir string) 
 	}
 	return q.enqueue(&types.Job{
 		Kind: KindRunnerInstall, Source: source, GameID: gameID, StoreGameID: tag,
+		Title: title, InstallDir: installDir,
+	})
+}
+
+// AddClientSetup queues installing or repairing a store client in installDir,
+// its own Platypus-managed prefix (protocol 1.19, issue #191). gameID is the
+// client's pseudo id, so a client has at most one setup job; the plugin's
+// client.setup job reports progress and its outcome through the queue.
+func (q *Queue) AddClientSetup(source, gameID, title, installDir string) (types.Job, error) {
+	if !filepath.IsAbs(installDir) {
+		return types.Job{}, fmt.Errorf("client prefix %q is not an absolute path", installDir)
+	}
+	return q.enqueue(&types.Job{
+		Kind: KindClientSetup, Source: source, GameID: gameID, StoreGameID: "client",
 		Title: title, InstallDir: installDir,
 	})
 }
