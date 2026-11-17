@@ -635,6 +635,11 @@ func (a *App) recordJobActivity(j types.Job) {
 		return
 	}
 	args := map[string]string{"title": j.Title, "store": j.Source}
+	if j.Auto {
+		// The feed names it an automatic update instead of a plain one
+		// (issue #209).
+		args["auto"] = "1"
+	}
 	if j.Total > 0 {
 		args["size"] = fmt.Sprint(j.Total)
 	} else if j.Bytes > 0 {

@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -10,10 +11,10 @@ import (
 )
 
 // Downloads settings (issue #207): a global speed cap and the daily window
-// when automatic updates may start. Both are store-agnostic: the cap reaches
+// when automatic updates may start, plus the automatic-update switch and its
+// per-game exclusions (issue #209). All are store-agnostic: the cap reaches
 // the plugins that declare protocol 1.21, the window is enforced by the job
-// queue for updates Platypus started by itself (none yet: automatic updates
-// are a follow-up, and the setting stays hidden until then).
+// queue for updates Platypus started by itself.
 
 // UpdateWindow is a daily local-time window, "HH:MM" to "HH:MM", inclusive
 // start and exclusive end. An end before the start crosses midnight
@@ -103,4 +104,97 @@ func ParseClock(s string) (int, error) {
 func MinutesIntoDay(t time.Time) int {
 	t = t.Local()
 	return t.Hour()*60 + t.Minute()
+}
+
+// AutoUpdate is the "Automatic updates" switch (issue #209). Unset in the
+// file means on, like the Steam client.
+func (s *Store) AutoUpdate() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.AutoUpdate == nil || *s.data.AutoUpdate
+}
+
+// SetAutoUpdate saves the "Automatic updates" switch.
+func (s *Store) SetAutoUpdate(on bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev := s.data.AutoUpdate
+	s.data.AutoUpdate = &on
+	if err := s.save(); err != nil {
+		s.data.AutoUpdate = prev
+		return err
+	}
+	return nil
+}
+
+// GameAutoUpdate says whether one game is updated automatically. Only an
+// explicit exclusion (the game's "Don't update automatically") turns it off.
+func (s *Store) GameAutoUpdate(gameID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.data.AutoUpdateOff[gameID]
+}
+
+// SetGameAutoUpdate saves one game's automatic-update exclusion: off keeps
+// the game out of automatic updates, on returns it to following the global
+// switch.
+func (s *Store) SetGameAutoUpdate(gameID string, on bool) error {
+	if gameID == "" {
+		return fmt.Errorf("game id is empty")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev := s.data.AutoUpdateOff
+	prevHad := prev[gameID]
+	if on {
+		if prev == nil || !prev[gameID] {
+			return nil
+		}
+		delete(prev, gameID)
+	} else {
+		next := make(map[string]bool, len(prev)+1)
+		for id, off := range prev {
+			next[id] = off
+		}
+		next[gameID] = true
+		s.data.AutoUpdateOff = next
+	}
+	if err := s.save(); err != nil {
+		if on && prevHad {
+			prev[gameID] = true
+		} else if !on {
+			s.data.AutoUpdateOff = prev
+		}
+		return err
+	}
+	return nil
+}
+
+// PruneAutoUpdateOff forgets the automatic-update exclusions of games that are
+// no longer in the library (issue #209). Call it with a library that was
+// listed in full, so a game from a failed source keeps its exclusion.
+func (s *Store) PruneAutoUpdateOff(keep map[string]bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	changed := false
+	for id := range s.data.AutoUpdateOff {
+		if !keep[id] {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		return nil
+	}
+	prev := maps.Clone(s.data.AutoUpdateOff)
+	for id := range s.data.AutoUpdateOff {
+		if !keep[id] {
+			delete(s.data.AutoUpdateOff, id)
+		}
+	}
+	if err := s.save(); err != nil {
+		s.data.AutoUpdateOff = prev
+		return err
+	}
+	return nil
 }

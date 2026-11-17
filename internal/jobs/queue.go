@@ -63,6 +63,17 @@ const (
 	StateCanceled = "canceled"
 )
 
+// KindNoun names a job kind with its article, for messages like "already has
+// an update queued".
+func KindNoun(kind string) string {
+	switch kind {
+	case KindInstall, KindUpdate, KindUninstall:
+		return "an " + kind
+	default:
+		return "a " + kind
+	}
+}
+
 // Backend talks to the plugin that owns a job.
 type Backend interface {
 	// Size returns download and disk sizes for an install or update.
@@ -128,6 +139,14 @@ type Queue struct {
 	// uninstall or a move is done: the game's folder and version are what the
 	// plugin says they are now. A verify only reports, so it doesn't call it.
 	onFinished func(job types.Job)
+	// onEnded is called, outside the lock, when a job reaches a final state
+	// (done, failed or canceled): automatic updates remember the outcome
+	// (issue #209). A canceled job is reported too; a pause is not final.
+	onEnded func(job types.Job)
+	// gameRunning says whether a game has a session open. A queued automatic
+	// update waits for it to end instead of running under the game (issue
+	// #209); anything the user asked for ignores it. nil means never running.
+	gameRunning func(gameID string) bool
 
 	mu  sync.Mutex
 	now func() time.Time // injected by tests
@@ -296,6 +315,11 @@ func (q *Queue) next(ctx context.Context) {
 			}
 			continue
 		}
+		// An automatic update waits while its game runs (issue #209): the
+		// session may end later, and Wake asks for another pass then.
+		if j.Auto && q.gameRunning != nil && q.gameRunning(j.GameID) {
+			continue
+		}
 		job = j
 	}
 	if job == nil {
@@ -402,6 +426,30 @@ func (q *Queue) SetOnFinished(f func(job types.Job)) {
 	q.mu.Unlock()
 }
 
+// SetOnEnded registers the callback for jobs that reach a final state: done,
+// failed or canceled. The job is as it was when it ended.
+func (q *Queue) SetOnEnded(f func(job types.Job)) {
+	q.mu.Lock()
+	q.onEnded = f
+	q.mu.Unlock()
+}
+
+// SetGameRunning installs the running-game check for automatic updates
+// (issue #209). It wakes the queue: a job that waited on the old answer may
+// start now.
+func (q *Queue) SetGameRunning(f func(gameID string) bool) {
+	q.mu.Lock()
+	q.gameRunning = f
+	q.mu.Unlock()
+	q.signal()
+}
+
+// Wake asks for another scheduling pass, e.g. when a game session ends and an
+// automatic update may start (issue #209).
+func (q *Queue) Wake() {
+	q.signal()
+}
+
 // Add queues a job. A game has at most one active job.
 func (q *Queue) Add(kind, source, gameID, storeGameID, title, installDir string) (types.Job, error) {
 	return q.AddTargeted(kind, source, gameID, storeGameID, title, installDir, nil)
@@ -419,6 +467,17 @@ func (q *Queue) AddTargeted(kind, source, gameID, storeGameID, title, installDir
 // choices (the `install-options` capability) with the job. Options are copied
 // and never checked here: the caller has resolved them against the store.
 func (q *Queue) AddWithOptions(kind, source, gameID, storeGameID, title, installDir string, target *types.VersionTarget, options types.InstallOptions) (types.Job, error) {
+	return q.add(kind, source, gameID, storeGameID, title, installDir, target, options, false)
+}
+
+// AddAuto queues an update Platypus started by itself (Job.Auto): the queue
+// holds it to the update window (issue #207). It takes the same version target
+// and install options as AddWithOptions.
+func (q *Queue) AddAuto(source, gameID, storeGameID, title, installDir string, target *types.VersionTarget, options types.InstallOptions) (types.Job, error) {
+	return q.add(KindUpdate, source, gameID, storeGameID, title, installDir, target, options, true)
+}
+
+func (q *Queue) add(kind, source, gameID, storeGameID, title, installDir string, target *types.VersionTarget, options types.InstallOptions, auto bool) (types.Job, error) {
 	switch kind {
 	case KindInstall, KindUpdate, KindUninstall:
 	default:
@@ -440,7 +499,7 @@ func (q *Queue) AddWithOptions(kind, source, gameID, storeGameID, title, install
 	options = types.NormalizeChoices(maps.Clone(options))
 	return q.enqueue(&types.Job{
 		Kind: kind, Source: source, GameID: gameID, StoreGameID: storeGameID,
-		Title: title, InstallDir: installDir, Target: target, Options: options,
+		Title: title, InstallDir: installDir, Target: target, Options: options, Auto: auto,
 	})
 }
 
@@ -545,7 +604,7 @@ func (q *Queue) enqueue(j *types.Job) (types.Job, error) {
 	defer q.mu.Unlock()
 	for _, o := range q.jobs {
 		if o.GameID == j.GameID && holdsGame(o) {
-			return types.Job{}, fmt.Errorf("%s already has a %s queued", j.Title, o.Kind)
+			return types.Job{}, fmt.Errorf("%s already has %s queued", j.Title, KindNoun(o.Kind))
 		}
 	}
 	now := time.Now().UnixMilli()
@@ -616,8 +675,13 @@ func (q *Queue) Cancel(ctx context.Context, id string) error {
 	j.State, j.Phase, j.Speed = StateCanceled, "", 0
 	j.CanceledAt, j.CleanedAt, j.Leftover = q.now().UnixMilli(), 0, ""
 	j.UpdatedAt = j.CanceledAt
+	ended := *j
 	q.changed(true)
+	onEnded := q.onEnded
 	q.mu.Unlock()
+	if onEnded != nil {
+		onEnded(ended)
+	}
 	if state == StateRunning {
 		// Best effort: the job is canceled for Platypus either way, and later
 		// notifications for it are ignored.
@@ -685,7 +749,7 @@ func (q *Queue) requeue(id string, from ...string) error {
 	}
 	for _, o := range q.jobs {
 		if o != j && o.GameID == j.GameID && holdsGame(o) {
-			return fmt.Errorf("%s already has a %s queued", j.Title, o.Kind)
+			return fmt.Errorf("%s already has %s queued", j.Title, KindNoun(o.Kind))
 		}
 	}
 	// A resumed run starts counting crashes afresh. Pausing or canceling and
@@ -938,12 +1002,19 @@ func (q *Queue) finishFrom(source, id, state, msg string) (types.Job, bool) {
 
 func (q *Queue) finish(id, state, msg string) {
 	q.mu.Lock()
+	var ended *types.Job
 	if j := q.find(id); j != nil && j.State == StateRunning {
 		end(j, state, msg)
+		snapshot := *j
+		ended = &snapshot
 	}
 	q.trim()
 	q.changed(true)
+	onEnded := q.onEnded
 	q.mu.Unlock()
+	if ended != nil && onEnded != nil {
+		onEnded(*ended)
+	}
 	q.signal()
 }
 

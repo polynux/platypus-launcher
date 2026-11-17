@@ -161,6 +161,13 @@
     "delete": "Delete preset {{name}}"
   },
   "maintenance": {
+    "autoUpdate": {
+      "title": "Automatic updates",
+      "text": "Platypus updates this game in the background when the store reports a newer version.",
+      "off": "Don't update automatically",
+      "saved": "Automatic updates saved for this game.",
+      "textOff": "Automatic updates are off in Settings, so this game isn't updated in the background."
+    },
     "busy": "{{title}} is busy; its files can't be changed until this finishes.",
     "removeTitle": "Remove from library",
     "removeRunning": "Stop {{title}} before removing it from the library.",

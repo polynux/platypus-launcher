@@ -72,10 +72,13 @@ func versionsApp(t *testing.T, protocols, caps string) *versionsEnv {
 	}
 	a.jobs.SetOnInstalled(a.recordInstall)
 	a.jobs.SetOnFinished(a.jobFinished)
+	a.jobs.SetOnEnded(a.autoEnded)
+	a.jobs.SetGameRunning(a.isRunning)
 	runCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { defer close(done); a.jobs.Run(runCtx) }()
 	t.Cleanup(func() { cancel(); <-done })
+	t.Cleanup(func() { a.autoChecks.Wait() })
 	if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
 		t.Fatal(err)
 	}

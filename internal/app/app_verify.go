@@ -43,6 +43,7 @@ func (a *App) VerifyGame(game types.Game) (types.Job, error) {
 	if err != nil {
 		return types.Job{}, err
 	}
+	a.dropAutoForApply(game.ID)
 	return a.jobs.AddVerify(game.Source, game.ID, game.StoreAppID, game.Title, folder, false)
 }
 
@@ -58,6 +59,7 @@ func (a *App) RepairGame(game types.Game) (types.Job, error) {
 	if !ok || last.Verify == nil || last.Verify.Damaged+last.Verify.Missing == 0 {
 		return types.Job{}, apperr.New("verify.noReport", fmt.Sprintf("check %s first: there is no damage report to repair from", game.Title), map[string]string{"title": game.Title})
 	}
+	a.dropAutoForApply(game.ID)
 	return a.jobs.AddVerify(game.Source, game.ID, game.StoreAppID, game.Title, folder, true)
 }
 

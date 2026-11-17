@@ -50,7 +50,7 @@ import urllib.request
 import zlib
 
 API = 1
-PLUGIN_VERSION = "0.4.0"
+PLUGIN_VERSION = "0.5.0"
 CODE_AUTH_REQUIRED = -32001
 # GOG build ids are long digits (e.g. 57200821661238017).
 BUILD_ID_RE = re.compile(r"[0-9]{4,32}")
@@ -426,6 +426,7 @@ def library_list(_params):
         raise RPCError(f"GOG API is unreachable: {e}")
     installed = installed_games()
     remember_titles({str(g.get("id")): g["title"] for g in games if g.get("id") and g.get("title")})
+    heads_deadline = time.time() + BUILD_HEADS_BUDGET
     out = []
     for g in games:
         app = str(g.get("id") or "")
@@ -457,12 +458,14 @@ def library_list(_params):
             entry["note"] = "This is a movie or extra, not a game."
         if app in installed:
             add_installed(entry, installed[app])
+            mark_update(entry, installed[app], heads_deadline)
         out.append(entry)
     for app, ig in installed.items():  # installed but missing from the owned list
         if not any(e["id"] == app for e in out):
             entry = {"id": app, "title": ig.get("title") or known_titles().get(app) or app,
                      "installable": False}
             add_installed(entry, ig)
+            mark_update(entry, ig, heads_deadline)
             out.append(entry)
     return {"games": out}
 
@@ -520,6 +523,87 @@ def add_installed(entry, ig):
     entry["installPath"] = ig.get("path", "")
     entry["version"] = ig.get("version", "")
     entry["native"] = ig.get("platform", "windows") == "linux"
+
+
+# --- update detection in the library (issue #209) ---------------------------
+#
+# library.list says whether an installed game has an update, so automatic
+# updates don't need a versions dialog first. The recorded build is compared
+# with its channel's current tip; tips are cached for BUILD_HEADS_TTL, and a
+# cold or stale entry costs one `gogdl info` per listing only while a small
+# budget lasts. Linux installs have no builds, so they report nothing.
+
+BUILD_HEADS_TTL = 6 * 3600  # seconds a cached channel tip is trusted
+BUILD_HEADS_BUDGET = 8      # seconds of tip lookups per library.list
+build_heads = None
+
+
+def load_build_heads():
+    global build_heads
+    with state_lock:
+        if build_heads is None:
+            data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
+            try:
+                with open(os.path.join(data, "build-heads.json")) as f:
+                    build_heads = json.load(f)
+            except (OSError, ValueError):
+                build_heads = {}
+            if not isinstance(build_heads, dict):
+                build_heads = {}
+        return build_heads
+
+
+def save_build_heads():
+    if build_heads is None:
+        return
+    data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
+    with state_lock:
+        write_json_atomic(os.path.join(data, "build-heads.json"), build_heads)
+
+
+def channel_tip(app, platform, channel, deadline):
+    """The build the installed channel points at now, from the cache while it
+    is fresh, else one gogdl info call while the listing's budget lasts. A
+    failed read keeps the last known tip (or reports none)."""
+    heads = load_build_heads()
+    entry = heads.get(app) or {}
+    if (entry.get("channel") or "") == (channel or "") and entry.get("build") and \
+            time.time() - float(entry.get("at") or 0) < BUILD_HEADS_TTL:
+        return str(entry["build"])
+    if time.time() < deadline:
+        try:
+            data = gog_info(app, platform, branch=channel or None,
+                            timeout=max(1, min(20, int(deadline - time.time()) + 1)))
+            raw = data.get("builds") or {}
+            items = (raw.get("items", []) if isinstance(raw, dict) else raw) or []
+            tip = channel_head(items, channel) if channel else str(data.get("buildId") or "")
+        except RPCError as e:
+            log("info", f"couldn't read the current build of {app}: {e}")
+            tip = ""
+        if tip:
+            heads[app] = {"channel": channel or "", "build": str(tip), "at": time.time()}
+            save_build_heads()
+            return str(tip)
+    if (entry.get("channel") or "") == (channel or ""):
+        return str(entry.get("build") or "")
+    return ""
+
+
+def mark_update(entry, ig, deadline):
+    """Library `updateAvailable` for an installed GOG game (issue #209): the
+    recorded build against its channel's tip. A game whose build is unknown
+    (or a Linux install, which has no builds) reports nothing."""
+    if (ig.get("platform") or "windows") == "linux":
+        return
+    build = str(ig.get("build") or "")
+    if not build and ig.get("path"):
+        build = marker_build(ig["path"], entry["id"])
+    if not build:
+        return
+    platform = ig.get("platform") or platform_of(entry["id"])
+    tip = channel_tip(entry["id"], platform, str(ig.get("channel") or ""), deadline)
+    if tip:
+        entry["updateAvailable"] = build != tip
 
 
 def gog_info(app, platform, build=None, branch=None, timeout=600):

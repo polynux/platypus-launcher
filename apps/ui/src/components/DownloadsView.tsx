@@ -71,6 +71,9 @@ function formatFinished(ms: number): string {
 
 function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsViewProps, 'onAction' | 'onOpenGame'>) {
   const { t } = useTranslation(['downloads', 'common']);
+  // An update Platypus started by itself says so (issue #209), so a
+  // background update never reads like one the user asked for.
+  const verb = t(job.auto && job.kind === 'update' ? 'downloads:action.autoUpdate' : VERB_KEY[job.kind]);
   const active = job.state === 'queued' || job.state === 'running' || job.state === 'paused';
   const pct = job.percent >= 0 ? Math.round(job.percent) : null;
   const sizes = job.total > 0
@@ -95,11 +98,11 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
         <div className="min-w-0">
           {isRunnerJob ? (
             <span className="truncate text-left text-[13px] font-bold">
-              {t(VERB_KEY[job.kind])} · {job.title}
+              {verb} · {job.title}
             </span>
           ) : (
             <button onClick={() => onOpenGame(job.game_id)} className="truncate text-left text-[13px] font-bold hover:text-dl">
-              {t(VERB_KEY[job.kind])} · {job.title}
+              {verb} · {job.title}
             </button>
           )}
           <div className={cx('truncate font-mono text-hint', STATE_STYLE[job.state])} title={detail}>

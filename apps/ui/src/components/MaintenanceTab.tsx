@@ -169,6 +169,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   return (
     <div className="space-y-5">
       <SaveBackupsSection game={game} onNotify={onNotify} />
+      {installed && offers(plugin, 'install', { game }) && <AutoUpdateRow game={game} onNotify={onNotify} />}
       {installed && (
         <CapabilitySurface plugin={plugin} capability="verify" game={game}>
           <Row title={t('gameSettings:maintenance.verifyTitle')} text={t('gameSettings:maintenance.verifyText', { title: game.title, plugin: plugin.name })}>
@@ -524,6 +525,51 @@ function ResetPrefixRow({ game, running, onNotify }: { game: Game; running?: boo
           <Button variant="danger" disabled={busy} onClick={reset}><RefreshCw className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.resetAction')}</Button>
         </div>
       </div>
+    </Row>
+  );
+}
+
+/** Maintenance → Automatic updates (issue #209): the per-game "Don't update
+ *  automatically" override. It is on unless the box is ticked; a game so
+ *  excluded never gets a background update, pinned or not. */
+export function AutoUpdateRow({ game, onNotify }: {
+  game: Game;
+  onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+}) {
+  const { t } = useTranslation(['gameSettings', 'common']);
+  const [auto, setAuto] = useState<boolean | null>(null);
+  // The global switch: when it is off, the per-game box changes nothing yet,
+  // and the row says so (issue #209).
+  const [globalOn, setGlobalOn] = useState(true);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    Effect.runPromise(LauncherApi.getGameAutoUpdate(game.id))
+      .then((v) => { if (live) setAuto(v); }, () => { if (live) setAuto(true); });
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => { if (live) setGlobalOn(!!s.auto_update); }, () => {});
+    return () => { live = false; };
+  }, [game.id]);
+  const toggle = (on: boolean) => {
+    setAuto(on);
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setGameAutoUpdate(game.id, on))
+      .then(() => onNotify(t('gameSettings:maintenance.autoUpdate.saved')))
+      .catch((e) => { setAuto(!on); onNotify(coreErrMsg(e), 'err'); })
+      .finally(() => setBusy(false));
+  };
+  return (
+    <Row title={t('gameSettings:maintenance.autoUpdate.title')} text={globalOn ? t('gameSettings:maintenance.autoUpdate.text') : t('gameSettings:maintenance.autoUpdate.textOff')}>
+      <label className="flex items-center gap-2 text-[12.5px] text-text-body">
+        <input
+          type="checkbox"
+          checked={auto === false}
+          disabled={auto === null || busy}
+          onChange={(e) => toggle(!e.target.checked)}
+          aria-label={t('gameSettings:maintenance.autoUpdate.off')}
+        />
+        {t('gameSettings:maintenance.autoUpdate.off')}
+      </label>
     </Row>
   );
 }

@@ -49,6 +49,11 @@ describe('downloads live language switching', () => {
     expect(screen.getByText('Resume all')).toBeTruthy();
   });
 
+  it('labels an update Platypus started as automatic', () => {
+    wrap(<DownloadsView jobs={[job({ id: 'a', kind: 'update', auto: true })]} onAction={noop} onClear={noop} onOpenGame={noop} />);
+    expect(screen.getByText(/Automatic update/)).toBeTruthy();
+  });
+
   it('localizes the job progress bytes line', async () => {
     wrap(<JobProgress job={job()} onCancel={noop} />);
     expect(screen.getByText(/3\.7 MB of 30\.0 GB/)).toBeTruthy();

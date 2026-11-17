@@ -7,6 +7,7 @@
   "action": {
     "install": "Install",
     "update": "Update",
+    "autoUpdate": "Automatic update",
     "uninstall": "Uninstall",
     "verify": "Verify",
     "move": "Move",
@@ -93,6 +94,7 @@
     "finished": {
       "install": "Installed",
       "update": "Updated",
+      "autoUpdate": "Automatically updated",
       "uninstall": "Uninstalled",
       "verify": "Verified",
       "move": "Moved",
