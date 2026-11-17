@@ -249,6 +249,20 @@ func (s *Plugin) Details(ctx context.Context, game types.Game) (*types.GameDetai
 			})
 		}
 	}
+	// News links are protocol 1.19: an older plugin's answer carries none.
+	// Keep only titled https links, bounded like the other lists.
+	if s.m.Runtime(s.ID()).Speaks(plugins.NewsVersion) {
+		for _, n := range d.News {
+			if len(out.News) >= maxNews {
+				break
+			}
+			u, title := sanitize.HTTPSURL(n.URL), sanitize.Clip(n.Title, maxCopyText)
+			if u == "" || title == "" {
+				continue
+			}
+			out.News = append(out.News, types.GameNews{Title: title, URL: u, Date: n.Date})
+		}
+	}
 	if d.Achievements != nil && d.Achievements.Total > 0 {
 		list := make([]types.Achievement, 0, len(d.Achievements.List))
 		for _, a := range d.Achievements.List {
@@ -491,6 +505,7 @@ func storeNotes(raw string, speaks bool) string {
 const (
 	maxScreenshots       = 30
 	maxVideos            = 20
+	maxNews              = 5
 	maxListItems         = 100
 	maxDescriptionRunes  = 200_000
 	maxRequirementsRunes = 50_000

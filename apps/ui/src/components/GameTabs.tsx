@@ -40,7 +40,7 @@ import {
   GameOutsideAlert,
   TabsNoteLink,
 } from './game/blocks';
-import { AboutSection } from './game/sections';
+import { AboutSection, NewsLinks } from './game/sections';
 import type { useAchievementProgress } from './ProgressAchievements';
 import type { InstallSize } from '../lib/installSize';
 
@@ -1697,6 +1697,7 @@ export function GameTabsView(d: GameTabsData) {
                 onUnlinkInfo={d.onUnlinkInfo}
                 hideDetails
               />
+              <NewsLinks news={d.details?.news} />
             </div>
             <aside className="grid min-w-0 content-start gap-5">
               <GallerySheet media={d.media} title={d.game.title} />
