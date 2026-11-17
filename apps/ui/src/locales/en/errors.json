@@ -54,6 +54,7 @@
     "unsupported": "{{name}} doesn't offer family."
   },
   "game": {
+    "badJoinArg": "Couldn't use the invite's join arguments for {{title}}.",
     "launchBusy": "{{title}} is being {{what}}; launch it once that finishes.",
     "launchBusyWorkshop": "{{title}} is syncing Workshop items; launch it once that finishes.",
     "noClientLaunch": "{{title}} can't be started through a store client.",
@@ -66,7 +67,8 @@
     "notInstalled": "{{title}} is not installed.",
     "notRunning": "That game is not running.",
     "runnerMissing": "Runner {{id}} is not installed.",
-    "running": "{{title}} is already running."
+    "running": "{{title}} is already running.",
+    "tooManyJoinArgs": "Too many join arguments for {{title}}."
   },
   "gog": {
     "productId": {

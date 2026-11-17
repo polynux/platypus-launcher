@@ -21,6 +21,8 @@ import (
 const (
 	EMsgMulti                       = 1
 	EMsgCloudNotifyAppStateChange   = 146
+	EMsgClientInviteToGame          = 7005
+	EMsgClientChatInvite            = 800
 	EMsgClientPersonaState          = 766
 	EMsgClientFriendsList           = 767
 	EMsgClientPlayingSessionState   = 9600

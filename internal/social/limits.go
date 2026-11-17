@@ -13,6 +13,12 @@ const (
 	maxNameLen   = 128
 	maxGameIDLen = 256
 	maxTitleLen  = 256
+	// Invite caps (protocol 1.24): a join fragment is a command line
+	// (256, like GetLaunchCommandLine's own cap); the store and lobby
+	// ids are short.
+	maxConnectLen = 256
+	maxStoreIDLen = 64
+	maxLobbyIDLen = 64
 )
 
 // clip shortens s to n characters.
@@ -43,8 +49,43 @@ func (f *Friend) clean() bool {
 	f.Name = clip(f.Name, maxNameLen)
 	f.AvatarURL = webAvatar(f.AvatarURL)
 	if f.Game != nil {
-		f.Game.ID = clip(f.Game.ID, maxGameIDLen)
-		f.Game.Title = clip(f.Game.Title, maxTitleLen)
+		f.Game.clean()
+	}
+	return true
+}
+
+// clean cuts a friend's game down to the limits.
+func (g *Game) clean() {
+	g.ID = clip(g.ID, maxGameIDLen)
+	g.Title = clip(g.Title, maxTitleLen)
+	g.StoreID = clip(g.StoreID, maxStoreIDLen)
+	g.Connect = clip(g.Connect, maxConnectLen)
+	g.LobbyID = clip(g.LobbyID, maxLobbyIDLen)
+}
+
+// clean applies the limits to an invite. It reports false when the invite
+// names no friend, no game, or no way to join, which is what mergeInvites
+// keys on.
+func (iv *Invite) clean() bool {
+	iv.From.ID = clip(iv.From.ID, maxIDLen)
+	if iv.From.ID == "" {
+		return false
+	}
+	iv.From.Name = clip(iv.From.Name, maxNameLen)
+	if iv.From.Name == "" {
+		iv.From.Name = iv.From.ID
+	}
+	iv.Game.clean()
+	if iv.Game.StoreID == "" {
+		return false
+	}
+	iv.Connect = clip(iv.Connect, maxConnectLen)
+	iv.LobbyID = clip(iv.LobbyID, maxLobbyIDLen)
+	if iv.Kind != "connect" && iv.Kind != "lobby" {
+		return false
+	}
+	if iv.Connect == "" && iv.LobbyID == "" {
+		return false
 	}
 	return true
 }

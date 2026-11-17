@@ -83,6 +83,10 @@ type socialSnapshot struct {
 		State string `json:"state"`
 	} `json:"self"`
 	Friends []socialFriend `json:"friends"`
+	Invites []struct {
+		Kind    string `json:"kind"`
+		Connect string `json:"connect"`
+	} `json:"invites"`
 }
 
 func (e *env) socialState() socialSnapshot {
@@ -352,6 +356,77 @@ func TestSteamSocialClientModeSkipsPlaying(t *testing.T) {
 	time.Sleep(time.Second)
 	if log := e.cmLog(); strings.Contains(log, "games_played") {
 		t.Fatalf("reported a client-mode game: %s", log)
+	}
+	if err := e.call("social.stop", map[string]any{}, nil); err != nil {
+		t.Fatalf("social.stop: %v", err)
+	}
+}
+
+// Game invites (protocol 1.24): rich-presence join data maps onto the
+// friend's game and a chat invite card notifies social.invite.
+func TestSteamSocialInvite(t *testing.T) {
+	e := setup(t)
+	knobs := socialKnobs()
+	f1 := knobs["persona_states"].(map[string]any)[socialF1].(map[string]any)
+	f1["connect"] = "+connect 10.0.0.1:27015"
+	f1["lobby"] = "109775241000000001" // a string: knobs ride through JSON
+	knobs["chat_incoming"] = map[string]any{
+		"friend": socialF1,
+		"text":   `[gameinvite appid="4321" connect="+connect 10.0.0.1:27015"]`,
+		"ts":     1791400010, "ord": 1, "entry": 3,
+	}
+	knobs["push_body_after"] = map[string]any{
+		"0": []any{"friends", "personas", "incoming"},
+		"3": []any{"friends_incr", "personas"},
+	}
+	for knob, value := range knobs {
+		e.setCMState(knob, value)
+	}
+	e.login()
+	games := e.library()
+	e.find(games, "4321")
+	if err := e.call("social.start", map[string]any{}, nil); err != nil {
+		t.Fatalf("social.start: %v", err)
+	}
+	snap := e.socialState()
+	var ana socialFriend
+	for _, f := range snap.Friends {
+		if f.ID == socialF1 {
+			ana = f
+		}
+	}
+	if ana.Game["id"] != "p.steam-standalone.4321" || ana.Game["title"] != "Standalone Game" {
+		t.Fatalf("ana game: %v", ana.Game)
+	}
+	if ana.Game["storeId"] != "4321" || ana.Game["connect"] != "+connect 10.0.0.1:27015" ||
+		ana.Game["lobbyId"] != "109775241000000001" || ana.Game["joinable"] != true {
+		t.Fatalf("ana join: %v", ana.Game)
+	}
+	if len(snap.Invites) != 1 {
+		t.Fatalf("state invites: %+v", snap.Invites)
+	}
+	raw := e.waitNotify("social.invite", 15*time.Second)
+	var inv struct {
+		From struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"from"`
+		Game struct {
+			ID      string `json:"id"`
+			Title   string `json:"title"`
+			StoreID string `json:"storeId"`
+		} `json:"game"`
+		Kind    string `json:"kind"`
+		Connect string `json:"connect"`
+		At      int64  `json:"at"`
+	}
+	if err := json.Unmarshal(raw, &inv); err != nil {
+		t.Fatalf("social.invite: %v", err)
+	}
+	if inv.From.ID != socialF1 || inv.From.Name != "Ana Ruiz" || inv.Kind != "connect" ||
+		inv.Game.StoreID != "4321" || inv.Game.ID != "p.steam-standalone.4321" ||
+		inv.Game.Title != "Standalone Game" || inv.Connect != "+connect 10.0.0.1:27015" || inv.At == 0 {
+		t.Fatalf("invite: %s", raw)
 	}
 	if err := e.call("social.stop", map[string]any{}, nil); err != nil {
 		t.Fatalf("social.stop: %v", err)

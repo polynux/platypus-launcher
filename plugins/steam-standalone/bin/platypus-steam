@@ -4642,19 +4642,30 @@ LIBRARY_IDS = set()  # store ids from the last library.list, for game links
 
 
 def social_game(g, installed):
-    """A helper game {appid, title} to the protocol's {id?, title}."""
-    appid = str((g or {}).get("appid") or "")
-    title = str((g or {}).get("title") or "")
+    """A helper game to the protocol's {id?, title, storeId?, joinable?...} (1.24)."""
+    g = g or {}
+    appid = str(g.get("appid") or "")
+    title = str(g.get("title") or "")
+    if not appid and not title:
+        return None
+    ref = {}
     if appid and (appid in LIBRARY_IDS or appid in installed):
-        ref = {"id": f"p.steam-standalone.{appid}"}
-        if title:
-            ref["title"] = title
-        return ref
-    if title:
-        return {"title": title}
+        ref["id"] = f"p.steam-standalone.{appid}"
     if appid:
-        return {"title": f"App {appid}"}
-    return None
+        ref["storeId"] = appid
+    if title:
+        ref["title"] = title
+    elif appid:
+        ref["title"] = f"App {appid}"
+    # Join data from rich presence (protocol 1.24): the fragment and/or
+    # the lobby id the Join action launches with.
+    if g.get("connect"):
+        ref["connect"] = str(g["connect"])
+    if g.get("lobbyId"):
+        ref["lobbyId"] = str(g["lobbyId"])
+    if g.get("joinable"):
+        ref["joinable"] = True
+    return ref
 
 
 def social_map_friend(f, installed):
@@ -4673,6 +4684,21 @@ def social_map_friend(f, installed):
 def social_map_friends(fs):
     installed = load_state("installed.json", {})
     return [social_map_friend(f, installed) for f in fs or []]
+
+
+def social_map_invite(inv):
+    """A helper invite to the protocol's social.invite (1.24)."""
+    inv = inv or {}
+    installed = load_state("installed.json", {})
+    fid = str(inv.get("friendId") or "")
+    game = social_game({"appid": inv.get("appId"), "title": inv.get("gameTitle")}, installed)
+    out = {"from": {"id": fid, "name": str(inv.get("friendName") or fid)},
+           "game": game, "kind": str(inv.get("kind") or ""), "at": inv.get("at") or 0}
+    if inv.get("connect"):
+        out["connect"] = str(inv["connect"])
+    if inv.get("lobbyId"):
+        out["lobbyId"] = str(inv["lobbyId"])
+    return out
 
 
 def social_spawn_locked(status):
@@ -4764,6 +4790,9 @@ def social_notify_event(rec, event, params):
                                   "friends": social_map_friends(params.get("friends") or [])})
     elif event == "message":
         notify("chat.message", params)
+    elif event == "invite":
+        # A game invite (protocol 1.24): who invites to what and how to join.
+        notify("social.invite", social_map_invite(params))
     elif event == "typing":
         notify("chat.typing", params)
     elif event == "unread":
@@ -4823,7 +4852,8 @@ def social_ensure():
 def social_mapped_snapshot(snap):
     return {"connection": snap.get("connection") or {"state": "offline"},
             "self": snap.get("self") or {},
-            "friends": social_map_friends(snap.get("friends") or [])}
+            "friends": social_map_friends(snap.get("friends") or []),
+            "invites": [social_map_invite(i) for i in snap.get("invites") or []]}
 
 
 def social_default_status():
@@ -4896,7 +4926,7 @@ def social_state(_params):
     with social_lock:
         rec = social_proc
         if rec is None or rec["proc"].poll() is not None:
-            return {"connection": {"state": "offline"}, "friends": []}
+            return {"connection": {"state": "offline"}, "friends": [], "invites": []}
     return social_mapped_snapshot(social_call_rec(rec, "state", {}, timeout=15))
 
 

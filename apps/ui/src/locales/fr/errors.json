@@ -54,6 +54,7 @@
     "unsupported": "« {{name}} » n'offre pas la famille."
   },
   "game": {
+    "badJoinArg": "Impossible d'utiliser les arguments de jonction de l'invitation pour « {{title}} ».",
     "launchBusy": "« {{title}} » est occupé ({{what}}) ; lancez-le une fois terminé.",
     "launchBusyWorkshop": "« {{title}} » synchronise les éléments d’atelier ; lancez-le une fois terminé.",
     "noClientLaunch": "« {{title}} » ne peut pas être démarré via un client de boutique.",
@@ -66,7 +67,8 @@
     "notInstalled": "« {{title}} » n'est pas installé.",
     "notRunning": "Ce jeu n'est pas en cours d'exécution.",
     "runnerMissing": "Le runner « {{id}} » n'est pas installé.",
-    "running": "« {{title}} » est déjà en cours d'exécution."
+    "running": "« {{title}} » est déjà en cours d'exécution.",
+    "tooManyJoinArgs": "Trop d'arguments de jonction pour « {{title}} »."
   },
   "gog": {
     "productId": {

@@ -46,6 +46,10 @@ interface AtlasFriendsPanelProps {
   /** Turns a store's friends off and on again, after its session was replaced or logged out. */
   onReconnect: (plugin: string) => void;
   onOpenGame: (gameId: string) => void;
+  /** Join a friend's game (protocol 1.24): present when a joinable row may join. */
+  onJoin?: (plugin: string, friend: SocialFriend) => void;
+  /** Why Join is disabled for a joinable row, null when it can join. */
+  joinReason?: (plugin: string, friend: SocialFriend) => string | null;
   /** Unread messages from a friend on a store (the chat capability). */
   unreadOf?: (plugin: string, friendId: string) => number;
   /** Opens the conversation with a friend (the chat capability). */
@@ -292,7 +296,7 @@ function MeCard({ views, labels, onSetStatus, onSetPlaying, chatAlerts, onSetCha
 
 type SectionProps = AtlasFriendsPanelProps & { view: SocialView; label: string; query: string; hideHeader?: boolean };
 
-function StoreSection({ view, label, query, hideHeader, plugins, onSetEnabled, onReconnect, unreadOf, onOpenChat, chatTarget }: SectionProps) {
+function StoreSection({ view, label, query, hideHeader, plugins, onSetEnabled, onReconnect, unreadOf, onOpenChat, chatTarget, onJoin, joinReason }: SectionProps) {
   const { t } = useTranslation('chat');
   const line = connectionLine(view.connection);
   const groups = useMemo(() => groupFriends(view.friends, query), [view.friends, query]);
@@ -330,9 +334,9 @@ function StoreSection({ view, label, query, hideHeader, plugins, onSetEnabled, o
         </p>
       )}
 
-      <FriendGroup title={t('chat:group.playing')} friends={groups.inGame} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} chatTarget={chatTarget} />
-      <FriendGroup title={t('chat:group.online')} friends={groups.online} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} chatTarget={chatTarget} />
-      <FriendGroup title={t('chat:group.offline')} friends={groups.offline} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} chatTarget={chatTarget} />
+      <FriendGroup title={t('chat:group.playing')} friends={groups.inGame} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} chatTarget={chatTarget} onJoin={onJoin} joinReason={joinReason} />
+      <FriendGroup title={t('chat:group.online')} friends={groups.online} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} chatTarget={chatTarget} onJoin={onJoin} joinReason={joinReason} />
+      <FriendGroup title={t('chat:group.offline')} friends={groups.offline} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} chatTarget={chatTarget} onJoin={onJoin} joinReason={joinReason} />
 
       {/* The store state lives below the groups (the lab's notices row): a
           notice only when the store is off or disconnected. */}
@@ -407,7 +411,7 @@ function ChatsTab(p: AtlasFriendsPanelProps) {
   );
 }
 
-function FriendGroup({ title, friends, plugin, logoUrl, unreadOf, onOpenChat, chatTarget }: {
+function FriendGroup({ title, friends, plugin, logoUrl, unreadOf, onOpenChat, chatTarget, onJoin, joinReason }: {
   title: string;
   friends: SocialFriend[];
   plugin: string;
@@ -415,6 +419,8 @@ function FriendGroup({ title, friends, plugin, logoUrl, unreadOf, onOpenChat, ch
   unreadOf?: (plugin: string, friendId: string) => number;
   onOpenChat?: (plugin: string, friend: SocialFriend) => void;
   chatTarget?: AtlasChatTarget | null;
+  onJoin?: (plugin: string, friend: SocialFriend) => void;
+  joinReason?: (plugin: string, friend: SocialFriend) => string | null;
 }) {
   const [shown, setShown] = useState(ROWS_PER_GROUP);
   const { t } = useTranslation('chat');
@@ -429,6 +435,8 @@ function FriendGroup({ title, friends, plugin, logoUrl, unreadOf, onOpenChat, ch
         {friends.slice(0, shown).map((f) => {
           const unread = unreadOf?.(plugin, f.id) ?? 0;
           const isOn = chatTarget?.plugin === plugin && chatTarget?.friendId === f.id;
+          const reason = f.game?.joinable && onJoin ? joinReason?.(plugin, f) ?? null : null;
+          const joinable = !!f.game?.joinable && !!onJoin;
           const row = (
             <>
               <PanelAvatar name={f.name} url={f.avatarUrl} dot={presenceDot(f.state, !!f.game)} />
@@ -450,20 +458,34 @@ function FriendGroup({ title, friends, plugin, logoUrl, unreadOf, onOpenChat, ch
           );
           return (
             <li key={f.id} className={cx((f.state === 'offline' || f.state === 'invisible') && 'opacity-60')}>
-              {onOpenChat ? (
-                <button
-                  type="button"
-                  onClick={() => onOpenChat(plugin, f)}
-                  className={cx(
-                    'flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                    isOn && 'bg-[color-mix(in_srgb,var(--color-accent)_14%,var(--color-surface))]'
-                  )}
-                >
-                  {row}
-                </button>
-              ) : (
-                <div className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5">{row}</div>
-              )}
+              <div className="flex items-center gap-1">
+                {onOpenChat ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenChat(plugin, f)}
+                    className={cx(
+                      'flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                      isOn && 'bg-[color-mix(in_srgb,var(--color-accent)_14%,var(--color-surface))]'
+                    )}
+                  >
+                    {row}
+                  </button>
+                ) : (
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5">{row}</div>
+                )}
+                {joinable && (
+                  <button
+                    type="button"
+                    disabled={reason !== null}
+                    title={reason ?? t('chat:invite.join')}
+                    aria-label={t('chat:invite.join')}
+                    onClick={() => onJoin?.(plugin, f)}
+                    className="flex-none rounded-md bg-accent px-2 py-1 text-[12px] font-semibold text-on-accent transition hover:brightness-110 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    {t('chat:invite.join')}
+                  </button>
+                )}
+              </div>
             </li>
           );
         })}

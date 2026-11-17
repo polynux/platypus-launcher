@@ -94,6 +94,13 @@
   "alertOthers_other": "{{first}} et {{count}} autres",
   "unknownFriend": "un ami",
   "findFriend": "Trouver un ami",
+  "invite": {
+    "toast": "{{name}} vous invite à jouer à {{title}}",
+    "join": "Rejoindre",
+    "client": "Rejoindre nécessite le client Steam, et {{title}} ne l'utilise pas.",
+    "fragment": "Impossible de lire l'invitation pour {{title}}.",
+    "missing": "{{title}} n'est pas encore dans votre bibliothèque."
+  },
   "tabs": {
     "friends": "Amis",
     "chats": "Discussions",

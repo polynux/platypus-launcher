@@ -93,6 +93,7 @@ export interface CoreApi {
   LaunchGame(game: types.Game): Promise<string>;
   LaunchGameAnyway(game: types.Game, prompt: string): Promise<string>;
   LaunchGameViaClient(game: types.Game): Promise<string>;
+  LaunchWithArgs(game: types.Game, extraArgs: string[]): Promise<string>;
   LinkGameInfo(gameID: string, source: string, id: string): Promise<string>;
   ListActivity(since: number, limit: number): Promise<types.ActivityEvent[]>;
   ListAvailableRunners(): Promise<types.AvailableRunner[]>;
@@ -303,6 +304,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'LaunchGame',
   'LaunchGameAnyway',
   'LaunchGameViaClient',
+  'LaunchWithArgs',
   'LinkGameInfo',
   'ListActivity',
   'ListAvailableRunners',

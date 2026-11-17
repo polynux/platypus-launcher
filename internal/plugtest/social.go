@@ -12,12 +12,14 @@ import (
 // the keys the requests and the snapshot may carry, and the states core relies
 // on. A plugin may leave out its own profile and report no game.
 var (
-	SocialStateKeys  = []string{"connection", "self", "friends"}
-	SocialFriendKeys = []string{"id", "name", "avatarUrl", "state", "game", "lastSeen"}
-	SocialGameKeys   = []string{"id", "title"}
-	SocialSelfKeys   = []string{"name", "avatarUrl", "state"}
-	SocialStatuses   = []string{"online", "away", "busy", "snooze", "invisible"}
-	socialFriendSt   = []string{"online", "offline", "away", "busy", "snooze", "looking", "invisible"}
+	SocialStateKeys      = []string{"connection", "self", "friends", "invites"}
+	SocialFriendKeys     = []string{"id", "name", "avatarUrl", "state", "game", "lastSeen"}
+	SocialGameKeys       = []string{"id", "title", "storeId", "joinable", "connect", "lobbyId"}
+	SocialSelfKeys       = []string{"name", "avatarUrl", "state"}
+	SocialInviteKeys     = []string{"from", "game", "kind", "connect", "lobbyId", "at"}
+	SocialInviteFromKeys = []string{"id", "name"}
+	SocialStatuses       = []string{"online", "away", "busy", "snooze", "invisible"}
+	socialFriendSt       = []string{"online", "offline", "away", "busy", "snooze", "looking", "invisible"}
 )
 
 // checkSocial holds a plugin offering `social` to the request and snapshot
@@ -46,6 +48,7 @@ func (s *Session) checkSocial(t *testing.T, gameID string) {
 		} `json:"connection"`
 		Self    json.RawMessage   `json:"self"`
 		Friends []json.RawMessage `json:"friends"`
+		Invites []json.RawMessage `json:"invites"`
 	}
 	if err := json.Unmarshal(raw, &snap); err != nil {
 		t.Fatalf("social.state: %v", err)
@@ -58,6 +61,9 @@ func (s *Session) checkSocial(t *testing.T, gameID string) {
 	}
 	for _, f := range snap.Friends {
 		checkFriend(t, f)
+	}
+	for _, iv := range snap.Invites {
+		checkInvite(t, iv)
 	}
 
 	if err := s.call("social.setStatus", map[string]any{"state": "away"}, nil); err != nil {
@@ -97,5 +103,33 @@ func checkFriend(t *testing.T, raw json.RawMessage) {
 	}
 	if len(f.Game) > 0 && string(f.Game) != "null" {
 		checkKeys(t, "friend game", f.Game, SocialGameKeys)
+	}
+}
+
+// checkInvite holds one pending invite to the Invite shape (1.24): who
+// invites to what, how to join, and when.
+func checkInvite(t *testing.T, raw json.RawMessage) {
+	t.Helper()
+	checkKeys(t, "invite", raw, SocialInviteKeys)
+	var iv struct {
+		From json.RawMessage `json:"from"`
+		Game json.RawMessage `json:"game"`
+		Kind string          `json:"kind"`
+	}
+	if err := json.Unmarshal(raw, &iv); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if len(iv.From) == 0 || string(iv.From) == "null" {
+		t.Errorf("invite without a sender: %s", raw)
+	} else {
+		checkKeys(t, "invite sender", iv.From, SocialInviteFromKeys)
+	}
+	if len(iv.Game) == 0 || string(iv.Game) == "null" {
+		t.Errorf("invite without a game: %s", raw)
+	} else {
+		checkKeys(t, "invite game", iv.Game, SocialGameKeys)
+	}
+	if iv.Kind != "connect" && iv.Kind != "lobby" {
+		t.Errorf("invite with kind %q, want connect or lobby: %s", iv.Kind, raw)
 	}
 }

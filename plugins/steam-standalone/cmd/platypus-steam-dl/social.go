@@ -39,6 +39,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -116,8 +117,14 @@ type friendInfo struct {
 	state    string
 	gameApp  uint32
 	gameName string
-	lastSeen int64
-	hasData  bool
+	// gameConnect is the join command line from rich presence ("connect"
+	// key) and gameLobby the lobby SteamID (game_lobby_id); either set
+	// marks the friend joinable. Never logged: connect strings carry
+	// server addresses.
+	gameConnect string
+	gameLobby   string
+	lastSeen    int64
+	hasData     bool
 }
 
 type sentMsg struct {
@@ -140,7 +147,16 @@ type socialSession struct {
 	playingSent    uint32
 	blocked        bool
 	playingApp     uint32
-	sent           map[string]sentMsg
+	// selfConnect/selfLobby are our own join data from our persona entry
+	// (fields 71/73), kept so a later send feature reads its own state.
+	selfConnect string
+	selfLobby   string
+	// invites holds one pending invite per friend (newest wins);
+	// inviteSeen is the last emit time per invite key for the 120 s
+	// repeat window.
+	invites    map[uint64]*invite
+	inviteSeen map[string]int64
+	sent       map[string]sentMsg
 	// inSend counts the in-flight SendMessage calls per friend, so our
 	// own echo is dropped before core has the send's id to dedupe by.
 	inSend map[uint64]int
@@ -187,13 +203,15 @@ func runSocial(ctx context.Context) error {
 		}
 	}
 	s := &socialSession{
-		status:    status,
-		friends:   map[uint64]*friendInfo{},
-		sent:      map[string]sentMsg{},
-		inSend:    map[uint64]int{},
-		sentEcho:  map[string]bool{},
-		requested: map[uint64]bool{},
-		ready:     make(chan struct{}),
+		status:     status,
+		friends:    map[uint64]*friendInfo{},
+		invites:    map[uint64]*invite{},
+		inviteSeen: map[string]int64{},
+		sent:       map[string]sentMsg{},
+		inSend:     map[uint64]int{},
+		sentEcho:   map[string]bool{},
+		requested:  map[uint64]bool{},
+		ready:      make(chan struct{}),
 	}
 	// Known before Connect: the friends list and persona pushes ride in
 	// with the logon response, and their handlers need our own id.
@@ -209,6 +227,10 @@ func runSocial(ctx context.Context) error {
 			steamcm.EMsgClientPersonaState:        func(_ depot.Msg, body []byte) { s.onPersonaState(body) },
 			steamcm.EMsgClientPlayingSessionState: func(_ depot.Msg, body []byte) { s.onPlayingState(body) },
 			steamcm.EMsgServiceMethodResponse:     func(hdr depot.Msg, body []byte) { s.onService(hdr, body) },
+			// Invite pushes: a direct join (7005, the game rides in the
+			// header's routing_appid) and a lobby invite (800).
+			steamcm.EMsgClientInviteToGame: func(hdr depot.Msg, body []byte) { s.onInviteToGame(hdr, body) },
+			steamcm.EMsgClientChatInvite:   func(_ depot.Msg, body []byte) { s.onChatInvite(body) },
 			// FamilyGroupsClient.NotifyRunningApps#1 shares EMsg 146
 			// with the cloud change notification; onFamilyRunning
 			// keeps only that target_job_name.
@@ -559,6 +581,18 @@ func renderFriend(f *friendInfo) map[string]any {
 		if f.gameName != "" {
 			g["title"] = f.gameName
 		}
+		// A joinable friend carries the fragment (rich presence
+		// "connect") and/or the lobby id (game_lobby_id) the Join
+		// action launches with. Never logged upstream either.
+		if f.gameConnect != "" {
+			g["connect"] = f.gameConnect
+		}
+		if f.gameLobby != "" {
+			g["lobbyId"] = f.gameLobby
+		}
+		if f.gameConnect != "" || f.gameLobby != "" {
+			g["joinable"] = true
+		}
 		m["game"] = g
 	}
 	if f.lastSeen != 0 {
@@ -604,6 +638,10 @@ func (s *socialSession) onPersonaState(body []byte) {
 			app = uint32(gameID & 0xFFFFFFFF)
 		}
 		gameName := string(fm.Bytes(55))
+		// Rich presence (field 71) carries the "connect" join fragment
+		// and game_lobby_id (field 73) the lobby SteamID; either makes
+		// the friend joinable.
+		connect, lobby := personaJoin(fm)
 		seen := int64(fm.Int(47))
 		if seen == 0 {
 			seen = int64(fm.Int(45))
@@ -615,6 +653,8 @@ func (s *socialSession) onPersonaState(body []byte) {
 			if len(ava) == 20 {
 				s.selfAva = avatarURL(ava)
 			}
+			s.selfConnect = connect
+			s.selfLobby = lobby
 			selfChanged = true
 			continue
 		}
@@ -632,6 +672,8 @@ func (s *socialSession) onPersonaState(body []byte) {
 		f.state = state
 		f.gameApp = app
 		f.gameName = gameName
+		f.gameConnect = connect
+		f.gameLobby = lobby
 		f.lastSeen = seen
 		changed = append(changed, f)
 	}
@@ -650,6 +692,312 @@ func (s *socialSession) onPersonaState(body []byte) {
 	if len(out) > 0 {
 		s.emit("friends", map[string]any{"full": false, "friends": out})
 	}
+}
+
+// personaJoin reads the join data of one persona entry: the "connect"
+// rich presence value (field 71 KVs) and game_lobby_id (field 73). Field
+// numbers come from steammessages_clientserver_friends.proto.
+func personaJoin(fm depot.Msg) (connect, lobby string) {
+	for _, raw := range fm.AllBytes(71) {
+		kv, err := depot.Decode(raw)
+		if err != nil {
+			continue
+		}
+		if string(kv.Bytes(1)) == "connect" {
+			connect = string(kv.Bytes(2))
+		}
+	}
+	if id := fm.Int(73); id != 0 {
+		lobby = strconv.FormatUint(id, 10)
+	}
+	return connect, lobby
+}
+
+// invite is one pending game invite: a direct join ("connect", launched
+// with the fragment) or a lobby invite ("lobby", joined by lobby id).
+type invite struct {
+	friend  uint64
+	app     uint32
+	kind    string // "connect" or "lobby"
+	connect string
+	lobby   string
+	at      int64
+}
+
+// inviteRepeatWindow is the dedupe window for the same invite: Steam pushes
+// the same invitation over up to three channels within seconds of each
+// other, so a repeat inside the window is dropped.
+const inviteRepeatWindow = 120
+
+// inviteNow is the clock addInvite dedupes by; tests stub it.
+var inviteNow = func() int64 { return time.Now().Unix() }
+
+// inviteKey identifies a repeat: same friend, game, kind and fragment.
+func inviteKey(iv invite) string {
+	return strconv.FormatUint(iv.friend, 10) + "|" + strconv.FormatUint(uint64(iv.app), 10) + "|" + iv.kind + "|" + iv.connect + "|" + iv.lobby
+}
+
+// addInvite keeps one invite per friend (newest wins), drops repeats inside
+// the window, and emits the survivor. Callers hold no lock; the key and the
+// connect string never reach any log.
+func (s *socialSession) addInvite(iv invite) {
+	now := inviteNow()
+	iv.at = now
+	key := inviteKey(iv)
+	s.mu.Lock()
+	if last, ok := s.inviteSeen[key]; ok && now-last < inviteRepeatWindow {
+		s.mu.Unlock()
+		return
+	}
+	s.inviteSeen[key] = now
+	for k, at := range s.inviteSeen {
+		if now-at >= inviteRepeatWindow {
+			delete(s.inviteSeen, k)
+		}
+	}
+	cp := iv
+	s.invites[iv.friend] = &cp
+	out := s.renderInvite(&cp)
+	s.mu.Unlock()
+	s.emit("invite", out)
+}
+
+// renderInvite renders an invite for the plugin; callers hold s.mu so the
+// friend's name and current game title ride along best-effort.
+func (s *socialSession) renderInvite(iv *invite) map[string]any {
+	m := map[string]any{
+		"friendId": strconv.FormatUint(iv.friend, 10),
+		"appId":    strconv.FormatUint(uint64(iv.app), 10),
+		"kind":     iv.kind,
+		"at":       iv.at,
+	}
+	if f := s.friends[iv.friend]; f != nil {
+		if f.name != "" {
+			m["friendName"] = f.name
+		}
+		// The friend's current game title only when the invite is for
+		// the game shown; otherwise the plugin falls back to the app.
+		if f.gameName != "" && f.gameApp == iv.app {
+			m["gameTitle"] = f.gameName
+		}
+	}
+	if iv.connect != "" {
+		m["connect"] = iv.connect
+	}
+	if iv.lobby != "" {
+		m["lobbyId"] = iv.lobby
+	}
+	return m
+}
+
+// invitesLocked renders the pending invites, oldest friend first; callers
+// hold s.mu.
+func (s *socialSession) invitesLocked() []map[string]any {
+	ids := make([]uint64, 0, len(s.invites))
+	for id := range s.invites {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	out := []map[string]any{}
+	for _, id := range ids {
+		out = append(out, s.renderInvite(s.invites[id]))
+	}
+	return out
+}
+
+// onInviteToGame handles ClientInviteToGame (7005): a "join me" invitation
+// carrying a command-line fragment; the game is the header's routing_appid
+// (steammessages_base.proto:97). A set remote_play names a Remote Play
+// Together stream, not a join, and is dropped.
+func (s *socialSession) onInviteToGame(hdr depot.Msg, body []byte) {
+	m, err := depot.Decode(body)
+	if err != nil {
+		return
+	}
+	if len(m.Bytes(4)) != 0 {
+		return
+	}
+	src := m.Int(2)
+	if src == 0 || src == s.selfID || steamIDType(src) != 1 {
+		return
+	}
+	app := uint32(hdr.Int(3))
+	connect := string(m.Bytes(3))
+	if app == 0 || connect == "" {
+		return
+	}
+	s.addInvite(invite{friend: src, app: app, kind: "connect", connect: connect})
+}
+
+// onChatInvite handles ClientChatInvite (800): a lobby invitation.
+// chatroom_type 3 is a lobby (EChatRoomType::Lobby); anything else is a
+// chat room, not a join. game_id's low 24 bits are the app.
+func (s *socialSession) onChatInvite(body []byte) {
+	m, err := depot.Decode(body)
+	if err != nil {
+		return
+	}
+	if m.Int(4) != 3 {
+		return
+	}
+	gameID := m.Int(7)
+	if gameID == 0 || gameID>>24 != 0 {
+		return
+	}
+	patron := m.Int(3)
+	lobby := m.Int(2)
+	if patron == 0 || patron == s.selfID || steamIDType(patron) != 1 || lobby == 0 {
+		return
+	}
+	s.addInvite(invite{
+		friend: patron,
+		app:    uint32(gameID & 0xFFFFFF),
+		kind:   "lobby",
+		lobby:  strconv.FormatUint(lobby, 10),
+	})
+}
+
+// parseChatInvite reads the first [lobbyinvite]/[gameinvite] card of a chat
+// message (FriendMessagesClient.IncomingMessage#1, field 4): the BBCode the
+// invite arrives as. Attribute values may be quoted (a quoted value may
+// contain ]) and a backslash escapes the next character; appid must be a
+// non-zero number, lobbyinvite requires lobbyid, gameinvite requires
+// connect. A set remoteplay names a Remote Play Together invitation, not a
+// join. Tag and attribute names read case-insensitively.
+
+func parseChatInvite(text string) (invite, bool) {
+	loc := inviteTagRe.FindStringSubmatchIndex(text)
+	if loc == nil {
+		return invite{}, false
+	}
+	tag := "connect"
+	if strings.EqualFold(text[loc[2]:loc[3]], "lobbyinvite") {
+		tag = "lobby"
+	}
+	attrs, ok := splitInviteAttrs(text[loc[1]:])
+	if !ok {
+		return invite{}, false
+	}
+	var app uint64
+	if n, err := strconv.ParseUint(attrs["appid"], 10, 32); err == nil {
+		app = n
+	}
+	if app == 0 {
+		return invite{}, false
+	}
+	if _, remote := attrs["remoteplay"]; remote {
+		return invite{}, false
+	}
+	if tag == "lobby" {
+		if attrs["lobbyid"] == "" {
+			return invite{}, false
+		}
+		return invite{app: uint32(app), kind: "lobby", lobby: attrs["lobbyid"]}, true
+	}
+	if attrs["connect"] == "" {
+		return invite{}, false
+	}
+	return invite{app: uint32(app), kind: "connect", connect: attrs["connect"]}, true
+}
+
+// inviteTagRe finds the first invite card's opening tag, matching ASCII
+// case-insensitively: the submatch indices are byte offsets into the
+// original text (strings.ToLower can change byte length, so it can't be
+// used for the search), keeping the case-sensitive values intact.
+var inviteTagRe = regexp.MustCompile(`(?i)\[(lobbyinvite|gameinvite)`)
+
+// splitInviteAttrs parses the attributes up to the tag's closing ] (outside
+// quotes, backslash-escaped), into lower-cased names and unescaped values.
+func splitInviteAttrs(s string) (map[string]string, bool) {
+	attrs := map[string]string{}
+	i := 0
+	// Find the closing bracket first, honouring quotes and escapes.
+	end := -1
+	quoted := byte(0)
+	for j := 0; j < len(s); j++ {
+		c := s[j]
+		if c == '\\' {
+			j++
+			continue
+		}
+		if quoted != 0 {
+			if c == quoted {
+				quoted = 0
+			}
+			continue
+		}
+		if c == '"' || c == '\'' {
+			quoted = c
+			continue
+		}
+		if c == ']' {
+			end = j
+			break
+		}
+	}
+	if end < 0 {
+		return nil, false
+	}
+	s = s[:end]
+	for i < len(s) {
+		for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+			i++
+		}
+		if i >= len(s) {
+			break
+		}
+		name := ""
+		for i < len(s) && isInviteNameChar(s[i]) {
+			name += string(s[i])
+			i++
+		}
+		if name == "" {
+			// Skip one unknown character (a stray '/' of a closing tag
+			// can't start here: the bracket scan stopped at the tag's
+			// own close).
+			i++
+			continue
+		}
+		for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+			i++
+		}
+		if i >= len(s) || s[i] != '=' {
+			continue
+		}
+		i++
+		for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+			i++
+		}
+		val := ""
+		if i < len(s) && (s[i] == '"' || s[i] == '\'') {
+			q := s[i]
+			i++
+			for i < len(s) && s[i] != q {
+				if s[i] == '\\' && i+1 < len(s) {
+					i++
+				}
+				val += string(s[i])
+				i++
+			}
+			if i < len(s) {
+				i++ // the closing quote
+			}
+		} else {
+			for i < len(s) && s[i] != ' ' && s[i] != '\t' {
+				if s[i] == '\\' && i+1 < len(s) {
+					i++
+				}
+				val += string(s[i])
+				i++
+			}
+		}
+		attrs[strings.ToLower(name)] = val
+	}
+	return attrs, true
+}
+
+func isInviteNameChar(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-'
 }
 
 // onPlayingState handles ClientPlayingSessionState (9600): another session
@@ -756,6 +1104,23 @@ func (s *socialSession) onService(hdr depot.Msg, body []byte) {
 		s.emit("typing", map[string]any{"friendId": fid})
 		return
 	}
+	if entry != 1 && entry != 3 {
+		return
+	}
+	// An invite card is detected on the BBCode (field 4): the plain text
+	// (field 8) has the markup stripped. A card is an invite, not a
+	// conversation message; our own echo of one is dropped.
+	if card, ok := parseChatInvite(string(m.Bytes(4))); ok {
+		if m.Int(7) != 0 {
+			return
+		}
+		if friend == s.selfID || steamIDType(friend) != 1 {
+			return
+		}
+		card.friend = friend
+		s.addInvite(card)
+		return
+	}
 	if entry != 1 {
 		return
 	}
@@ -812,6 +1177,7 @@ func (s *socialSession) waitReady() (map[string]any, *socialError) {
 			"connection": map[string]any{"state": connState(s.client.State())},
 			"self":       s.selfLocked(),
 			"friends":    s.friendsLocked(),
+			"invites":    s.invitesLocked(),
 		}
 		s.mu.Unlock()
 		return snap, nil
@@ -924,7 +1290,7 @@ func (s *socialSession) backfillNames() {
 	s.mu.Unlock()
 }
 
-// snapshot renders the current connection, self and friends.
+// snapshot renders the current connection, self, friends and invites.
 func (s *socialSession) snapshot() map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -932,6 +1298,7 @@ func (s *socialSession) snapshot() map[string]any {
 		"connection": map[string]any{"state": connState(s.client.State())},
 		"self":       s.selfLocked(),
 		"friends":    s.friendsLocked(),
+		"invites":    s.invitesLocked(),
 	}
 }
 

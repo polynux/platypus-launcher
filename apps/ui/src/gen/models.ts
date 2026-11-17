@@ -46,6 +46,24 @@ export namespace social {
   export interface Game {
     id?: string;
     title: string;
+    storeId?: string;
+    joinable?: boolean;
+    connect?: string;
+    lobbyId?: string;
+  }
+
+  export interface Invite {
+    from: social.InviteFrom;
+    game: social.Game;
+    kind: string;
+    connect?: string;
+    lobbyId?: string;
+    at: number;
+  }
+
+  export interface InviteFrom {
+    id: string;
+    name: string;
   }
 
   export interface Self {
@@ -63,6 +81,7 @@ export namespace social {
     connection: social.Connection;
     self?: social.Self | null;
     friends: social.Friend[];
+    invites?: social.Invite[];
   }
 }
 
