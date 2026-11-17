@@ -135,7 +135,10 @@ func TestAuthStatusSecondCallServesCache(t *testing.T) {
 // Concurrent first reads share one plugin round trip (single-flight), and all
 // callers get its answer.
 func TestAuthStatusSingleFlight(t *testing.T) {
-	t.Parallel()
+	// A slow login check keeps the one flight open long enough for every
+	// caller to join it, even on a loaded machine (#208). t.Setenv rules out
+	// t.Parallel.
+	t.Setenv("ECHO_AUTH_STATUS_DELAY_MS", "500")
 	e, _ := authEnv(t)
 	e.a.invalidateAuth("echo")
 
@@ -175,6 +178,9 @@ func TestAuthStatusSingleFlight(t *testing.T) {
 // flight, which load breaks (a straggler scheduled after the flight closed
 // correctly starts another refresh).
 func TestAuthStatusRefreshSingleFlight(t *testing.T) {
+	// A slow login check keeps the background refresh in flight while all
+	// readers arrive, so a straggler can't start a second one (#208).
+	t.Setenv("ECHO_AUTH_STATUS_DELAY_MS", "500")
 	e, _ := authEnv(t)
 	if _, err := e.a.PluginAuthStatus("echo"); err != nil {
 		t.Fatal(err)
