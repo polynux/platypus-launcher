@@ -2174,6 +2174,12 @@ def dl_request(params, extra=None):
             req["branch_passwords"] = {channel: stored[channel]}
         elif stored and not channel:
             req["branch_passwords"] = dict(stored)
+    # A branch naming no target (the DLC catalog on a beta channel): the
+    # stored password unlocks it when no password was typed.
+    if params.get("branch") and params["branch"] != "public" and not pw and not params.get("target"):
+        stored = (beta_passwords().get(str(params["id"])) or {})
+        if params["branch"] in stored:
+            req["branch_passwords"] = {params["branch"]: stored[params["branch"]]}
     # The add-on selection (protocol 1.5): value ids the downloader keeps
     # besides the base-game depots. The caller validates them against the
     # DLC catalog; stdin only, like the token.
@@ -2275,7 +2281,7 @@ def install_size(params):
     here too: the core sizes before it installs."""
     try:
         params = dict(params)
-        params["dlc"] = resolve_dlc_selection(str(params.get("id") or ""), params)
+        params["dlc"] = resolve_dlc_selection(str(params.get("id") or ""), params, "install")
         req = dl_request(params)
         result = dl_run("size", req)
     except WrongBranchPassword as e:
@@ -2295,33 +2301,75 @@ def install_size(params):
 #
 # The game's add-ons: PICS extended.listofdlc plus the depot->DLC map
 # (depots.<id>.dlcappid) from platypus-steam-dl's dlc subcommand, ownership
-# from the owned-apps list, names from the Store. game.options shows one
-# multi group; the selection rides install/update/size requests as dlc
-# value ids and is remembered per game in installed.json, so updates keep
-# it. Deselecting an add-on drops its depots on the next update; the
-# downloader deletes only files no kept depot carries.
+# from the CM licences (PICS package info) with the owned-apps list as
+# fallback, names from PICS. game.options shows one multi group with the
+# store's default ticked; the selection rides install/update/size requests
+# as dlc value ids and is remembered per game in installed.json. A plain
+# update never removes anything: without explicit options.dlc the selection
+# starts from what's on disk plus what's owned. Deselecting an add-on drops
+# its depots on the next update; the downloader deletes only files no kept
+# depot carries.
 
-def dlc_catalog(app):
-    """The PICS DLC catalog for the app: {"dlc": [{"appid", "depots"}],
-    "depots": {depot: dlc appid}}. Raises when Steam is unreachable or the
+# The DLC catalog, fetched once per game and branch (PICS changes rarely;
+# the TTL keeps a dialog's repeated sizes off the CM).
+_dlc_cache = {}  # (app, branch) -> [fetched_at, catalog]
+_dlc_lock = threading.Lock()
+DLC_CACHE_TTL = 300
+
+
+def dlc_catalog(app, branch=None, max_age=DLC_CACHE_TTL):
+    """The PICS DLC catalog for the app and branch: {"dlc": [{"appid",
+    "depots", "name", "sizeBytes"}], "depots": {depot: dlc appid},
+    "by_os": {platform: [depots]}, "owned": [dlc appids] or None}.
+    "owned" is None when the session carries no licences (the caller falls
+    back to the owned-apps list). Raises when Steam is unreachable or the
     app is unknown, like the versions list does."""
-    result = dl_run("dlc", dl_request({"id": app}), label="Steam add-ons")
+    key = (str(app), branch or "public")
+    with _dlc_lock:
+        hit = _dlc_cache.get(key)
+        if hit is not None and time.time() - hit[0] < max_age:
+            return hit[1]
+    result = dl_run("dlc", dl_request({"id": app, "branch": branch or "public"}),
+                    label="Steam add-ons")
     dlc = []
     for e in result.get("dlc") or []:
         if not isinstance(e, dict):
             continue
         try:
-            dlc.append({"appid": str(int(e.get("appid"))),
-                        "depots": [str(int(d)) for d in e.get("depots") or []]})
+            item = {"appid": str(int(e.get("appid"))),
+                    "depots": [str(int(d)) for d in e.get("depots") or []]}
         except (TypeError, ValueError):
             continue
+        if e.get("name"):
+            item["name"] = str(e["name"])
+        try:
+            if int(e.get("sizeBytes") or 0) > 0:
+                item["sizeBytes"] = int(e["sizeBytes"])
+        except (TypeError, ValueError):
+            pass
+        dlc.append(item)
     mapping = {}
     for depot, dlc_id in (result.get("depots") or {}).items():
         try:
             mapping[str(int(depot))] = str(int(dlc_id))
         except (TypeError, ValueError):
             continue
-    return {"dlc": dlc, "depots": mapping}
+    by_os = {}
+    for platform, depots in (result.get("by_os") or {}).items():
+        try:
+            by_os[str(platform)] = [str(int(d)) for d in depots or []]
+        except (TypeError, ValueError):
+            continue
+    owned = None
+    if result.get("owned") is not None:
+        try:
+            owned = [str(int(i)) for i in result.get("owned") or []]
+        except (TypeError, ValueError):
+            owned = None
+    catalog = {"dlc": dlc, "depots": mapping, "by_os": by_os, "owned": owned}
+    with _dlc_lock:
+        _dlc_cache[key] = [time.time(), catalog]
+    return catalog
 
 
 def owned_app_ids():
@@ -2332,40 +2380,133 @@ def owned_app_ids():
             if g.get("appid") is not None}
 
 
-def resolve_dlc_selection(app, params):
-    """The DLC value ids (strings) an install/update/size downloads: the
-    explicit options choice when given (unknown or unowned add-ons are
-    refused), else the remembered selection of an installed game, else
-    every owned add-on (the Steam client's default). Needs no CM round
-    trip when the remembered selection covers it."""
+def dlc_owned_set(catalog):
+    """The owned DLC value ids: the licence-based list when the session
+    carried licences, else the owned-apps list."""
+    if catalog.get("owned") is not None:
+        return set(catalog["owned"])
+    return owned_app_ids()
+
+
+def saved_depot_ids(app):
+    """Depot ids with saved manifests for the app: the on-disk install
+    history, whatever the ledger recorded."""
+    ids = set()
+    try:
+        entries = os.listdir(os.path.join(data_dir(), "manifests", str(app)))
+    except OSError:
+        return ids
+    for name in entries:
+        head, sep, _ = name.partition("_")
+        if sep and head.isdigit() and int(head) != 0:
+            ids.add(head)
+    return ids
+
+
+def dlc_map_for(entry, catalog):
+    """The depot->DLC map to read an install by: the remembered map first
+    (it matches the install's era), the current catalog filling the gaps.
+    Base depots (dlcappid 0) belong to no DLC and stay out."""
+    mapping = {}
+    for depot, dlc_id in (catalog.get("depots") or {}).items():
+        if str(dlc_id) != "0":
+            mapping[str(depot)] = str(dlc_id)
+    for depot, dlc_id in (entry.get("depotDlc") or {}).items():
+        if str(dlc_id) != "0":
+            mapping[str(depot)] = str(dlc_id)
+    return mapping
+
+
+def ondisk_dlc_ids(app, entry, catalog):
+    """The DLC value ids with depots on disk: archiveRef plus saved
+    manifests, mapped through the depot->DLC map."""
+    mapping = dlc_map_for(entry, catalog)
+    have = set((entry.get("archiveRef") or {}).get("depots") or {})
+    have |= saved_depot_ids(app)
+    out = set()
+    for depot in have:
+        dlc_id = mapping.get(str(depot))
+        if dlc_id is not None:
+            out.add(dlc_id)
+    return out
+
+
+def resolve_dlc_selection(app, params, kind):
+    """The DLC value ids (strings) an install/update/size downloads. An
+    explicit options.dlc choice wins (unknown add-ons, or ones the account
+    doesn't own and never installed, are refused). Otherwise a remembered
+    selection wins; an update with nothing stored starts from what's on
+    disk plus what's owned, so a plain update never removes anything; a
+    fresh install takes every owned add-on (the Steam client's default)."""
     opts = params.get("options") or {}
     entry = (load_state("installed.json", {}) or {}).get(str(app)) or {}
     stored = entry.get("dlc")
-    if "dlc" not in opts and stored is not None:
-        return [str(x) for x in stored]
-    catalog = dlc_catalog(app)
+    branch = ((params.get("target") or {}).get("channel")
+              or (entry.get("channel") if kind == "update" else None)
+              or "public")
+    catalog = dlc_catalog(app, branch)
     known = {e["appid"] for e in catalog["dlc"]}
     if "dlc" in opts:
         want = opts["dlc"]
         if not isinstance(want, list) or any(not isinstance(x, str) for x in want):
             raise RPCError("invalid params: options.dlc is a list of value ids", -32602)
-        owned = owned_app_ids()
-        already = {str(x) for x in stored or []}
         for vid in want:
             if vid not in known:
                 raise RPCError("Steam has no add-on {} for app {}".format(vid, app), -32602)
+        if not want:
+            return []
+        owned = dlc_owned_set(catalog)
+        already = {str(x) for x in stored or []} | ondisk_dlc_ids(app, entry, catalog)
+        for vid in want:
             if vid not in owned and vid not in already:
-                name = store_app(vid).get("name") or "Add-on {}".format(vid)
+                name = store_cached(vid).get("name") or "Add-on {}".format(vid)
                 raise RPCError("{} is not owned: buy it in the store first".format(name), -32602)
         return list(want)
-    owned = owned_app_ids()
+    if kind == "update":
+        if stored is not None:
+            return [str(x) for x in stored]
+        # Pre-DLC installs remember nothing: start from what's on disk
+        # plus what's owned, so a plain update never removes anything.
+        if not known:
+            return sorted(ondisk_dlc_ids(app, entry, catalog))
+        owned = dlc_owned_set(catalog)
+        return sorted(ondisk_dlc_ids(app, entry, catalog) | (owned & known))
+    if stored is not None:
+        return [str(x) for x in stored]
+    if not known:
+        return []
+    owned = dlc_owned_set(catalog)
     return sorted(v for v in known if v in owned)
+
+
+def dlc_installed_ids(app, entry, catalog):
+    """The DLC value ids to show as installed: remembered and still on
+    disk, on the install's platform. A DLC with no depot on the platform,
+    or one whose depots never landed (a denied key), never shows
+    installed. A legacy install without a remembered selection reads the
+    depots on disk."""
+    platform = "linux" if entry.get("native", True) else "windows"
+    plat = set((catalog.get("by_os") or {}).get(platform) or catalog.get("depots") or {})
+    mapping = dlc_map_for(entry, catalog)
+    have = set((entry.get("archiveRef") or {}).get("depots") or {})
+    have |= saved_depot_ids(app)
+    ondisk = set()
+    for depot in have & plat:
+        dlc_id = mapping.get(str(depot))
+        if dlc_id is not None:
+            ondisk.add(dlc_id)
+    stored = entry.get("dlc")
+    if stored is not None:
+        return {str(x) for x in stored} & ondisk
+    return ondisk
 
 
 def game_options(params):
     """The add-on group (protocol 1.5): one multi group with the game's
-    DLC, each value owned/installed and unowned ones with their store
-    page. A game without DLC gets an empty groups list."""
+    DLC, each value owned/installed (with its install size) and unowned
+    ones with their store page. The default ticks the installed add-ons,
+    or every owned one for a fresh install. A game without DLC gets an
+    empty groups list."""
     app = str(params.get("id") or "")
     if not app:
         raise RPCError("invalid params: id is required", -32602)
@@ -2373,31 +2514,29 @@ def game_options(params):
         int(app)
     except ValueError:
         raise RPCError("invalid params: id is required", -32602)
-    catalog = dlc_catalog(app)
+    entry = (load_state("installed.json", {}) or {}).get(app) or {}
+    catalog = dlc_catalog(app, entry.get("channel") or "public")
     if not catalog["dlc"]:
         return {"groups": []}
-    owned = owned_app_ids()
-    entry = (load_state("installed.json", {}) or {}).get(app) or {}
-    stored = entry.get("dlc")
-    if stored is not None:
-        installed_ids = {str(x) for x in stored}
-    else:
-        have = set((entry.get("archiveRef") or {}).get("depots") or {})
-        installed_ids = {e["appid"] for e in catalog["dlc"] if set(e["depots"]) & have}
+    owned = dlc_owned_set(catalog)
+    installed_ids = dlc_installed_ids(app, entry, catalog)
     values = []
     for e in catalog["dlc"]:
         vid = e["appid"]
         is_owned = vid in owned
         value = {"id": vid,
-                 "label": store_app(vid).get("name") or "Add-on {}".format(vid),
+                 "label": e.get("name") or store_cached(vid).get("name") or "Add-on {}".format(vid),
                  "owned": is_owned}
+        if "sizeBytes" in e:
+            value["sizeBytes"] = e["sizeBytes"]
         if vid in installed_ids:
             value["installed"] = True
         if not is_owned:
             value["storeUrl"] = "https://store.steampowered.com/app/{}/".format(vid)
         values.append(value)
+    default = sorted(installed_ids) if entry else sorted(v for v in owned if v in {e["appid"] for e in catalog["dlc"]})
     return {"groups": [{"id": "dlc", "label": tr("dlc_label"), "kind": "multi",
-                        "dlc": True, "values": values}]}
+                        "dlc": True, "values": values, "default": default}]}
 
 
 # --- versions (protocol 1.3) -------------------------------------------------
@@ -2807,16 +2946,7 @@ def verify_version(app):
     installed = load_state("installed.json", {}).get(app) or {}
     channel = installed.get("channel") or ""
     if installed.get("archiveRef"):
-        ref = dict((installed["archiveRef"] or {}).get("depots") or {})
-        if installed.get("dlc") is not None:
-            # A deselected add-on stays out of the check: drop its depots
-            # from the pinned history, like updates do. Unmapped depots
-            # (a depot->DLC map from before the map was kept) stay in.
-            keep = {str(x) for x in installed["dlc"]}
-            mapping = installed.get("depotDlc") or {}
-            ref = {d: g for d, g in ref.items()
-                   if mapping.get(str(d)) is None or str(mapping[str(d)]) in keep}
-        target = {"archiveRef": {"depots": ref}}
+        target = {"archiveRef": installed["archiveRef"]}
         if channel:
             target["channel"] = channel
         if installed.get("build"):
@@ -2858,7 +2988,13 @@ def follow_verify(job_id, app, install_dir, repair=False):
     with jobs_lock:
         jobs.setdefault(job_id, {"canceled": False, "id": app, "dir": install_dir})
     try:
-        req = dl_request({"id": app, **verify_version(app)},
+        version = verify_version(app)
+        remembered = (load_state("installed.json", {}) or {}).get(app) or {}
+        if remembered.get("dlc") is not None:
+            # A deselected add-on stays out of the check and is not
+            # redownloaded by a repair: the helper filters by it.
+            version["dlc"] = [str(x) for x in remembered["dlc"]]
+        req = dl_request({"id": app, **version},
                          {"install_dir": install_dir, "job_id": job_id})
         req["repair"] = bool(repair)
         result = dl_run("verify", req, job_id, install_dir,
@@ -2944,7 +3080,7 @@ def start_job(params, kind):
     # then start again from what it left on disk.
     # The add-on selection (protocol 1.5) resolves before the claim: an
     # unknown or unowned add-on fails the start without holding the job.
-    dlc_selection = resolve_dlc_selection(app, params)
+    dlc_selection = resolve_dlc_selection(app, params, kind)
     if not claim_job(job_id, {"canceled": False, "id": app, "dir": game_dir, "proc": None}):
         return {}
     write_job_meta(job_id, {"app": app, "kind": kind, "dir": game_dir, "installDir": install_dir})

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"platypus/internal/depot"
 	"platypus/internal/steam"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -727,23 +728,7 @@ func removeRetiredDepots(s *session, appID uint32, kept map[uint32]bool, combine
 	if err != nil {
 		return nil // nothing ever installed: nothing retired
 	}
-	var retired []uint32
-	seenRetired := map[uint32]bool{}
-	for _, e := range entries {
-		name := e.Name()
-		i := strings.IndexByte(name, '_')
-		if i <= 0 {
-			continue
-		}
-		var id uint64
-		if _, err := fmt.Sscanf(name[:i], "%d", &id); err != nil || id == 0 {
-			continue
-		}
-		if !kept[uint32(id)] && !seenRetired[uint32(id)] {
-			seenRetired[uint32(id)] = true
-			retired = append(retired, uint32(id))
-		}
-	}
+	retired := retiredDepotIDs(entries, kept)
 	if len(retired) == 0 {
 		return nil
 	}
@@ -778,6 +763,7 @@ func removeRetiredDepots(s *session, appID uint32, kept map[uint32]bool, combine
 				break
 			}
 		}
+		var key []byte
 		if needKey {
 			if err := pics(); err != nil {
 				return err
@@ -792,37 +778,116 @@ func removeRetiredDepots(s *session, appID uint32, kept map[uint32]bool, combine
 					}
 				}
 			}
-			k, err := s.cm.DepotKey(depotID, app, 0)
+			// The key is gone with the licence (or unreachable):
+			// leave the files and forget the manifests rather
+			// than failing the update. A reselect downloads
+			// from scratch.
+			key, err = s.cm.DepotKey(depotID, app, 0)
 			if err != nil {
-				return depErrf(depotID, err)
-			}
-			for _, old := range olds {
-				if old.Meta.FilenamesEncrypted {
-					if err := old.DecryptFilenames(k); err != nil {
-						return depErrf(depotID, err)
-					}
-				}
+				forgetManifests(dir, entries, depotID)
+				continue
 			}
 		}
-		var gone []string
-		seenGone := map[string]bool{}
-		for _, old := range olds {
-			_, g := depot.Diff(old, combined)
-			for _, name := range g {
-				if !seenGone[name] {
-					seenGone[name] = true
-					gone = append(gone, name)
-				}
-			}
-		}
-		if err := removeGone(installDir, gone); err != nil {
+		if err := retireDepot(s.dataDir, installDir, appID, depotID, olds, combined, key); err != nil {
 			return err
 		}
-		for _, e := range entries {
-			if strings.HasPrefix(e.Name(), fmt.Sprintf("%d_", depotID)) {
-				os.Remove(filepath.Join(dir, e.Name()))
+		forgetManifests(dir, entries, depotID)
+	}
+	return nil
+}
+
+// retiredDepotIDs lists the saved-manifest depot ids outside the kept set.
+func retiredDepotIDs(entries []os.DirEntry, kept map[uint32]bool) []uint32 {
+	var retired []uint32
+	seenRetired := map[uint32]bool{}
+	for _, e := range entries {
+		name := e.Name()
+		i := strings.IndexByte(name, '_')
+		if i <= 0 {
+			continue
+		}
+		var id uint64
+		if _, err := fmt.Sscanf(name[:i], "%d", &id); err != nil || id == 0 {
+			continue
+		}
+		if !kept[uint32(id)] && !seenRetired[uint32(id)] {
+			seenRetired[uint32(id)] = true
+			retired = append(retired, uint32(id))
+		}
+	}
+	return retired
+}
+
+// retireDepot decrypts a retired depot's saved manifests with its key (nil
+// when the names were never encrypted) and deletes the files no kept depot
+// carries. A bad key is an error: the caller decides whether to fail or to
+// leave the files and forget the manifests.
+func retireDepot(dataDir, installDir string, appID, depotID uint32, olds []*depot.Manifest, combined *depot.Manifest, key []byte) error {
+	for _, old := range olds {
+		if old.Meta.FilenamesEncrypted {
+			if err := old.DecryptFilenames(key); err != nil {
+				return depErrf(depotID, err)
 			}
 		}
+	}
+	var gone []string
+	seenGone := map[string]bool{}
+	for _, old := range olds {
+		_, g := depot.Diff(old, combined)
+		for _, name := range g {
+			if !seenGone[name] {
+				seenGone[name] = true
+				gone = append(gone, name)
+			}
+		}
+	}
+	return removeRetiredFiles(installDir, olds, gone)
+}
+
+// forgetManifests drops a retired depot's saved manifests, so reselecting
+// it downloads from scratch instead of reusing a stale branch.
+func forgetManifests(dir string, entries []os.DirEntry, depotID uint32) {
+	prefix := fmt.Sprintf("%d_", depotID)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), prefix) {
+			os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+}
+
+// removeRetiredFiles deletes a retired depot's files but only directories
+// left empty: a user file inside a DLC folder (screenshots, saves) keeps
+// the folder, and a folder a kept depot still lists is never named here.
+func removeRetiredFiles(installDir string, olds []*depot.Manifest, gone []string) error {
+	dirs := map[string]bool{}
+	for _, old := range olds {
+		for _, f := range old.Files {
+			if f.IsDir() {
+				dirs[f.Name] = true
+			}
+		}
+	}
+	var errs []string
+	var dirGone []string
+	for _, name := range gone {
+		if dirs[name] {
+			dirGone = append(dirGone, name)
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(installDir, filepath.FromSlash(name))); err != nil {
+			errs = append(errs, name+": "+err.Error())
+		}
+	}
+	// Deepest first, so a parent is empty when attempted; Remove fails on
+	// a directory that still holds user files, which then stays.
+	sort.Slice(dirGone, func(i, j int) bool {
+		return strings.Count(dirGone[i], "/") > strings.Count(dirGone[j], "/")
+	})
+	for _, name := range dirGone {
+		_ = os.Remove(filepath.Join(installDir, filepath.FromSlash(name)))
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("removing obsolete files: %s", errs)
 	}
 	return nil
 }

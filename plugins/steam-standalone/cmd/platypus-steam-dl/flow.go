@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -135,58 +136,9 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 	if err != nil {
 		return nil, "", resolvedTarget{}, callErr("product info", err)
 	}
-	branches, err := parseBranches(kv)
+	branches, err := branchesForRequest(s.cm, kv, appID, toks[appID], s.req)
 	if err != nil {
-		return nil, "", resolvedTarget{}, fmt.Errorf("app %d: %v", appID, err)
-	}
-	// A locked branch carries no plain manifests (live shape): its gids
-	// come from the private-beta section. A password branch is normally
-	// hidden from PICS entirely, so when the requested branch is missing
-	// it resolves here and joins the list; a listed locked branch just
-	// merges its gids. Either way the target below sees plain manifests.
-	if name, pw := privateBranchRequest(s.req); name != "" && pw != "" {
-		// An open branch resolves from plain PICS; only a hidden or
-		// locked one needs its private-beta section.
-		if listed := findBranch(branches, name); listed == nil || listed.PwdRequired {
-			pbi, err := privateBranchInfo(s.cm, kv, appID, toks[appID], name, pw)
-			if err != nil {
-				return nil, "", resolvedTarget{}, err
-			}
-			if listed == nil {
-				branches = append(branches, *pbi)
-			}
-		}
-	} else if t := s.req.Target; t != nil && t.Build != "" && t.Channel == "" {
-		// A build with no channel names no branch: resolve the stored
-		// branches PICS hides so branchForBuild sees them, and merge the
-		// private gids for listed locked ones. Only branches without a
-		// password resolve from plain PICS. A refused password only fails
-		// the install when no branch holds the build; otherwise the wrong
-		// branch is not this one.
-		var firstErr error
-		for _, name := range sortedKeys(s.req.BranchPasswords) {
-			pw := s.req.BranchPasswords[name]
-			if pw == "" {
-				continue
-			}
-			listed := findBranch(branches, name)
-			if listed != nil && !listed.PwdRequired {
-				continue
-			}
-			pbi, err := privateBranchInfo(s.cm, kv, appID, toks[appID], name, pw)
-			if err != nil {
-				if firstErr == nil {
-					firstErr = err
-				}
-				continue
-			}
-			if listed == nil {
-				branches = append(branches, *pbi)
-			}
-		}
-		if branchForBuild(branches, t.Build) == nil && firstErr != nil {
-			return nil, "", resolvedTarget{}, firstErr
-		}
+		return nil, "", resolvedTarget{}, err
 	}
 	rt, err := resolveTarget(branches, s.req)
 	if err != nil {
@@ -270,6 +222,25 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 			return nil, "", resolvedTarget{}, fmt.Errorf("depot %d isn't downloadable from the %s branch", depot, rt.branch)
 		}
 	}
+	// Adding DLC while pinned: an add-on in the selection without a pinned
+	// manifest would mix the pinned build with the branch tip, so refuse
+	// with a clear error instead. Unpin (a plain update) to fetch it.
+	if len(rt.manifests) > 0 {
+		var missing []uint32
+		seenMissing := map[uint32]bool{}
+		for _, r := range refs {
+			if r.DLCAppID == 0 {
+				continue
+			}
+			if _, ok := rt.manifests[r.DepotID]; !ok && !seenMissing[r.DLCAppID] {
+				seenMissing[r.DLCAppID] = true
+				missing = append(missing, r.DLCAppID)
+			}
+		}
+		if len(missing) > 0 {
+			return nil, "", resolvedTarget{}, fmt.Errorf("add-on %d has no pinned manifests for this version: update without a version pin to fetch it", missing[0])
+		}
+	}
 	servers, err := s.cm.ServersForSteamPipe(cellID(), 32, 0)
 	if err != nil {
 		return nil, "", resolvedTarget{}, callErr("server list", err)
@@ -289,9 +260,10 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 	// O(depots) CM round trips before the first byte.
 	out := make([]fetchedDepot, len(refs))
 	type depRes struct {
-		idx int
-		fd  fetchedDepot
-		err error
+		idx  int
+		fd   fetchedDepot
+		err  error
+		skip error
 	}
 	jobs := make(chan int, len(refs))
 	results := make(chan depRes, len(refs))
@@ -312,6 +284,13 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 				}
 				key, err := s.cm.DepotKey(r.DepotID, keyApp, 0)
 				if err != nil {
+					// A depot the account may not fetch (a refunded or
+					// borrowed DLC whose licence is gone) is skipped
+					// instead of failing the job; anything else fails.
+					if accessDenied(err) {
+						results <- depRes{idx: i, skip: callErrf("depot %d key", r.DepotID, err)}
+						continue
+					}
 					results <- depRes{idx: i, err: callErrf("depot %d key", r.DepotID, err)}
 					continue
 				}
@@ -346,16 +325,48 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, resol
 	close(jobs)
 	wg.Wait()
 	close(results)
+	var firstSkip error
+	skipped := map[int]bool{}
 	for res := range results {
 		if res.err != nil {
 			return nil, "", resolvedTarget{}, res.err
 		}
+		if res.skip != nil {
+			if firstSkip == nil {
+				firstSkip = res.skip
+			}
+			skipped[res.idx] = true
+			continue
+		}
 		out[res.idx] = res.fd
+	}
+	final := make([]fetchedDepot, 0, len(refs))
+	for i := range refs {
+		if !skipped[i] {
+			final = append(final, out[i])
+		}
+	}
+	out = final
+	if len(out) == 0 {
+		// Every depot refused: report the first denial rather than an
+		// empty download set.
+		if firstSkip != nil {
+			return nil, "", resolvedTarget{}, firstSkip
+		}
+		return nil, "", resolvedTarget{}, fmt.Errorf("the dlc selection leaves no depots to download")
 	}
 	// CDN tokens for hosts that need them (third-party CDNs); the fake
 	// CDN ignores the query, real ones may require it.
 	withTokens(ctx, s, out)
 	return out, osUsed, rt, nil
+}
+
+// accessDenied reports whether err is a CM refusal for lack of permission
+// (EResult AccessDenied, e.g. a refunded or unshared DLC depot key). Such
+// depots are skipped instead of failing the job.
+func accessDenied(err error) bool {
+	var ce *steamcm.CMError
+	return errors.As(err, &ce) && ce.EResult == 15
 }
 
 // depotHosts keeps SteamCache and CDN types, honours allowed_app_ids, and

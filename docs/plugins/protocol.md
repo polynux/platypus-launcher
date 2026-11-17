@@ -945,7 +945,7 @@ on an installed game under "Add-ons & options".
 ```
 game.options { id } -> { groups: [
   { id: "language", label: "Language", kind: "select", values: [{ id: "en", label: "English" }], default: "en" },
-  { id: "dlc", label: "Add-ons", kind: "multi", dlc: true,
+  { id: "dlc", label: "Add-ons", kind: "multi", dlc: true, default: ["123"],
     values: [{ id: "123", label: "Season Pass", sizeBytes: 1048576, owned: true, installed: false },
              { id: "456", label: "Deluxe", owned: false, storeUrl: "https://store.example/deluxe" }] },
   { id: "packs", label: "Optional packs", kind: "multi", values: [...] },
@@ -955,9 +955,11 @@ game.installSize { id, options? } -> { downloadBytes, diskBytes }
 ```
 
 - **Groups.** `kind` is `select` (one value; `default` is its id), `multi` (any
-  number of values) or `bool` (on or off; `default` is true or false, no
-  `values`). A group with `dlc: true` is DLC: its values say whether the user
-  `owned` them and whether they are `installed`. An unowned value is shown
+  number of values; `default` is the list ticked when the dialog opens) or
+  `bool` (on or off; `default` is true or false, no `values`). A group with
+  `dlc: true` is DLC: its values say whether the user `owned` them and whether
+  they are `installed`. A DLC group ticks its installed values, or every
+  owned value for a fresh install. An unowned value is shown
   greyed out, with `storeUrl` (an https link) when the store has one. Core
   ignores a group of any other `kind`, so a plugin can add kinds without
   breaking older Platypus versions.

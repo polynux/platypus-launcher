@@ -209,6 +209,79 @@ func (s *Session) ProductInfo(appID uint32, accessToken uint64, timeout time.Dur
 	}
 }
 
+// PackageApps maps PICS package ids to the app ids each package licenses
+// (EMsg 8903/8904 with packages = 1 in the request and packages = 2 in the
+// reply, the mirror of the app fields). Package buffers are text KeyValues
+// like app buffers, with the licensed apps under packageinfo/appids.
+// Packages Steam has no info for are skipped; a transport problem is an
+// error, like ProductInfo.
+func (s *Session) PackageApps(packageIDs []uint32, timeout time.Duration) (map[uint32][]uint32, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	e := &depot.Enc{}
+	for _, p := range packageIDs {
+		pe := &depot.Enc{}
+		pe.Varint(1, uint64(p))
+		e.MsgField(1, pe)
+	}
+	s.jobID++
+	job := s.jobID
+	if err := s.conn.WriteMessage(2, packEMsg(EMsgClientPICSProductInfo, header(s.steamID, s.sessionID, job, ""), e.Bytes())); err != nil {
+		return nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+	}
+	out := map[uint32][]uint32{}
+	deadline := time.Now().Add(timeout)
+	for {
+		emsg, rhdr, body, err := s.readOne(deadline)
+		if err != nil {
+			return nil, err
+		}
+		if emsg == EMsgClientHeartBeat {
+			s.sideMessage(emsg, rhdr, body)
+			continue
+		}
+		if emsg == EMsgClientPICSProductInfo+1 && rhdr.Int(11) == job {
+			m, err := depot.Decode(body)
+			if err != nil {
+				return nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+			}
+			for _, raw := range m.AllBytes(2) {
+				pm, err := depot.Decode(raw)
+				if err != nil {
+					continue
+				}
+				pkg := uint32(pm.Int(1))
+				if pkg == 0 || pm.Int(3) != 0 {
+					continue
+				}
+				kv, err := steam.ParseKV(string(pm.Bytes(5)))
+				if err != nil {
+					continue
+				}
+				if pi := kv.Get("packageinfo"); pi != nil {
+					kv = pi
+				}
+				apps := kv.Get("appids")
+				if apps == nil {
+					continue
+				}
+				for _, child := range apps.Children {
+					var id uint64
+					fmt.Sscanf(child.String(), "%d", &id)
+					if id != 0 {
+						out[pkg] = append(out[pkg], uint32(id))
+					}
+				}
+			}
+			return out, nil
+		}
+		s.sideMessage(emsg, rhdr, body)
+	}
+}
+
 // appInfoRoot unwraps the "appinfo" section and reports whether the app info
 // carries what a caller can use: depots (installs) or common (terms, names).
 // An app with no depots still has usable app info.

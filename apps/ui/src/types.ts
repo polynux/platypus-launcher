@@ -302,8 +302,8 @@ export interface OptionGroup {
   kind: OptionKind;
   dlc?: boolean;
   values?: OptionValue[];
-  /** A select's value id, or a bool's flag. */
-  default?: string | boolean | null;
+  /** A select's value id, a multi's ticked value ids, or a bool's flag. */
+  default?: string | string[] | boolean | null;
 }
 
 /** One entry per group: a value id (select), value ids (multi) or a flag (bool). */

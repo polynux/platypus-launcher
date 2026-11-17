@@ -36,7 +36,8 @@ type OptionValue struct {
 }
 
 // OptionGroup is one question the install dialog asks. Default is the value
-// id of a select group, or true/false for a bool group.
+// id of a select group, the ticked value ids of a multi group, or true/false
+// for a bool group.
 type OptionGroup struct {
 	ID      string        `json:"id"`
 	Label   string        `json:"label,omitempty"`
@@ -110,6 +111,8 @@ func NormalizeGroups(in []OptionGroup) []OptionGroup {
 				def = values[0].ID
 			}
 			g.Default = def
+		} else if g.Kind == OptionMulti {
+			g.Default = multiDefault(g.Default, values)
 		} else {
 			g.Default = nil
 		}
@@ -117,6 +120,36 @@ func NormalizeGroups(in []OptionGroup) []OptionGroup {
 		out = append(out, g)
 	}
 	return out
+}
+
+// multiDefault keeps a multi group's default as the known value ids it
+// names, in the store's order. Anything else (an unknown value, a value
+// that isn't a list, a missing default) ticks nothing.
+func multiDefault(raw any, values []OptionValue) []string {
+	def := []string{}
+	var list []any
+	switch v := raw.(type) {
+	case []any:
+		list = v
+	case []string:
+		for _, id := range v {
+			list = append(list, id)
+		}
+	default:
+		return def
+	}
+	ids := map[string]bool{}
+	for _, item := range list {
+		if id, ok := item.(string); ok && id != "" {
+			ids[id] = true
+		}
+	}
+	for _, v := range values {
+		if ids[v.ID] {
+			def = append(def, v.ID)
+		}
+	}
+	return def
 }
 
 func fallback(s, def string) string {
@@ -214,6 +247,10 @@ func NormalizeChoices(o InstallOptions) InstallOptions {
 func pickValues(g OptionGroup, raw any, chosen bool, c Check) ([]string, error) {
 	picked := []string{}
 	if !chosen {
+		// A group the choices leave out ticks its default.
+		if def, ok := g.Default.([]string); ok {
+			return def, nil
+		}
 		return picked, nil
 	}
 	// A list is []any from settings or the queue's JSON, []string when it

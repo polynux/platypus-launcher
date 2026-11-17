@@ -137,12 +137,12 @@ func Build(k Knobs) *Fixture {
 		specs = append(specs, fileSpec{name: fmt.Sprintf("data/extra%02d.bin", i),
 			body: bytes.Repeat([]byte{byte(i + 1)}, 2048)})
 	}
-	fix := assemble(key, 11, 999, osUsed, specs)
+	fix := assemble(key, 11, 999, osUsed, specs, false)
 	return fix
 }
 
 // assemble encrypts specs into a fixture depot, for Build and BuildDLC.
-func assemble(key []byte, depotID uint32, gid uint64, osUsed string, specs []fileSpec) *Fixture {
+func assemble(key []byte, depotID uint32, gid uint64, osUsed string, specs []fileSpec, encryptNames bool) *Fixture {
 	fix := &Fixture{Key: key, DepotID: depotID, GID: gid, OSUsed: osUsed, Chunks: map[string][]byte{}}
 	var files []depot.File
 	for _, sp := range specs {
@@ -166,7 +166,7 @@ func assemble(key []byte, depotID uint32, gid uint64, osUsed string, specs []fil
 	}
 	meta := depot.Metadata{DepotID: fix.DepotID, GID: fix.GID, DiskOriginal: fix.DiskBytes,
 		DiskCompressed: fix.CompressedBytes, UniqueChunks: uint32(len(fix.Chunks))}
-	raw, err := depot.BuildManifest(meta, files, key, false)
+	raw, err := depot.BuildManifest(meta, files, key, encryptNames)
 	if err != nil {
 		panic(err)
 	}
@@ -190,7 +190,19 @@ func BuildDLC() *Fixture {
 			body:  []byte("#!/bin/sh\necho 'steam standalone game'\n"),
 			flags: depot.FlagExecutable},
 		{name: "dlc.dat", body: bytes.Repeat([]byte{0xD1}, 2048)},
-	})
+	}, false)
+}
+
+// BuildDLCEncrypted is BuildDLC with encrypted filenames, for the retire
+// path that must decrypt saved manifests with the depot key.
+func BuildDLCEncrypted() *Fixture {
+	key := TestKey()
+	return assemble(key, 12, 1000, "linux", []fileSpec{
+		{name: "game.sh",
+			body:  []byte("#!/bin/sh\necho 'steam standalone game'\n"),
+			flags: depot.FlagExecutable},
+		{name: "dlc.dat", body: bytes.Repeat([]byte{0xD1}, 2048)},
+	}, true)
 }
 
 // CDN is a fake content server farm serving one fixture.
@@ -310,16 +322,16 @@ func WriteCMStateDLC(t *testing.T, cmState string, cdn *CDN, base, dlc *Fixture)
 "%d"
 {
 "config" { "oslist" "linux" }
-"manifests" { "public" { "gid" "%d" } }
+"manifests" { "public" { "gid" "%d" "size" "%d" } }
 }
 "%d"
 {
 "config" { "oslist" "linux" }
 "dlcappid" "100"
-"manifests" { "public" { "gid" "%d" } }
+"manifests" { "public" { "gid" "%d" "size" "%d" } }
 }
 }
-`, base.DepotID, base.GID, dlc.DepotID, dlc.GID)
+`, base.DepotID, base.GID, base.DiskBytes, dlc.DepotID, dlc.GID, dlc.DiskBytes)
 	raw, _ := json.Marshal(st)
 	if err := os.WriteFile(cmState, raw, 0o644); err != nil {
 		t.Fatal(err)
