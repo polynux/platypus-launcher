@@ -2,6 +2,7 @@ package depot
 
 import (
 	"context"
+	"errors"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -145,4 +146,30 @@ func TestInstallWriterSharedChunk(t *testing.T) {
 		t.Fatal("shared chunk not written to second file")
 	}
 	_ = raw1
+}
+
+// TestDownloadStreamSinkErrorReturns proves a failing sink (a full disk)
+// ends the download with its error instead of hanging: workers would
+// otherwise keep draining queued tasks into a full results channel (#210).
+func TestDownloadStreamSinkErrorReturns(t *testing.T) {
+	key := testKey()
+	m, encMap := buildFixtureDepot(t, key, 4, 4)
+	hosts, _ := startHosts(t, m, encMap, []time.Duration{0, 0}, -1, -1, "")
+	// Two workers give a results buffer of 4 for 16 chunks, so the old
+	// code blocked once the collector stopped reading.
+	s := NewScheduler(NewClient(), SchedulerConfig{InitialConns: 2, MaxConns: 2, MaxPerHost: 4})
+	diskFull := errors.New("no space left on device")
+	sink := func(id string, data []byte) error { return diskFull }
+	done := make(chan error, 1)
+	go func() {
+		done <- s.DownloadStream(context.Background(), m, 11, hosts, key, nil, sink, nil)
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, diskFull) {
+			t.Fatalf("err = %v, want %v", err, diskFull)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("DownloadStream hung after the sink failed")
+	}
 }
