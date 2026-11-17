@@ -22,7 +22,7 @@
     "test:desktop": "bun --filter platypus-desktop test",
     "i18n:check": "bun apps/ui/scripts/i18n-check.mjs && bun apps/ui/scripts/i18n-lint.mjs",
     "test": "bun run i18n:check && bun run test:ui && bun run test:desktop",
-    "check:windows": "GOOS=windows go build ./cmd/platypus-core ./plugins/...",
+    "check:windows": "GOOS=windows go build ./... && GOOS=windows go vet ./internal/session ./internal/plugins ./cmd/platypus-core ./internal/plugtest ./internal/app",
     "test:fast": "go test ./... && bun run check:windows && bun run test",
     "test:slow": "PLATYPUS_TEST_SLOW=1 go test ./... && PLATYPUS_TEST_SLOW=1 bun run test",
     "test:e2e": "node apps/desktop/e2e/run.mjs",

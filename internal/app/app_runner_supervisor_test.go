@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"syscall"
 	"testing"
 	"time"
 
@@ -64,7 +63,7 @@ func TestRunnerPluginRestartsAfterACrash(t *testing.T) {
 	if first == 0 {
 		t.Fatal("the runner plugin did not start")
 	}
-	if err := syscall.Kill(first, syscall.SIGKILL); err != nil {
+	if err := killTestProcess(first); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)

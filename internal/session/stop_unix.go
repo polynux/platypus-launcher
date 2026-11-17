@@ -20,6 +20,11 @@ func prepareProcess(cmd *exec.Cmd) {
 	cmd.SysProcAttr.Setpgid = true
 }
 
+// assignGameJob and releaseGameJob are Windows-only: Unix stops reach the
+// whole process group or the token-tagged tree, so there is no job to track.
+func assignGameJob(int)  {}
+func releaseGameJob(int) {}
+
 // killProcesses signals the session: its process group for a direct launch,
 // else the tree below pid; a forced stop also kills anything carrying token.
 func killProcesses(pid int, direct bool, token string, force bool) {

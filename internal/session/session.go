@@ -418,6 +418,7 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 		return 0, err
 	}
 	pid := cmd.Process.Pid
+	assignGameJob(pid)
 	t.mu.Lock()
 	e.cmd = cmd
 	e.pid = pid
@@ -437,6 +438,7 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 	go func() {
 		// Wait also waits for the output copy to finish, so closing after is safe.
 		err := cmd.Wait()
+		releaseGameJob(pid)
 		if flush != nil {
 			flush()
 		}

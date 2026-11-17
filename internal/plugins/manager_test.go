@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -297,7 +296,7 @@ func TestChangedHashDisables(t *testing.T) {
 	if p.Status != StatusChanged {
 		t.Fatalf("status after change: %+v", p)
 	}
-	if e.m.Running("echo") != 0 || syscall.Kill(pid, 0) == nil {
+	if e.m.Running("echo") != 0 || testProcessAlive(pid) {
 		t.Fatal("changed plugin still running")
 	}
 	if err := e.m.Call(ctx(t), "echo", "echo", nil, nil); err == nil || !strings.Contains(err.Error(), "changed") {
@@ -520,7 +519,7 @@ func TestShutdownKills(t *testing.T) {
 	}
 	pid := e.m.Running("echo")
 	e.m.Shutdown()
-	if syscall.Kill(pid, 0) == nil {
+	if testProcessAlive(pid) {
 		t.Fatalf("plugin %d survived shutdown", pid)
 	}
 	if err := e.m.Call(ctx(t), "echo", "echo", nil, nil); err == nil {

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -127,7 +126,7 @@ func TestRuntimeSurvivesACrashUntilTheNextInitialize(t *testing.T) {
 		t.Fatal(err)
 	}
 	pid := e.m.Running("echo")
-	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+	if err := killTestProcess(pid); err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(5 * time.Second); e.m.Running("echo") == pid && time.Now().Before(deadline); {
@@ -186,7 +185,7 @@ func TestOptionalMethodProbeIsForgottenWhenThePluginRestarts(t *testing.T) {
 		t.Fatalf("first run: %v", err)
 	}
 	pid := e.m.Running("echo")
-	_ = syscall.Kill(pid, syscall.SIGKILL)
+	_ = killTestProcess(pid)
 	for deadline := time.Now().Add(5 * time.Second); e.m.Running("echo") == pid && time.Now().Before(deadline); {
 		time.Sleep(10 * time.Millisecond)
 	}
