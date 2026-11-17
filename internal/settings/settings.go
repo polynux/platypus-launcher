@@ -55,6 +55,12 @@ type file struct {
 	// kept before Platypus deletes it. A pointer: 0 (delete at once) is a
 	// choice, unset means DefaultCancelCleanupDays.
 	CancelCleanupDays *int `json:"cancel_cleanup_days,omitempty"`
+	// DownloadLimit is the global download speed cap in bytes per second
+	// (issue #207); 0 means unlimited. See downloads.go.
+	DownloadLimit int64 `json:"download_limit,omitempty"`
+	// UpdateWindow is the daily window when queued updates may start (issue
+	// #207). A pointer: unset means off, 03:00–06:00. See downloads.go.
+	UpdateWindow *UpdateWindow `json:"update_window,omitempty"`
 	// Cloud saves: each plugin's default mode and each game's own choice
 	// (see cloud.go).
 	CloudPlugins map[string]string `json:"cloud_plugins,omitempty"`

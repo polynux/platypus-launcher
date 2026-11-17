@@ -405,6 +405,15 @@ type LauncherSettings struct {
 	// CancelCleanupDays is how long a canceled download's partial data is
 	// kept before Platypus deletes it; 0 deletes it right away.
 	CancelCleanupDays int `json:"cancel_cleanup_days"`
+	// DownloadLimit is the global download speed cap in bytes per second
+	// (issue #207); 0 means unlimited.
+	DownloadLimit int64 `json:"download_limit"`
+	// UpdateWindow is the daily window when queued updates may start (issue
+	// #207). The times are local HH:MM; an end before the start crosses
+	// midnight. Manual installs always start right away.
+	UpdateWindowEnabled bool   `json:"update_window_enabled"`
+	UpdateWindowStart   string `json:"update_window_start"`
+	UpdateWindowEnd     string `json:"update_window_end"`
 	// RatingsOnline is the "Fetch ratings online" switch (see compat.go).
 	RatingsOnline bool `json:"ratings_online"`
 	// ProtectionOnline is the "Fetch protection data online" switch (issue
@@ -770,6 +779,11 @@ type Job struct {
 	// Options are the install-option choices the install or update sends
 	// (the `install-options` capability), kept with the job like Target.
 	Options InstallOptions `json:"options,omitempty"`
+	// Auto marks an update Platypus started by itself, not one the user
+	// started. Only auto updates respect the update window (issue #207):
+	// anything the user asked for starts right away. Nothing queues an auto
+	// update yet; automatic updates are a follow-up.
+	Auto bool `json:"auto,omitempty"`
 }
 
 // VerifyReport is what a game's files check found. Checked counts the files

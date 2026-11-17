@@ -382,6 +382,8 @@ func (a *App) startup(ctx context.Context) {
 		a.host.Errorf("jobs: %v", err)
 	}
 	a.jobs.SetCleanupAfter(cleanupAfter(a.settings.CancelCleanupDays()))
+	w := a.settings.UpdateWindow()
+	a.jobs.SetUpdateWindow(w)
 
 	a.ledger, err = ledger.Open(filepath.Join(dataDir, "install-history.json"))
 	if err != nil {
@@ -1330,10 +1332,15 @@ func (a *App) stopGame(gameID string, force bool) error {
 }
 
 func (a *App) launcherSettings() types.LauncherSettings {
+	w := a.settings.UpdateWindow()
 	return types.LauncherSettings{
 		GamesFolder:           a.settings.GamesFolder(),
 		DefaultGamesFolder:    settings.DefaultGamesFolderFor(a.homeDir()),
 		CancelCleanupDays:     a.settings.CancelCleanupDays(),
+		DownloadLimit:         a.settings.DownloadLimit(),
+		UpdateWindowEnabled:   w.Enabled,
+		UpdateWindowStart:     w.Start,
+		UpdateWindowEnd:       w.End,
 		RatingsOnline:         a.settings.RatingsOnline(),
 		ProtectionOnline:      a.settings.ProtectionOnline(),
 		ClientNotices:         a.settings.ClientNotices(),

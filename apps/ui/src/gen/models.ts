@@ -555,12 +555,17 @@ export namespace types {
     allow_no_saves?: boolean;
     verify?: types.VerifyReport | null;
     options?: types.InstallOptions;
+    auto?: boolean;
   }
 
   export interface LauncherSettings {
     games_folder: string;
     default_games_folder: string;
     cancel_cleanup_days: number;
+    download_limit: number;
+    update_window_enabled: boolean;
+    update_window_start: string;
+    update_window_end: string;
     ratings_online: boolean;
     protection_online: boolean;
     client_notices: boolean;

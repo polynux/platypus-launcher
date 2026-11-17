@@ -172,6 +172,7 @@ export interface CoreApi {
   SetCustomTitle(gameID: string, title: string, sortTitle: string): Promise<types.Customization>;
   SetDefaultAccent(color: string): Promise<types.LauncherSettings>;
   SetDefaultRunner(id: string): Promise<types.LauncherSettings>;
+  SetDownloadLimit(bytesPerSec: number): Promise<types.LauncherSettings>;
   SetGameInfoOnline(on: boolean): Promise<types.LauncherSettings>;
   SetGameNotes(gameID: string, notes: string): Promise<types.GameStatusInfo>;
   SetGameSaveBackup(gameID: string, mode: string): Promise<void>;
@@ -192,6 +193,7 @@ export interface CoreApi {
   SetSocialStatus(pluginID: string, state: string): Promise<void>;
   SetSystemLanguages(langs: string[]): Promise<string>;
   SetTheme(id: string): Promise<types.LauncherSettings>;
+  SetUpdateWindow(enabled: boolean, start: string, end: string): Promise<types.LauncherSettings>;
   SocialViews(): Promise<social.View[]>;
   StopGame(gameID: string): Promise<void>;
   UninstallGame(game: types.Game): Promise<types.Job>;
@@ -374,6 +376,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetCustomTitle',
   'SetDefaultAccent',
   'SetDefaultRunner',
+  'SetDownloadLimit',
   'SetGameInfoOnline',
   'SetGameNotes',
   'SetGameSaveBackup',
@@ -394,6 +397,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetSocialStatus',
   'SetSystemLanguages',
   'SetTheme',
+  'SetUpdateWindow',
   'SocialViews',
   'StopGame',
   'UninstallGame',

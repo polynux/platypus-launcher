@@ -8,7 +8,7 @@
   "appearance": "Apparence",
   "folders": "Dossiers de jeux",
   "prefixes": "Préfixe Wine",
-  "cleanup": "Téléchargements annulés",
+  "cleanup": "Téléchargements",
   "ratings": "Informations sur les jeux",
   "artwork": "Illustrations",
   "gameInfo": "Détails des jeux",
@@ -135,9 +135,17 @@
    "invalid": "son fichier ne peut pas être utilisé"
   }
  },
+ "downloads": {
+  "heading": "Téléchargements",
+  "description": "Vitesse et horaire des téléchargements des boutiques.",
+  "limitLabel": "Limite de vitesse",
+  "limitDescription": "Plafonne la vitesse de chaque téléchargement, en Kio/s. 0 signifie illimité. S'applique aux boutiques dont le téléchargeur accepte une limite (Steam) ; les autres téléchargent au plus vite.",
+  "kib": "Kio/s",
+  "limitSaved": "Limite de vitesse enregistrée",
+  "saveError": "Platypus n'a pas pu enregistrer les réglages de téléchargement."
+ },
  "loadError": "Platypus n'a pas pu charger les paramètres.",
  "prefixError": "Platypus n'a pas pu changer le dossier des préfixes Wine.",
- "cleanupError": "Platypus n'a pas pu nettoyer ces dossiers.",
  "backups": {
   "heading": "Sauvegardes",
   "description": "Platypus sauvegarde les fichiers de sauvegarde avant toute action destructive (suppression d’un jeu, effacement d’un préfixe, désinstallation). Une sauvegarde par exécution, gardées ici ou dans le dossier de votre choix — un dossier synchronisé convient aussi.",

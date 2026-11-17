@@ -11,6 +11,7 @@ import (
 	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
+	"platypus/internal/settings"
 	"platypus/internal/types"
 )
 
@@ -40,7 +41,9 @@ func (b jobBackend) Size(ctx context.Context, j types.Job) (plugins.InstallSize,
 func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 	switch j.Kind {
 	case jobs.KindVerify:
-		return b.a.plugins.Call(ctx, j.Source, "game.verify", verifyParams(j), nil)
+		params := verifyParams(j)
+		b.a.attachDownloadLimit(j, params) // a repair downloads the damaged files
+		return b.a.plugins.Call(ctx, j.Source, "game.verify", params, nil)
 	case jobs.KindMove:
 		if !b.a.plugins.Has(j.Source, "move") {
 			return b.a.startCoreMove(j) // runs on its own; reports through the queue
@@ -72,7 +75,9 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 	if err != nil {
 		return err
 	}
-	return b.a.plugins.Call(ctx, j.Source, "game."+j.Kind, installParams(j, options), nil)
+	params := installParams(j, options)
+	b.a.attachDownloadLimit(j, params)
+	return b.a.plugins.Call(ctx, j.Source, "game."+j.Kind, params, nil)
 }
 
 // jobTargetGate runs the versions gate for a job that names a version. A job
@@ -347,6 +352,47 @@ func (a *App) ResumeAllJobs() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// attachDownloadLimit adds the global speed cap to the jobs that download
+// (install, update, and a verify that repairs), for a plugin that speaks
+// protocol 1.21 (the revision that added the param). The plugin passes it to
+// its own downloader; a plugin that doesn't speak it gets nothing and
+// downloads at its own pace.
+func (a *App) attachDownloadLimit(j types.Job, params map[string]any) {
+	switch {
+	case j.Kind == jobs.KindInstall, j.Kind == jobs.KindUpdate:
+	case j.Kind == jobs.KindVerify && j.Repair:
+	default:
+		return
+	}
+	limit := a.settings.DownloadLimit()
+	if limit <= 0 || !a.plugins.OffersProtocol(j.Source, plugins.DownloadLimitVersion) {
+		return
+	}
+	params["downloadLimit"] = limit
+}
+
+// SetDownloadLimit saves the global download speed cap in bytes per second
+// (0 = unlimited). It applies to the next install or update each downloader
+// starts; a running one keeps its pace.
+func (a *App) SetDownloadLimit(bytesPerSec int64) (types.LauncherSettings, error) {
+	if err := a.settings.SetDownloadLimit(bytesPerSec); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
+}
+
+// SetUpdateWindow saves the daily window when queued updates may start. The
+// queue reads it from now on: an update queued outside the window waits,
+// installs never do.
+func (a *App) SetUpdateWindow(enabled bool, start, end string) (types.LauncherSettings, error) {
+	w := settings.UpdateWindow{Enabled: enabled, Start: start, End: end}
+	if err := a.settings.SetUpdateWindow(w); err != nil {
+		return a.launcherSettings(), err
+	}
+	a.jobs.SetUpdateWindow(w)
+	return a.launcherSettings(), nil
 }
 
 // SetCancelCleanupDays sets how many days a canceled download's data is kept
