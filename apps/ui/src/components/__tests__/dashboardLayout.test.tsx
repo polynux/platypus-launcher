@@ -3,6 +3,7 @@
 import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render as rtlRender, cleanup, screen, within } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Dashboard } from '../Dashboard';
@@ -60,7 +61,7 @@ describe('dashboard layouts', () => {
     // Eight events, the built-in limit.
     const activity = screen.getByText('Activity').closest('section');
     expect(activity?.querySelectorAll('ul li')).toHaveLength(8);
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('renders the cool layout: no welcome banner, a row, activity in the side column', async () => {
@@ -83,7 +84,7 @@ describe('dashboard layouts', () => {
     expect(within(side as HTMLElement).getByText('Activity')).toBeTruthy();
     expect(side!.querySelectorAll('ul li')).toHaveLength(6);
     expect(main!.querySelectorAll('ul li')).toHaveLength(1);
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('renders the empty library through the built-in layout', async () => {
@@ -95,6 +96,6 @@ describe('dashboard layouts', () => {
     const top = container.querySelector('[data-region="top"]');
     expect(top).toBeTruthy();
     expect(within(top as HTMLElement).getByText('no titles found')).toBeTruthy();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 });

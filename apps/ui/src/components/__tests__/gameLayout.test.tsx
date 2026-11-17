@@ -5,6 +5,7 @@
 import React from 'react';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { render as rtlRender, cleanup, screen, within, fireEvent } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Effect } from 'effect';
@@ -168,7 +169,7 @@ describe('game page layouts', () => {
     expect(bottom).toBeTruthy();
     expect(within(bottom as HTMLElement).getByText('Achievements')).toBeTruthy();
     expect(within(bottom as HTMLElement).getByText('this session')).toBeTruthy();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('renders a fresh game: install note and install action, axe clean', async () => {
@@ -176,7 +177,7 @@ describe('game page layouts', () => {
     expect(await screen.findByRole('heading', { name: 'Layout Fresh' })).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /Install/ }).length).toBeGreaterThan(0);
     expect(screen.getByTestId('install-size-line')).toBeTruthy();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('renders the cool layout: about above media, compat and installation lead the side, axe clean', async () => {
@@ -194,6 +195,6 @@ describe('game page layouts', () => {
     const sideText = (side as HTMLElement).textContent ?? '';
     expect(sideText.indexOf('Compatibility')).toBeLessThan(sideText.indexOf('Installation'));
     expect(sideText.indexOf('Installation')).toBeLessThan(sideText.indexOf('Status'));
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 });

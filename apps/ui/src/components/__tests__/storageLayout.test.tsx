@@ -3,6 +3,7 @@
 import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render as rtlRender, cleanup, screen, within } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Effect } from 'effect';
@@ -101,7 +102,7 @@ describe('storage layouts', () => {
     expect(await screen.findByRole('progressbar')).toBeTruthy();
     expect(screen.getByText('games by size')).toBeTruthy();
     expect(screen.getByText('Alpha')).toBeTruthy();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('renders the cool layout: games and drives share a row', async () => {
@@ -116,7 +117,7 @@ describe('storage layouts', () => {
     expect(row?.className).toContain('xl:grid-cols-[1.75fr_1fr]');
     expect(within(main as HTMLElement).getByText('games by size')).toBeTruthy();
     expect(within(main as HTMLElement).getByText('Alpha')).toBeTruthy();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 
   it('renders the empty library through the built-in layout', async () => {
@@ -126,6 +127,6 @@ describe('storage layouts', () => {
     const main = container.querySelector('[data-region="main"]');
     expect(main).toBeTruthy();
     expect(within(main as HTMLElement).getByText('games by size')).toBeTruthy();
-    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+    (expect(await axe(container)) as any).toHaveNoViolations();
   });
 });

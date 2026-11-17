@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Modal } from './Modal';
@@ -33,7 +34,7 @@ describe('Settings catalog variants', () => {
       for (const chrome of ['hairline', 'framed', 'plain']) {
         it(`renders ${presentation} / ${navigation} / ${chrome} without axe violations`, async () => {
           const { container } = render(<Fixture presentation={presentation} navigation={navigation} chrome={chrome} onClose={() => {}} />);
-          (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+          (expect(await axe(container)) as any).toHaveNoViolations();
         });
       }
     }

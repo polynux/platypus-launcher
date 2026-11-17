@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Modal } from './Modal';
@@ -43,7 +44,7 @@ describe('Launcher Settings catalog variants', () => {
       const { container } = render(<SettingsFixture presentation={presentation} />);
       expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
       if (navigation === 'tabs') expect(screen.getByRole('tablist', { name: 'Settings sections' })).toBeInTheDocument();
-      (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+      (expect(await axe(container)) as any).toHaveNoViolations();
     });
   }
 });

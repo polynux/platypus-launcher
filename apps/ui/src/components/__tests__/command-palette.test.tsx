@@ -4,6 +4,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { CommandPalette, openCommandPalette, type CommandPaletteProps } from '../CommandPalette';
@@ -117,7 +118,7 @@ describe('command palette', () => {
     expect(labels).toContain('Steam');
     // A game row carries its hours played after the title.
     expect(labels.some((label) => label?.startsWith('Celeste'))).toBe(true);
-    (expect(await (await import('vitest-axe')).axe(dialog)) as unknown as { toHaveNoViolations: () => void }).toHaveNoViolations();
+    (expect(await axe(dialog)) as unknown as { toHaveNoViolations: () => void }).toHaveNoViolations();
   });
 
   it('filters on typing', async () => {
