@@ -73,6 +73,11 @@ type App struct {
 	removes        coreMoves // core-run removals (issue #43), like moves
 	runnerInstalls coreMoves // core-run runner installs (issue #142), like moves
 	clientSetups   coreMoves // core-run client setups (protocol 1.20), like moves
+	clientRuns     coreMoves // core-run client commands (protocol 1.23), like setups
+	// clientRunMu guards clientRunSource: the plugin source of each running
+	// clientRun job, so launches hold while the client's command runs.
+	clientRunMu     sync.Mutex
+	clientRunSource map[string]string
 	// wineMu guards wineSessions: game ids running through a wine client, by
 	// source, so SetupClient refuses while the client runs (issue #191).
 	wineMu       sync.Mutex
@@ -1322,6 +1327,11 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 		// The client starts the game: refuse while its setup holds it, even
 		// when the library didn't flag this game as client-launched (S4).
 		if _, ok := a.jobs.Holding(stores.ClientGameID(game.Source), jobs.KindClientSetup); ok {
+			return "", apperr.New("game.launchBusy",
+				fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title),
+				map[string]string{"title": game.Title, "what": "set up"})
+		}
+		if a.clientRunHolding(game.Source) {
 			return "", apperr.New("game.launchBusy",
 				fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title),
 				map[string]string{"title": game.Title, "what": "set up"})

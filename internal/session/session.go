@@ -23,7 +23,7 @@ import (
 	"platypus/internal/types"
 )
 
-const (
+var (
 	pollEvery = 2 * time.Second
 	// How long a store client gets to start the game (Steam's shader
 	// pre-caching and updates can take a while) before we report that nothing
@@ -36,6 +36,10 @@ const (
 	// seen running, to count as a crash. The client owns the process, so no
 	// exit code reaches Platypus; a run this short is the signal it has (#46).
 	clientQuickExit = time.Minute
+	// signinCeiling caps a launch that waits for the user in the client
+	// (protocol 1.23 signin state, issue #213): the start deadline keeps
+	// extending while signin is reported, but never past this from launch.
+	signinCeiling = 30 * time.Minute
 )
 
 type Emit func(types.SessionEvent)
@@ -289,6 +293,20 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 						next := deadline.Add(pollEvery)
 						if capDeadline.Before(next) {
 							next = capDeadline
+						}
+						deadline = next
+					case "signin":
+						// The client is up and waits for the user (protocol
+						// 1.23): pause the start deadline like an update,
+						// but never past the signin ceiling from launch.
+						worked = true
+						idleSince = time.Time{}
+						next := deadline.Add(pollEvery)
+						if capDeadline.Before(next) {
+							next = capDeadline
+						}
+						if ceil := asked.Add(signinCeiling); ceil.Before(next) {
+							next = ceil
 						}
 						deadline = next
 					case "idle":

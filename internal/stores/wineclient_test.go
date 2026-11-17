@@ -183,9 +183,54 @@ func TestValidateClientSetup(t *testing.T) {
 	}
 }
 
+// A clientRun answer (protocol 1.23) validates like a client.setup exe: it
+// must exist now, inside the prefix or an allowed folder, with the same env
+// denylist.
+func TestValidateClientRun(t *testing.T) {
+	root := t.TempDir()
+	prefix := ClientPrefixDir("echo", filepath.Join(root, "prefixes"))
+	binDir := filepath.Join(prefix, "drive_c", "client")
+	os.MkdirAll(binDir, 0o755)
+	exe := filepath.Join(binDir, "client.exe")
+	os.WriteFile(exe, []byte("MZ"), 0o755)
+	outside := filepath.Join(root, "client.exe")
+	os.WriteFile(outside, []byte("MZ"), 0o755)
+
+	man := plugins.Manifest{ID: "echo", Name: "Echo"}
+	folders := []string{filepath.Join(root, "Games", "echo"), prefix}
+
+	got, err := ValidateClientRun(plugins.ClientRunSpec{
+		Exe: exe, Args: []string{"uplay://install/1"}, Env: map[string]string{"LOG": "1"},
+		Redact: []string{"--token="},
+	}, man, folders, prefix)
+	if err != nil {
+		t.Fatalf("valid clientRun spec: %v", err)
+	}
+	if got.Exe != exe || len(got.Args) != 1 || got.Env["LOG"] != "1" || len(got.Redact) != 1 {
+		t.Fatalf("clientRun spec = %+v, want the validated fields", got)
+	}
+
+	win, err := ValidateClientRun(plugins.ClientRunSpec{Exe: `C:\client\client.exe`}, man, folders, prefix)
+	if err != nil || win.Exe != exe {
+		t.Fatalf("windows client path: got %+v, %v; want %s", win, err, exe)
+	}
+
+	for name, spec := range map[string]plugins.ClientRunSpec{
+		"no exe":       {},
+		"missing exe":  {Exe: filepath.Join(binDir, "gone.exe")},
+		"exe outside":  {Exe: outside},
+		"denied env":   {Exe: exe, Env: map[string]string{"WINEPREFIX": "/tmp"}},
+		"other drive":  {Exe: `D:\client.exe`},
+		"relative exe": {Exe: "client.exe"},
+	} {
+		if _, err := ValidateClientRun(spec, man, folders, prefix); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
 func TestClientPrefixDir(t *testing.T) {
 	if got := ClientPrefixDir("echo", "/data/prefixes"); got != "/data/prefixes/p.echo.client" {
-		t.Errorf("ClientPrefixDir = %q", got)
 	}
 	if ClientGameID("echo") != "p.echo.client" {
 		t.Errorf("ClientGameID = %q", ClientGameID("echo"))

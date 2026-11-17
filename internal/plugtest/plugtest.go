@@ -935,7 +935,10 @@ var (
 		"delegate", "client", "command", "prefix", "find", "startTimeout"}
 	// The installer spec client.setup answers (protocol 1.20, "Wine clients").
 	InstallerKeys = []string{"exe", "args", "env", "redact", "size", "confirm"}
-
+	// The clientRun answer of game.install/game.update/game.uninstall
+	// (protocol 1.23, "Client-run commands").
+	InstallAnswerKeys = []string{"clientRun", "clientOwnsLocation", "size"}
+	ClientRunKeys     = []string{"exe", "args", "env", "redact"}
 	// The versions capability (docs/plugins/protocol.md, "Versions").
 	VersionListKeys    = []string{"channels", "builds", "manual", "links", "updateAvailable", "pinned"}
 	VersionChannelKeys = []string{"id", "name", "description", "updatedAt", "buildId", "requires", "unlocked", "current"}

@@ -378,6 +378,10 @@ func (s *Plugin) Launch(ctx context.Context, game types.Game, preview bool) (*La
 				}
 				switch out.State {
 				case "updating", "shaders", "downloading", "validating", "launching", "idle", "running":
+				case "signin":
+					if !s.m.Runtime(s.ID()).Speaks(plugins.SigninVersion) {
+						return nil, nil
+					}
 				default:
 					return nil, nil
 				}

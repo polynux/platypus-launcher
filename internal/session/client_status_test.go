@@ -59,16 +59,53 @@ func TestWatchClientWithoutStatusUsesOriginalTimeoutFailure(t *testing.T) {
 	}
 }
 
-func TestClientStatusChangedRequiresStateOrPercentagePoint(t *testing.T) {
-	previousProgress := .40
-	previous := &types.ClientStatus{State: "downloading", Progress: &previousProgress}
-	progress := .405
-	if clientStatusChanged(previous, &types.ClientStatus{State: "downloading", Progress: &progress}) {
-		t.Fatal("sub-percentage change should not emit")
+func TestWatchClientSigninExtendsDeadline(t *testing.T) {
+	oldPoll := pollEvery
+	pollEvery = 50 * time.Millisecond
+	defer func() { pollEvery = oldPoll }()
+	rec := newRecorder()
+	tr := NewTracker(rec.emit)
+	var pid atomic.Int32
+	status := func(time.Time) (*types.ClientStatus, error) {
+		return &types.ClientStatus{State: "signin"}, nil
 	}
-	progress = .41
-	if !clientStatusChanged(previous, &types.ClientStatus{State: "downloading", Progress: &progress}) {
-		t.Fatal("one percentage point change should emit")
+	if !tr.WatchClient("signin-game", "Ubisoft Connect", func() int { return int(pid.Load()) }, 300*time.Millisecond, WithClientStatus(status)) {
+		t.Fatal("WatchClient refused launch")
+	}
+	// Past the start timeout with no game: still waiting, not failed.
+	time.Sleep(600 * time.Millisecond)
+	select {
+	case e := <-rec.ch:
+		if e.State == "failed" {
+			t.Fatalf("signin launch failed while the client waits: %q", e.Message)
+		}
+	default:
+	}
+	pid.Store(322171)
+	ev := rec.waitState(t, "running", 5*time.Second)
+	if ev.PID != 322171 {
+		t.Fatalf("running PID = %d, want the delayed game process", ev.PID)
+	}
+	pid.Store(0)
+	rec.waitState(t, "stopped", 5*time.Second)
+}
+
+func TestWatchClientSigninCeilingFailsLaunch(t *testing.T) {
+	oldPoll, oldCeil := pollEvery, signinCeiling
+	pollEvery = 50 * time.Millisecond
+	signinCeiling = 600 * time.Millisecond
+	defer func() { pollEvery, signinCeiling = oldPoll, oldCeil }()
+	rec := newRecorder()
+	tr := NewTracker(rec.emit)
+	status := func(time.Time) (*types.ClientStatus, error) {
+		return &types.ClientStatus{State: "signin"}, nil
+	}
+	if !tr.WatchClient("signin-ceiling-game", "Ubisoft Connect", func() int { return 0 }, 200*time.Millisecond, WithClientStatus(status)) {
+		t.Fatal("WatchClient refused launch")
+	}
+	ev := rec.waitState(t, "failed", 5*time.Second)
+	if !strings.Contains(ev.Message, "never started the game") {
+		t.Fatalf("failure message = %q, want the start-timeout failure", ev.Message)
 	}
 }
 

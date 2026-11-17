@@ -14,13 +14,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
 	"platypus/internal/plugtest"
 )
 
@@ -109,8 +112,9 @@ func plantClient(t *testing.T, prefix, layout, name string) {
 
 func TestUbisoftHandshake(t *testing.T) {
 	s := suite(nil).Handshake(t)
-	// The manifest speaks exactly 1.20 (wine-client + client.setup); the
-	// core offering 1.21 negotiates exactly that.
+	// The manifest speaks 1.20 (setup + launch) and 1.23 (plus the
+	// core-run client commands); the core offering up to 1.23 negotiates
+	// exactly that.
 	data, err := os.ReadFile("plugin.json")
 	if err != nil {
 		t.Fatal(err)
@@ -119,25 +123,47 @@ func TestUbisoftHandshake(t *testing.T) {
 		Protocol struct {
 			Versions []string `json:"versions"`
 		} `json:"protocol"`
+		Capabilities []string `json:"capabilities"`
+		Version      string   `json:"version"`
 	}
 	if err := json.Unmarshal(data, &man); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(man.Protocol.Versions, []string{"1.20"}) {
-		t.Fatalf("manifest protocol versions = %v, want [1.20]", man.Protocol.Versions)
+	if !slices.Equal(man.Protocol.Versions, []string{"1.20", "1.23"}) {
+		t.Fatalf("manifest protocol versions = %v, want [1.20 1.23]", man.Protocol.Versions)
+	}
+	if man.Version != "0.2.0" {
+		t.Fatalf("manifest version = %q, want 0.2.0", man.Version)
+	}
+	if !slices.Equal(man.Capabilities, []string{"library", "install", "launch"}) {
+		t.Fatalf("manifest capabilities = %v, want [library install launch]", man.Capabilities)
 	}
 	var init struct {
+		Protocol     string   `json:"protocol"`
 		Capabilities []string `json:"capabilities"`
 	}
-	call(t, s, "initialize", map[string]any{"api": 1}, &init)
-	if !slices.Equal(init.Capabilities, []string{"library", "launch"}) {
-		t.Fatalf("capabilities = %v, want [library launch]", init.Capabilities)
+	call(t, s, "initialize",
+		map[string]any{"api": 1, "protocols": []string{"1.20", "1.23"}}, &init)
+	if init.Protocol != "1.23" {
+		t.Fatalf("protocol = %q, want the 1.23 pick", init.Protocol)
 	}
-	// Install is gone (the core-run client-commands issue): the gate refuses
-	// its methods before the plugin.
+	if !slices.Equal(init.Capabilities, []string{"library", "install", "launch"}) {
+		t.Fatalf("capabilities = %v, want [library install launch] over 1.23", init.Capabilities)
+	}
+	call(t, s, "initialize",
+		map[string]any{"api": 1, "protocols": []string{"1.20"}}, &init)
+	if init.Protocol != "1.20" {
+		t.Fatalf("protocol = %q, want the 1.20 fallback", init.Protocol)
+	}
+	if !slices.Equal(init.Capabilities, []string{"library", "launch"}) {
+		t.Fatalf("capabilities = %v, want [library launch] over 1.20 (no install)", init.Capabilities)
+	}
+	// Over 1.20 the install methods read as unimplemented; job.cancel stays
+	// harmless (stopping nothing).
 	wantCode(t, s, "game.install", map[string]any{}, jsonrpc.CodeMethodNotFound)
 	wantCode(t, s, "game.installSize", map[string]any{}, jsonrpc.CodeMethodNotFound)
-	wantCode(t, s, "job.cancel", map[string]any{}, jsonrpc.CodeMethodNotFound)
+	var discarded json.RawMessage
+	call(t, s, "job.cancel", map[string]any{"jobId": "nothing-running"}, &discarded)
 }
 
 func TestUbisoftClientSetupFetch(t *testing.T) {
@@ -259,12 +285,12 @@ func TestUbisoftLaunchSpec(t *testing.T) {
 		}
 	}
 	var launch struct {
-		Delegate     string `json:"delegate"`
-		Client       string `json:"client"`
-		Exe          string `json:"exe"`
-		Args         []string `json:"args"`
-		Prefix       string   `json:"prefix"`
-		Find         struct {
+		Delegate string   `json:"delegate"`
+		Client   string   `json:"client"`
+		Exe      string   `json:"exe"`
+		Args     []string `json:"args"`
+		Prefix   string   `json:"prefix"`
+		Find     struct {
 			Cmdline []string `json:"cmdline"`
 		} `json:"find"`
 		StartTimeout int `json:"startTimeout"`
@@ -340,5 +366,186 @@ func TestUbisoftClientStatus(t *testing.T) {
 		map[string]any{"id": "635", "since": 0}, &status)
 	if status.State != "launching" {
 		t.Errorf("clientStatus = %+v, want launching via the Proton/upc.exe fallback", status)
+	}
+}
+
+// waitJobEvent polls the plugin's job notifications for one of the named
+// methods on a job, failing when it doesn't arrive in time.
+func waitJobEvent(t *testing.T, s *plugtest.Session, jobID string, methods []string, within time.Duration) (string, plugins.JobUpdate) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		for _, e := range s.Events(jobID) {
+			for _, m := range methods {
+				if e.Method == m {
+					return e.Method, e.Update
+				}
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	var got []string
+	for _, e := range s.Events(jobID) {
+		got = append(got, e.Method+":"+e.Update.JobID)
+	}
+	t.Fatalf("no %v for job %s within %v (saw %v)", methods, jobID, within, got)
+	return "", plugins.JobUpdate{}
+}
+
+// noJobEvent fails when one of the named methods arrives for a job within
+// the window (a canceled watch must stay silent).
+func noJobEvent(t *testing.T, s *plugtest.Session, jobID string, methods []string, within time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		for _, e := range s.Events(jobID) {
+			for _, m := range methods {
+				if e.Method == m {
+					t.Fatalf("unexpected %s for job %s", m, jobID)
+				}
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+type clientRunAnswer struct {
+	ClientRun struct {
+		Exe  string   `json:"exe"`
+		Args []string `json:"args"`
+	} `json:"clientRun"`
+	ClientOwnsLocation bool `json:"clientOwnsLocation"`
+}
+
+func setupPrefix(t *testing.T, sess *plugtest.Session, prefix string) {
+	t.Helper()
+	call(t, sess, "client.setup", map[string]any{"jobId": "", "prefix": prefix}, nil)
+	plantClient(t, prefix, "drive_c", "UbisoftConnect.exe")
+}
+
+func TestUbisoftInstallAnswersClientRun(t *testing.T) {
+	data := fakeInstaller()
+	srv, _ := pinServer(t, data)
+	env := pinEnv(srv, data)
+	env["PLATYPUS_UBISOFT_WATCH_TIMEOUT"] = "10"
+	env["PLATYPUS_UBISOFT_WATCH_POLL"] = "0.05"
+	sess := suite(env).Start(t)
+	prefix := filepath.Join(t.TempDir(), "client")
+	setupPrefix(t, sess, prefix)
+
+	var ans clientRunAnswer
+	call(t, sess, "game.install",
+		map[string]any{"id": "635", "installDir": t.TempDir(), "jobId": "install-1"}, &ans)
+	if ans.ClientRun.Exe != `C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\UbisoftConnect.exe` {
+		t.Errorf("clientRun exe = %q, want the client path", ans.ClientRun.Exe)
+	}
+	if !slices.Equal(ans.ClientRun.Args, []string{"uplay://install/635"}) {
+		t.Errorf("clientRun args = %v, want the install URL", ans.ClientRun.Args)
+	}
+	if !ans.ClientOwnsLocation {
+		t.Error("clientOwnsLocation = false, want true (the client owns installs)")
+	}
+	// The plugin ends the job from the client's records: plant the game's
+	// record and the watch reports done.
+	plantRecord(t, prefix, "635", "Game.exe")
+	waitJobEvent(t, sess, "install-1", []string{"job.done"}, 5*time.Second)
+
+	var upd clientRunAnswer
+	call(t, sess, "game.update",
+		map[string]any{"id": "635", "installDir": t.TempDir(), "jobId": "update-1"}, &upd)
+	if !slices.Equal(upd.ClientRun.Args, []string{"uplay://install/635"}) {
+		t.Errorf("update args = %v, want the install URL", upd.ClientRun.Args)
+	}
+	waitJobEvent(t, sess, "update-1", []string{"job.done"}, 5*time.Second)
+
+	var un clientRunAnswer
+	call(t, sess, "game.uninstall",
+		map[string]any{"id": "635", "jobId": "uninstall-1"}, &un)
+	if !slices.Equal(un.ClientRun.Args, []string{"uplay://uninstall/635"}) {
+		t.Errorf("uninstall args = %v, want the uninstall URL", un.ClientRun.Args)
+	}
+	rec := filepath.Join(prefix, "drive_c", "platypus-ubisoft", "records", "635.json")
+	if err := os.Remove(rec); err != nil {
+		t.Fatal(err)
+	}
+	waitJobEvent(t, sess, "uninstall-1", []string{"job.done"}, 5*time.Second)
+
+	// An uninstall for a game the client doesn't have fails readably.
+	wantCode(t, sess, "game.uninstall",
+		map[string]any{"id": "636", "jobId": "uninstall-x"}, -32000)
+
+	// A canceled watch stays silent: cancel, then complete the install.
+	var cancelAns clientRunAnswer
+	call(t, sess, "game.install",
+		map[string]any{"id": "636", "installDir": t.TempDir(), "jobId": "install-cancel"}, &cancelAns)
+	call(t, sess, "job.cancel", map[string]any{"jobId": "install-cancel"}, nil)
+	plantRecord(t, prefix, "636", "Other.exe")
+	noJobEvent(t, sess, "install-cancel", []string{"job.done", "job.failed"}, time.Second)
+}
+
+func TestUbisoftInstallWatchTimeout(t *testing.T) {
+	data := fakeInstaller()
+	srv, _ := pinServer(t, data)
+	env := pinEnv(srv, data)
+	env["PLATYPUS_UBISOFT_WATCH_TIMEOUT"] = "0.3"
+	env["PLATYPUS_UBISOFT_WATCH_POLL"] = "0.05"
+	sess := suite(env).Start(t)
+	prefix := filepath.Join(t.TempDir(), "client")
+	setupPrefix(t, sess, prefix)
+
+	var ans clientRunAnswer
+	call(t, sess, "game.install",
+		map[string]any{"id": "635", "installDir": t.TempDir(), "jobId": "install-timeout"}, &ans)
+	if ans.ClientRun.Exe == "" {
+		t.Fatal("install didn't answer a clientRun command")
+	}
+	// No record ever appears: the watch fails with a readable message.
+	method, update := waitJobEvent(t, sess, "install-timeout", []string{"job.failed"}, 5*time.Second)
+	if method != "job.failed" || update.Error == "" {
+		t.Fatalf("job end = %s %+v, want a readable job.failed", method, update)
+	}
+}
+
+func TestUbisoftClientStatusSignin(t *testing.T) {
+	data := fakeInstaller()
+	srv, _ := pinServer(t, data)
+	env := pinEnv(srv, data)
+	env["PLATYPUS_UBISOFT_SIGNIN_GRACE"] = "0"
+	sess := suite(env).Start(t)
+	prefix := filepath.Join(t.TempDir(), "client")
+	setupPrefix(t, sess, prefix)
+
+	var status struct {
+		State string `json:"state"`
+		Label string `json:"label"`
+	}
+	// No client process: the client isn't up (updating), even with no grace.
+	call(t, sess, "game.clientStatus",
+		map[string]any{"id": "635", "since": 0}, &status)
+	if status.State != "updating" {
+		t.Fatalf("clientStatus = %+v, want updating with no client process", status)
+	}
+	// A client process without the game: waiting for the user in the client.
+	// (bash's exec -a sets argv[0], which the /proc scan reads; dash's
+	// exec has no -a.)
+	cmd := exec.Command("bash", "-c", "exec -a UbisoftConnect.exe sleep 30")
+	if err := cmd.Start(); err != nil {
+		t.Skipf("can't spawn the fake client process: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		call(t, sess, "game.clientStatus",
+			map[string]any{"id": "635", "since": 0}, &status)
+		if status.State == "signin" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("clientStatus = %+v, want signin with the client up", status)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if status.Label == "" {
+		t.Error("signin has no label for the UI")
 	}
 }

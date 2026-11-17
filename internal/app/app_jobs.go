@@ -76,7 +76,7 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 		if _, err := b.a.backupBeforeDelete(ctx, game, triggerUninstall, j.AllowNoSaves); err != nil {
 			return err
 		}
-		return b.a.plugins.Call(ctx, j.Source, "game.uninstall", installParams(j, nil), nil)
+		return b.a.startInstallLike(ctx, j, installParams(j, nil))
 	case jobs.KindRemove:
 		return b.a.startCoreRemove(j) // core deletes; reports through the queue
 	case jobs.KindRunnerInstall:
@@ -97,10 +97,46 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 	}
 	params := installParams(j, options)
 	b.a.attachDownloadLimit(j, params)
-	return b.a.plugins.Call(ctx, j.Source, "game."+j.Kind, params, nil)
+	return b.a.startInstallLike(ctx, j, params)
 }
 
-// jobTargetGate runs the versions gate for a job that names a version. A job
+// startInstallLike calls game.install/game.update/game.uninstall and either
+// leaves the job to the plugin (a {} answer) or runs the answered clientRun
+// command in the pinned client prefix as part of the same job (protocol
+// 1.23, issue #212). A repeated jobId starts no second copy.
+func (a *App) startInstallLike(ctx context.Context, j types.Job, params map[string]any) error {
+	if a.clientRuns.active(j.ID) {
+		return nil
+	}
+	var answer plugins.InstallAnswer
+	if err := a.plugins.Call(ctx, j.Source, "game."+j.Kind, params, &answer); err != nil {
+		return err
+	}
+	if answer.ClientRun == nil {
+		return nil // the plugin does the work; it ends the job itself
+	}
+	if !a.plugins.Runtime(j.Source).Speaks(plugins.ClientRunVersion) {
+		return fmt.Errorf("%s speaks an older protocol and can't answer clientRun (needs 1.23)", j.Source)
+	}
+	if answer.Size < 0 {
+		return fmt.Errorf("%s: clientRun size %d must not be negative", j.Source, answer.Size)
+	}
+	p, ok := a.plugins.Plugin(j.Source)
+	if !ok {
+		return fmt.Errorf("unknown plugin %q", j.Source)
+	}
+	clientDir := stores.ClientPrefixDir(j.Source, a.effectivePrefixesFolder())
+	folders := append(a.plugins.Folders(j.Source, a.settings.GamesFolder()), clientDir)
+	if !answer.ClientOwnsLocation && j.InstallDir != "" {
+		folders = append(folders, j.InstallDir)
+	}
+	run, err := stores.ValidateClientRun(*answer.ClientRun, p.Manifest, folders, clientDir)
+	if err != nil {
+		return err
+	}
+	return a.startClientRun(j, answer, run)
+}
+
 // resumed after the store stopped offering versions fails here, instead of
 // installing the latest while the UI says the game is pinned.
 func (a *App) jobTargetGate(j types.Job) error {
@@ -165,6 +201,11 @@ func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
 		b.a.clientSetups.stop(ctx, j.ID)
 		return nil
 	}
+	if b.a.clientRuns.active(j.ID) {
+		// Core runs the client command itself: stop it and its wineserver,
+		// then forward the cancel so the plugin ends the job too.
+		b.a.clientRuns.stop(ctx, j.ID)
+	}
 	return b.a.plugins.Call(ctx, j.Source, "job.cancel", map[string]any{"jobId": j.ID}, nil)
 }
 
@@ -187,6 +228,9 @@ func (b jobBackend) RunsInCore(j types.Job) bool {
 func (a *App) heldByJob(game types.Game) error {
 	if game.ClientLaunch {
 		if _, ok := a.jobs.Holding(stores.ClientGameID(game.Source), jobs.KindClientSetup); ok {
+			return apperr.New("game.launchBusy", fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title), map[string]string{"title": game.Title, "what": "set up"})
+		}
+		if a.clientRunHolding(game.Source) {
 			return apperr.New("game.launchBusy", fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title), map[string]string{"title": game.Title, "what": "set up"})
 		}
 	}

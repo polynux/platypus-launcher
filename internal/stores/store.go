@@ -75,6 +75,16 @@ type ClientSetup struct {
 	Confirm string
 }
 
+// ClientRun is a validated clientRun answer (protocol 1.23): the client
+// command the core runs under the runner in the client's prefix as part of
+// the plugin's install/update/uninstall job.
+type ClientRun struct {
+	Exe    string
+	Args   []string
+	Env    map[string]string
+	Redact []string
+}
+
 // DirectLaunch is a validated plugin launch spec Platypus runs itself.
 type DirectLaunch struct {
 	Exe       string
