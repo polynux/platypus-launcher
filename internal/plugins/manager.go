@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"platypus/internal/dataplug"
+	"platypus/internal/platform"
 	"platypus/internal/settings"
 	"platypus/internal/themes"
 )
@@ -699,10 +700,8 @@ func (m *Manager) AllowFolder(id, path string) error {
 	return m.trust.SetPluginState(id, st)
 }
 
-// systemDirs can't be allowed as game folders: launching "games" from there
-// would let a plugin run any system binary.
-var systemDirs = []string{"/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/proc", "/run", "/sbin", "/sys", "/usr", "/var"}
-
+// No system folder can be allowed as a game folder: launching "games" from
+// there would let a plugin run any system binary.
 func checkAllowable(path string) error {
 	home, _ := os.UserHomeDir()
 	return checkAllowableFor(path, home)
@@ -712,18 +711,16 @@ func checkAllowable(path string) error {
 // "root", "home" or "system"; "" means AllowFolder would accept it. The same
 // rules AllowFolder enforces, so the library can tell the UI per game whether
 // "Allow this folder" is possible (issue #173) instead of the UI duplicating
-// them.
+// them. Roots and protected folders come from the platform (issue #83).
 func AllowDenyReasonFor(path, home string) string {
-	if path == "/" {
+	if platform.IsRoot(path) {
 		return "root"
 	}
 	if home != "" && path == filepath.Clean(home) {
 		return "home"
 	}
-	for _, d := range systemDirs {
-		if path == d || strings.HasPrefix(path, d+"/") {
-			return "system"
-		}
+	if platform.IsProtected(path) {
+		return "system"
 	}
 	return ""
 }

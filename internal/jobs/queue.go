@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"platypus/internal/jsonrpc"
+	"platypus/internal/platform"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
 )
@@ -149,7 +150,7 @@ type file struct {
 // again; plugins resume their downloads where the files left off.
 func Open(path string, b Backend, emit func([]types.Job)) (*Queue, error) {
 	q := &Queue{
-		path: path, b: b, emit: emit, freeSpace: freeSpace, now: time.Now,
+		path: path, b: b, emit: emit, freeSpace: platform.FreeSpace, now: time.Now,
 		wake: make(chan struct{}, 1), pending: make(chan []types.Job, 1),
 		cleanupAfter: DefaultCleanupAfter, discarding: map[string]bool{}, cleanupWake: make(chan struct{}, 1),
 	}
@@ -1124,19 +1125,6 @@ func newID() string {
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
-
-// FreeSpace is the bytes free where path would land: the install dialog uses
-// it to say whether an install fits, and a move's check compares it with the
-// game's size. path may be a folder that doesn't exist yet.
-func FreeSpace(path string) (uint64, error) { return freeSpace(path) }
-
-// SpaceStats is the total and user-available bytes of the filesystem
-// holding path, or its nearest existing parent: FreeSpace's sibling for the
-// disk usage view (issue #50).
-func SpaceStats(path string) (total, free uint64, err error) { return spaceStats(path) }
-
-// freeSpace returns the bytes available to the user on the filesystem that
-// holds path, or its nearest existing parent.
 
 // HumanBytes writes a size the way the queue's messages do: 1.2 GB.
 func HumanBytes(b int64) string { return human(b) }

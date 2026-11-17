@@ -15,6 +15,7 @@ import (
 	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/jsonrpc"
+	"platypus/internal/platform"
 	"platypus/internal/plugins"
 	"platypus/internal/relocate"
 	"platypus/internal/types"
@@ -155,7 +156,7 @@ func moveSpace(from, to string) (need, free int64, err error) {
 	}
 	need = int64(float64(size) * moveSpaceMargin)
 	dir := filepath.Dir(to)
-	f, err := jobs.FreeSpace(dir)
+	f, err := platform.FreeSpace(dir)
 	if err != nil {
 		return need, 0, fmt.Errorf("free space in %s: %w", dir, err)
 	}

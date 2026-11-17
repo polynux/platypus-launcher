@@ -10,6 +10,7 @@ import (
 
 	"platypus/internal/apperr"
 	"platypus/internal/jobs"
+	"platypus/internal/platform"
 	"platypus/internal/settings"
 	"platypus/internal/types"
 )
@@ -31,7 +32,7 @@ func folderState(dir string) (exists bool, free int64) {
 	if st, err := os.Stat(dir); err == nil && st.IsDir() {
 		exists = true
 	}
-	f, err := jobs.FreeSpace(dir)
+	f, err := platform.FreeSpace(dir)
 	if err != nil {
 		return exists, -1
 	}

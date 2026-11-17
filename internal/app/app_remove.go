@@ -11,6 +11,7 @@ import (
 	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/paths"
+	"platypus/internal/platform"
 	"platypus/internal/plugins"
 	"platypus/internal/relocate"
 	"platypus/internal/settings"
@@ -92,17 +93,6 @@ func pathOverlaps(a, b string) bool {
 // dirContains says whether dir is root or sits above it.
 func dirContains(dir, root string) bool {
 	return dir == root || strings.HasPrefix(root, dir+string(filepath.Separator))
-}
-
-// isSystemDir says whether dir is a system folder no deletion may touch.
-// Shared with checkFolderFor.
-func isSystemDir(dir string) bool {
-	for _, sys := range []string{"/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/proc", "/run", "/sbin", "/sys", "/usr", "/var"} {
-		if dir == sys || strings.HasPrefix(dir, sys+"/") {
-			return true
-		}
-	}
-	return false
 }
 
 // isHomeOrAbove says whether dir is home or a folder above it. Shared with
@@ -270,10 +260,10 @@ func (a *App) checkDeleteDirFor(gameID, dir, kind string) (bool, error) {
 			fmt.Sprintf("refusing to delete %q: not a clean absolute path", dir),
 			map[string]string{"path": dir})
 	}
-	if dir == "/" {
+	if platform.IsRoot(dir) {
 		return refuse("remove.root", "refusing to delete the filesystem root", nil)
 	}
-	if isSystemDir(dir) {
+	if platform.IsProtected(dir) {
 		return refuse("remove.system",
 			fmt.Sprintf("refusing to delete system folder %s", dir),
 			map[string]string{"path": dir})

@@ -12,8 +12,8 @@ import (
 
 	"platypus/internal/apperr"
 	"platypus/internal/datadir"
-	"platypus/internal/jobs"
 	"platypus/internal/paths"
+	"platypus/internal/platform"
 	"platypus/internal/relocate"
 	"platypus/internal/types"
 )
@@ -189,7 +189,8 @@ func resolveDiskPath(path string) string {
 }
 
 // driveOf names the drive holding path: the longest mount point at or above
-// it. A path under no known mount falls back to the filesystem root.
+// it. A path under no known mount falls back to its volume root: Windows has
+// no mount table here, so each drive ("C:\") is its own volume (issue #83).
 func driveOf(path string, mounts []diskMount) string {
 	best := ""
 	for _, m := range mounts {
@@ -203,7 +204,7 @@ func driveOf(path string, mounts []diskMount) string {
 		}
 	}
 	if best == "" {
-		return "/"
+		return platform.VolumeRoot(path)
 	}
 	return best
 }
@@ -271,7 +272,7 @@ func buildDiskUsage(games []types.Game, roots []string, home, prefixes string, m
 // prefixes for attribution. roots are the folders to attribute
 // (game folders, install dirs, the prefixes folder); overlapping roots on
 // one drive count once, and a folder shared by several games counts once.
-// spaceOf is the filesystem probe (jobs.SpaceStats in production); tests
+// spaceOf is the filesystem probe (platform.SpaceStats in production); tests
 // inject fakes to simulate several drives. Games come out biggest first.
 func buildDiskUsageWith(games []types.Game, roots []string, home, prefixes string, mounts []diskMount, spaceOf func(string) (uint64, uint64, error), sizer func(types.Game) types.GameSize) types.DiskUsage {
 	out := types.DiskUsage{GeneratedAt: time.Now().Unix()}
@@ -506,8 +507,9 @@ func (a *App) runDiskScan() {
 }
 
 // scanDiskPass runs one measuring pass over the library with the production
-// probes. A mount table that can't be read still yields grouped sizes:
-// grouping falls back to the filesystem root, never to an error.
+// probes. A mount table that can't be read (no /proc/self/mountinfo, as on
+// Windows) still yields grouped sizes: grouping falls back to each path's
+// volume root, never to an error.
 func (a *App) scanDiskPass() bool {
 	games, err := a.diskLibrary()
 	if err != nil {
@@ -519,7 +521,7 @@ func (a *App) scanDiskPass() bool {
 		return false
 	}
 	mounts, _ := readDiskMounts()
-	return a.scanDiskWith(games, mounts, jobs.SpaceStats, relocate.TreeSize)
+	return a.scanDiskWith(games, mounts, platform.SpaceStats, relocate.TreeSize)
 }
 
 // diskLibrary lists the games a scan measures: the whole library, or the

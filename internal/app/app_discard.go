@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"platypus/internal/jobs"
+	"platypus/internal/platform"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
 )
@@ -83,10 +84,10 @@ func checkFolderFor(dir, gamesRoot, action, home string) error {
 	if dir == "" || !filepath.IsAbs(dir) || filepath.Clean(dir) != dir {
 		return fmt.Errorf("refusing to %s %q: not a clean absolute path", action, dir)
 	}
-	if dir == "/" {
+	if platform.IsRoot(dir) {
 		return fmt.Errorf("refusing to %s the filesystem root", action)
 	}
-	if isSystemDir(dir) {
+	if platform.IsProtected(dir) {
 		return fmt.Errorf("refusing to %s system folder %s", action, dir)
 	}
 	if home != "" && isHomeOrAbove(dir, home) {
