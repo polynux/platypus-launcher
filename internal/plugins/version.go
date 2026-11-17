@@ -186,14 +186,12 @@ func (s VersionSet) MarshalJSON() ([]byte, error) {
 // userNotes, a suggestion the user's own value always wins); 1.17 adds
 // batched compatibility facts, runner and save-context capabilities, and
 // LibraryGame.clientLaunch; 1.18 adds game.clientStatus and the split ratings
+// and protection state of compat.lookup; 1.19 adds the game's news links to
 // game.details; 1.20 adds the wine-client launch delegate (a store client in
 // a Platypus-managed Wine prefix) and the client.setup job that installs it;
 // 1.21 adds the optional downloadLimit param of game.install and game.update
 // (issue #207); 1.22 adds the workshop capability (workshop.list,
 // workshop.sync); 1.23 adds the clientRun answer of game.install, game.update
-// and game.uninstall (the core runs a client command in the pinned prefix as
-// part of the plugin's job, issue #212) and the signin clientStatus state
-// (the client is up and waits for the user, issue #213).
 var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12}, {1, 13}, {1, 14}, {1, 15}, {1, 16}, {1, 17}, {1, 18}, {1, 19}, {1, 20}, {1, 21}, {1, 22}, {1, 23}}
 
 var ClientStatusVersion = Version{1, 18}

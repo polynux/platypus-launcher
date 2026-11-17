@@ -456,6 +456,10 @@ func TestUbisoftInstallAnswersClientRun(t *testing.T) {
 	if !slices.Equal(upd.ClientRun.Args, []string{"uplay://install/635"}) {
 		t.Errorf("update args = %v, want the install URL", upd.ClientRun.Args)
 	}
+	// A pre-existing record is not completion: the update must not finish
+	// until the record changes.
+	noJobEvent(t, sess, "update-1", []string{"job.done", "job.failed"}, time.Second)
+	plantRecord(t, prefix, "635", "Game2.exe")
 	waitJobEvent(t, sess, "update-1", []string{"job.done"}, 5*time.Second)
 
 	var un clientRunAnswer
@@ -499,10 +503,12 @@ func TestUbisoftInstallWatchTimeout(t *testing.T) {
 	if ans.ClientRun.Exe == "" {
 		t.Fatal("install didn't answer a clientRun command")
 	}
-	// No record ever appears: the watch fails with a readable message.
+	// No record ever appears: the watch fails with a readable message that
+	// promises nothing (no library reader picks the install up, #192).
 	method, update := waitJobEvent(t, sess, "install-timeout", []string{"job.failed"}, 5*time.Second)
-	if method != "job.failed" || update.Error == "" {
-		t.Fatalf("job end = %s %+v, want a readable job.failed", method, update)
+	if method != "job.failed" || update.Error == "" ||
+		!strings.Contains(update.Error, "didn't report the install of 635 in time") {
+		t.Fatalf("job end = %s %+v, want the honest timeout failure", method, update)
 	}
 }
 
@@ -519,33 +525,53 @@ func TestUbisoftClientStatusSignin(t *testing.T) {
 		State string `json:"state"`
 		Label string `json:"label"`
 	}
-	// No client process: the client isn't up (updating), even with no grace.
+	// No install record: not launchable (updating), even with no grace.
 	call(t, sess, "game.clientStatus",
 		map[string]any{"id": "635", "since": 0}, &status)
 	if status.State != "updating" {
-		t.Fatalf("clientStatus = %+v, want updating with no client process", status)
+		t.Fatalf("clientStatus = %+v, want updating with no record", status)
 	}
-	// A client process without the game: waiting for the user in the client.
-	// (bash's exec -a sets argv[0], which the /proc scan reads; dash's
-	// exec has no -a.)
-	cmd := exec.Command("bash", "-c", "exec -a UbisoftConnect.exe sleep 30")
-	if err := cmd.Start(); err != nil {
-		t.Skipf("can't spawn the fake client process: %v", err)
+	plantRecord(t, prefix, "635", "Game.exe")
+	// Record present but nothing running: the client starts it (launching).
+	call(t, sess, "game.clientStatus",
+		map[string]any{"id": "635", "since": 0}, &status)
+	if status.State != "launching" {
+		t.Fatalf("clientStatus = %+v, want launching with nothing running", status)
 	}
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		call(t, sess, "game.clientStatus",
-			map[string]any{"id": "635", "since": 0}, &status)
-		if status.State == "signin" {
-			break
+	// A client process in this prefix without the game: waiting for the
+	// user in the client. (bash's exec -a sets argv[0], which the /proc
+	// scan reads; dash's exec has no -a. WINEPREFIX scopes the match to
+	// this prefix.)
+	spawn := func(name string) {
+		t.Helper()
+		cmd := exec.Command("bash", "-c", "exec -a "+name+" sleep 30")
+		cmd.Env = append(os.Environ(), "WINEPREFIX="+prefix)
+		if err := cmd.Start(); err != nil {
+			t.Skipf("can't spawn the fake %s process: %v", name, err)
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("clientStatus = %+v, want signin with the client up", status)
-		}
-		time.Sleep(50 * time.Millisecond)
+		t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
 	}
+	spawn("UbisoftConnect.exe")
+	waitStatus := func(want string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			call(t, sess, "game.clientStatus",
+				map[string]any{"id": "635", "since": 0}, &status)
+			if status.State == want {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("clientStatus = %+v, want %s", status, want)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	waitStatus("signin")
 	if status.Label == "" {
 		t.Error("signin has no label for the UI")
 	}
+	// The game itself running reads as launching, as before.
+	spawn("Game.exe")
+	waitStatus("launching")
 }

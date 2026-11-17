@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"platypus/internal/apperr"
 	"platypus/internal/jobs"
@@ -15,19 +16,26 @@ import (
 	"platypus/internal/types"
 )
 
+// clientRunTarget is one running core-run client command: its plugin source
+// and job kind, so holds can name what the client is doing.
+type clientRunTarget struct {
+	source string
+	kind   string
+}
+
 // clientRuns tracks the core-run client commands (protocol 1.23): one run
 // per job id, like clientSetups. clientRunSource maps a running job to its
-// plugin source, so launches can hold while the client's command runs.
-func (a *App) clientRunBegin(id, source string, cancel context.CancelFunc) (*coreRun, error) {
+// target, so launches can hold while the client's command runs.
+func (a *App) clientRunBegin(id, source, kind string, cancel context.CancelFunc) (*coreRun, error) {
 	run, err := a.clientRuns.begin(id, cancel)
 	if err != nil {
 		return nil, err
 	}
 	a.clientRunMu.Lock()
 	if a.clientRunSource == nil {
-		a.clientRunSource = map[string]string{}
+		a.clientRunSource = map[string]clientRunTarget{}
 	}
-	a.clientRunSource[id] = source
+	a.clientRunSource[id] = clientRunTarget{source: source, kind: kind}
 	a.clientRunMu.Unlock()
 	return run, nil
 }
@@ -42,14 +50,48 @@ func (a *App) clientRunEnd(id string, run *coreRun) {
 // clientRunHolding reports whether a core-run client command for source is
 // running (protocol 1.23): the client's games refuse to launch meanwhile.
 func (a *App) clientRunHolding(source string) bool {
+	return a.clientRunKind(source) != ""
+}
+
+// clientRunKind is the kind of the client's running clientRun job, or "".
+func (a *App) clientRunKind(source string) string {
 	a.clientRunMu.Lock()
 	defer a.clientRunMu.Unlock()
-	for _, s := range a.clientRunSource {
-		if s == source {
-			return true
+	for _, t := range a.clientRunSource {
+		if t.source == source {
+			return t.kind
 		}
 	}
-	return false
+	return ""
+}
+
+// clientRunJobs lists the running clientRun jobs of one source.
+func (a *App) clientRunJobs(source string) []types.Job {
+	a.clientRunMu.Lock()
+	ids := map[string]bool{}
+	for id, t := range a.clientRunSource {
+		if t.source == source {
+			ids[id] = true
+		}
+	}
+	a.clientRunMu.Unlock()
+	var out []types.Job
+	for _, j := range a.jobs.List() {
+		if ids[j.ID] {
+			out = append(out, j)
+		}
+	}
+	return out
+}
+
+// stopClientRuns stops every core-run client command of source (the jobs
+// themselves are failed by the caller).
+func (a *App) stopClientRuns(source string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for _, j := range a.clientRunJobs(source) {
+		a.clientRuns.stop(ctx, j.ID)
+	}
 }
 
 // startClientRun runs the plugin's clientRun answer as part of its
@@ -71,8 +113,21 @@ func (a *App) startClientRun(j types.Job, answer plugins.InstallAnswer, run *sto
 	if a.clientRunHolding(j.Source) {
 		return fmt.Errorf("%s is busy with another client command; try again once it finishes", j.Title)
 	}
+	if a.wineClientRunning(j.Source) {
+		// Killing the client's wineserver would take the running game
+		// with it: refuse to start while the client runs a game.
+		p, ok := a.plugins.Plugin(j.Source)
+		name := j.Source
+		if ok {
+			name = p.Manifest.Name
+		}
+		enAction, frAction := clientRunNoun(j.Kind)
+		return apperr.New("client.gameRunning",
+			fmt.Sprintf("%s is running a game; stop it before %s.", name, enAction),
+			map[string]string{"client": name, "action": enAction, "actionFr": frAction})
+	}
 	runCtx, cancel := context.WithCancel(a.ctx)
-	cr, err := a.clientRunBegin(j.ID, j.Source, cancel)
+	cr, err := a.clientRunBegin(j.ID, j.Source, j.Kind, cancel)
 	if err != nil {
 		cancel()
 		return err
@@ -83,6 +138,51 @@ func (a *App) startClientRun(j types.Job, answer plugins.InstallAnswer, run *sto
 		a.runClientRun(runCtx, j, answer, run)
 	}()
 	return nil
+}
+
+// clientRunVerb names what a clientRun job does, for hold messages.
+func clientRunVerb(kind string) (en, fr string) {
+	switch kind {
+	case jobs.KindUpdate:
+		return "updating", "mise à jour"
+	case jobs.KindUninstall:
+		return "uninstalling", "désinstallation"
+	default:
+		return "installing", "installation"
+	}
+}
+
+// clientRunNoun names the job for "stop it before ..." messages.
+func clientRunNoun(kind string) (en, fr string) {
+	switch kind {
+	case jobs.KindUpdate:
+		return "the update", "la mise à jour"
+	case jobs.KindUninstall:
+		return "the uninstall", "la désinstallation"
+	default:
+		return "the install", "l'installation"
+	}
+}
+
+// failClientRuns fails every running clientRun job of a plugin that exited,
+// and stops the core-run commands (issue #212): the dead plugin's watch can
+// never end them, so requeueing would leave the jobs in limbo.
+func (a *App) failClientRuns(source string) {
+	live := a.clientRunJobs(source)
+	for _, j := range live {
+		a.clientRuns.stop(a.ctx, j.ID)
+	}
+	for _, j := range live {
+		p, ok := a.plugins.Plugin(source)
+		name := source
+		if ok {
+			name = p.Manifest.Name
+		}
+		enNoun, _ := clientRunNoun(j.Kind)
+		a.jobs.Notify(source, "job.failed", plugins.JobUpdate{
+			JobID: j.ID, Error: fmt.Sprintf("%s stopped during %s; try again", name, enNoun),
+		})
+	}
 }
 
 // runClientRun wraps the validated client command for the pinned client
@@ -159,7 +259,11 @@ func (a *App) runClientRun(ctx context.Context, j types.Job, answer plugins.Inst
 		fail(err)
 		return
 	}
-	a.jobs.Notify(j.Source, "job.progress", plugins.JobUpdate{JobID: j.ID, Phase: "installing"})
+	phase := "installing"
+	if j.Kind == jobs.KindUninstall {
+		phase = "uninstalling"
+	}
+	a.jobs.Notify(j.Source, "job.progress", plugins.JobUpdate{JobID: j.ID, Phase: phase})
 	if err := a.runClientCommand(ctx, j, run, wrapped); err != nil {
 		fail(err)
 		return
@@ -215,7 +319,11 @@ func (a *App) runClientCommand(ctx context.Context, j types.Job, run *stores.Cli
 	case <-ctx.Done():
 		killProcessTree(cmd)
 		<-done
-		a.stopClientWineserver(j, wrapped)
+		// Never stop the prefix's wineserver while a client session is
+		// live: it would kill the running game along with the command.
+		if !a.wineClientRunning(j.Source) {
+			a.stopClientWineserver(j, wrapped)
+		}
 		return ctx.Err()
 	}
 }

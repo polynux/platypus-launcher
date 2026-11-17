@@ -39,6 +39,7 @@
   },
   "client": {
     "confirmDownload": "{{message}}",
+    "gameRunning": "{{client}} is running a game; stop it before {{action}}.",
     "inUse": "{{client}} is running; stop the game before setting it up.",
     "notSetUp": "{{client}} isn't set up yet; set it up first, then launch the game."
   },
@@ -54,6 +55,7 @@
     "unsupported": "{{name}} doesn't offer family."
   },
   "game": {
+    "clientRunBusy": "{{title}} is {{action}} in {{client}}; launch it once that finishes.",
     "launchBusy": "{{title}} is being {{what}}; launch it once that finishes.",
     "launchBusyWorkshop": "{{title}} is syncing Workshop items; launch it once that finishes.",
     "noClientLaunch": "{{title}} can't be started through a store client.",

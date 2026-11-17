@@ -23,7 +23,7 @@ import (
 	"platypus/internal/types"
 )
 
-var (
+const (
 	pollEvery = 2 * time.Second
 	// How long a store client gets to start the game (Steam's shader
 	// pre-caching and updates can take a while) before we report that nothing
@@ -59,6 +59,12 @@ type Tracker struct {
 	// asked for, if the run ended within clientQuick. A clean run clears it.
 	clientCrashed map[string]time.Time
 	clientQuick   time.Duration
+	// pollEvery, idleGrace and signinCeiling are per-tracker so tests can
+	// use short durations without package globals (never run tests in
+	// parallel: entries share the process table).
+	pollEvery     time.Duration
+	idleGrace     time.Duration
+	signinCeiling time.Duration
 }
 
 // entry is one tracked launch. cmd is the direct-launch process (nil for
@@ -90,7 +96,8 @@ type entry struct {
 
 func NewTracker(emit Emit) *Tracker {
 	return &Tracker{emit: emit, grace: defaultGrace, active: map[string]*entry{}, crashed: map[string]string{},
-		clientCrashed: map[string]time.Time{}, clientQuick: clientQuickExit}
+		clientCrashed: map[string]time.Time{}, clientQuick: clientQuickExit,
+		pollEvery: pollEvery, idleGrace: clientIdleGrace, signinCeiling: signinCeiling}
 }
 
 // CrashLog returns the log file of gameID's last direct launch when that run
@@ -290,7 +297,7 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 					case "updating", "shaders", "downloading", "validating":
 						worked = true
 						idleSince = time.Time{}
-						next := deadline.Add(pollEvery)
+						next := deadline.Add(t.pollEvery)
 						if capDeadline.Before(next) {
 							next = capDeadline
 						}
@@ -301,25 +308,25 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 						// but never past the signin ceiling from launch.
 						worked = true
 						idleSince = time.Time{}
-						next := deadline.Add(pollEvery)
+						next := deadline.Add(t.pollEvery)
 						if capDeadline.Before(next) {
 							next = capDeadline
 						}
-						if ceil := asked.Add(signinCeiling); ceil.Before(next) {
+						if ceil := asked.Add(t.signinCeiling); ceil.Before(next) {
 							next = ceil
 						}
 						deadline = next
 					case "idle":
 						if worked && idleSince.IsZero() {
 							idleSince = time.Now()
-							deadline = idleSince.Add(clientIdleGrace)
+							deadline = idleSince.Add(t.idleGrace)
 						}
 					default:
 						idleSince = time.Time{}
 					}
 				}
 			}
-			if worked && !idleSince.IsZero() && time.Since(idleSince) >= clientIdleGrace {
+			if worked && !idleSince.IsZero() && time.Since(idleSince) >= t.idleGrace {
 				if t.userStopped(e) {
 					t.emit(types.SessionEvent{GameID: gameID, State: "stopped", Message: stoppedByUserMsg})
 				} else {
@@ -336,7 +343,7 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 				t.emit(types.SessionEvent{GameID: gameID, State: "failed", Message: message})
 				return
 			}
-			time.Sleep(pollEvery)
+			time.Sleep(t.pollEvery)
 		}
 		started = time.Now()
 		if t.setRunning(gameID, pid) {

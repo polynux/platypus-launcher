@@ -231,6 +231,7 @@ func TestValidateClientRun(t *testing.T) {
 
 func TestClientPrefixDir(t *testing.T) {
 	if got := ClientPrefixDir("echo", "/data/prefixes"); got != "/data/prefixes/p.echo.client" {
+		t.Errorf("ClientPrefixDir = %q", got)
 	}
 	if ClientGameID("echo") != "p.echo.client" {
 		t.Errorf("ClientGameID = %q", ClientGameID("echo"))

@@ -140,7 +140,8 @@ func TestClientRunCancelKillsCommand(t *testing.T) {
 }
 
 // clientOwnsLocation skips the job's installDir: the game lands in the
-// client prefix instead, and the install folder stays untouched.
+// client prefix instead, and the queue-created install folder is removed
+// again while still empty.
 func TestClientRunClientOwnsLocation(t *testing.T) {
 	e := clientRunEnv(t, map[string]string{
 		"ECHO_CLIENT_RUN_OWNS":    "1",
@@ -154,8 +155,8 @@ func TestClientRunClientOwnsLocation(t *testing.T) {
 		t.Fatalf("InstallGameTo: %v", err)
 	}
 	e.waitJob(t, j.ID, jobs.StateDone)
-	if _, err := os.Stat(filepath.Join(folder, "tiny")); !os.IsNotExist(err) {
-		t.Fatalf("job's installDir holds game files: %v", err)
+	if _, err := os.Stat(folder); !os.IsNotExist(err) {
+		t.Fatalf("job's install folder still there: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(clientPrefix(t, e), "drive_c", "echo-client", "games", "tiny", "game.sh")); err != nil {
 		t.Fatalf("client-owned game.sh: %v", err)
@@ -171,11 +172,11 @@ func TestClientRunLaunchRefused(t *testing.T) {
 		t.Fatalf("InstallGame: %v", err)
 	}
 	waitRunning(t, e, j.ID)
-	if _, err := e.a.LaunchGame(wineGame()); apperr.CodeOf(err) != "game.launchBusy" {
-		t.Fatalf("launch during a clientRun job: %v, want game.launchBusy", err)
+	if _, err := e.a.LaunchGame(wineGame()); apperr.CodeOf(err) != "game.clientRunBusy" {
+		t.Fatalf("launch during a clientRun job: %v, want game.clientRunBusy", err)
 	}
-	if _, err := e.a.LaunchGame(wineGameDirect()); apperr.CodeOf(err) != "game.launchBusy" {
-		t.Fatalf("unflagged launch during a clientRun job: %v, want game.launchBusy", err)
+	if _, err := e.a.LaunchGame(wineGameDirect()); apperr.CodeOf(err) != "game.clientRunBusy" {
+		t.Fatalf("unflagged launch during a clientRun job: %v, want game.clientRunBusy", err)
 	}
 	if err := e.a.CancelJob(j.ID); err != nil {
 		t.Fatalf("CancelJob: %v", err)
@@ -205,5 +206,95 @@ func TestClientRunOldPluginRejected(t *testing.T) {
 			t.Fatalf("job state = %q, want failed", got.State)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// Starting a clientRun while the client's game runs is refused: killing the
+// prefix's wineserver would take the game with it.
+func TestClientRunRefusedWhileGameRuns(t *testing.T) {
+	e := clientRunEnv(t, map[string]string{"ECHO_CLIENT_RUN_HOLD": "1"})
+	setupEchoClient(t, e)
+	if _, err := e.a.LaunchGame(wineGame()); err != nil {
+		t.Fatalf("LaunchGame: %v", err)
+	}
+	ev := waitSessionState(t, e, wineGame().ID, "running")
+	parent := parentPid(t, ev.PID)
+	j, err := e.a.InstallGame(tinyInstallGame())
+	if err != nil {
+		t.Fatalf("InstallGame: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		got := pollJob(t, e, j.ID, 30*time.Second)
+		if got.State == jobs.StateFailed {
+			if !strings.Contains(got.Error, "running a game") {
+				t.Fatalf("job error = %q, want the running-game refusal", got.Error)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("job state = %q, want failed", got.State)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := e.a.StopGame(wineGame().ID); err != nil {
+		t.Fatalf("StopGame: %v", err)
+	}
+	waitSessionState(t, e, wineGame().ID, "stopped")
+	_ = killProcess(parent)
+}
+
+// Canceling a clientRun while a client session is live kills the command
+// but never stops the prefix's wineserver: the game keeps running.
+func TestClientRunCancelSkipsWineserverWhileSessionLive(t *testing.T) {
+	e := clientRunEnv(t, map[string]string{"ECHO_CLIENT_RUN_HOLD": "1"})
+	setupEchoClient(t, e)
+	j, err := e.a.InstallGame(tinyInstallGame())
+	if err != nil {
+		t.Fatalf("InstallGame: %v", err)
+	}
+	waitRunning(t, e, j.ID)
+	e.a.noteWineSession(wineGame().ID, "echo")
+	t.Cleanup(func() { e.a.clearWineSession(wineGame().ID) })
+	if err := e.a.CancelJob(j.ID); err != nil {
+		t.Fatalf("CancelJob: %v", err)
+	}
+	e.waitJob(t, j.ID, jobs.StateCanceled)
+	if stops := findRunActions(runnerRecords(t, e), "stop"); len(stops) != 0 {
+		t.Fatalf("runner stop ran while a client session was live: %v", stops)
+	}
+}
+
+// A plugin that exits mid-clientRun can't end the job: the core stops the
+// command and fails the job with a clear message instead of requeueing it.
+func TestClientRunPluginExitFailsJob(t *testing.T) {
+	e := clientRunEnv(t, map[string]string{
+		"ECHO_CLIENT_RUN_HOLD":  "1",
+		"ECHO_CLIENT_RUN_SLEEP": "30",
+	})
+	setupEchoClient(t, e)
+	j, err := e.a.InstallGame(tinyInstallGame())
+	if err != nil {
+		t.Fatalf("InstallGame: %v", err)
+	}
+	waitRunning(t, e, j.ID)
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if findWrap(t, e, stores.ClientGameID("echo")) != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("client command never started running")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	e.a.failClientRuns("echo")
+	got := e.waitJob(t, j.ID, jobs.StateFailed)
+	if !strings.Contains(got.Error, "stopped during the install") {
+		t.Fatalf("job error = %q, want the stopped-plugin failure", got.Error)
+	}
+	// The command was stopped (no session lives, so the wineserver stop ran).
+	if stops := findRunActions(runnerRecords(t, e), "stop"); len(stops) == 0 {
+		t.Fatal("no runner stop action ran for the stopped client command")
 	}
 }

@@ -48,10 +48,12 @@ Playnite, uplay_install.manifest/.state per Optima). The plugin only reads
 them; whatever the client (real or test double) wrote is the state.
 
 Signin heuristic (no account, no client API): the plugin scans /proc for a
-process whose command line names the client executable (UbisoftConnect.exe /
-upc.exe). A planted client exe with no matching process is a client that
-isn't up (`updating`); a matching process with no game record past
-SIGNIN_GRACE_SECONDS means the client is up and the game isn't (`signin`).
+process naming the client executable (UbisoftConnect.exe / upc.exe) whose
+WINEPREFIX is this prefix (or whose command line holds it when no environ
+is visible; other users' processes never count; rescanned at most every
+2 s). A launchable game (an install record naming a game exe) whose client
+runs in this prefix without the game past SIGNIN_GRACE_SECONDS is a client
+waiting for the user (`signin`); a running game is `launching` as before.
 First-seen times are kept in memory only. PLATYPUS_UBISOFT_SIGNIN_GRACE
 overrides the grace in tests.
 
@@ -344,29 +346,111 @@ def signin_grace():
         return SIGNIN_GRACE_SECONDS
 
 
-def client_running():
-    """Whether a client process is up: a /proc command line naming the
-    client executable (no account, no client API; see module docstring)."""
+# Cache of the last /proc scan (rescanned at most every ~2 s).
+_proc_cache = {"at": 0.0, "procs": []}
+PROC_CACHE_SECONDS = 2.0
+
+
+def _scan_processes():
+    """One /proc pass: [(wineprefix, cmd_basenames, cmd_parts)]. Only the
+    user's own processes count: other users' entries are unreadable or
+    skipped by uid."""
+    now = time.monotonic()
+    with _state_lock:
+        if now - _proc_cache["at"] < PROC_CACHE_SECONDS:
+            return list(_proc_cache["procs"])
+    me = os.getuid()
+    procs = []
     try:
         pids = os.listdir("/proc")
     except OSError:
-        return False
+        pids = []
     for pid in pids:
         if not pid.isdigit():
             continue
+        base = os.path.join("/proc", pid)
         try:
-            with open(os.path.join("/proc", pid, "cmdline"), "rb") as f:
-                parts = f.read().split(b"\0")
+            if os.stat(base).st_uid != me:
+                continue
+            with open(os.path.join(base, "cmdline"), "rb") as f:
+                raw = f.read().split(b"\0")
         except (OSError, ValueError):
             continue
-        for part in parts:
+        parts = []
+        for part in raw:
+            if not part:
+                continue
             try:
-                base = os.path.basename(part.decode("utf-8", "replace").replace("\\", "/"))
+                parts.append(part.decode("utf-8", "replace"))
             except Exception:
                 continue
-            if base.lower() in CLIENT_NAMES_LOWER:
+        try:
+            with open(os.path.join(base, "environ"), "rb") as f:
+                env = f.read().split(b"\0")
+        except (OSError, ValueError):
+            env = []
+        wineprefix = None
+        for var in env:
+            if var.startswith(b"WINEPREFIX="):
+                try:
+                    wineprefix = var[len(b"WINEPREFIX="):].decode("utf-8", "replace")
+                except Exception:
+                    pass
+                break
+        basenames = set()
+        for text in parts:
+            name = os.path.basename(text.replace("\\", "/")).lower()
+            if name:
+                basenames.add(name)
+        procs.append((wineprefix, basenames, parts))
+    with _state_lock:
+        _proc_cache["at"] = now
+        _proc_cache["procs"] = procs
+    return list(procs)
+
+
+def _proc_in_prefix(procs, prefix, names):
+    """Whether a process naming one of names runs in this prefix: its
+    WINEPREFIX matches, or (no environ visible) its command line holds the
+    prefix path."""
+    want = os.path.normpath(prefix)
+    for wineprefix, basenames, parts in procs:
+        if not (basenames & names):
+            continue
+        if wineprefix is not None:
+            if os.path.normpath(wineprefix) == want:
                 return True
+            continue
+        if any(prefix in part for part in parts):
+            return True
     return False
+
+
+def client_running(prefix):
+    """Whether the store client runs in this prefix (no account, no client
+    API: a /proc command line naming the client executable with this
+    prefix's WINEPREFIX; see module docstring)."""
+    return _proc_in_prefix(_scan_processes(), prefix, CLIENT_NAMES_LOWER)
+
+
+def game_running(prefix, exe_name):
+    """Whether the game's own process runs in this prefix."""
+    if not exe_name:
+        return False
+    return _proc_in_prefix(_scan_processes(), prefix, {exe_name.lower()})
+
+def snapshot_record(prefix, app):
+    """The install record's current (bytes, mtime), or (None, None)."""
+    try:
+        path = record_path(prefix, app)
+    except RPCError:
+        return (None, None)
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        return (data, os.path.getmtime(path))
+    except OSError:
+        return (None, None)
 
 
 def client_url(action, app):
@@ -386,24 +470,22 @@ def answer_client_run(app, action):
             "clientOwnsLocation": True}
 
 
-def watch_job(job_id, prefix, app, action):
-    """End the job from the client's on-disk state: an install/update
-    completes when the game's record appears, an uninstall when it is gone
-    (bounded wait; a readable failure on timeout). A canceled watch sends
-    nothing, per the Jobs contract."""
-    stop = threading.Event()
-    with _state_lock:
-        _watch_stops[job_id] = stop
+def watch_job(job_id, prefix, app, action, before, stop):
+    """End the job from a CHANGE in the client's on-disk state, observed
+    after the answer was sent: an install/update completes when the game's
+    record appears or changes, an uninstall when it is gone (bounded wait;
+    a readable failure on timeout). A canceled watch sends nothing, per the
+    Jobs contract."""
     deadline = time.monotonic() + watch_timeout()
     try:
         while time.monotonic() < deadline:
             if stop.is_set():
                 return
-            rec = read_record(prefix, app)
+            current = snapshot_record(prefix, app)
             if action == "uninstall":
-                done = rec is None
+                done = current[0] is None
             else:
-                done = rec is not None
+                done = current != before
             if done:
                 notify("job.done", {"jobId": job_id})
                 return
@@ -416,9 +498,8 @@ def watch_job(job_id, prefix, app, action):
                              f"uninstall {app}")})
         else:
             notify("job.failed", {"jobId": job_id,
-                   "error": (f"timed out waiting for Ubisoft Connect to "
-                             f"install {app}; finish the install in the "
-                             f"client and Platypus will pick it up")})
+                   "error": (f"Ubisoft Connect didn't report the install "
+                             f"of {app} in time")})
     finally:
         with _state_lock:
             if _watch_stops.get(job_id) is stop:
@@ -443,7 +524,15 @@ def start_client_command(params, action):
                        "(run client.setup first)", code=-32602)
     if action == "uninstall" and read_record(prefix, app) is None:
         raise RPCError(f"{app} is not installed in Ubisoft Connect")
-    threading.Thread(target=watch_job, args=(job_id, prefix, app, action),
+    # Snapshot the records and register the cancel before answering, so the
+    # watch only ends on a change from this answer on and a cancel can never
+    # slip in between.
+    before = snapshot_record(prefix, app)
+    stop = threading.Event()
+    with _state_lock:
+        _watch_stops[job_id] = stop
+    threading.Thread(target=watch_job,
+                     args=(job_id, prefix, app, action, before, stop),
                      daemon=True).start()
     return answer_client_run(app, action)
 
@@ -532,17 +621,25 @@ def launch_spec(params):
 
 def client_status(params):
     """Client-side launch status (protocol 1.18, plus signin over 1.23).
-    A planted client exe with no client process is a client that isn't up
-    (updating); a client process without the game past the signin grace is
-    a client waiting for the user (signin)."""
+    Process state, not install records: a launchable game whose client runs
+    in this prefix without the game past the signin grace is a client
+    waiting for the user (signin); a running game is launching as today."""
     app = params["id"]
     prefix = remembered_prefix()
     if not prefix or find_client_exe(prefix) is None:
         return {"state": "idle", "label": "Ubisoft Connect isn't set up yet"}
-    if read_record(prefix, app) is not None:
+    exe = game_exe_name(prefix, app)
+    if exe is None:
+        with _state_lock:
+            _client_seen.pop((prefix, app), None)
+        return {"state": "updating",
+                "label": "Waiting for Ubisoft Connect (sign in if it asks)"}
+    if game_running(prefix, exe):
+        with _state_lock:
+            _client_seen.pop((prefix, app), None)
         return {"state": "launching",
                 "label": f"Starting {app} in Ubisoft Connect"}
-    if client_running():
+    if client_running(prefix):
         key = (prefix, app)
         now = time.monotonic()
         with _state_lock:
@@ -554,11 +651,12 @@ def client_status(params):
         if waiting:
             return {"state": "signin",
                     "label": "Waiting for you in Ubisoft Connect"}
-    else:
-        with _state_lock:
-            _client_seen.pop((prefix, app), None)
-    return {"state": "updating",
-            "label": "Waiting for Ubisoft Connect (sign in if it asks)"}
+        return {"state": "updating",
+                "label": "Waiting for Ubisoft Connect (sign in if it asks)"}
+    with _state_lock:
+        _client_seen.pop((prefix, app), None)
+    return {"state": "launching",
+            "label": f"Starting {app} in Ubisoft Connect"}
 
 
 METHODS = {

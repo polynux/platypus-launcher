@@ -74,10 +74,10 @@ type App struct {
 	runnerInstalls coreMoves // core-run runner installs (issue #142), like moves
 	clientSetups   coreMoves // core-run client setups (protocol 1.20), like moves
 	clientRuns     coreMoves // core-run client commands (protocol 1.23), like setups
-	// clientRunMu guards clientRunSource: the plugin source of each running
+	// clientRunMu guards clientRunSource: the target of each running
 	// clientRun job, so launches hold while the client's command runs.
 	clientRunMu     sync.Mutex
-	clientRunSource map[string]string
+	clientRunSource map[string]clientRunTarget
 	// wineMu guards wineSessions: game ids running through a wine client, by
 	// source, so SetupClient refuses while the client runs (issue #191).
 	wineMu       sync.Mutex
@@ -453,6 +453,9 @@ func (a *App) startup(ctx context.Context) {
 			// The process is gone: its cached login state died with it.
 			a.invalidateAuth(id)
 			a.jobs.PluginExited(id, err)
+			// A dead plugin can't end its clientRun jobs: fail them now
+			// and stop the core-run commands (issue #212).
+			a.failClientRuns(id)
 			if a.social != nil {
 				a.social.Exited(id)
 			}
@@ -1331,10 +1334,16 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 				fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title),
 				map[string]string{"title": game.Title, "what": "set up"})
 		}
-		if a.clientRunHolding(game.Source) {
-			return "", apperr.New("game.launchBusy",
-				fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title),
-				map[string]string{"title": game.Title, "what": "set up"})
+		if kind := a.clientRunKind(game.Source); kind != "" {
+			enVerb, frVerb := clientRunVerb(kind)
+			plug, ok := a.plugins.Plugin(game.Source)
+			client := game.Source
+			if ok {
+				client = plug.Manifest.Name
+			}
+			return "", apperr.New("game.clientRunBusy",
+				fmt.Sprintf("%s is %s in %s; launch it once that finishes", game.Title, enVerb, client),
+				map[string]string{"title": game.Title, "client": client, "action": enVerb, "actionFr": frVerb})
 		}
 	}
 	filtered := make([]string, 0, len(p.args))

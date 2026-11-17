@@ -28,14 +28,9 @@ Verified with fakes and loopback (no network, no Wine, no account):
 - `game.install`/`game.update`/`game.uninstall` answer the `clientRun`
   command (`uplay://install/<id>` / `uplay://uninstall/<id>`) with
   `clientOwnsLocation`, and end the job from the client's on-disk records
-  (bounded wait, readable failure on timeout, silent on cancel).
-- `game.clientStatus` mapping: `idle` (no client) / `updating` (waiting) /
-  `signin` (client up without the game past a short grace: sign in if it
-  asks) / `launching` (installed), incl. the Proton layout and the `upc.exe`
-  fallback.
-- The pin-mismatch paths (wrong SHA-256, wrong size) fail instead of
-  installing anything.
-
+  (bounded wait, readable failure on timeout, silent on cancel). Installed
+  games appear in the library only once the local-cache reader lands
+  (#192): until then a finished install has nowhere to show.
 Pending a real prefix and a Ubisoft account (untouched by this plugin):
 
 - L-U1: the Connect install folder (`UbisoftConnect.exe` vs `upc.exe` is a

@@ -5,15 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"slices"
-	"time"
-
+	"os"
 	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
 	"platypus/internal/settings"
 	"platypus/internal/stores"
 	"platypus/internal/types"
+	"slices"
+	"time"
 )
 
 // jobBackend runs queue jobs through the owning plugin.
@@ -130,6 +130,11 @@ func (a *App) startInstallLike(ctx context.Context, j types.Job, params map[stri
 	if !answer.ClientOwnsLocation && j.InstallDir != "" {
 		folders = append(folders, j.InstallDir)
 	}
+	if answer.ClientOwnsLocation {
+		// The client owns installs: drop the job's install folder when
+		// the queue created it and nothing landed in it.
+		a.dropEmptyInstallDir(j)
+	}
 	run, err := stores.ValidateClientRun(*answer.ClientRun, p.Manifest, folders, clientDir)
 	if err != nil {
 		return err
@@ -137,7 +142,29 @@ func (a *App) startInstallLike(ctx context.Context, j types.Job, params map[stri
 	return a.startClientRun(j, answer, run)
 }
 
-// resumed after the store stopped offering versions fails here, instead of
+// dropEmptyInstallDir removes a fresh install's folder when the plugin's
+// clientOwnsLocation answer says the client owns installs (protocol 1.23):
+// the queue already created it, and the client installs elsewhere. A
+// non-empty folder, or one that predates the job, is left alone; os.Remove
+// only removes empty dirs anyway.
+func (a *App) dropEmptyInstallDir(j types.Job) {
+	if j.Kind != jobs.KindInstall || j.InstallDir == "" {
+		return
+	}
+	st, err := os.Stat(j.InstallDir)
+	if err != nil || !st.IsDir() {
+		return
+	}
+	if st.ModTime().Before(time.UnixMilli(j.CreatedAt)) {
+		return
+	}
+	entries, err := os.ReadDir(j.InstallDir)
+	if err != nil || len(entries) > 0 {
+		return
+	}
+	_ = os.Remove(j.InstallDir)
+}
+
 // installing the latest while the UI says the game is pinned.
 func (a *App) jobTargetGate(j types.Job) error {
 	game := types.Game{ID: j.GameID, Source: j.Source, StoreAppID: j.StoreGameID, Title: j.Title}
@@ -211,12 +238,11 @@ func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
 
 // RunsInCore says whether core is running the job itself, in a goroutine of
 // its own (see CoreRunner in the queue): core's own moves and removals, its
-// backup/restore and client-setup jobs, and runner installs.
 func (b jobBackend) RunsInCore(j types.Job) bool {
 	if j.Kind == jobs.KindBackup || j.Kind == jobs.KindRestore {
 		return true
 	}
-	return b.a.moves.active(j.ID) || b.a.removes.active(j.ID) || b.a.runnerInstalls.active(j.ID) || b.a.clientSetups.active(j.ID)
+	return b.a.moves.active(j.ID) || b.a.removes.active(j.ID) || b.a.runnerInstalls.active(j.ID) || b.a.clientSetups.active(j.ID) || b.a.clientRuns.active(j.ID)
 }
 
 // heldByJob refuses a launch while a move, a check, a backup, a restore or a
@@ -230,8 +256,16 @@ func (a *App) heldByJob(game types.Game) error {
 		if _, ok := a.jobs.Holding(stores.ClientGameID(game.Source), jobs.KindClientSetup); ok {
 			return apperr.New("game.launchBusy", fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title), map[string]string{"title": game.Title, "what": "set up"})
 		}
-		if a.clientRunHolding(game.Source) {
-			return apperr.New("game.launchBusy", fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title), map[string]string{"title": game.Title, "what": "set up"})
+		if kind := a.clientRunKind(game.Source); kind != "" {
+			enVerb, frVerb := clientRunVerb(kind)
+			p, ok := a.plugins.Plugin(game.Source)
+			client := game.Source
+			if ok {
+				client = p.Manifest.Name
+			}
+			return apperr.New("game.clientRunBusy",
+				fmt.Sprintf("%s is %s in %s; launch it once that finishes", game.Title, enVerb, client),
+				map[string]string{"title": game.Title, "client": client, "action": enVerb, "actionFr": frVerb})
 		}
 	}
 	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindBackup, jobs.KindRestore, jobs.KindRemove, jobs.KindWorkshop)

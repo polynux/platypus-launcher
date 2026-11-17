@@ -59,12 +59,23 @@ func TestWatchClientWithoutStatusUsesOriginalTimeoutFailure(t *testing.T) {
 	}
 }
 
+func TestClientStatusChangedRequiresStateOrPercentagePoint(t *testing.T) {
+	previousProgress := .40
+	previous := &types.ClientStatus{State: "downloading", Progress: &previousProgress}
+	progress := .405
+	if clientStatusChanged(previous, &types.ClientStatus{State: "downloading", Progress: &progress}) {
+		t.Fatal("sub-percentage change should not emit")
+	}
+	progress = .41
+	if !clientStatusChanged(previous, &types.ClientStatus{State: "downloading", Progress: &progress}) {
+		t.Fatal("one percentage point change should emit")
+	}
+}
+
 func TestWatchClientSigninExtendsDeadline(t *testing.T) {
-	oldPoll := pollEvery
-	pollEvery = 50 * time.Millisecond
-	defer func() { pollEvery = oldPoll }()
 	rec := newRecorder()
 	tr := NewTracker(rec.emit)
+	tr.pollEvery = 50 * time.Millisecond
 	var pid atomic.Int32
 	status := func(time.Time) (*types.ClientStatus, error) {
 		return &types.ClientStatus{State: "signin"}, nil
@@ -91,12 +102,10 @@ func TestWatchClientSigninExtendsDeadline(t *testing.T) {
 }
 
 func TestWatchClientSigninCeilingFailsLaunch(t *testing.T) {
-	oldPoll, oldCeil := pollEvery, signinCeiling
-	pollEvery = 50 * time.Millisecond
-	signinCeiling = 600 * time.Millisecond
-	defer func() { pollEvery, signinCeiling = oldPoll, oldCeil }()
 	rec := newRecorder()
 	tr := NewTracker(rec.emit)
+	tr.pollEvery = 50 * time.Millisecond
+	tr.signinCeiling = 600 * time.Millisecond
 	status := func(time.Time) (*types.ClientStatus, error) {
 		return &types.ClientStatus{State: "signin"}, nil
 	}
