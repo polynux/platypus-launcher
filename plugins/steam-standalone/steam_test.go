@@ -352,6 +352,46 @@ func TestClientLaunchFactComesFromInstalledLaunchMode(t *testing.T) {
 	}
 }
 
+// The 1.15 library hints come from what the plugin already knows (issue
+// #199): a client-mode install needs Steam, so a connection; any other
+// install runs directly; a game with no install record has an unknown mode
+// and gets no hint. A saved game's store last-played time rides along, and
+// the store never owns cloud saves (Platypus does).
+func TestSteamLibraryLaunchHints(t *testing.T) {
+	e := setup(t)
+	e.login()
+	rewriteAPI(t, []any{
+		map[string]any{"appid": float64(4321), "name": "Standalone Game",
+			"playtime_forever": float64(90), "rtime_last_played": float64(1700000000)},
+		map[string]any{"appid": float64(4322), "name": "Tool Thing"},
+		map[string]any{"appid": float64(4323), "name": "Not Installed"},
+	})
+	installed := map[string]map[string]any{
+		"4321": {"path": filepath.Join(e.folder, "Standalone_Game"), "title": "Standalone Game", "mode": "client"},
+		"4322": {"path": filepath.Join(e.folder, "Tool_Thing"), "title": "Tool Thing", "mode": "none"},
+	}
+	data, _ := json.Marshal(installed)
+	if err := os.WriteFile(filepath.Join(e.pluginData(), "installed.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lib := e.library()
+	client := e.find(lib, "4321")
+	if client.Offline != "network" || client.CloudSync || client.LastPlayed != 1700000000 {
+		t.Fatalf("client game hints = offline %q, cloudSync %v, lastPlayed %d",
+			client.Offline, client.CloudSync, client.LastPlayed)
+	}
+	direct := e.find(lib, "4322")
+	if direct.Offline != "ok" || direct.CloudSync || direct.LastPlayed != 0 {
+		t.Fatalf("direct game hints = offline %q, cloudSync %v, lastPlayed %d",
+			direct.Offline, direct.CloudSync, direct.LastPlayed)
+	}
+	uninstalled := e.find(lib, "4323")
+	if uninstalled.Offline != "unknown" || uninstalled.CloudSync {
+		t.Fatalf("uninstalled game hints = offline %q, cloudSync %v",
+			uninstalled.Offline, uninstalled.CloudSync)
+	}
+}
+
 func TestSaveContextWithNoSteamClientIsEmpty(t *testing.T) {
 	// The plugin looks for Steam under HOME and XDG_DATA_HOME: an empty home
 	// keeps a real install on the machine from answering.

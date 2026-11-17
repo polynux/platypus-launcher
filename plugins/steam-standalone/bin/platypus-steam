@@ -1313,6 +1313,20 @@ def resolve_art_assets(app_ids, deadline=None):
     return out
 
 
+def launch_hints(app, installed):
+    """Protocol 1.15 library hints, from what the plugin already knows: a
+    client-mode install needs Steam (and so a connection), any other install
+    runs the game directly, and only an install record names its launch mode.
+    Platypus owns this store's cloud saves, so the store never syncs them."""
+    mode = (installed.get(app) or {}).get("mode") or ""
+    hints = {"cloudSync": False}
+    if mode == "client":
+        hints["offline"] = "network"
+    elif app in installed:
+        hints["offline"] = "ok"
+    return hints
+
+
 def library_list(_params):
     data = owned_games()
     token = access_token()
@@ -1342,6 +1356,13 @@ def library_list(_params):
             entry["note"] = mode_note(ig.get("mode") or "none")
             if ig.get("mode") == "client":
                 entry["clientLaunch"] = True
+        entry.update(launch_hints(app, installed))
+        try:
+            last = int(g.get("rtime_last_played") or 0)
+        except (TypeError, ValueError):
+            last = 0
+        if last > 0:
+            entry["lastPlayed"] = last
         # Art needs no Store lookup: always set it, so games past the Store
         # budget (or with no Store entry at all) still show covers.
         entry.update(art_urls(app))
@@ -1372,6 +1393,7 @@ def library_list(_params):
             }
             if ig.get("mode") == "client":
                 missing["clientLaunch"] = True
+            missing.update(launch_hints(app, installed))
             missing.update(art_urls(app))
             out.append(missing)
     # Newer apps only have hashed asset paths: resolve the real cover/hero/
@@ -1918,6 +1940,7 @@ def merge_family_games(out, fam, installed, deadline, steamid=""):
             entry["note"] = mode_note(ig.get("mode") or "none")
             if ig.get("mode") == "client":
                 entry["clientLaunch"] = True
+        entry.update(launch_hints(appid, installed))
         entry.update(art_urls(appid))
         app_type = (store.get("type") or "").lower()
         if app_type and app_type not in ("game", "demo", "beta", "application"):
