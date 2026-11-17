@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -78,7 +79,11 @@ type backend struct{ m *plugins.Manager }
 
 func (b backend) Size(ctx context.Context, j types.Job) (plugins.InstallSize, error) {
 	var s plugins.InstallSize
-	err := b.m.Call(ctx, j.Source, "game.installSize", map[string]any{"id": j.StoreGameID}, &s)
+	params := map[string]any{"id": j.StoreGameID}
+	if j.Target != nil {
+		params["target"] = j.Target
+	}
+	err := b.m.Call(ctx, j.Source, "game.installSize", params, &s)
 	return s, err
 }
 
@@ -86,6 +91,9 @@ func (b backend) Start(ctx context.Context, j types.Job) error {
 	p := map[string]any{"id": j.StoreGameID, "jobId": j.ID}
 	if j.Kind != jobs.KindUninstall {
 		p["installDir"] = j.InstallDir
+	}
+	if j.Target != nil {
+		p["target"] = j.Target
 	}
 	if j.Kind == jobs.KindVerify {
 		p["repair"] = j.Repair
@@ -124,6 +132,10 @@ func setup(t *testing.T) *env {
 
 	e := &env{state: filepath.Join(root, "legendary-state.json"), games: filepath.Join(root, "Games")}
 	t.Setenv("FAKE_LEGENDARY_STATE", e.state)
+	// legendary's config folder holds the manifests this plugin archives.
+	if os.Getenv("LEGENDARY_CONFIG_PATH") == "" {
+		t.Setenv("LEGENDARY_CONFIG_PATH", filepath.Join(root, "legendary-config"))
+	}
 	e.pt = playtimeServer(t)
 	t.Setenv("PLATYPUS_EPIC_LIBRARY_URL", e.pt.srv.URL)
 	// A game legendary installed before Platypus, outside Platypus's folder.
@@ -219,6 +231,41 @@ func (e *env) run(t *testing.T, kind string, g types.Game) types.Job {
 		t.Fatal(err)
 	}
 	return e.wait(t, j.ID)
+}
+
+func (e *env) runTarget(t *testing.T, kind string, g types.Game, target *types.VersionTarget) types.Job {
+	t.Helper()
+	j, err := e.q.AddTargeted(kind, id, g.ID, g.StoreAppID, g.Title, e.folder, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e.wait(t, j.ID)
+}
+
+// setLatest moves the fake store's current build, like Epic publishing an update.
+func (e *env) setLatest(t *testing.T, app, version string) {
+	t.Helper()
+	data, err := os.ReadFile(e.state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var st map[string]any
+	if err := json.Unmarshal(data, &st); err != nil {
+		t.Fatal(err)
+	}
+	latest, _ := st["latest"].(map[string]any)
+	if latest == nil {
+		latest = map[string]any{}
+		st["latest"] = latest
+	}
+	latest[app] = version
+	out, err := json.Marshal(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(e.state, out, 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (e *env) verify(t *testing.T, g types.Game, repair bool) types.Job {
@@ -649,5 +696,150 @@ func TestEpicOldLegendaryHidesAchievements(t *testing.T) {
 	}
 	if has("achievements") || !has("playtime") || !has("verify") {
 		t.Fatalf("capabilities on legendary 0.20: %v", init.Capabilities)
+	}
+}
+
+// Epic lists no old builds: the plugin archives the manifest of what is
+// installed, before every update and after every install, and installs one of
+// those back through `legendary install --manifest` (its documented downgrade
+// path). The fake legendary writes a manifest per install, like the real one.
+func TestEpicVersionsArchiveAndDowngrade(t *testing.T) {
+	e := setup(t)
+	e.login(t)
+	var installedMu sync.Mutex
+	installed := map[string]types.Installed{}
+	e.q.SetOnInstalled(func(j types.Job, in types.Installed) {
+		installedMu.Lock()
+		installed[j.ID] = in
+		installedMu.Unlock()
+	})
+	archive := filepath.Join(e.m.DataDirOf(id), "archive", "Goose")
+	versions := func(pinned map[string]any, ledger []any) types.VersionInfo {
+		t.Helper()
+		params := map[string]any{"id": "Goose", "ledger": ledger}
+		if pinned != nil {
+			params["pinned"] = pinned
+		}
+		var info types.VersionInfo
+		if err := e.call(t, "versions.list", params, &info); err != nil {
+			t.Fatal(err)
+		}
+		if len(info.Channels) != 0 || info.Manual != nil {
+			t.Fatalf("Epic listed channels or manual values: %+v", info)
+		}
+		return info
+	}
+	builds := func(info types.VersionInfo) map[string]types.VersionBuild {
+		out := map[string]types.VersionBuild{}
+		for _, b := range info.Builds {
+			out[b.ID] = b
+		}
+		return out
+	}
+	target := func() json.RawMessage {
+		return json.RawMessage(`"1.0.manifest"`)
+	}
+
+	goose := e.library(t)["Goose"]
+	j := e.run(t, jobs.KindInstall, goose)
+	if j.State != jobs.StateDone {
+		t.Fatalf("install: %+v", j)
+	}
+	if _, err := os.Stat(filepath.Join(archive, "1.0.manifest")); err != nil {
+		t.Fatalf("install wasn't archived: %v", err)
+	}
+	if in := installed[j.ID]; in.Build != "1.0" || string(in.ArchiveRef) != `"1.0.manifest"` {
+		t.Fatalf("job.done installed: %+v", in)
+	}
+	info := versions(nil, nil)
+	if b := builds(info); len(b) != 1 || !b["1.0"].Current || info.UpdateAvailable {
+		t.Fatalf("after install: %+v", info)
+	}
+
+	// A target's size comes from the archived manifest, not the current store build.
+	archivedSize := map[string]any{"id": "Goose", "target": map[string]any{"build": "1.0", "archiveRef": target()}}
+	var size plugins.InstallSize
+	if err := e.call(t, "game.installSize", archivedSize, &size); err != nil || size.DownloadBytes != 7<<20 || size.DiskBytes != 9<<20 {
+		t.Fatalf("archived size: %+v, %v", size, err)
+	}
+
+	// The store moves on; the update archives 1.0 before replacing it.
+	e.setLatest(t, "Goose", "1.1")
+	if info = versions(nil, nil); !info.UpdateAvailable {
+		t.Fatalf("no update offered: %+v", info)
+	}
+	if u := e.run(t, jobs.KindUpdate, goose); u.State != jobs.StateDone {
+		t.Fatalf("update: %+v", u)
+	}
+	info = versions(nil, nil)
+	if b := builds(info); len(b) != 2 || !b["1.1"].Current || b["1.0"].Source != "archive" ||
+		info.UpdateAvailable {
+		t.Fatalf("after update: %+v", info)
+	}
+
+	// Downgrade to the archived build through --manifest.
+	j = e.runTarget(t, jobs.KindUpdate, goose, &types.VersionTarget{Build: "1.0", ArchiveRef: target()})
+	if j.State != jobs.StateDone {
+		t.Fatalf("downgrade: %+v", j)
+	}
+	if !strings.Contains(e.calls(t), "install Goose --update-only --skip-sdl --manifest "+filepath.Join(archive, "1.0.manifest")) {
+		t.Fatalf("downgrade call: %s", e.calls(t))
+	}
+	if in := installed[j.ID]; in.Build != "1.0" {
+		t.Fatalf("downgrade installed: %+v", in)
+	}
+	info = versions(nil, nil)
+	if b := builds(info); !b["1.0"].Current || !info.UpdateAvailable {
+		t.Fatalf("after downgrade: %+v", info)
+	}
+	if pinned := versions(map[string]any{"kind": "build", "id": "1.0"}, nil); pinned.UpdateAvailable {
+		t.Fatalf("update offered while pinned: %+v", pinned)
+	}
+
+	// Bounded: three saved builds per game, oldest pruned.
+	for _, v := range []string{"1.2", "1.3", "1.4"} {
+		e.setLatest(t, "Goose", v)
+		if u := e.run(t, jobs.KindUpdate, goose); u.State != jobs.StateDone {
+			t.Fatalf("update to %s: %+v", v, u)
+		}
+	}
+	manifests, _ := filepath.Glob(filepath.Join(archive, "*.manifest"))
+	if len(manifests) != 3 {
+		t.Fatalf("archives not bounded: %v", manifests)
+	}
+	if _, err := os.Stat(filepath.Join(archive, "1.0.manifest")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the oldest archive survived pruning: %v", err)
+	}
+
+	// A pruned build is listed from the install history, but not installable.
+	gone := versions(nil, []any{map[string]any{"build": "1.0", "versionName": "1.0", "date": "2025-01-01"}})
+	if b := builds(gone); b["1.0"].Available == nil || *b["1.0"].Available || b["1.0"].Source != "archive" {
+		t.Fatalf("pruned build listed as installable: %+v", gone)
+	}
+	err := e.call(t, "game.update", map[string]any{"id": "Goose", "jobId": "gone-1", "installDir": e.folder,
+		"target": map[string]any{"build": "1.0", "archiveRef": target()}}, nil)
+	if err == nil || !strings.Contains(err.Error(), "no longer saved") {
+		t.Fatalf("a pruned build was installable: %v", err)
+	}
+
+	// A fresh install of an archived build works too (base path, not update-only).
+	if u := e.run(t, jobs.KindUninstall, goose); u.State != jobs.StateDone {
+		t.Fatalf("uninstall: %+v", u)
+	}
+	j = e.runTarget(t, jobs.KindInstall, goose, &types.VersionTarget{Build: "1.2", ArchiveRef: json.RawMessage(`"1.2.manifest"`)})
+	if j.State != jobs.StateDone {
+		t.Fatalf("install archived build: %+v", j)
+	}
+	if !strings.Contains(e.calls(t), "install Goose --base-path "+e.folder+" --skip-sdl --platform Windows --manifest "+
+		filepath.Join(archive, "1.2.manifest")) {
+		t.Fatalf("archived install call: %s", e.calls(t))
+	}
+	if g := e.library(t)["Goose"]; !g.IsInstalled || g.Version != "1.2" {
+		t.Fatalf("after archived install: %+v", g)
+	}
+
+	var junk json.RawMessage
+	if err := e.call(t, "versions.list", map[string]any{"id": "Nope"}, &junk); err == nil {
+		t.Fatal("versions listed for an app the account doesn't own")
 	}
 }

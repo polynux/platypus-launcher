@@ -62,6 +62,41 @@ def err(msg, code=1):
     sys.exit(code)
 
 
+def latest_version(st, app):
+    """The store's current build: state's per-game override, else the catalogue's."""
+    return (st.get("latest") or {}).get(app) or next(g["latest"] for g in CATALOG if g["app_name"] == app)
+
+
+def config_dir():
+    """legendary's config folder, where manifests are saved (lfs/lgndry.py)."""
+    return os.environ.get("LEGENDARY_CONFIG_PATH") or os.path.join(
+        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "legendary")
+
+
+def manifest_path(app, platform, version):
+    name = "".join(c for c in f"{app}_{platform}_{version}" if c not in '<>:"/\\|?*')
+    return os.path.join(config_dir(), "manifests", name + ".manifest")
+
+
+def write_manifest(app, platform, version):
+    """The manifest legendary saves after preparing a download (save_manifest).
+    Its fields are what `legendary info <file> --json` reports."""
+    path = manifest_path(app, platform, version)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    build = "".join(c for c in version if c.isdigit()) or "1"
+    data = {"app_name": app, "build_version": version, "build_id": build,
+            "download_size": 7 * 1024 * 1024, "disk_size": 9 * 1024 * 1024,
+            "file_manifest_list": [{"path": "Binaries/Game.exe", "size": 2}]}
+    with open(path, "w") as f:
+        json.dump(data, f)
+    return path
+
+
+def read_manifest(path):
+    with open(path) as f:
+        return json.load(f)
+
+
 def no_credentials():
     """What upstream does when core.login() finds no user.json."""
     print("Traceback (most recent call last):", file=sys.stderr)
@@ -105,25 +140,38 @@ def main():
         out = []
         for g in CATALOG:
             out.append({"metadata": g["meta"], "app_name": g["app_name"], "app_title": g["app_title"],
-                        "asset_infos": {p: {"app_name": g["app_name"], "build_version": g["latest"]} for p in g["platforms"]},
+                        "asset_infos": {p: {"app_name": g["app_name"], "build_version": latest_version(st, g["app_name"])} for p in g["platforms"]},
                         "base_urls": [], "sidecar": None, "achievements": g.get("achievements"), "dlcs": []})
         print(json.dumps(out))
     elif cmd == "list-installed":
         print(json.dumps([dict(v, app_name=k) for k, v in st["installed"].items()]))
     elif cmd == "info":
-        print(json.dumps({"game": {}, "install": {}, "manifest": {"disk_size": 12 * 1024 * 1024, "download_size": 10 * 1024 * 1024}}))
+        target = rest[0]
+        if os.path.exists(target):
+            m = read_manifest(target)
+            print(json.dumps({"game": {}, "install": {}, "manifest": {
+                "app_name": m.get("app_name", ""), "build_version": m.get("build_version", ""),
+                "build_id": m.get("build_id", ""),
+                "disk_size": m.get("disk_size", 0), "download_size": m.get("download_size", 0)}}))
+        else:
+            print(json.dumps({"game": {}, "install": {}, "manifest": {"disk_size": 12 * 1024 * 1024, "download_size": 10 * 1024 * 1024}}))
     elif cmd == "install":
         app = rest[0]
         update = "--update-only" in rest
+        if update and app not in st["installed"]:
+            err(f'Update requested for "{app}", but app not installed!')
+        game = next(g for g in CATALOG if g["app_name"] == app)
+        platform = rest[rest.index("--platform") + 1] if "--platform" in rest else \
+            st["installed"].get(app, {}).get("platform", "Windows")
+        override = rest[rest.index("--manifest") + 1] if "--manifest" in rest else None
+        version = read_manifest(override)["build_version"] if override else latest_version(st, app)
         if update:
-            if app not in st["installed"]:
-                err(f'Update requested for "{app}", but app not installed!')
-            st["installed"][app]["version"] = next(g["latest"] for g in CATALOG if g["app_name"] == app)
+            st["installed"][app]["version"] = version
+            write_manifest(app, platform, version)
             save(st)
             print("[cli] INFO: Finished installation process in 0.10 seconds.", file=sys.stderr)
             return
         base = rest[rest.index("--base-path") + 1]
-        game = next(g for g in CATALOG if g["app_name"] == app)
         # Like the real tool: the game folder (with its download cache) and a
         # resume file in the config folder exist before the first byte lands.
         if app in st["installed"]:
@@ -149,8 +197,9 @@ def main():
         if cfg:
             os.unlink(os.path.join(cfg, "tmp", f"{app}.resume"))
         open(os.path.join(path, "Binaries", "Game.exe"), "wb").write(b"MZ")
-        st["installed"][app] = {"install_path": path, "title": game["app_title"], "version": game["latest"],
-                                "platform": "Windows", "install_size": 12 * 1024 * 1024, "is_dlc": False,
+        write_manifest(app, platform, version)  # save_manifest, as prepare_download does
+        st["installed"][app] = {"install_path": path, "title": game["app_title"], "version": version,
+                                "platform": platform, "install_size": 12 * 1024 * 1024, "is_dlc": False,
                                 "executable": "Binaries\\Game.exe", "can_run_offline": True}
         save(st)
         print("[cli] INFO: Finished installation process in 0.30 seconds.", file=sys.stderr)
@@ -255,7 +304,7 @@ def main():
         if not ig:
             err(f"Game {app} is not currently installed!")
         offline = "--offline" in rest
-        latest = next(g["latest"] for g in CATALOG if g["app_name"] == app)
+        latest = latest_version(st, app)
         if "--skip-version-check" not in rest and latest != ig["version"]:
             err("Game is out of date, please update or launch with update check skipping!")
         token = "" if offline else "exchange0123456789"
