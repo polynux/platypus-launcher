@@ -68,6 +68,11 @@ LOCALES = {
         "need_login": "log in to Steam first",
         "need_login_expired": "log in to Steam first (the session expired)",
         "not_installed": "app {app} is not installed",
+        "settings_downloads": "Downloads",
+        "settings_downloads_desc": "Where installs, updates and verify fetch their chunks from.",
+        "settings_region": "Download region",
+        "settings_region_desc": "Automatic uses the Steam client's own region when it has one, else Steam's geolocation.",
+        "region_auto": "Automatic",
     },
     "fr": {
         "mode_none": "Mode de lancement : sans Steamworks — fonctionne directement, entièrement sans Steam.",
@@ -76,6 +81,11 @@ LOCALES = {
         "need_login": "connectez-vous à Steam d'abord",
         "need_login_expired": "connectez-vous à Steam d'abord (la session a expiré)",
         "not_installed": "l'application {app} n'est pas installée",
+        "settings_downloads": "Téléchargements",
+        "settings_downloads_desc": "La provenance des morceaux des installations, mises à jour et vérifications.",
+        "settings_region": "Région de téléchargement",
+        "settings_region_desc": "Automatique utilise la région du client Steam s'il en a une, sinon la géolocalisation de Steam.",
+        "region_auto": "Automatique",
     },
 }
 
@@ -242,6 +252,89 @@ def tighten(name):
         os.chmod(state_path(name), 0o600)
     except OSError:
         pass
+
+
+# --- settings (protocol 1.8) ----------------------------------------------
+#
+# One choice today: the CDN region downloads ask Steam for servers in.
+# ContentServerDirectory.GetServersForSteamPipe takes a cell id; Automatic
+# leaves it to Steam (the client's CellIDServerOverride when there is one,
+# else geolocation). The cell ids are the regions Steam's Content Server
+# Directory Service answers for
+# (tpill90.github.io/steam-lancache-prefill/steam-docs/CDN-Regions/).
+REGIONS = [
+    ("auto", "Automatic"),
+    ("1", "Chicago"),
+    ("4", "London"),
+    ("5", "Frankfurt"),
+    ("14", "Paris"),
+    ("15", "Amsterdam"),
+    ("25", "Sao Paulo"),
+    ("31", "Seattle"),
+    ("32", "Tokyo"),
+    ("33", "Hong Kong"),
+    ("35", "Singapore"),
+    ("38", "Warsaw"),
+    ("40", "Madrid"),
+    ("50", "Atlanta"),
+    ("52", "Sydney"),
+    ("63", "Washington DC"),
+    ("64", "Los Angeles"),
+    ("65", "Dallas Fort-Worth"),
+    ("66", "Stockholm"),
+    ("92", "Vienna"),
+]
+REGION_IDS = set(rid for rid, _ in REGIONS)
+
+
+def settings_values():
+    """The applied settings, persisted in the plugin data folder. Core sends
+    the whole set on every change and when the plugin starts, so the file is
+    only what a standalone run (no core) falls back to."""
+    values = load_state("settings.json", {})
+    if not isinstance(values, dict):
+        values = {}
+    region = values.get("region")
+    return {"region": region if region in REGION_IDS else "auto"}
+
+
+def download_env():
+    """The helper's environment: a chosen region rides PLATYPUS_STEAM_CELLID,
+    which platypus-steam-dl reads before the Steam client's config. Automatic
+    leaves it alone (an inherited override, or Steam's own choice)."""
+    env = dict(os.environ)
+    region = settings_values()["region"]
+    if region != "auto":
+        env["PLATYPUS_STEAM_CELLID"] = region
+    return env
+
+
+def settings_schema(_params):
+    return {"groups": [{
+        "id": "downloads",
+        "label": tr("settings_downloads"),
+        "description": tr("settings_downloads_desc"),
+        "fields": [{
+            "id": "region",
+            "kind": "select",
+            "label": tr("settings_region"),
+            "description": tr("settings_region_desc"),
+            "default": "auto",
+            "options": [{"id": rid, "label": tr("region_auto") if rid == "auto" else label}
+                        for rid, label in REGIONS],
+        }],
+    }]}
+
+
+def settings_apply(params):
+    values = (params or {}).get("values")
+    if not isinstance(values, dict):
+        raise RPCError("invalid params: values is required", -32602)
+    region = values.get("region") or "auto"
+    if region not in REGION_IDS:
+        raise RPCError("invalid params: unknown download region", -32602)
+    save_state("settings.json", {"region": region})
+    return {}
 
 
 def account_config():
@@ -2195,7 +2288,7 @@ def dl_run(subcommand, req, job_id=None, game_dir=None, label="download failed",
     try:
         proc = subprocess.Popen([dl_bin(), subcommand], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, bufsize=1, env=dict(os.environ))
+                                text=True, bufsize=1, env=download_env())
     except FileNotFoundError:
         raise RPCError("platypus-steam-dl is missing; reinstall the plugin")
     if timeout is not None:
@@ -4069,10 +4162,10 @@ def initialize(params):
     offered = (params or {}).get("protocols") or []
     protocol = "1.21" if "1.21" in offered else ("1.19" if "1.19" in offered else (
         "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")))
-    return {"name": "Steam (standalone)", "version": "0.25.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.26.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
-                             "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],
+                             "verify", "achievements", "playtime", "cloud-saves", "social", "chat", "settings"],
             # Password branches unlock through their private-beta section,
             # proven live on real Steam (Valheim public-test, No Man's Sky
             # experimental: unlock, section gids, manifest code + download).
@@ -4331,6 +4424,8 @@ METHODS = {
     "chat.send": chat_send,
     "chat.markRead": chat_mark_read,
     "chat.unreadCounts": chat_unread_counts,
+    "settings.schema": settings_schema,
+    "settings.apply": settings_apply,
     "cloud.status": cloud_status,
     "cloud.pull": cloud_pull,
     "cloud.push": cloud_push,

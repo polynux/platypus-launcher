@@ -291,9 +291,315 @@ def add_installed(entry, ig, latest):
 
 
 def install_size(params):
+    path, meta = target_manifest(params.get("id") or "", params.get("target"))
+    if path:
+        if not meta.get("downloadBytes") and not meta.get("diskBytes"):
+            meta = manifest_meta(path)
+        return {"downloadBytes": int(meta.get("downloadBytes") or 0),
+                "diskBytes": int(meta.get("diskBytes") or 0)}
     info = legendary_json("info", params["id"], "--json", timeout=300)
     m = info.get("manifest") or {}
     return {"downloadBytes": int(m.get("download_size") or 0), "diskBytes": int(m.get("disk_size") or 0)}
+
+
+# --- versions (1.3) -------------------------------------------------------
+# Epic publishes no list of old builds. The only builds that can come back are
+# the manifests legendary saved while installing them: `legendary install
+# --manifest <file>` is its documented downgrade path (cli.py). So the plugin
+# copies the installed manifest into its data folder before every update and
+# after every install, keeps the last MAX_ARCHIVES per game, and lists those as
+# archive builds. A version target names one of them by archiveRef or build.
+
+MAX_ARCHIVES = 3  # older builds kept per game, on top of the installed one
+MANIFEST_EXT = ".manifest"
+
+
+def plugin_data():
+    return os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
+
+
+def clean_filename(name):
+    # legendary/lfs/utils.py: the characters its config filenames drop.
+    return "".join(c for c in str(name) if c not in '<>:"/\\|?*')
+
+
+def safe_name(value):
+    name = clean_filename(value).strip().lstrip(".").strip()
+    return name[:120]
+
+
+def valid_app(app):
+    return isinstance(app, str) and bool(APP_RE.fullmatch(app)) and bool(app.strip("."))
+
+
+def archive_dir(app):
+    if not valid_app(app):
+        return None
+    return os.path.join(plugin_data(), "archive", app)
+
+
+def installed_manifest(app, version, platform):
+    """The manifest file legendary saved for an installed build: its config
+    folder's manifests/<app>_<platform>_<version>.manifest (lfs/lgndry.py), or
+    the older name without the platform."""
+    base = os.path.join(config_dir(), "manifests")
+    for name in (clean_filename(f"{app}_{platform}_{version}"), clean_filename(f"{app}_{version}")):
+        path = os.path.join(base, name + MANIFEST_EXT)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def manifest_meta(path):
+    """A manifest file's own build fields. `legendary info <path> --json
+    --offline` parses a local manifest without logging in or refreshing the
+    game list (cli.py: a path is a manifest URI and offline skips update_meta)."""
+    try:
+        data = legendary_json("info", path, "--json", "--offline", timeout=60)
+    except RPCError:
+        return {}
+    m = data.get("manifest") or {}
+    return {"buildId": str(m.get("build_id") or ""),
+            "downloadBytes": int(m.get("download_size") or 0),
+            "diskBytes": int(m.get("disk_size") or 0)}
+
+
+def load_archive(app):
+    """Saved builds for a game: {build: metadata} from archive/<app>/*.json,
+    only while the build's manifest is still there."""
+    d = archive_dir(app)
+    if not d:
+        return {}
+    found = {}
+    for name in list_dir(d):
+        if not name.endswith(".json"):
+            continue
+        stem = name[:-len(".json")]
+        if not os.path.isfile(os.path.join(d, stem + MANIFEST_EXT)):
+            continue
+        try:
+            with open(os.path.join(d, name)) as f:
+                meta = json.load(f)
+        except (OSError, ValueError):
+            continue
+        build = str(meta.get("build") or "") if isinstance(meta, dict) else ""
+        if build:
+            found[build] = meta
+    return found
+
+
+def prune_archives(d, protected=()):
+    """Keeps the protected builds (the installed one, and the one a job is
+    about to install) plus the MAX_ARCHIVES most recently saved others. A
+    manifest with no sidecar is an orphan from an interrupted save."""
+    protected = {s for s in protected if s}
+    entries = []
+    for name in list_dir(d):
+        if not name.endswith(".json"):
+            continue
+        stem = name[:-len(".json")]
+        if not os.path.isfile(os.path.join(d, stem + MANIFEST_EXT)):
+            _unlink(os.path.join(d, name))
+            continue
+        try:
+            entries.append((os.stat(os.path.join(d, name)).st_mtime, stem))
+        except OSError:
+            continue
+    entries.sort()
+    others = [stem for _, stem in entries if stem not in protected]
+    dropped = set(others[:-MAX_ARCHIVES])
+    for _, stem in entries:
+        if stem not in dropped:
+            continue
+        for ext in (".json", MANIFEST_EXT):
+            _unlink(os.path.join(d, stem + ext))
+    sidecars = {stem for _, stem in entries}
+    for name in list_dir(d):
+        if name.endswith(MANIFEST_EXT) and name[:-len(MANIFEST_EXT)] not in sidecars:
+            _unlink(os.path.join(d, name))
+
+
+def _unlink(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def archive_installed(app, keep=""):
+    """Copies the installed build's manifest into the plugin's data folder and
+    returns the archiveRef for it (the saved manifest's name), or None."""
+    ig = installed_games().get(app)
+    d = archive_dir(app)
+    if not ig or not d:
+        return None
+    version = str(ig.get("version") or "")
+    name = safe_name(version)
+    if not name:
+        return None
+    src = installed_manifest(app, version, ig.get("platform") or "Windows")
+    dest = os.path.join(d, name + MANIFEST_EXT)
+    if not src:
+        return os.path.basename(dest) if os.path.isfile(dest) else None
+    sidecar = os.path.join(d, name + ".json")
+    saved = {}
+    try:
+        with open(sidecar) as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            saved = loaded
+    except (OSError, ValueError):
+        pass
+    # An install made with --manifest records no base URLs of its own
+    # (core.py:prepare_download); keep the ones the sidecar already has.
+    base_urls = [u for u in (ig.get("base_urls") or []) if isinstance(u, str) and u]
+    if not base_urls and isinstance(saved.get("baseUrls"), list):
+        base_urls = [u for u in saved["baseUrls"] if isinstance(u, str) and u]
+    meta = {"build": version, "versionName": version,
+            "date": datetime.date.today().isoformat(),
+            "platform": ig.get("platform") or "Windows",
+            "baseUrls": base_urls,
+            "downloadBytes": 0, "diskBytes": int(ig.get("install_size") or 0)}
+    info = manifest_meta(src)
+    meta["downloadBytes"] = info.get("downloadBytes") or 0
+    meta["diskBytes"] = info.get("diskBytes") or meta["diskBytes"]
+    meta["buildId"] = info.get("buildId") or ""
+    try:
+        os.makedirs(d, exist_ok=True)
+        shutil.copyfile(src, dest + ".new")
+        os.replace(dest + ".new", dest)
+        with open(sidecar + ".new", "w") as f:
+            json.dump(meta, f)
+        os.replace(sidecar + ".new", sidecar)
+    except OSError as e:
+        _unlink(dest + ".new")
+        _unlink(sidecar + ".new")
+        log("warn", f"couldn't archive {app} {version}: {e}")
+        return None
+    prune_archives(d, protected={name, keep})
+    return os.path.basename(dest)
+
+
+def target_manifest(app, target):
+    """(manifest path, its saved metadata) for a Versions target, or
+    (None, {}) when there is none. Epic has no channels and no typed versions:
+    a target names a build from the install history and/or the archiveRef
+    Platypus kept for it."""
+    if not target:
+        return None, {}
+    if target.get("channel"):
+        raise RPCError("Epic has no channels; pick a build you had installed before", -32000)
+    if target.get("manual"):
+        raise RPCError("Epic's versions come from saved manifests, not typed values", -32000)
+    d = archive_dir(app)
+    if not d:
+        raise RPCError("invalid params: id is required", -32602)
+    build = str(target.get("build") or "")
+    ref = target.get("archiveRef")
+    name = ref if isinstance(ref, str) else ""
+    if isinstance(ref, dict):
+        name = str(ref.get("manifest") or ref.get("build") or "")
+    if name:
+        base = os.path.basename(name)
+        if base != name or not base.endswith(MANIFEST_EXT) or base.startswith("."):
+            raise RPCError("that archive reference is not a saved manifest", -32000)
+        path = os.path.join(d, base)
+        stem = base[:-len(MANIFEST_EXT)]
+    elif build:
+        stem = safe_name(build)
+        path = os.path.join(d, stem + MANIFEST_EXT) if stem else ""
+    else:
+        raise RPCError("pick an archived build to install", -32000)
+    if not os.path.isfile(path):
+        raise RPCError("that build's manifest is no longer saved; only builds from your "
+                       "install history can be restored", -32000)
+    meta = {}
+    try:
+        with open(os.path.join(d, stem + ".json")) as f:
+            saved = json.load(f)
+        if isinstance(saved, dict):
+            meta = saved
+    except (OSError, ValueError):
+        pass
+    return path, meta
+
+
+def store_entry(app):
+    """(the store's current Windows build version, whether the account owns the
+    app). One `legendary list` for both: versions.list needs the latest build
+    for updateAvailable, and ownership to refuse an unknown id."""
+    owned = legendary_json("list", "--json", timeout=300)
+    for g in owned:
+        if g.get("app_name") == app:
+            assets = g.get("asset_infos") or {}
+            return str((assets.get("Windows") or {}).get("build_version") or ""), True
+    return "", False
+
+
+def versions_list(params):
+    app = str((params or {}).get("id") or "")
+    if not app:
+        raise RPCError("invalid params: id is required", -32602)
+    if not valid_app(app):
+        raise RPCError(f"{app} is not a valid Epic app id", -32002)
+    ig = installed_games().get(app)
+    archived = load_archive(app)
+    pinned = (params or {}).get("pinned")
+    if not isinstance(pinned, dict):
+        pinned = {}
+    pinned_build = str(pinned.get("id") or "") if pinned.get("kind") == "build" else ""
+    latest = ""
+    if ig or archived:
+        try:
+            latest, _owned = store_entry(app)
+        except RPCError:
+            latest = ""  # no update information beats failing a local list
+    else:
+        latest, owned = store_entry(app)
+        if not owned:
+            raise RPCError(f"{app} is not in your Epic library", -32002)
+    current = str((ig or {}).get("version") or "")
+    builds = []
+    known = set()
+    # An installed build the store has moved past is only reachable through
+    # the saved manifest, so it is labelled as an archive build.
+    if current:
+        known.add(current)
+        builds.append({"id": current, "name": current,
+                       "source": "archive" if latest and latest != current else "store",
+                       "current": True})
+    elif latest:
+        known.add(latest)
+        builds.append({"id": latest, "name": latest, "source": "store"})
+    for build, meta in archived.items():
+        if build in known:
+            continue
+        known.add(build)
+        # publishedAt is when the plugin saved the manifest (today's date at
+        # install): Epic's manifests carry no publication date.
+        builds.append({"id": build, "name": str(meta.get("versionName") or build),
+                       "publishedAt": str(meta.get("date") or "")[:10],
+                       "source": "archive", "current": False})
+    # Builds Platypus remembers that the plugin no longer has a manifest for:
+    # listed so the history stays visible, but not installable.
+    for entry in (params or {}).get("ledger") or []:
+        if not isinstance(entry, dict):
+            continue
+        build = str(entry.get("build") or "")
+        if not build or build in known:
+            continue
+        known.add(build)
+        builds.append({"id": build, "name": str(entry.get("versionName") or build),
+                       "publishedAt": str(entry.get("date") or "")[:10],
+                       "source": "archive", "available": False})
+    update_available = False
+    if current:
+        if pinned_build:
+            update_available = current != pinned_build
+        else:
+            update_available = bool(latest) and latest != current
+    return {"channels": [], "builds": builds, "manual": None, "links": [],
+            "updateAvailable": update_available, "pinned": pinned}
 
 
 # --- jobs ---------------------------------------------------------------
@@ -307,17 +613,36 @@ MIB = 1024 * 1024
 
 def start_job(params, kind):
     app, job_id = params["id"], params["jobId"]
+    manifest, meta = target_manifest(app, params.get("target")) if kind != "uninstall" else (None, {})
     if kind == "install":
-        args = ["-y", "install", app, "--base-path", params["installDir"], "--skip-sdl", "--platform", "Windows"]
+        platform = str(meta.get("platform") or "Windows")
+        args = ["-y", "install", app, "--base-path", params["installDir"], "--skip-sdl",
+                "--platform", platform]
     elif kind == "update":
         args = ["-y", "install", app, "--update-only", "--skip-sdl"]
     else:
         args = ["-y", "uninstall", app]
+    if manifest:
+        args += ["--manifest", manifest]
+        base_urls = meta.get("baseUrls")
+        if isinstance(base_urls, list) and base_urls and isinstance(base_urls[0], str):
+            # A fresh install has no installed record, and a metadata refetch
+            # drops the app's base URLs: legendary then raises "No base URLs
+            # found" (core.py). The saved record's first one goes with it.
+            args += ["--base-url", base_urls[0]]
     # Platypus resends a job with the same jobId after a crash: run it once. A job
     # just paused or canceled is still stopping: wait, then let legendary pick
     # up from its resume file.
     if not claim_job(job_id, {"proc": None, "canceled": False}):
         return {}
+    if kind == "update":
+        # The build being replaced may never come back from Epic. The target
+        # manifest must survive this archive's pruning to be installed.
+        keep = os.path.basename(manifest)[:-len(MANIFEST_EXT)] if manifest else ""
+        try:
+            archive_installed(app, keep)
+        except Exception as e:  # never stop an update over the archive copy
+            log("warn", f"couldn't archive the installed build of {app}: {e}")
     job_started(job_id, app, kind, params.get("installDir") or "")
     try:
         proc = subprocess.Popen(["legendary", *args], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -330,13 +655,13 @@ def start_job(params, kind):
         job = jobs.setdefault(job_id, {"canceled": False})
         job["proc"] = proc
         canceled = job["canceled"]
-    threading.Thread(target=follow_job, args=(job_id, kind, proc), daemon=True).start()
+    threading.Thread(target=follow_job, args=(job_id, kind, app, proc), daemon=True).start()
     if canceled:  # job.cancel arrived while the process was starting
         stop_proc(proc, grace=5)
     return {}
 
 
-def follow_job(job_id, kind, proc):
+def follow_job(job_id, kind, app, proc):
     state = {"jobId": job_id, "phase": "uninstalling" if kind == "uninstall" else "preparing"}
     recent = []
     for line in proc.stdout:
@@ -366,10 +691,29 @@ def follow_job(job_id, kind, proc):
         return
     if rc == 0:
         job_finished(job_id)
-        notify("job.done", {"jobId": job_id})
+        notify("job.done", {"jobId": job_id, **installed_after(app, kind)})
     else:
         job_stopped(job_id)
         notify("job.failed", {"jobId": job_id, "error": " · ".join(recent[-3:]) or f"legendary exited with {rc}"})
+
+
+def installed_after(app, kind):
+    """job.done's `installed` for a finished install or update: the build
+    legendary recorded, with the manifest the plugin saved for it."""
+    if kind == "uninstall":
+        return {}
+    try:
+        ref = archive_installed(app)
+    except Exception as e:
+        log("warn", f"couldn't archive {app} after {kind}: {e}")
+        ref = None
+    build = str((installed_games().get(app) or {}).get("version") or "")
+    if not build:
+        return {}
+    installed = {"build": build, "versionName": build}
+    if ref:
+        installed["archiveRef"] = ref
+    return {"installed": installed}
 
 
 def claim_job(job_id, entry, timeout=90):
@@ -869,6 +1213,12 @@ def launch_spec(params):
     if preview:
         # No exchange code and no update check just to show a command.
         args += ["--offline", "--skip-version-check"]
+    elif ig.get("manifest_path"):
+        # legendary records the manifest path of an install made with
+        # --manifest (an archived build) and clears it on any normal download.
+        # Its version check would compare that build with the store's latest
+        # and refuse the launch as out of date.
+        args += ["--skip-version-check"]
     code, out, err = legendary(*args, timeout=120)
     if code != 0:
         if "out of date" in err:
@@ -894,10 +1244,10 @@ def launch_spec(params):
 # --- dispatch -----------------------------------------------------------
 
 def initialize(params):
-    capabilities = ["library", "install", "launch", "auth", "discard", "verify", "playtime"]
+    capabilities = ["library", "install", "launch", "auth", "discard", "verify", "playtime", "versions"]
     if achievements_supported():
         capabilities.append("achievements")
-    return {"name": "Epic Games (legendary)", "version": "0.2.0", "api": API,
+    return {"name": "Epic Games (legendary)", "version": "0.4.0", "api": API,
             "capabilities": capabilities, "missing": []}
 
 
@@ -910,6 +1260,7 @@ METHODS = {
     "library.list": library_list,
     "game.details": game_details,
     "game.installSize": install_size,
+    "versions.list": versions_list,
     "game.install": lambda p: start_job(p, "install"),
     "game.update": lambda p: start_job(p, "update"),
     "game.uninstall": lambda p: start_job(p, "uninstall"),
