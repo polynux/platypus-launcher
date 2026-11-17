@@ -87,19 +87,50 @@ def tail(text, n=3):
     return " · ".join(lines[-n:]) if lines else "no output"
 
 
+AUTH_PROBLEMS = ("login failed", "not logged in", "no saved credentials",
+                 "stored credentials are no longer valid")
+
+
+def auth_problem(text):
+    """Whether legendary's output says the user has to log in (upstream raises
+    ValueError('No saved credentials') as a traceback in some commands)."""
+    low = (text or "").lower()
+    return any(s in low for s in AUTH_PROBLEMS)
+
+
 def legendary_json(*args, timeout=300):
     code, out, err = legendary(*args, timeout=timeout)
     if code != 0:
-        if "Login failed" in err or "not logged in" in err.lower():
+        if auth_problem(err):
             raise RPCError("log in to Epic first", CODE_AUTH_REQUIRED)
         raise RPCError(f"legendary {args[0]} failed: {tail(err)}")
     try:
         return json.loads(out)
     except ValueError:
-        # `legendary get-token` reports a failed login and still exits 0.
-        if "Login failed" in err or "not logged in" in err.lower():
+        # `legendary get-token` and `achievements` report a failed login (or
+        # raise ValueError without credentials) and still exit 0.
+        if auth_problem(err):
             raise RPCError("log in to Epic first", CODE_AUTH_REQUIRED)
         raise RPCError(f"legendary {args[0]} printed no JSON: {tail(err)}")
+
+
+# `achievements` joined legendary's CLI in 0.21.0; older builds answer
+# "invalid choice" from argparse.
+MIN_ACHIEVEMENTS = (0, 21, 0)
+_achievements_ok = None
+
+
+def achievements_supported():
+    global _achievements_ok
+    if _achievements_ok is None:
+        try:
+            code, out, _err = legendary("--version", timeout=10)
+        except RPCError:
+            _achievements_ok = True  # the tool missing is reported by every call
+            return _achievements_ok
+        m = re.search(r"(\d+)\.(\d+)\.(\d+)", out) if code == 0 else None
+        _achievements_ok = not m or (int(m.group(1)), int(m.group(2)), int(m.group(3))) >= MIN_ACHIEVEMENTS
+    return _achievements_ok
 
 
 # --- auth ---------------------------------------------------------------
@@ -579,8 +610,12 @@ def start_verify(params):
         raise RPCError("invalid params: id and jobId are required", -32602)
     if not isinstance(install_dir, str) or not os.path.isabs(install_dir):
         raise RPCError("invalid params: installDir must be an absolute path", -32602)
-    if app not in installed_games():
+    ig = installed_games().get(app)
+    if not ig:
         raise RPCError(f"{app} is not installed")
+    recorded = ig.get("install_path") or ""
+    if os.path.normpath(recorded) != os.path.normpath(install_dir):
+        raise RPCError(f"Platypus says {install_dir} but legendary has {recorded}; move the game again")
     repair = bool(params.get("repair"))
     if not claim_job(job_id, {"proc": None, "canceled": False}):
         return {}
@@ -668,7 +703,9 @@ def follow_verify(job_id, repair, proc):
         canceled = jobs.pop(job_id, {}).get("canceled", False)
     if canceled:
         return
-    if rc != 0 or not (summary or (repair and finished)):
+    # A check needs its summary; a repair needs the downloader's finish line:
+    # a failed download logs "Installation failed" and exits 0 without it.
+    if rc != 0 or not (finished if repair else summary):
         notify("job.failed", {"jobId": job_id, "error": " · ".join(recent[-3:]) or f"legendary exited with {rc}"})
         return
     if repair:
@@ -695,7 +732,7 @@ def game_relocated(params):
         raise RPCError(f"no install record at {src}", -32602)
     if os.path.basename(os.path.normpath(src)) != os.path.basename(os.path.normpath(dst)):
         raise RPCError("Platypus renamed the game's folder; legendary can only follow a move into a new parent", -32000)
-    code, out, err = legendary("move", app, os.path.dirname(os.path.normpath(dst)), "--skip-move", timeout=120)
+    code, out, err = legendary("move", app, os.path.dirname(os.path.normpath(dst)), "--skip-move", timeout=25)
     moved = installed_games().get(app) or {}
     if os.path.normpath(moved.get("install_path") or "") != os.path.normpath(dst):
         raise RPCError(f"legendary move failed: {tail(err) or tail(out)}")
@@ -726,12 +763,16 @@ def achievements_list(params):
     app = params.get("id")
     if not isinstance(app, str) or not app:
         raise RPCError("invalid params: id is required", -32602)
-    code, out, err = legendary("achievements", app, "--json", timeout=180)
+    code, out, err = legendary("achievements", app, "--json", timeout=25)
     if code != 0:
-        if "Login failed" in err:
+        if auth_problem(err):
             raise RPCError("log in to Epic first", CODE_AUTH_REQUIRED)
+        if "invalid choice" in err and "achievements" in err:
+            raise RPCError("update legendary to 0.21 or later for achievements")
         raise RPCError(f"legendary achievements failed: {tail(err)}")
     if not out.strip():
+        if auth_problem(err):
+            raise RPCError("log in to Epic first", CODE_AUTH_REQUIRED)
         if "No game found" in err:
             raise RPCError(f"{app} is not in your Epic library")
         if "No achievements" in err:
@@ -750,9 +791,10 @@ def achievements_list(params):
                  "description": a.get("description") or "", "hidden": bool(a.get("hidden"))}
             if a.get("icon_link"):
                 e["icon"] = a["icon_link"]
-            when = unix_time(a.get("unlock_date")) if a.get("unlocked") else None
-            if when:
-                e["unlockedAt"] = when
+            if a.get("unlocked"):
+                # "N/A" is what legendary prints for an unlock without a
+                # timestamp; an unlocked achievement still needs one.
+                e["unlockedAt"] = unix_time(a.get("unlock_date")) or 1
             rarity = a.get("rarity") or {}
             if isinstance(rarity, dict) and isinstance(rarity.get("percent"), (int, float)):
                 e["globalPercent"] = float(rarity["percent"])
@@ -767,21 +809,34 @@ def achievements_list(params):
 
 
 def epic_bearer():
-    token = legendary_json("get-token", "--json", "--bearer", timeout=120)
+    token = legendary_json("get-token", "--json", "--bearer", timeout=15)
     access, account = token.get("access_token"), token.get("account_id")
     if not isinstance(access, str) or not access or not isinstance(account, str) or not account:
         raise RPCError("legendary printed no access token")
     return access, account
 
 
+def library_host():
+    """Epic's library host. The environment override is a test hook and only
+    a loopback address is accepted, so the bearer token can't be pointed at
+    another machine."""
+    override = os.environ.get("PLATYPUS_EPIC_LIBRARY_URL")
+    if override:
+        parts = urllib.parse.urlsplit(override)
+        if parts.scheme in ("http", "https") and parts.hostname in ("127.0.0.1", "localhost", "::1"):
+            return override
+        log("warn", "PLATYPUS_EPIC_LIBRARY_URL is not a loopback address; using Epic's library service")
+    return LIBRARY_HOST
+
+
 def playtime_list(_params):
     access, account = epic_bearer()
-    host = os.environ.get("PLATYPUS_EPIC_LIBRARY_URL") or LIBRARY_HOST
+    host = library_host()
     url = f"{host.rstrip('/')}/library/api/public/playtime/account/{urllib.parse.quote(account)}/all"
     req = urllib.request.Request(url, headers={"Authorization": f"bearer {access}",
                                                "User-Agent": EPIC_UA, "Accept": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=12) as r:
             rows = json.load(r)
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
@@ -839,9 +894,11 @@ def launch_spec(params):
 # --- dispatch -----------------------------------------------------------
 
 def initialize(params):
+    capabilities = ["library", "install", "launch", "auth", "discard", "verify", "playtime"]
+    if achievements_supported():
+        capabilities.append("achievements")
     return {"name": "Epic Games (legendary)", "version": "0.2.0", "api": API,
-            "capabilities": ["library", "install", "launch", "auth", "discard",
-                             "verify", "achievements", "playtime"], "missing": []}
+            "capabilities": capabilities, "missing": []}
 
 
 METHODS = {

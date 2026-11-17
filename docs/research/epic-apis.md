@@ -22,7 +22,10 @@ against fakes.
   `Verification failed, N file(s) corrupted, M file(s) are missing.`
   There is no `--json`; the exit code is 0 whether the check passed or not, so
   the plugin parses those lines. Missing manifests and paths are reported on
-  stderr and also exit 0, so a run without a summary is a failure.
+  stderr and also exit 0, so a run without a summary is a failure. A repair
+  needs the downloader's `Finished installation process` (or
+  `Download size is 0`): legendary logs `Installation failed` and still exits 0
+  when the download fails, so only a finish line counts as a repaired game.
 - `legendary repair <app>` (`repair` is an alias of `install` with
   `--repair`) verifies first when `<config>/tmp/<app>.repair` is absent, then
   re-downloads the files it listed. With a stale repair file it trusts that
@@ -60,11 +63,21 @@ against fakes.
   `cli.py:get_token`), which prints `access_token` and `account_id` from
   legendary's stored session. The token lives only in the request header and is
   never logged. A 401/403 becomes the protocol's auth-required error.
+- Logged out, upstream raises `ValueError('No saved credentials')` (a traceback,
+  exit 1) or prints `Login failed` / `Stored credentials are no longer valid`.
+  The plugin maps all of those to the auth-required error for both get-token
+  and achievements. Timeouts stay under core's 30 s calls: 15 s for the token,
+  12 s for the HTTP read, 25 s for achievements and move.
 - No timestamp for the last session is in the response, so `lastPlayed` is
   omitted.
 
 ## Achievements (`achievements.list`)
 
+- Requires **legendary 0.21.0 or later** (the `achievements` subcommand was
+  added on 2026-08-04). The plugin checks `legendary --version` once at startup
+  and leaves `achievements` out of its runtime capabilities on older builds;
+  argparse's `invalid choice: 'achievements'` is also reported as an update
+  hint. `plugin.json`'s requirement names 0.21.
 - `legendary achievements <app> --json` (`cli.py:achievements`, `core.py:
   get_achievements`) combines the catalogue's achievement definitions with the
   user's progress from Epic's launcher GraphQL endpoint

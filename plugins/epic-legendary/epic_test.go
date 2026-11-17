@@ -13,7 +13,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,10 +33,21 @@ const (
 	accountID = "0123456789abcdef0123456789abcdef"
 )
 
-// playtimeServer answers Epic's library playtime endpoint on loopback.
-func playtimeServer(t *testing.T) *httptest.Server {
+type playtimeStub struct {
+	srv  *httptest.Server
+	deny atomic.Bool
+}
+
+// playtimeServer answers Epic's library playtime endpoint on loopback. deny
+// makes it answer 401 instead, like an expired token.
+func playtimeServer(t *testing.T) *playtimeStub {
 	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	pt := &playtimeStub{}
+	pt.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if pt.deny.Load() {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 		if r.URL.Path != "/library/api/public/playtime/account/"+accountID+"/all" {
 			http.NotFound(w, r)
 			return
@@ -47,8 +60,8 @@ func playtimeServer(t *testing.T) *httptest.Server {
 		io.WriteString(w, `[{"accountId":"`+accountID+`","artifactId":"Goose","totalTime":5400},
 			{"accountId":"`+accountID+`","artifactId":"Pre","totalTime":120}]`)
 	}))
-	t.Cleanup(srv.Close)
-	return srv
+	t.Cleanup(pt.srv.Close)
+	return pt
 }
 
 type env struct {
@@ -58,6 +71,7 @@ type env struct {
 	state  string
 	folder string
 	games  string
+	pt     *playtimeStub
 }
 
 type backend struct{ m *plugins.Manager }
@@ -110,7 +124,8 @@ func setup(t *testing.T) *env {
 
 	e := &env{state: filepath.Join(root, "legendary-state.json"), games: filepath.Join(root, "Games")}
 	t.Setenv("FAKE_LEGENDARY_STATE", e.state)
-	t.Setenv("PLATYPUS_EPIC_LIBRARY_URL", playtimeServer(t).URL)
+	e.pt = playtimeServer(t)
+	t.Setenv("PLATYPUS_EPIC_LIBRARY_URL", e.pt.srv.URL)
 	// A game legendary installed before Platypus, outside Platypus's folder.
 	pre := filepath.Join(root, "Heroic", "Pre")
 	os.MkdirAll(filepath.Join(pre, "Binaries"), 0o755)
@@ -501,12 +516,138 @@ func TestEpicAchievementsAndPlaytime(t *testing.T) {
 		t.Fatalf("playtime: %v", pt)
 	}
 
+	var rpcErr *jsonrpc.Error
+	e.pt.deny.Store(true)
+	if err := e.call(t, "playtime.list", nil, &junk); !errors.As(err, &rpcErr) || rpcErr.Code != plugins.CodeAuthRequired {
+		t.Fatalf("playtime with an expired token: %v", err)
+	}
+	e.pt.deny.Store(false)
+
 	var st types.AuthStatus
 	if err := e.call(t, "auth.logout", nil, &st); err != nil {
 		t.Fatal(err)
 	}
-	var rpcErr *jsonrpc.Error
 	if err := e.call(t, "playtime.list", nil, &junk); !errors.As(err, &rpcErr) || rpcErr.Code != plugins.CodeAuthRequired {
 		t.Fatalf("playtime while logged out: %v", err)
+	}
+	if err := e.call(t, "achievements.list", map[string]any{"id": "Goose"}, &junk); !errors.As(err, &rpcErr) || rpcErr.Code != plugins.CodeAuthRequired {
+		t.Fatalf("achievements while logged out: %v", err)
+	}
+}
+
+func TestEpicVerifyMissingManifestAndFolderMismatch(t *testing.T) {
+	e := setup(t)
+	login(t, e)
+	goose := e.library(t)["Goose"]
+	if j := e.run(t, jobs.KindInstall, goose); j.State != jobs.StateDone {
+		t.Fatalf("install: %+v", j)
+	}
+	goose = e.library(t)["Goose"]
+
+	// A folder the legendary record doesn't name is refused before any work.
+	wrong := filepath.Join(t.TempDir(), filepath.Base(goose.InstallDir))
+	err := e.call(t, "game.verify", map[string]any{"id": "Goose", "installDir": wrong,
+		"jobId": "verify-wrong-dir", "repair": false}, nil)
+	if err == nil || !strings.Contains(err.Error(), wrong) || !strings.Contains(err.Error(), goose.InstallDir) {
+		t.Fatalf("verify in another folder: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(goose.InstallDir, ".no-manifest"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	j := e.verify(t, goose, false)
+	if j.State != jobs.StateFailed || !strings.Contains(j.Error, "Manifest") {
+		t.Fatalf("verify without a manifest: %+v", j)
+	}
+}
+
+func TestEpicRepairFailure(t *testing.T) {
+	e := setup(t)
+	login(t, e)
+	goose := e.library(t)["Goose"]
+	if j := e.run(t, jobs.KindInstall, goose); j.State != jobs.StateDone {
+		t.Fatalf("install: %+v", j)
+	}
+	goose = e.library(t)["Goose"]
+	for _, name := range []string{".damaged", ".repair-fail"} {
+		if err := os.WriteFile(filepath.Join(goose.InstallDir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if j := e.verify(t, goose, false); j.Verify == nil || j.Verify.Damaged != 1 {
+		t.Fatalf("check: %+v", j)
+	}
+	j := e.verify(t, goose, true)
+	if j.State != jobs.StateFailed || !strings.Contains(j.Error, "Installation failed") {
+		t.Fatalf("failed repair reported as done: %+v", j)
+	}
+}
+
+func TestEpicRelocatedRefusals(t *testing.T) {
+	e := setup(t)
+	login(t, e)
+	goose := e.library(t)["Goose"]
+	if j := e.run(t, jobs.KindInstall, goose); j.State != jobs.StateDone {
+		t.Fatalf("install: %+v", j)
+	}
+	goose = e.library(t)["Goose"]
+	renamed := filepath.Join(t.TempDir(), "Moved", "DifferentName")
+	var rpcErr *jsonrpc.Error
+	err := e.call(t, "game.relocated", map[string]any{"id": "Goose", "from": goose.InstallDir, "to": renamed}, nil)
+	if !errors.As(err, &rpcErr) || rpcErr.Code != -32000 {
+		t.Fatalf("relocated with a renamed folder: %v", err)
+	}
+}
+
+func TestEpicRelocatedMoveLockFailure(t *testing.T) {
+	t.Setenv("FAKE_LEGENDARY_MOVE_FAIL", "1")
+	e := setup(t)
+	login(t, e)
+	goose := e.library(t)["Goose"]
+	if j := e.run(t, jobs.KindInstall, goose); j.State != jobs.StateDone {
+		t.Fatalf("install: %+v", j)
+	}
+	goose = e.library(t)["Goose"]
+	to := filepath.Join(t.TempDir(), "Moved", filepath.Base(goose.InstallDir))
+	err := e.call(t, "game.relocated", map[string]any{"id": "Goose", "from": goose.InstallDir, "to": to}, nil)
+	if err == nil || !strings.Contains(err.Error(), "lock") {
+		t.Fatalf("relocated despite the lock: %v", err)
+	}
+	if goose = e.library(t)["Goose"]; goose.InstallDir == to {
+		t.Fatalf("record changed without a move: %+v", goose)
+	}
+}
+
+func TestEpicAchievementWithoutUnlockTime(t *testing.T) {
+	e := setup(t)
+	login(t, e)
+	if err := os.WriteFile(e.state+".na-unlock", nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var ach stats.AchievementsReply
+	if err := e.call(t, "achievements.list", map[string]any{"id": "Goose"}, &ach); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range ach.List {
+		if a.ID == "prank" && a.UnlockedAt != 1 {
+			t.Fatalf("N/A unlock date: %+v", a)
+		}
+	}
+}
+
+func TestEpicOldLegendaryHidesAchievements(t *testing.T) {
+	t.Setenv("FAKE_LEGENDARY_VERSION", "0.20.3")
+	e := setup(t)
+	var init struct {
+		Capabilities []string `json:"capabilities"`
+	}
+	if err := e.call(t, "initialize", nil, &init); err != nil {
+		t.Fatal(err)
+	}
+	has := func(name string) bool {
+		return slices.Contains(init.Capabilities, name)
+	}
+	if has("achievements") || !has("playtime") || !has("verify") {
+		t.Fatalf("capabilities on legendary 0.20: %v", init.Capabilities)
 	}
 }

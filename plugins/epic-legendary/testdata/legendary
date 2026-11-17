@@ -62,10 +62,23 @@ def err(msg, code=1):
     sys.exit(code)
 
 
+def no_credentials():
+    """What upstream does when core.login() finds no user.json."""
+    print("Traceback (most recent call last):", file=sys.stderr)
+    print('  File ".../legendary/core.py", line 224, in _login', file=sys.stderr)
+    print("    raise ValueError('No saved credentials')", file=sys.stderr)
+    print("ValueError: No saved credentials", file=sys.stderr)
+    sys.exit(1)
+
+
 def main():
     args = [a for a in sys.argv[1:] if a not in ("-y", "--yes")]
     with open(STATE + ".calls", "a") as f:
         f.write(" ".join(args) + "\n")
+    if args[0] in ("--version", "version"):
+        print(f'legendary version "{os.environ.get("FAKE_LEGENDARY_VERSION", "0.21.1")}", '
+              'codename "Fake"')
+        return
     st = load()
     cmd, rest = args[0], args[1:]
 
@@ -142,6 +155,10 @@ def main():
         save(st)
         print("[cli] INFO: Finished installation process in 0.30 seconds.", file=sys.stderr)
     elif cmd == "move":
+        if os.environ.get("FAKE_LEGENDARY_MOVE_FAIL"):
+            print("[cli] FATAL: Failed to acquire installed data lock, only one instance of Legendary "
+                  "may install/import/move applications at a time.", file=sys.stderr)
+            return
         app, new_base = rest[0], rest[1]
         ig = st["installed"].get(app)
         if not ig:
@@ -158,6 +175,10 @@ def main():
         path = ig["install_path"]
         if not os.path.isdir(path):
             err(f'Install path "{path}" does not exist')
+        if os.path.exists(os.path.join(path, ".no-manifest")):
+            print("[cli] CRITICAL: Manifest appears to be missing! To repair, run "
+                  f'"legendary repair {app} --repair-and-update"', file=sys.stderr)
+            return
         damaged = 1 if os.path.exists(os.path.join(path, ".damaged")) else 0
         total = 3
         for i in range(1, total + 1):
@@ -177,6 +198,9 @@ def main():
                       "changed. Exiting...", file=sys.stderr)
                 return
             print("[cli] INFO: Download size: 1.00 MiB (Compression savings: 0.0%)", file=sys.stderr, flush=True)
+            if os.path.exists(os.path.join(path, ".repair-fail")):
+                print("[cli] ERROR: Installation failed: fake download error", file=sys.stderr)
+                return
             for i, mib in enumerate((0.5, 1.0), 1):
                 print(f"[DLManager] INFO: = Progress: {i * 50:.02f}% ({i}/2), Running for 00:00:0{i}, "
                       f"ETA: 00:00:01", file=sys.stderr, flush=True)
@@ -187,7 +211,7 @@ def main():
     elif cmd == "achievements":
         app = rest[0]
         if not st["account"]:
-            err("Login failed! Unable to check for EULAs.")
+            no_credentials()
         game = next((g for g in CATALOG if g["app_name"] == app), None)
         if not game:
             err(f'No game found for "{app}"')
@@ -195,7 +219,8 @@ def main():
         if not ach:
             print(f'[cli] INFO: No achievements found for "{app}"', file=sys.stderr)
             return
-        unlocked = {"prank": "2020-05-01 12:00:00+00:00"}
+        unlocked = {"prank": "N/A" if os.path.exists(STATE + ".na-unlock")
+                    else "2020-05-01 12:00:00.123456+00:00"}
         groups = {"completed": [], "in_progress": [], "uninitiated": [], "hidden": []}
         for e in ach["achievement_set"]["achievements"]:
             is_unlocked = e["id"] in unlocked
@@ -213,7 +238,7 @@ def main():
                           "user_unlocked": len(groups["completed"]), "user_xp": 0, "user_awards": []}))
     elif cmd == "get-token":
         if not st["account"]:
-            err("Login failed!")
+            no_credentials()
         print(json.dumps({"token_type": "bearer", "access_token": "eg1~faketoken", "expires_in": 7200,
                           "expires_at": "2026-01-01T00:00:00.000Z", "account_id": ACCOUNT_ID}))
     elif cmd == "uninstall":
