@@ -231,6 +231,7 @@ func runnerRecords(t *testing.T, e *fixturesEnv) []map[string]any {
 	}
 	return out
 }
+
 // parentPid reads /proc/<pid>/stat's ppid field (the fake client runs the
 // game as a child and waits for it).
 func parentPid(t *testing.T, pid int) int {

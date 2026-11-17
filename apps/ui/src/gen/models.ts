@@ -555,6 +555,7 @@ export namespace types {
     allow_no_saves?: boolean;
     verify?: types.VerifyReport | null;
     options?: types.InstallOptions;
+    confirmed?: boolean;
   }
 
   export interface LauncherSettings {
