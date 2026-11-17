@@ -3503,15 +3503,20 @@ def apply_workshop_plans(app, items):
     return plans, collections
 
 
-def workshop_prune(root, keep):
+def workshop_prune(root, keep, owned=None):
     """Removes item folders no longer subscribed (folders only, names stay
-    ids): the sync owns this root and nothing else lives in it."""
+    ids). With owned=None the sync owns the whole root (<install>/workshop of
+    a game Platypus installed); otherwise the root is shared with the Steam
+    client (a Steam library or a game-local folder like Portal 2's maps/
+    workshop) and only ids Platypus synced there itself are removed."""
     try:
         names = os.listdir(root)
     except OSError:
         return
     for name in names:
         if name in keep or not name.isdigit():
+            continue
+        if owned is not None and name not in owned:
             continue
         path = os.path.join(root, name)
         if os.path.isdir(path) and not os.path.islink(path):
@@ -3574,6 +3579,7 @@ def follow_workshop(job_id, app, install_dir):
     # counts as synced when every child is.
     state = workshop_state()
     entry = state.setdefault(app, {})
+    synced_before = set(entry)
     entry.update(saved)
     for c in collections:
         if all(cid in entry for cid in c["children"]):
@@ -3585,7 +3591,8 @@ def follow_workshop(job_id, app, install_dir):
     roots = workshop_roots()
     roots[app] = root
     workshop_save_roots(roots)
-    workshop_prune(root, keep)
+    own_root = os.path.normpath(root) == os.path.normpath(os.path.join(install_dir, "workshop"))
+    workshop_prune(root, keep, None if own_root else synced_before | set(saved))
     workshop_cache_drop(app)
     notify("job.done", {"jobId": job_id})
 
@@ -5123,7 +5130,7 @@ def initialize(params):
                 "1.19" if "1.19" in offered else
                 "1.18" if "1.18" in offered else
                 "1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.30.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.31.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat", "settings", "install-options", "workshop"],

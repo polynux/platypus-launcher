@@ -614,3 +614,50 @@ func TestSteamWorkshopListCarriesPlacement(t *testing.T) {
 		t.Fatalf("ruled items = %+v", items)
 	}
 }
+
+// A placement root shared with the Steam client (Portal 2's maps/workshop)
+// keeps item folders Platypus never synced: the prune only removes ids the
+// sync wrote there itself, and those once unsubscribed.
+func TestSteamWorkshopSharedRootKeepsClientItems(t *testing.T) {
+	e := setup(t)
+	e.login()
+	gameDir := t.TempDir()
+	dataDir := e.m.DataDirOf(id)
+	installed, _ := json.Marshal(map[string]any{"620": map[string]any{"path": gameDir, "title": "Standalone Game"}})
+	if err := os.WriteFile(filepath.Join(dataDir, "installed.json"), installed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clientItem := filepath.Join(gameDir, "portal2", "maps", "workshop", "7777")
+	if err := os.MkdirAll(clientItem, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sync := func(items, details []map[string]any) {
+		t.Helper()
+		e.setCMState("workshop_items", items)
+		e.setCMState("workshop_details", details)
+		j, err := e.q.AddWorkshop(id, "p.steam.620", "620", "Standalone Game", gameDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if done := e.waitJob(j.ID); done.State != "done" {
+			t.Fatalf("workshop job = %+v", done)
+		}
+	}
+	sync([]map[string]any{
+		{"published_file_id": uint64(9200), "appid": 620, "hcontent": e.fix.GID, "size": e.fix.CompressedBytes, "subscribed": 10, "depot_content": true},
+	}, []map[string]any{
+		{"id": uint64(9200), "appid": 620, "title": "Echo Chamber", "hcontent": e.fix.GID, "size": e.fix.CompressedBytes, "file_type": 1},
+	})
+	synced := filepath.Join(gameDir, "portal2", "maps", "workshop", "9200")
+	if _, err := os.Stat(synced); err != nil {
+		t.Fatalf("synced item missing: %v", err)
+	}
+	// Unsubscribe everything: Platypus's own item goes, the client's stays.
+	sync([]map[string]any{}, []map[string]any{})
+	if _, err := os.Stat(synced); !os.IsNotExist(err) {
+		t.Fatalf("unsubscribed synced item stayed: %v", err)
+	}
+	if _, err := os.Stat(clientItem); err != nil {
+		t.Fatalf("a Steam-client item was pruned: %v", err)
+	}
+}
