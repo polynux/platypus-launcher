@@ -48,7 +48,8 @@
       "shaders": "traitement des shaders",
       "downloading": "téléchargement des dépôts",
       "validating": "vérification des fichiers",
-      "launching": "démarrage du jeu"
+      "launching": "démarrage du jeu",
+      "signin": "En attente de vous dans {{client}}"
     },
     "clientFinished": "{{client}} a terminé son travail sans démarrer le jeu. Relancez-le avec Jouer.",
     "clientSetup": {

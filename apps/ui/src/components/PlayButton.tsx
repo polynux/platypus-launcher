@@ -32,6 +32,11 @@ export function PlayButton(p: PlayButtonProps) {
       : clientStatus?.state === 'downloading' ? t('game:play.client.downloading')
         : clientStatus?.state === 'validating' ? t('game:play.client.validating')
           : clientStatus?.state === 'launching' ? t('game:play.client.launching') : undefined;
+  // The client is up and waits for the user (protocol 1.23): a full
+  // sentence, not the "Client: action" prefix the other states use.
+  const signinWaiting = clientStatus?.state === 'signin' ? t('game:play.client.signin', { client: clientName }) : undefined;
+  const waitingText = signinWaiting ?? clientAction;
+  const waitingLabel = signinWaiting ? signinWaiting : clientAction ? `${clientName}: ${clientAction}` : undefined;
   const clientProgress = clientStatus?.progress == null ? '' : ` ${Math.round(clientStatus.progress * 100)}%`;
   const failedMessage = p.session?.message?.includes("finished its work but didn't start the game")
     ? t('game:play.clientFinished', { client: p.session.message.split(' finished its work')[0] })
@@ -56,7 +61,7 @@ export function PlayButton(p: PlayButtonProps) {
         ) : (
           <Button variant="primary" size="none" disabled title={p.session?.message} className={cx(stopBtn, 'disabled:opacity-80')}>
             <Loader2 className="h-4 w-4 animate-spin" />
-            {clientAction ? `${clientStatus?.label || `${clientName}: ${clientAction}`}${clientProgress}` : t('game:play.starting')}
+            {waitingText ? `${clientStatus?.label || waitingLabel}${clientProgress}` : t('game:play.starting')}
           </Button>
         )}
         <Button variant="neutral" size="none" onClick={p.onStop} className={cx(stopBtn, 'bg-white/[0.08] text-white/85 ring-1 ring-white/[0.12] hover:bg-red-400/20 hover:text-red-100 hover:ring-red-300/40')}>

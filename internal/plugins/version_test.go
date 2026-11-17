@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 )
 
@@ -145,5 +146,21 @@ func TestOpenRangeStaysInItsMajor(t *testing.T) {
 	got, ok := Negotiate(s, []Version{{1, 0}, {1, 1}, {2, 0}})
 	if !ok || got != (Version{1, 1}) {
 		t.Fatalf("Negotiate = %v, %v; want 1.1", got, ok)
+	}
+}
+
+func TestClientRunAndSigninNeed123(t *testing.T) {
+	if !slices.Contains(SupportedProtocols, ClientRunVersion) {
+		t.Fatalf("SupportedProtocols %v has no 1.23", SupportedProtocols)
+	}
+	if !slices.Contains(SupportedProtocols, SigninVersion) {
+		t.Fatalf("SupportedProtocols %v has no 1.23", SupportedProtocols)
+	}
+	old := Version{1, 22}
+	if !old.Less(ClientRunVersion) {
+		t.Fatal("1.22 must be older than the 1.23 clientRun answer")
+	}
+	if (Version{1, 23}).Less(ClientRunVersion) || ClientRunVersion.Less(Version{1, 23}) {
+		t.Fatal("1.23 must be exactly the first clientRun revision")
 	}
 }

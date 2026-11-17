@@ -59,7 +59,12 @@
 //	ECHO_AUTH_STATUS_DELAY_MS milliseconds auth.status waits before it answers (a slow login check)
 //	ECHO_INSTALLER_SLEEP seconds the fake client installer waits before installing (a cancel window for client.setup tests)
 //	ECHO_SETUP_CONFIRM text making client.setup ask for download confirmation (protocol 1.20)
-//	ECHO_GAMES        number of extra games to list, with covers served locally (bulk.go), to try the UI at scale
+//	ECHO_CLIENT_RUN set: game.install/game.update/game.uninstall answer a clientRun command (protocol 1.23) for the core to run in the client prefix, and echo ends the job itself as if it watched the client. Answers regardless of the negotiated protocol, so a 1.20 core run proves the rejection.
+//	ECHO_CLIENT_RUN_SLEEP seconds the client-run stand-in waits before exiting (a cancel window for clientRun tests)
+//	ECHO_CLIENT_RUN_OWNS set: the answer sets clientOwnsLocation (the client owns installs)
+//	ECHO_CLIENT_RUN_SIZE bytes: the answer's size for the free-space check (default 0, skipped)
+//	ECHO_CLIENT_RUN_DONE_MS milliseconds before echo ends the clientRun job itself (default 200)
+//	ECHO_CLIENT_RUN_HOLD set: echo never ends the clientRun job (a hold for cancel/launch tests)
 //
 // Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there, and
 // social (social.go) its ECHO_SOCIAL_TICK and `config` social knobs; chat
@@ -962,6 +967,12 @@ func startInstall(p params) (any, error) {
 	}
 	cancels[p.JobID] = stop
 	jobsMu.Unlock()
+	if os.Getenv("ECHO_CLIENT_RUN") != "" {
+		// The core-run client command (protocol 1.23): answered
+		// regardless of the negotiated protocol, so a 1.20 core proves
+		// the rejection of a clientRun it must not accept.
+		return startClientRun(p, stop)
+	}
 	go func() {
 		defer func() {
 			jobsMu.Lock()
@@ -1025,6 +1036,17 @@ func startInstall(p params) (any, error) {
 }
 
 func startUninstall(p params) (any, error) {
+	if os.Getenv("ECHO_CLIENT_RUN") != "" {
+		stop := make(chan struct{})
+		jobsMu.Lock()
+		if _, running := cancels[p.JobID]; running {
+			jobsMu.Unlock()
+			return map[string]any{}, nil
+		}
+		cancels[p.JobID] = stop
+		jobsMu.Unlock()
+		return startClientRun(p, stop)
+	}
 	stMu.Lock()
 	dir, ok := st.Installed[p.ID]
 	stMu.Unlock()
@@ -1046,6 +1068,102 @@ func startUninstall(p params) (any, error) {
 		notify("job.done", map[string]any{"jobId": p.JobID})
 	}()
 	return nil, nil
+}
+
+// startClientRun answers a core-run client command (protocol 1.23): the
+// stand-in the core runs under the runner in the client prefix, as part of
+// this job. Echo ends the job itself after doneMs, like a watch of the
+// client's state would; HOLD leaves it running for cancel/launch tests.
+func startClientRun(p params, stop chan struct{}) (any, error) {
+	stMu.Lock()
+	prefix := st.ClientPrefix
+	stMu.Unlock()
+	if prefix == "" {
+		return nil, fmt.Errorf("Echo client isn't set up yet (no client prefix)")
+	}
+	dir := filepath.Join(prefix, "drive_c", "echo-client")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	exe := filepath.Join(dir, "client-run.sh")
+	script := "#!/bin/sh\nsleep \"${ECHO_CLIENT_RUN_SLEEP:-30}\"\n"
+	if err := os.WriteFile(exe, []byte(script), 0o755); err != nil {
+		return nil, err
+	}
+	out := map[string]any{"clientRun": map[string]any{"exe": exe, "args": []string{p.ID}}}
+	if os.Getenv("ECHO_CLIENT_RUN_OWNS") != "" {
+		out["clientOwnsLocation"] = true
+	}
+	if size, err := strconv.Atoi(os.Getenv("ECHO_CLIENT_RUN_SIZE")); err == nil && size > 0 {
+		out["size"] = int64(size)
+	}
+	if os.Getenv("ECHO_CLIENT_RUN_HOLD") != "" {
+		return out, nil
+	}
+	doneMs := 200
+	if v, err := strconv.Atoi(os.Getenv("ECHO_CLIENT_RUN_DONE_MS")); err == nil && v >= 0 {
+		doneMs = v
+	}
+	uninstall := p.InstallDir == ""
+	owns := os.Getenv("ECHO_CLIENT_RUN_OWNS") != ""
+	stMu.Lock()
+	prefix = st.ClientPrefix
+	stMu.Unlock()
+	go func() {
+		defer func() {
+			jobsMu.Lock()
+			delete(cancels, p.JobID)
+			jobsMu.Unlock()
+		}()
+		select {
+		case <-stop:
+			return
+		case <-time.After(time.Duration(doneMs) * time.Millisecond):
+		}
+		if uninstall {
+			stMu.Lock()
+			dir, ok := st.Installed[p.ID]
+			if ok {
+				delete(st.Installed, p.ID)
+				delete(st.Versions, p.ID)
+				delete(st.Options, p.ID)
+			}
+			save()
+			stMu.Unlock()
+			if ok {
+				_ = os.RemoveAll(dir)
+			}
+			notify("job.done", map[string]any{"jobId": p.JobID})
+			return
+		}
+		rec, err := resolveTarget(p.ID, p.Target)
+		if err != nil {
+			notify("job.failed", map[string]any{"jobId": p.JobID, "error": err.Error()})
+			return
+		}
+		dir := filepath.Join(p.InstallDir, p.ID)
+		if owns {
+			// The client owns installs: the game lands in the client
+			// prefix, never in the job's installDir.
+			dir = filepath.Join(prefix, "drive_c", "echo-client", "games", p.ID)
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			notify("job.failed", map[string]any{"jobId": p.JobID, "error": err.Error()})
+			return
+		}
+		if err := os.WriteFile(filepath.Join(dir, "game.sh"), []byte("#!/bin/sh\necho \"echo game "+rec.Build+" $*\"\n"), 0o755); err != nil {
+			notify("job.failed", map[string]any{"jobId": p.JobID, "error": err.Error()})
+			return
+		}
+		stMu.Lock()
+		st.Installed[p.ID] = dir
+		st.Versions[p.ID] = rec
+		delete(st.Partial, p.ID)
+		save()
+		stMu.Unlock()
+		notify("job.done", map[string]any{"jobId": p.JobID, "installed": installedAnswer(rec)})
+	}()
+	return out, nil
 }
 
 // clientSleep is the command the store client "launches" for a game reached

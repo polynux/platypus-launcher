@@ -36,6 +36,10 @@ const (
 	// seen running, to count as a crash. The client owns the process, so no
 	// exit code reaches Platypus; a run this short is the signal it has (#46).
 	clientQuickExit = time.Minute
+	// signinCeiling caps a launch that waits for the user in the client
+	// (protocol 1.23 signin state, issue #213): the start deadline keeps
+	// extending while signin is reported, but never past this from launch.
+	signinCeiling = 30 * time.Minute
 )
 
 type Emit func(types.SessionEvent)
@@ -55,6 +59,12 @@ type Tracker struct {
 	// asked for, if the run ended within clientQuick. A clean run clears it.
 	clientCrashed map[string]time.Time
 	clientQuick   time.Duration
+	// pollEvery, idleGrace and signinCeiling are per-tracker so tests can
+	// use short durations without package globals (never run tests in
+	// parallel: entries share the process table).
+	pollEvery     time.Duration
+	idleGrace     time.Duration
+	signinCeiling time.Duration
 }
 
 // entry is one tracked launch. cmd is the direct-launch process (nil for
@@ -86,7 +96,8 @@ type entry struct {
 
 func NewTracker(emit Emit) *Tracker {
 	return &Tracker{emit: emit, grace: defaultGrace, active: map[string]*entry{}, crashed: map[string]string{},
-		clientCrashed: map[string]time.Time{}, clientQuick: clientQuickExit}
+		clientCrashed: map[string]time.Time{}, clientQuick: clientQuickExit,
+		pollEvery: pollEvery, idleGrace: clientIdleGrace, signinCeiling: signinCeiling}
 }
 
 // CrashLog returns the log file of gameID's last direct launch when that run
@@ -286,22 +297,36 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 					case "updating", "shaders", "downloading", "validating":
 						worked = true
 						idleSince = time.Time{}
-						next := deadline.Add(pollEvery)
+						next := deadline.Add(t.pollEvery)
 						if capDeadline.Before(next) {
 							next = capDeadline
+						}
+						deadline = next
+					case "signin":
+						// The client is up and waits for the user (protocol
+						// 1.23): pause the start deadline like an update,
+						// but never past the signin ceiling from launch.
+						worked = true
+						idleSince = time.Time{}
+						next := deadline.Add(t.pollEvery)
+						if capDeadline.Before(next) {
+							next = capDeadline
+						}
+						if ceil := asked.Add(t.signinCeiling); ceil.Before(next) {
+							next = ceil
 						}
 						deadline = next
 					case "idle":
 						if worked && idleSince.IsZero() {
 							idleSince = time.Now()
-							deadline = idleSince.Add(clientIdleGrace)
+							deadline = idleSince.Add(t.idleGrace)
 						}
 					default:
 						idleSince = time.Time{}
 					}
 				}
 			}
-			if worked && !idleSince.IsZero() && time.Since(idleSince) >= clientIdleGrace {
+			if worked && !idleSince.IsZero() && time.Since(idleSince) >= t.idleGrace {
 				if t.userStopped(e) {
 					t.emit(types.SessionEvent{GameID: gameID, State: "stopped", Message: stoppedByUserMsg})
 				} else {
@@ -318,7 +343,7 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 				t.emit(types.SessionEvent{GameID: gameID, State: "failed", Message: message})
 				return
 			}
-			time.Sleep(pollEvery)
+			time.Sleep(t.pollEvery)
 		}
 		started = time.Now()
 		if t.setRunning(gameID, pid) {

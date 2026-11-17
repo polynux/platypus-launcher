@@ -72,6 +72,52 @@ func TestClientStatusChangedRequiresStateOrPercentagePoint(t *testing.T) {
 	}
 }
 
+func TestWatchClientSigninExtendsDeadline(t *testing.T) {
+	rec := newRecorder()
+	tr := NewTracker(rec.emit)
+	tr.pollEvery = 50 * time.Millisecond
+	var pid atomic.Int32
+	status := func(time.Time) (*types.ClientStatus, error) {
+		return &types.ClientStatus{State: "signin"}, nil
+	}
+	if !tr.WatchClient("signin-game", "Ubisoft Connect", func() int { return int(pid.Load()) }, 300*time.Millisecond, WithClientStatus(status)) {
+		t.Fatal("WatchClient refused launch")
+	}
+	// Past the start timeout with no game: still waiting, not failed.
+	time.Sleep(600 * time.Millisecond)
+	select {
+	case e := <-rec.ch:
+		if e.State == "failed" {
+			t.Fatalf("signin launch failed while the client waits: %q", e.Message)
+		}
+	default:
+	}
+	pid.Store(322171)
+	ev := rec.waitState(t, "running", 5*time.Second)
+	if ev.PID != 322171 {
+		t.Fatalf("running PID = %d, want the delayed game process", ev.PID)
+	}
+	pid.Store(0)
+	rec.waitState(t, "stopped", 5*time.Second)
+}
+
+func TestWatchClientSigninCeilingFailsLaunch(t *testing.T) {
+	rec := newRecorder()
+	tr := NewTracker(rec.emit)
+	tr.pollEvery = 50 * time.Millisecond
+	tr.signinCeiling = 600 * time.Millisecond
+	status := func(time.Time) (*types.ClientStatus, error) {
+		return &types.ClientStatus{State: "signin"}, nil
+	}
+	if !tr.WatchClient("signin-ceiling-game", "Ubisoft Connect", func() int { return 0 }, 200*time.Millisecond, WithClientStatus(status)) {
+		t.Fatal("WatchClient refused launch")
+	}
+	ev := rec.waitState(t, "failed", 5*time.Second)
+	if !strings.Contains(ev.Message, "never started the game") {
+		t.Fatalf("failure message = %q, want the start-timeout failure", ev.Message)
+	}
+}
+
 // Issue #149 review: a window opened while a store client works reads the
 // launch-status snapshot, and that snapshot hides the client's status when the
 // user switched the notices off — the polling keeps going, its events don't.
