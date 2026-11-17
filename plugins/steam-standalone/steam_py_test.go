@@ -36,16 +36,19 @@ func TestSteamBranchPasswordInRequest(t *testing.T) {
 import threading
 hs.refresh_token = lambda: "tok"
 reqs = []
-def fake_run(sub, req, job_id=None, game_dir=None):
+def fake_run(sub, req, job_id=None, game_dir=None, **k):
     reqs.append((sub, dict(req)))
+    if sub == "dlc":
+        return {"dlc": [], "depots": {}, "base": []}
     return {"os_used": "linux", "disk_bytes": 1, "download_bytes": 1}
 hs.dl_run = fake_run
+hs.owned_games = lambda: {"response": {"games": []}}
 hs.record_install = lambda *a: None
 hs.notify = lambda *a: None
 hs.install_size({"id": "4321", "branch": "beta", "branchPassword": "s3cret"})
 hs.follow_install("j1", "4321", "/tmp/g", "update", {"branch": "beta", "branchPassword": "s3cret"})
 hs.follow_install("j2", "4321", "/tmp/g", "install")
-print([(s, r["branch"], r.get("branch_password")) for s, r in reqs])
+print([(s, r["branch"], r.get("branch_password")) for s, r in reqs if s != "dlc"])
 `)
 	want := "[('size', 'beta', 's3cret'), ('update', 'beta', 's3cret'), ('install', 'public', None)]"
 	if got != want {

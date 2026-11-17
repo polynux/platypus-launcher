@@ -1,7 +1,7 @@
 {
   "id": "steam-standalone",
   "name": "Steam (standalone)",
-  "version": "0.25.0",
+  "version": "0.26.0",
   "author": "Platypus",
   "description": "Install and launch the Steam games you own without the Steam client, using the built-in Go depot downloader and Steam login. Games that need the Steam client at runtime still get the real client, started hidden.",
   "manifestVersion": 1,
@@ -9,7 +9,7 @@
   "store": "steam",
   "exec": "bin/platypus-steam",
   "icon": "icon.svg",
-  "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family", "verify", "achievements", "playtime", "cloud-saves", "social", "chat", "settings"],
+  "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family", "verify", "achievements", "playtime", "cloud-saves", "social", "chat", "settings", "install-options"],
   "requires": [
     { "bin": "python3", "hint": "install python3 from your distribution" },
     { "bin": "steam", "hint": "only needed for games that refuse to run outside the Steam client; install it from your distribution or store.steampowered.com" }

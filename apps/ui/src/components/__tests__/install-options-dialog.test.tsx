@@ -100,6 +100,15 @@ describe('InstallOptionsDialog', () => {
     expect(screen.getByText('installed')).toBeTruthy();
     expect(screen.getByRole('switch', { name: 'Subtitles' }).getAttribute('aria-checked')).toBe('false');
   });
+  it("starts with the store's default ticked", async () => {
+    // Core resolves the store default into chosen (protocol 1.5 multi
+    // default); the dialog ticks it without the user touching anything.
+    const dlc = { ...groups[1], default: ['season'] };
+    open('install', game(), options({ groups: [groups[0], dlc, groups[2]], chosen: { language: 'en', dlc: ['season'], subtitles: false } }));
+    await ready();
+    expect((screen.getByLabelText('Season Pass') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('Soundtrack') as HTMLInputElement).checked).toBe(false);
+  });
 
   it('greys out DLC the user does not own, with the store link', async () => {
     open();

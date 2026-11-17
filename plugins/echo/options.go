@@ -162,6 +162,17 @@ func valueList(values []optValue, installed []string) []map[string]any {
 	return out
 }
 
+// ownedIDs is the multi default for a catalog: the owned value ids.
+func ownedIDs(values []optValue) []string {
+	out := []string{}
+	for _, v := range values {
+		if v.owned {
+			out = append(out, v.id)
+		}
+	}
+	return out
+}
+
 // gameOptions answers game.options. A game the store doesn't install has no
 // groups; the others offer the full set, with what was installed marked.
 func gameOptions(p params) (any, error) {
@@ -183,7 +194,7 @@ func gameOptions(p params) (any, error) {
 		map[string]any{"id": "language", "label": "Language", "kind": "select",
 			"values": languages, "default": "en"},
 		map[string]any{"id": "dlc", "label": "Add-ons", "kind": "multi", "dlc": true,
-			"values": valueList(echoDLC, installed.DLC)},
+			"values": valueList(echoDLC, installed.DLC), "default": ownedIDs(echoDLC)},
 		map[string]any{"id": "packs", "label": "Optional packs", "kind": "multi",
 			"values": valueList(echoPacks, installed.Packs)},
 		map[string]any{"id": "subtitles", "label": "Subtitles", "kind": "bool", "default": false},

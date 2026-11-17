@@ -22,18 +22,23 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 
 	"platypus/internal/steam"
 )
 
 // DepotRef is one depot to download: its id, manifest id and branch.
+// DLCAppID names the add-on the depot belongs to (PICS depots.<id>.dlcappid);
+// zero means the base game.
 type DepotRef struct {
 	DepotID  uint32
 	GID      uint64
 	Branch   string
 	FromApp  uint32 // depotfromapp source, 0 when own
 	KeyAppID uint32 // app the depot key/request code belong to (source for shared)
+	DLCAppID uint32 // DLC app the depot belongs to, 0 for the base game
 }
 
 // steamArch reports the machine architecture the way DepotDownloader's
@@ -81,11 +86,15 @@ func selectDepots(kv *steam.KV, appID uint32, branch, osname string) ([]DepotRef
 		if cfg != nil && cfg.String("lowviolence") == "1" {
 			continue
 		}
+		// DepotDownloader reads the same field: depots.<id>.dlcappid names
+		// the add-on the depot ships; absent (or unparsable) is the base.
+		var dlcAppID uint32
+		fmt.Sscanf(d.String("dlcappid"), "%d", &dlcAppID)
 		if gidStr := d.String("manifests", branch, "gid"); gidStr != "" {
 			var gid uint64
 			fmt.Sscanf(gidStr, "%d", &gid)
 			if gid != 0 {
-				out = append(out, DepotRef{DepotID: depotID, GID: gid, Branch: branch})
+				out = append(out, DepotRef{DepotID: depotID, GID: gid, Branch: branch, DLCAppID: dlcAppID})
 				continue
 			}
 		}
@@ -93,7 +102,7 @@ func selectDepots(kv *steam.KV, appID uint32, branch, osname string) ([]DepotRef
 			var src uint32
 			fmt.Sscanf(from, "%d", &src)
 			if src != 0 && src != appID {
-				out = append(out, DepotRef{DepotID: depotID, Branch: branch, FromApp: src})
+				out = append(out, DepotRef{DepotID: depotID, Branch: branch, FromApp: src, DLCAppID: dlcAppID})
 			}
 		}
 	}
@@ -140,4 +149,64 @@ func branchPasswordHash(req request) string {
 		return ""
 	}
 	return betaHash(req.BranchPassword)
+}
+
+// listDLC reads the game's DLC app ids from PICS app info
+// (extended.listofdlc, comma-separated): the Steam client's DLC list for
+// the game. Missing or unparsable entries are skipped; the result is
+// sorted. An app with no DLC answers an empty list, not an error.
+func listDLC(kv *steam.KV) []uint32 {
+	raw := kv.String("extended", "listofdlc")
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	seen := map[uint32]bool{}
+	var out []uint32
+	for _, part := range strings.Split(raw, ",") {
+		n, err := strconv.ParseUint(strings.TrimSpace(part), 10, 32)
+		if err != nil || n == 0 || seen[uint32(n)] {
+			continue
+		}
+		seen[uint32(n)] = true
+		out = append(out, uint32(n))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// filterDepotsByDLC keeps the base-game depots (no dlcappid) and the depots
+// of the selected DLC apps. keep names DLC app ids; a nil keep installs
+// the old set (everything selected: the legacy request shape without a
+// dlc field). The second result is the dropped depots, so callers can
+// forget overrides pinned to them instead of erroring.
+func filterDepotsByDLC(refs []DepotRef, keep map[uint32]bool) (kept, dropped []DepotRef) {
+	if keep == nil {
+		return refs, nil
+	}
+	for _, r := range refs {
+		if r.DLCAppID == 0 || keep[r.DLCAppID] {
+			kept = append(kept, r)
+		} else {
+			dropped = append(dropped, r)
+		}
+	}
+	return kept, dropped
+}
+
+// dlcKeepSet parses the request's dlc value ids (protocol 1.5: strings)
+// into the keep set for filterDepotsByDLC. A nil request field means no
+// filtering; anything else (even empty: base game only) filters.
+func dlcKeepSet(raw []string) (map[uint32]bool, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	keep := map[uint32]bool{}
+	for _, id := range raw {
+		n, err := strconv.ParseUint(strings.TrimSpace(id), 10, 32)
+		if err != nil || n == 0 {
+			return nil, fmt.Errorf("bad dlc selection %q", id)
+		}
+		keep[uint32(n)] = true
+	}
+	return keep, nil
 }
