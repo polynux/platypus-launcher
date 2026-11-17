@@ -3369,6 +3369,17 @@ def _requirement_side(v):
     return lo, hi
 
 
+def _platforms(raw):
+    """The store's platform flags as the protocol's names (protocol 1.10,
+    "Compat"). PICS app info carries the same OS list as common/oslist; the
+    store's app details already answer it, so game.details stays public."""
+    if not isinstance(raw, dict):
+        return []
+    return [name for key, name in
+            (("windows", "windows"), ("mac", "macos"), ("linux", "linux"))
+            if raw.get(key)]
+
+
 def _movie_url(movie):
     """Prefer mp4 480/max or webm; HLS-only entries are skipped."""
     for key in ("mp4", "webm"):
@@ -3489,6 +3500,13 @@ def game_details(params):
             ("title", (m.get("name") or "")[:200]), ("mime", mime)) if v})
     if videos:
         out["videos"] = videos
+    # Compat facts (protocol 1.10, "Compat"): this store knows the game's own
+    # AppID and its platform flags. DRM stays absent: Steam doesn't state it,
+    # and Platypus never shows a guessed badge.
+    out["steamAppId"] = app
+    platforms = _platforms(d.get("platforms"))
+    if platforms:
+        out["platforms"] = platforms
     if params.get("terms"):
         terms = game_terms(app)
         if terms:

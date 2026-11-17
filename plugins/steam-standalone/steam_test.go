@@ -198,6 +198,7 @@ func setup(t *testing.T) *env {
 	      "movies": [{"name": "Trailer", "thumbnail": "https://cdn.steam/4321_tr.jpg",
 	        "mp4": {"480": "https://cdn.steam/4321_tr.mp4", "max": "https://cdn.steam/4321_tr_max.mp4"}}],
 	      "developers": ["Dev"], "publishers": ["Pub"], "release_date": {"date": "2019-09-20"},
+	      "platforms": {"windows": true, "mac": false, "linux": true},
 	      "detailed_description": "<p>A standalone <b>game</b>.</p><script>alert(1)</script>",
 	      "supported_languages": "English<strong>*</strong>, French",
 	      "controller_support": "full",
@@ -1597,5 +1598,29 @@ func TestSteamQRStatusPollShowsPersona(t *testing.T) {
 	}
 	if st.User != "TestPersona" {
 		t.Fatalf("want persona TestPersona on the first loggedIn status, got %q", st.User)
+	}
+}
+
+// Compat facts (protocol 1.10, issue #201): the game page's ratings need the
+// store's own AppID instead of a title match, and the platform flags name the
+// OS support. Steam states no DRM fact, so none is sent: no guessed badge.
+func TestSteamDetailsCompatFacts(t *testing.T) {
+	e := setup(t)
+	game := types.Game{
+		ID: stores.GameID(id, "4321"), Source: id, Store: "steam",
+		StoreAppID: "4321", Title: "Standalone Game",
+	}
+	d, err := e.store.Details(context.Background(), game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.SteamAppID != "4321" {
+		t.Fatalf("steamAppId = %q, want the game's own app id", d.SteamAppID)
+	}
+	if !slices.Equal(d.Platforms, []string{"windows", "linux"}) {
+		t.Fatalf("platforms = %v, want windows and linux", d.Platforms)
+	}
+	if d.DRM != nil {
+		t.Fatalf("drm = %+v, want absent (Steam states no DRM facts)", d.DRM)
 	}
 }
