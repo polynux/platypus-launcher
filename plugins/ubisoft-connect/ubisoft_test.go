@@ -636,12 +636,17 @@ func TestUbisoftLibraryCatalogueRewrite(t *testing.T) {
 	if ids := libraryIDs(t, sess); !slices.Equal(ids, []string{"635"}) {
 		t.Fatalf("library.list = %v, want [635] before the catalogue rewrite", ids)
 	}
-	// Ownership is untouched: only the client rewrote its catalogue.
+	// Ownership is untouched: only the client rewrote its catalogue. The
+	// new catalogue is larger, so the stamp changes even where two writes
+	// share a timestamp tick (it keys on size and mtime).
 	plantCatalogue(t, prefix, [][]byte{
+		configRecord(635, 0, gameYAML("Older", "a.exe")),
 		configRecord(636, 0, gameYAML("Newer", "b.exe")),
 	})
-	if ids := libraryIDs(t, sess); !slices.Equal(ids, []string{"636"}) {
-		t.Fatalf("library.list = %v, want [636] after a catalogue-only rewrite", ids)
+	ids := libraryIDs(t, sess)
+	slices.Sort(ids)
+	if !slices.Equal(ids, []string{"635", "636"}) {
+		t.Fatalf("library.list = %v, want both games after a catalogue-only rewrite", ids)
 	}
 }
 
