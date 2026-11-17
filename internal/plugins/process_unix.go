@@ -12,3 +12,7 @@ func configurePluginProcess(cmd *exec.Cmd) {
 }
 
 func killPluginProcess(cmd *exec.Cmd) { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+
+// afterPluginStart is Windows-only: the job object can only be assigned once
+// the process exists. Unix sets everything it needs before Start.
+func afterPluginStart(*exec.Cmd) {}

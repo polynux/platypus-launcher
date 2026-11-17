@@ -15,7 +15,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -1050,7 +1049,7 @@ func (s *Session) Kill() {
 	if pid == 0 {
 		s.t.Fatal("plugin isn't running")
 	}
-	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+	if err := killPid(pid); err != nil {
 		s.t.Fatal(err)
 	}
 	deadline := time.Now().Add(10 * time.Second)

@@ -386,6 +386,7 @@ func (p *process) start() (Conn, error) {
 		p.recordCrash(err)
 		return nil, fmt.Errorf("plugin %s: %w", p.id, err)
 	}
+	afterPluginStart(cmd)
 
 	conn := p.transportOrDefault().Connect(outR, inW, p.notify)
 	exited := make(chan struct{})
