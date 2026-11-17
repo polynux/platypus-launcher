@@ -414,6 +414,10 @@ type LauncherSettings struct {
 	UpdateWindowEnabled bool   `json:"update_window_enabled"`
 	UpdateWindowStart   string `json:"update_window_start"`
 	UpdateWindowEnd     string `json:"update_window_end"`
+	// AutoUpdate is the "Automatic updates" switch (issue #209): update
+	// installed games in the background, inside the window above. On until
+	// the user switches it off.
+	AutoUpdate bool `json:"auto_update"`
 	// RatingsOnline is the "Fetch ratings online" switch (see compat.go).
 	RatingsOnline bool `json:"ratings_online"`
 	// ProtectionOnline is the "Fetch protection data online" switch (issue
@@ -781,8 +785,8 @@ type Job struct {
 	Options InstallOptions `json:"options,omitempty"`
 	// Auto marks an update Platypus started by itself, not one the user
 	// started. Only auto updates respect the update window (issue #207):
-	// anything the user asked for starts right away. Nothing queues an auto
-	// update yet; automatic updates are a follow-up.
+	// anything the user asked for starts right away. Automatic updates
+	// (#209) queue these when the library reports one.
 	Auto bool `json:"auto,omitempty"`
 }
 

@@ -173,6 +173,17 @@ func (a *App) RescanLibrary() (types.Library, error) {
 }
 
 func (a *App) getLibrary(force bool) (types.Library, error) {
+	lib, err := a.scanLibrary(force)
+	if err != nil {
+		return lib, err
+	}
+	a.autoUpdateCheck(lib)
+	return lib, nil
+}
+
+// scanLibrary lists every source and assembles the library, without the
+// automatic-update check a refresh runs on the result (issue #209).
+func (a *App) scanLibrary(force bool) (types.Library, error) {
 	// Concurrent scans share one refresh: the second serves the first one's
 	// fresh cache instead of listing the same slow stores twice.
 	a.scanMu.Lock()

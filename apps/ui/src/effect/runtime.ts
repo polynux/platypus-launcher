@@ -576,6 +576,17 @@ export const LauncherApi = {
   setUpdateWindow: (enabled: boolean, start: string, end: string) =>
     call<LauncherSettings>('SetUpdateWindow', () => App.SetUpdateWindow(enabled, start, end)),
 
+  // Automatic updates (issue #209): installed games update in the background
+  // inside the window above. On until the user switches it off.
+  setAutoUpdate: (on: boolean) =>
+    call<LauncherSettings>('SetAutoUpdate', () => App.SetAutoUpdate(on)),
+  // One game's "Don't update automatically" override; true follows the
+  // global switch.
+  getGameAutoUpdate: (gameId: string) =>
+    call<boolean>('GetGameAutoUpdate', () => App.GetGameAutoUpdate(gameId)),
+  setGameAutoUpdate: (gameId: string, on: boolean) =>
+    call<void>('SetGameAutoUpdate', () => App.SetGameAutoUpdate(gameId, on)),
+
   // Where Wine prefixes are created (issue #37). "" resets it to the
   // default; changing it never moves or deletes existing prefixes.
   setPrefixesFolder: (path: string) =>

@@ -220,6 +220,13 @@ func (a *App) queueJobWith(kind string, game types.Game, target *types.VersionTa
 // ("" is the plugin's own install folder). The folder is checked first and,
 // once the job is queued, remembered and allowed for the plugin's launches.
 func (a *App) queueJobIn(kind string, game types.Game, target *types.VersionTarget, options types.InstallOptions, picked string) (types.Job, error) {
+	return a.queueJobInAuto(kind, game, target, options, picked, false)
+}
+
+// queueJobInAuto is queueJobIn for a job Platypus starts by itself (an
+// automatic update, issue #209): auto marks the job, so the queue holds it to
+// the update window.
+func (a *App) queueJobInAuto(kind string, game types.Game, target *types.VersionTarget, options types.InstallOptions, picked string, auto bool) (types.Job, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
 		return types.Job{}, apperr.New("game.notFromStore", fmt.Sprintf("%s doesn't come from a store plugin", game.Title), map[string]string{"title": game.Title})
@@ -246,7 +253,12 @@ func (a *App) queueJobIn(kind string, game types.Game, target *types.VersionTarg
 	if game.IsInstalled && game.InstallDir != "" {
 		folder = game.InstallDir // an installed game updates where it is, moved or not
 	}
-	job, err := a.jobs.AddWithOptions(kind, game.Source, game.ID, game.StoreAppID, game.OriginalTitle(), folder, target, options)
+	var job types.Job
+	if auto {
+		job, err = a.jobs.AddAuto(game.Source, game.ID, game.StoreAppID, game.OriginalTitle(), folder, target, options)
+	} else {
+		job, err = a.jobs.AddWithOptions(kind, game.Source, game.ID, game.StoreAppID, game.OriginalTitle(), folder, target, options)
+	}
 	if err == nil && custom {
 		a.rememberInstallFolder(game.Source, folder)
 	}
@@ -393,6 +405,90 @@ func (a *App) SetUpdateWindow(enabled bool, start, end string) (types.LauncherSe
 	}
 	a.jobs.SetUpdateWindow(w)
 	return a.launcherSettings(), nil
+}
+
+// autoUpdateEvery is how often the automatic-update check re-lists the
+// library (issue #209), besides every library refresh.
+const autoUpdateEvery = 2 * time.Hour
+
+// SetAutoUpdate saves the "Automatic updates" switch (issue #209). Turning it
+// on checks the library right away, so a game already waiting for an update
+// is queued without another manual refresh.
+func (a *App) SetAutoUpdate(on bool) (types.LauncherSettings, error) {
+	if err := a.settings.SetAutoUpdate(on); err != nil {
+		return a.launcherSettings(), err
+	}
+	if on {
+		go a.checkAutoUpdates()
+	}
+	return a.launcherSettings(), nil
+}
+
+// GetGameAutoUpdate reports whether one game may be updated automatically:
+// false only when the user excluded it.
+func (a *App) GetGameAutoUpdate(gameID string) (bool, error) {
+	return a.settings.GameAutoUpdate(gameID), nil
+}
+
+// SetGameAutoUpdate saves one game's "Don't update automatically" override
+// (on returns the game to following the global switch).
+func (a *App) SetGameAutoUpdate(gameID string, on bool) error {
+	return a.settings.SetGameAutoUpdate(gameID, on)
+}
+
+// autoUpdateCheck queues an automatic update for each installed game whose
+// store reports one (issue #209). A game is skipped when it is pinned, when
+// the user excluded it, and while it runs: its update waits for the next
+// check instead. A game that already has a job is skipped too (the queue
+// would refuse a second one).
+func (a *App) autoUpdateCheck(lib types.Library) {
+	if a.settings == nil || !a.settings.AutoUpdate() {
+		return
+	}
+	a.autoUpdateMu.Lock()
+	defer a.autoUpdateMu.Unlock()
+	pins := a.settings.Pins()
+	for _, g := range lib.Games {
+		if !g.IsInstalled || !g.UpdateAvailable || g.Pinned != nil {
+			continue
+		}
+		if _, pinned := pins[g.ID]; pinned {
+			continue
+		}
+		if !a.settings.GameAutoUpdate(g.ID) || a.isRunning(g.ID) {
+			continue
+		}
+		if _, err := a.queueJobInAuto(jobs.KindUpdate, g, nil, a.savedOptions(g), "", true); err != nil {
+			continue // a job already holds the game, or the store can't update it now
+		}
+	}
+}
+
+// checkAutoUpdates lists the library for the periodic check; a library
+// refresh runs autoUpdateCheck on what it lists.
+func (a *App) checkAutoUpdates() {
+	if a == nil || a.settings == nil || a.ctx == nil || !a.settings.AutoUpdate() {
+		return
+	}
+	if _, err := a.GetLibrary(); err != nil {
+		a.warnf("automatic updates: %v", err)
+	}
+}
+
+// autoUpdateLoop re-checks the library every autoUpdateEvery (issue #209).
+// Every library refresh checks too; this only makes sure one happens when no
+// window is opened and no rescan is asked for.
+func (a *App) autoUpdateLoop(ctx context.Context) {
+	t := time.NewTicker(autoUpdateEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			a.checkAutoUpdates()
+		}
+	}
 }
 
 // SetCancelCleanupDays sets how many days a canceled download's data is kept

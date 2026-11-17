@@ -131,6 +131,8 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
                   const pct = j.percent >= 0 ? Math.round(j.percent) : null;
                   const paused = j.state === 'paused';
                   const name = byId.get(j.game_id)?.title ?? j.title;
+                  // An update Platypus started by itself says so (issue #209).
+                  const verb = t(j.auto && j.kind === 'update' ? 'downloads:action.autoUpdate' : VERB_KEY[j.kind]);
                   const running = j.state === 'running';
                   const eta = running && j.total > 0 && j.speed > 0 && j.total > j.bytes
                     ? t('downloads:job.etaMins', { count: Math.max(1, Math.round((j.total - j.bytes) / j.speed / 60)) })
@@ -153,7 +155,7 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
                             <span className="truncate text-left text-[13px] font-bold">
                               {name}
                             </span>
-                            <span className="truncate text-[12px] text-text-faint">{t(VERB_KEY[j.kind])}</span>
+                            <span className="truncate text-[12px] text-text-faint">{verb}</span>
                           </div>
                           <div className="h-1.5 overflow-hidden rounded-[3px] bg-surface-strong" role="progressbar" aria-label={t('downloads:aria.progressOf', { title: name })} aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
                             {/* Unknown progress pulses full width only while running: a queued or
@@ -219,7 +221,7 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
                     className={cx('truncate text-[12.5px]', j.state === 'failed' ? 'text-danger' : 'text-text-muted')}
                     title={j.state === 'failed' && raw !== '' ? raw : undefined}
                   >
-                    {j.state === 'failed' ? failedLabel : j.state === 'done' ? t(FINISHED_KEY[j.kind]) : t(STATE_KEY[j.state])}
+                    {j.state === 'failed' ? failedLabel : j.state === 'done' ? t(j.auto && j.kind === 'update' ? 'downloads:atlas.finished.autoUpdate' : FINISHED_KEY[j.kind]) : t(STATE_KEY[j.state])}
                   </span>
                   <span className="text-[12px] tabular-nums text-text-muted">{j.total > 0 ? formatBytes(j.total) : ''}</span>
                   <span className="text-[12px] text-text-muted">{relTime(j.updated_at)}</span>

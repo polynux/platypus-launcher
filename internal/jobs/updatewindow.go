@@ -10,8 +10,7 @@ import (
 // Update schedule (issue #207): a daily local-time window when automatic
 // updates may start. Only updates Platypus started by itself wait (Job.Auto);
 // anything the user asked for — an update, a version switch, an install —
-// starts right away. Nothing queues an auto update yet: automatic updates are
-// a follow-up, and the setting stays hidden in the UI until then.
+// starts right away. Automatic updates themselves are issue #209.
 
 // windowCheck caps how long one wake timer runs: instead of trusting a single
 // long AfterFunc across a suspend or a clock change, the queue re-checks at

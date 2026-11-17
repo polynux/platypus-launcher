@@ -61,6 +61,12 @@ type file struct {
 	// UpdateWindow is the daily window when queued updates may start (issue
 	// #207). A pointer: unset means off, 03:00–06:00. See downloads.go.
 	UpdateWindow *UpdateWindow `json:"update_window,omitempty"`
+	// AutoUpdate is the "Automatic updates" switch (issue #209). A pointer:
+	// unset means on, like the Steam client. See downloads.go.
+	AutoUpdate *bool `json:"auto_update,omitempty"`
+	// AutoUpdateOff are the games the user excluded from automatic updates
+	// (issue #209), by Platypus's game id. See downloads.go.
+	AutoUpdateOff map[string]bool `json:"auto_update_off,omitempty"`
 	// Cloud saves: each plugin's default mode and each game's own choice
 	// (see cloud.go).
 	CloudPlugins map[string]string `json:"cloud_plugins,omitempty"`

@@ -128,6 +128,9 @@ type App struct {
 	// one's fresh cache instead of listing the same slow stores twice.
 	library libraryCache
 	scanMu  sync.Mutex
+	// autoUpdateMu serializes the automatic-update checks (issue #209): a
+	// library refresh and the periodic tick may overlap.
+	autoUpdateMu sync.Mutex
 	// auth caches one login state per plugin: the Plugins view asks on every
 	// visit, and asking costs the plugin a store round trip (app_auth.go,
 	// issue #28). Served immediately, refreshed in the background.
@@ -468,6 +471,7 @@ func (a *App) startup(ctx context.Context) {
 	a.stop = stop
 	go a.jobs.Run(runCtx)
 	go a.playHeartbeatLoop(runCtx)
+	go a.autoUpdateLoop(runCtx)
 }
 
 // shutdown stops games Platypus started directly and every store plugin.
@@ -1341,6 +1345,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		UpdateWindowEnabled:   w.Enabled,
 		UpdateWindowStart:     w.Start,
 		UpdateWindowEnd:       w.End,
+		AutoUpdate:            a.settings.AutoUpdate(),
 		RatingsOnline:         a.settings.RatingsOnline(),
 		ProtectionOnline:      a.settings.ProtectionOnline(),
 		ClientNotices:         a.settings.ClientNotices(),

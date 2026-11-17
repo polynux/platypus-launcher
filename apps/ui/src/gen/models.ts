@@ -566,6 +566,7 @@ export namespace types {
     update_window_enabled: boolean;
     update_window_start: string;
     update_window_end: string;
+    auto_update: boolean;
     ratings_online: boolean;
     protection_online: boolean;
     client_notices: boolean;

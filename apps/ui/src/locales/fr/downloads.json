@@ -7,6 +7,7 @@
   "action": {
     "install": "Installation",
     "update": "Mise à jour",
+    "autoUpdate": "Mise à jour automatique",
     "uninstall": "Désinstallation",
     "verify": "Vérification",
     "move": "Déplacement",
@@ -91,6 +92,7 @@
     "finished": {
       "install": "Installé",
       "update": "Mis à jour",
+      "autoUpdate": "Mis à jour automatiquement",
       "uninstall": "Désinstallé",
       "verify": "Vérifié",
       "move": "Déplacé",

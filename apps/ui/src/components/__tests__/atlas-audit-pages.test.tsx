@@ -195,6 +195,13 @@ describe('finding 7: downloads recent rows', () => {
     expect(screen.queryByText('done')).toBeNull();
   });
 
+  it('labels an update Platypus started as automatic', () => {
+    render(
+      <AtlasDownloads {...dlProps([mkJob({ id: 'a', game_id: 'civ', kind: 'update', state: 'running', auto: true })])} />,
+    );
+    expect(screen.getByText('Automatic update')).toBeInTheDocument();
+  });
+
   it('shows the failed label for the screenshot error, with the raw text in a tooltip', () => {
     const raw = 'size check: unknown game "bulk-0001"';
     const { container } = render(

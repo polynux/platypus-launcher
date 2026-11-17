@@ -161,6 +161,12 @@
     "delete": "Supprimer le préréglage {{name}}"
   },
   "maintenance": {
+    "autoUpdate": {
+      "title": "Mises à jour automatiques",
+      "text": "Platypus met à jour ce jeu en arrière-plan quand la boutique signale une version plus récente.",
+      "off": "Ne pas mettre à jour automatiquement",
+      "saved": "Mises à jour automatiques enregistrées pour ce jeu."
+    },
     "busy": "{{title}} est occupé ; ses fichiers ne peuvent pas être changés avant la fin.",
     "removeTitle": "Retirer de la bibliothèque",
     "removeRunning": "Arrêtez {{title}} avant de le retirer de la bibliothèque.",

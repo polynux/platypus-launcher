@@ -413,6 +413,17 @@ func (q *Queue) AddTargeted(kind, source, gameID, storeGameID, title, installDir
 // choices (the `install-options` capability) with the job. Options are copied
 // and never checked here: the caller has resolved them against the store.
 func (q *Queue) AddWithOptions(kind, source, gameID, storeGameID, title, installDir string, target *types.VersionTarget, options types.InstallOptions) (types.Job, error) {
+	return q.add(kind, source, gameID, storeGameID, title, installDir, target, options, false)
+}
+
+// AddAuto queues an update Platypus started by itself (Job.Auto): the queue
+// holds it to the update window (issue #207). It takes the same version target
+// and install options as AddWithOptions.
+func (q *Queue) AddAuto(source, gameID, storeGameID, title, installDir string, target *types.VersionTarget, options types.InstallOptions) (types.Job, error) {
+	return q.add(KindUpdate, source, gameID, storeGameID, title, installDir, target, options, true)
+}
+
+func (q *Queue) add(kind, source, gameID, storeGameID, title, installDir string, target *types.VersionTarget, options types.InstallOptions, auto bool) (types.Job, error) {
 	switch kind {
 	case KindInstall, KindUpdate, KindUninstall:
 	default:
@@ -434,7 +445,7 @@ func (q *Queue) AddWithOptions(kind, source, gameID, storeGameID, title, install
 	options = types.NormalizeChoices(maps.Clone(options))
 	return q.enqueue(&types.Job{
 		Kind: kind, Source: source, GameID: gameID, StoreGameID: storeGameID,
-		Title: title, InstallDir: installDir, Target: target, Options: options,
+		Title: title, InstallDir: installDir, Target: target, Options: options, Auto: auto,
 	})
 }
 

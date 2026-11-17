@@ -53,6 +53,7 @@ export interface CoreApi {
   GetDiskUsage(): Promise<types.DiskUsage>;
   GetFamilyMembers(source: string): Promise<types.FamilyMember[]>;
   GetGameAchievements(game: types.Game): Promise<types.AchievementProgress | null>;
+  GetGameAutoUpdate(gameID: string): Promise<boolean>;
   GetGameCompat(game: types.Game): Promise<types.Compat>;
   GetGameDetails(game: types.Game): Promise<types.GameDetails | null>;
   GetGameFix(game: types.Game): Promise<types.GameFixInfo | null>;
@@ -159,6 +160,7 @@ export interface CoreApi {
   ScanGameSize(game: types.Game): Promise<types.DiskUsage>;
   SearchArtOnline(title: string): Promise<types.ArtCandidate[]>;
   SetArtworkOnline(on: boolean): Promise<types.LauncherSettings>;
+  SetAutoUpdate(on: boolean): Promise<types.LauncherSettings>;
   SetBackupSettings(folder: string, keep: number, mode: string, afterSession: boolean): Promise<types.BackupSettings>;
   SetCancelCleanupDays(days: number): Promise<types.LauncherSettings>;
   SetChatAlerts(pluginID: string, on: boolean): Promise<void>;
@@ -173,6 +175,7 @@ export interface CoreApi {
   SetDefaultAccent(color: string): Promise<types.LauncherSettings>;
   SetDefaultRunner(id: string): Promise<types.LauncherSettings>;
   SetDownloadLimit(bytesPerSec: number): Promise<types.LauncherSettings>;
+  SetGameAutoUpdate(gameID: string, on: boolean): Promise<void>;
   SetGameInfoOnline(on: boolean): Promise<types.LauncherSettings>;
   SetGameNotes(gameID: string, notes: string): Promise<types.GameStatusInfo>;
   SetGameSaveBackup(gameID: string, mode: string): Promise<void>;
@@ -257,6 +260,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'GetDiskUsage',
   'GetFamilyMembers',
   'GetGameAchievements',
+  'GetGameAutoUpdate',
   'GetGameCompat',
   'GetGameDetails',
   'GetGameFix',
@@ -363,6 +367,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ScanGameSize',
   'SearchArtOnline',
   'SetArtworkOnline',
+  'SetAutoUpdate',
   'SetBackupSettings',
   'SetCancelCleanupDays',
   'SetChatAlerts',
@@ -377,6 +382,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetDefaultAccent',
   'SetDefaultRunner',
   'SetDownloadLimit',
+  'SetGameAutoUpdate',
   'SetGameInfoOnline',
   'SetGameNotes',
   'SetGameSaveBackup',
