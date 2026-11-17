@@ -131,11 +131,11 @@ type GameSaveContext struct {
 }
 
 type ClientStatus struct {
-	State string `json:"state"`
-	Label string `json:"label,omitempty"`
+	State    string   `json:"state"`
+	Label    string   `json:"label,omitempty"`
 	Progress *float64 `json:"progress,omitempty"`
-	Bytes int64 `json:"bytes,omitempty"`
-	Total int64 `json:"total,omitempty"`
+	Bytes    int64    `json:"bytes,omitempty"`
+	Total    int64    `json:"total,omitempty"`
 }
 
 // CompatLookupGame is one game in a batched compat.lookup request (1.17).
