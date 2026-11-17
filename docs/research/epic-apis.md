@@ -1,4 +1,4 @@
-# Epic Games Store: verify, move, playtime and achievements
+# Epic Games Store: verify, move, versions, playtime and achievements
 
 Research for the Epic plugin (`plugins/epic-legendary`), which wraps
 [legendary](https://github.com/legendary-gl/legendary). Sources: legendary
@@ -100,6 +100,54 @@ against fakes.
   maps the former to an empty list and the latter to an RPC error.
 - Unlocking is never written: this path is read-only.
 
+## Previous versions (`versions`, protocol 1.3)
+
+Epic has no public list of old builds for an app, and its store API only ever
+names the current one (`asset_infos.<platform>.build_version`). The plugin
+therefore offers only builds the user actually had:
+
+- legendary saves every installed build's manifest at
+  `<config>/manifests/<app>_<platform>_<build version>.manifest`
+  (`lfs/lgndry.py:_get_manifest_filename`, `core.py:prepare_download` calls
+  `save_manifest`). The plugin copies that file into its data folder before
+  every update and after every install, as `archive/<app>/<build>.manifest`
+  with a small `archive/<app>/<build>.json` (version name, save date, platform,
+  the install record's CDN base URLs, download/disk size), keeping the
+  installed build plus the three most recently saved older ones per game.
+  Uninstalling a game keeps its saved builds; a prune drops the oldest older
+  build (and any manifest without a sidecar) once there are more than three.
+- `versions.list` answers the installed build and each saved manifest. The
+  installed build is `source: "store"` while it is the store's current build
+  and `source: "archive"` once the store has moved past it; with no install the
+  store's current build is listed as `store`. History entries with no saved
+  manifest stay listed with `available: false`; Epic never lists channels, so
+  `channels` is empty and there is no `versions.unlock`. `publishedAt` on an
+  archive build is the date the plugin saved the manifest, not a store
+  publication date (Epic's manifests carry none).
+- A target naming an archived build (or Platypus's `archiveRef`, the saved
+  manifest's file name) runs `legendary install <app> --manifest <file>`
+  (`cli.py:install_parser`: "Manifest URL or path to use instead of the CDN one
+  (e.g. for downgrading)"), with `--update-only` for a switch and
+  `--base-path` for a fresh install. A local manifest brings no base URLs of
+  its own, and the metadata refetch in `install_game` rebuilds the app's entry
+  without them (`Game(...)` drops `base_urls`), so `prepare_download` raises
+  `No base URLs found` (`core.py:1614`). The sidecar therefore keeps the
+  installed record's `base_urls`, and the plugin passes the first one as
+  `--base-url` whenever it uses a saved manifest. The plugin reads sizes for
+  `game.installSize` from the saved metadata rather than the store's current
+  build.
+- `job.done.installed` carries the build version legendary recorded and the
+  saved manifest's name as `archiveRef`; Platypus's ledger keeps it.
+  `updateAvailable` compares the installed build with the store's current one,
+  or with the pin's build when Platypus passes one.
+- A build installed with `--manifest` records its manifest path
+  (`InstalledGame.manifest_path`, set to the argument and cleared by any
+  normal download), so `game.launchSpec` adds `--skip-version-check`: the
+  store's version check would otherwise refuse the older build as out of date.
+  A pin set on an already-installed build without running a job does not leave
+  a manifest path, so it still cannot launch an outdated build; fixing that
+  needs a `pinned` field on `launchSpec` (none today).
+
 ## Install options (1.5): not offered
 
 legendary exposes only `--install-tag <tag>` (selective download) and
@@ -135,3 +183,22 @@ than legendary's CLI can do.
    hidden achievement): keys, unlock timestamps and global percentages.
 5. `game.relocated` after a real core move: legendary's record follows it, the
    game launches from its new folder, and no update is offered.
+6. Previous versions (real account, after an update is available): install a
+   game, let Epic publish/keep an update, then
+   - update it, and check
+     `~/.local/share/platypus/plugin-data/epic-legendary/archive/<app>/`
+     holds the old build's `.manifest` and `.json` (sizes from
+     `legendary info <saved manifest> --json`);
+   - `versions.list` (`{"id":"<app>"}`) lists the old build as `archive`;
+   - `legendary install <app> --update-only --skip-sdl --manifest
+     <saved manifest> --base-url <baseUrls[0] from its sidecar>` really
+     downgrades (the plugin sends exactly that), `legendary list-installed
+     --json` reports the old `version` and a non-empty `manifest_path`;
+   - uninstall, then install the saved build again through Platypus, and check
+     the `--base-url` in the plugin log: without it legendary fails with
+     `No base URLs found`;
+   - launch the downgraded game: `manifest_path` makes the plugin pass
+     `--skip-version-check`, so it should launch even though the store has a
+     newer build. Also pin the already-installed build without running a job
+     and launch: no manifest path exists then, so record whether legendary
+     refuses it (needs the `pinned` field noted above).
