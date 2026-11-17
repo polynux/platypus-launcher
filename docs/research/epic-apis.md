@@ -202,3 +202,49 @@ than legendary's CLI can do.
      newer build. Also pin the already-installed build without running a job
      and launch: no manifest path exists then, so record whether legendary
      refuses it (needs the `pinned` field noted above).
+
+## Live results (arco, 2026-11-17)
+
+Logged in. Library: 256 owned games, none installed. One small owned game
+(Fez, 0.40 GB download / 0.45 GB disk) installed for the verify/repair/move
+checks, then uninstalled; legendary's record clean afterwards (the version
+archive is kept by design). No other user files touched.
+
+1. Verify formats: **pass**. legendary 0.21.1 prints one
+   `Verification progress: N/M (P%) [X MiB/s]` line per file (25 for Fez)
+   then `Verification finished successfully.`, exit 0. Plugin: clean
+   check-only reports `{checked: 25, damaged: 0, missing: 0}` with phase
+   `checking`.
+2. Repair: **pass**. A flipped byte in a small text file reports
+   `{checked: 25, damaged: 1, missing: 0}`; repair reports
+   `{checked: 25, damaged: 0, missing: 0, repaired: 1}` (phases
+   `checking` → `repairing`, seconds), and the file is byte-identical to
+   a pre-test backup. (Check-only omits the `repaired` key; core's Go
+   struct defaults it to 0, so no contract issue.)
+3. Playtime: **pass**. Raw endpoint answers an array of
+   `{accountId, artifactId, totalTime}` with `totalTime` an int of
+   seconds (~0.3 s for the call); `floor(seconds / 60)` matches the
+   plugin's minutes exactly on the top entries. 55 entries total,
+   including two whose artifact id is not in the owned library (dev
+   builds) — the plugin reports those too instead of dropping them.
+4. Achievements: **pass**. Two games with known progress verified:
+   40 total / 35 unlocked (2 hidden) and 33 total / 20 unlocked
+   (5 hidden). Keys are id, name, description, hidden, icon, unlockedAt
+   (unix) and globalPercent; unearned hidden entries carry the id as the
+   name with an empty description. A game with no achievements answers
+   total 0 / unlocked 0 / empty list. Names/descriptions come back in the
+   account's language regardless of the request locale.
+5. Relocated: **pass**. After a core-style move (directory moved, then
+   `game.relocated`), legendary's record points at the new path (checked
+   via `list-installed`) and `game.launchSpec` in preview mode builds the
+   exe/cwd under the new folder with the Epic online-service args
+   (`AUTH_PASSWORD` redacted); the game was not started. Note: a
+   `launchSpec` sent concurrently with `game.relocated` can read the stale
+   record — serialize them (relocate, wait for `{}`, then spec), as core
+   does; not a plugin bug.
+6. Previous versions: **skipped** — no update pending (installed build
+   was the store's current one, `updateAvailable` false). Partly
+   observed: install writes `archive/<app>/<build>.manifest` plus a
+   sizes sidecar, `job.done.installed` carries that build as `archiveRef`,
+   and the archive survives uninstall. The downgrade cycle is still
+   untested on the wire.

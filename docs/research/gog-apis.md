@@ -161,3 +161,51 @@ No account was available, so these are unverified on the wire:
 7. `game.options` on a movie/extra (no installers) answers empty groups rather
    than an error, and a language GOG dropped from a game is refused when asked
    for.
+
+## Live results (arco, 2026-11-17)
+
+Both stores logged in. Library: 29 owned games, none installed. One small
+owned game (Forager, 0.12 GB download / 0.16 GB disk, Windows-only, single
+language) installed for the verify/repair/move checks, then uninstalled;
+records clean afterwards. No other user files touched.
+
+1. `X-Gog-Lc` mapping: **pass**. `achievements.list` with locale `de`
+   returns German names/descriptions on a 57-achievement game, so the
+   `de` → `de-DE` mapping is accepted; no `en-US` fallback needed.
+2. Paging: **pass (single page)**. Raw achievements answer:
+   `total_count` 57, `limit` 1000, `page_token` 0, 57 items. No owned game
+   exceeds one page (largest seen: 57); the multi-page path is still
+   untested.
+3. Sessions timing: **pass with a caveat**. Raw
+   `games/<id>/users/<user>/sessions` answers `{"time_sum": <minutes>}`
+   (int) in ~0.13 s for one game; at that rate a full 29-game sweep is
+   ~4 s, well under the plugin's 25 s cap. `playtime.list` returned 3
+   games with nonzero time in 1.65 s, but the plugin cache was fresh that
+   day, so the per-game live path was timed only via the direct request.
+4. `clients/.../sessions`: **not equivalent**. The raw `clients/<id>/`
+   form answers 404 where `games/<id>/` answers 200 with `time_sum`, so
+   the plugin's choice of the `games/` form is the correct one.
+5. Repair: **pass (Windows); Linux installer half not checked**.
+   Forager: check-only clean (30 checked, 0 damaged); a flipped byte
+   inside a data file reports damaged 1; repair reports repaired 1,
+   damaged 0, and the file is byte-identical to a pre-test backup
+   (phases `checking` → `repairing`, seconds, so only broken chunks
+   re-downloaded). Appending one byte past end-of-file is NOT flagged
+   (chunk ranges are hashed, file size is not compared) — observation only.
+   Linux exclude-file / `--lang` / `--with-dlcs` repair path and the
+   language/add-on preservation claim are still unverified on the wire.
+6. Depot codes: **partial**. Forager's stored manifest lists depots with
+   languages `en-US` and `*`, matching gogdl's table. Legacy depot codes
+   (`en`, `br`, `cn`) on a real multi-language game not observed live
+   (would need a second, larger install).
+7. Extras and dropped languages: **pass after one fix**. One goodies
+   collection answers `game.options` → `{"groups": []}`; the other
+   (Witcher goodies) errored with -32002 because the catalog lists
+   installers gogdl's content system cannot install — fixed on
+   `live/11-gog-epic` (treat content-system-unsupported as an extra;
+   regression test `TestGogExtraWithInstallersListsNoOptions`), now `[]`
+   on both. `installSize` on extras errors clearly (-32000, names the
+   content-system failure). A dropped language is refused at install
+   time: `game.install` with `xx-YY` fails fast with -32602 before any
+   download; `installSize` with an unknown language just estimates the
+   default (no refusal, by design).

@@ -50,7 +50,7 @@ import urllib.request
 import zlib
 
 API = 1
-PLUGIN_VERSION = "0.5.0"
+PLUGIN_VERSION = "0.5.1"
 CODE_AUTH_REQUIRED = -32001
 # GOG build ids are long digits (e.g. 57200821661238017).
 BUILD_ID_RE = re.compile(r"[0-9]{4,32}")
@@ -806,8 +806,10 @@ def game_options(params):
     except RPCError as e:
         if e.code == CODE_AUTH_REQUIRED:
             raise
-        if not product_installable(app):
-            return {"groups": []}  # a movie or extra: nothing to choose
+        # A movie, extra or book: the catalog may still list installers for
+        # it, but gogdl has no content system to install from.
+        if not product_installable(app) or "doesn't support content system" in str(e):
+            return {"groups": []}  # nothing to choose
         raise RPCError(f"couldn't list install options for {app}: {e}", -32002)
     lang = installed_language(app)
     groups = []
