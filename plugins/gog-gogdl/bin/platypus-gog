@@ -27,6 +27,7 @@ import glob
 import json
 import os
 import re
+import select
 import shutil
 import signal
 import subprocess
@@ -37,9 +38,25 @@ import urllib.error
 import urllib.request
 
 API = 1
+PLUGIN_VERSION = "0.2.0"
 CODE_AUTH_REQUIRED = -32001
-# GOG's login page for Platypus's client id (gogdl's own OAuth client). The page
-# redirects to embed.gog.com/on_login_success?... with the code in the query.
+# GOG build ids are long digits (e.g. 57200821661238017).
+BUILD_ID_RE = re.compile(r"[0-9]{4,32}")
+
+
+def stall_limits():
+    """How long a download may go without progress before the plugin fails it
+    instead of hanging: no growth in downloaded bytes (bytes stall), or no
+    output line at all (quiet stall). Tests shrink both through the environment."""
+    def secs(name, default):
+        try:
+            return max(1.0, float(os.environ.get(name, default)))
+        except ValueError:
+            return default
+    return secs("PLATYPUS_GOG_STALL_BYTES_S", 600), secs("PLATYPUS_GOG_STALL_QUIET_S", 900)
+
+ # GOG's login page for Platypus's client id (gogdl's own OAuth client). The page
+ # redirects to embed.gog.com/on_login_success?... with the code in the query.
 LOGIN_URL = ("https://auth.gog.com/auth?client_id=46899977096215655&response_type=code"
              "&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient")
 
@@ -51,8 +68,30 @@ state_lock = threading.RLock()
 jobs = {}  # jobId -> {"proc": Popen, "canceled": bool}
 
 MIB = 1024 * 1024
-# gogdl download progress: "Progress: 42.13% (123.45/292.88 MiB) @ 5.61 MiB/s"
+# gogdl download progress. 1.3.0 prints `[PROGRESS] INFO: = Progress: 22.36
+# 16802208/75133843, Running for: …` (byte counts); older ones printed
+# `Progress: 42.13% (123.45/292.88 MiB) @ 5.61 MiB/s`.
 PROGRESS_RE = re.compile(r"Progress:\s*([\d.]+)%\s*\(([\d.]+)/([\d.]+)\s*MiB\)(?:\s*@\s*([\d.]+)\s*MiB/s)?")
+PROGRESS2_RE = re.compile(r"=\s*Progress:\s*([\d.]+)\s+(\d+)/(\d+)")
+SPEED_RE = re.compile(r"\+\s*Download\s*-\s*([\d.]+)\s*MiB/s")
+# 1.3.0's liveness signals besides written bytes: downloaded MiB (which grow
+# while chunks land in the cache) and non-zero throughput or disk activity
+# (slow chunks and xdelta patches move no written bytes for a while).
+DL_RE = re.compile(r"=\s*Downloaded:\s*([\d.]+)\s*MiB")
+DISK_RE = re.compile(r"\+\s*Disk\s*-\s*([\d.]+)\s*MiB/s\s*\(write\)\s*/\s*([\d.]+)\s*MiB/s\s*\(read\)")
+
+def parse_progress(line):
+    """(percent, done_bytes, total_bytes, speed_bps|None) from a gogdl progress
+    line, or None for any other output."""
+    m = PROGRESS_RE.search(line)
+    if m:
+        speed = float(m.group(4)) * MIB if m.group(4) else None
+        return (float(m.group(1)), int(float(m.group(2)) * MIB),
+                int(float(m.group(3)) * MIB), speed)
+    m = PROGRESS2_RE.search(line)
+    if m:
+        return float(m.group(1)), int(m.group(2)), int(m.group(3)), None
+    return None
 
 
 class RPCError(Exception):
@@ -84,14 +123,35 @@ def auth_file():
     return os.path.join(data, "gogdl-auth.json")
 
 
+def gogdl_config_base():
+    """gogdl's config dir for this plugin: manifests and chunk caches."""
+    return os.path.join(os.environ.get("PLATYPUS_PLUGIN_DATA") or ".", "gogdl")
+
+
+def gogdl_env():
+    """The environment gogdl runs in. Its own state (manifest and chunk
+    caches) moves under our data dir via GOGDL_CONFIG_PATH (since gogdl
+    1.1.0): --auth-config-path only moves the tokens, and without this the
+    shared manifest cache breaks installs (a cached manifest diffs as
+    up-to-date against an empty folder) and we overwrite Heroic's."""
+    base = gogdl_config_base()
+    for sub in ("manifests", os.path.join("heroic_gogdl", "manifests")):
+        try:  # either layout gogdl may use under the config path
+            os.makedirs(os.path.join(base, sub), exist_ok=True)
+        except OSError:
+            pass
+    return {**os.environ, "GOGDL_CONFIG_PATH": base}
+
+
 def gogdl(*args, timeout=300):
     """Runs gogdl and returns (exit code, stdout, stderr)."""
     try:
         p = subprocess.run(["gogdl", "--auth-config-path", auth_file(), *args],
-                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                           timeout=timeout, env=gogdl_env())
     except FileNotFoundError:
-        raise RPCError("gogdl is not installed; get the binary from "
-                       "github.com/Heroic-Games-Launcher/heroic-gogdl/releases")
+        raise RPCError("gogdl is not installed (needs version 1.1 or newer); get the "
+                       "binary from github.com/Heroic-Games-Launcher/heroic-gogdl/releases")
     except subprocess.TimeoutExpired:
         raise RPCError(f"gogdl {args[0]} timed out")
     return p.returncode, p.stdout, p.stderr
@@ -242,6 +302,10 @@ def library_list(_params):
             "heroUrl": f"{img}_scaled_1366x768.jpg" if img else "",
             "bannerUrl": f"{img}.jpg" if img else "",
         }
+        # gogdl's linux manager has no builds: a Linux installer gets every
+        # capability except version selection.
+        if (g.get("worksOn") or {}).get("Linux"):
+            entry["features"] = ["library", "install", "launch", "auth", "discard"]
         # Movie extras sit in the same account list.
         if g.get("isMovie") or g.get("category") == "movie" or g.get("url", "").startswith("/movie/"):
             entry["installable"] = False
@@ -313,27 +377,56 @@ def add_installed(entry, ig):
     entry["native"] = ig.get("platform", "windows") == "linux"
 
 
-def install_size(params):
-    app, platform = params["id"], platform_of(params["id"])
-    code, out, err = gogdl("info", app, "--platform", platform, timeout=600)
+def gog_info(app, platform, build=None, branch=None, timeout=600):
+    """gogdl info as a dict. build/branch narrow it to one build's metadata."""
+    cmd = ["info", app, "--platform", platform]
+    if build:
+        cmd += ["--build", build]
+    if branch:
+        cmd += ["--branch", branch]
+    code, out, err = gogdl(*cmd, timeout=timeout)
     if code != 0:
         # Logged out = gogdl says so, or no stored credentials. A bare "auth"
         # substring also matches unrelated words ("authoritative").
         if "not logged in" in err.lower() or credentials() is None:
             raise RPCError("log in to GOG first", CODE_AUTH_REQUIRED)
         raise RPCError(f"gogdl info failed: {tail(err)}")
+    return parse_gogdl_json(out, err)
+
+
+def parse_gogdl_json(out, err):
+    """The info JSON, tolerating log lines some gogdl versions print on stdout."""
+    text = out[out.index("{"):] if "{" in out else out
     try:
-        data = json.loads(out)
+        return json.loads(text)
     except ValueError:
         raise RPCError(f"gogdl info printed no JSON: {tail(err)}")
-    # Real gogdl (v1.3+) nests the sizes per language under "size"; the *
-    # entry can be all zeros while the actual language carries the numbers,
-    # so take the biggest entry. Older builds printed the fields at top level.
-    sizes = data.get("size") or {"*": data}
+
+
+def best_sizes(data):
+    """The expected (download, disk) pair. gogdl installs en-US by default,
+    so that entry wins when it carries numbers; then the * entry; then the
+    biggest language (the max overstates multilingual games). Older gogdl
+    builds printed the fields at top level."""
+    sizes = (data or {}).get("size") or {"*": data}
+    for key in ("en-US", "*"):
+        e = sizes.get(key) or {}
+        if e.get("download_size") or e.get("disk_size"):
+            return int(e.get("download_size") or 0), int(e.get("disk_size") or 0)
     entries = list(sizes.values()) or [data]
     best = max(entries, key=lambda e: int((e or {}).get("disk_size") or 0))
-    return {"downloadBytes": int(best.get("download_size") or 0),
-            "diskBytes": int(best.get("disk_size") or 0)}
+    return int(best.get("download_size") or 0), int(best.get("disk_size") or 0)
+
+
+def install_size(params):
+    app = params["id"]
+    build, branch = resolve_target(params.get("target"))
+    if build:
+        data = require_served_build(app, platform_of(app), build, branch or None)
+    else:
+        data = gog_info(app, platform_of(app))
+    download, disk = best_sizes(data)
+    return {"downloadBytes": download, "diskBytes": disk}
 
 
 def platform_of(app):
@@ -354,6 +447,113 @@ def platform_of(app):
     return "windows"
 
 
+# --- versions (1.3) ---------------------------------------------------------
+#
+# Builds come from `gogdl info` (its builds[] lists what this user can fetch).
+# The content-system builds endpoint only names the total: when it reports more
+# builds than gogdl lists, or private branches, the rest sit on branches this
+# user can't see, and versions.list offers a build-id box instead of pretending
+# the list is complete. No password branches are known (available_branches is
+# [null]), so there is no versions.unlock: the first -32601 tells Platypus.
+
+def resolve_target(target):
+    """(build, branch) for gogdl from a Versions target. ("", "") by default;
+    manual.input (or manual.build) is a build id the store doesn't list."""
+    if not target:
+        return "", ""
+    build = str(target.get("build") or "")
+    branch = str(target.get("channel") or "")
+    manual = target.get("manual") or {}
+    if not build:
+        build = str(manual.get("input") or manual.get("build") or "").strip()
+    if build and not BUILD_ID_RE.fullmatch(build):
+        raise RPCError(f"GOG build ids are digits (got {build!r}); pick a build "
+                       f"from the list or type its numeric id", -32000)
+    return build, branch
+
+
+def channel_head(items, channel):
+    """The first listed build on a channel (branches are the store's moving
+    pointers; the default channel's head is the latest build)."""
+    for i in items:
+        if str(i.get("branch") or "") == (channel or ""):
+            return str(i.get("build_id"))
+    return ""
+
+
+def versions_list(params):
+    app = (params or {}).get("id") or ""
+    if not app:
+        raise RPCError("invalid params: id is required", -32602)
+    platform = platform_of(app)
+    try:
+        data = gog_info(app, platform)  # unknown id or logged out, usually
+    except RPCError as e:
+        if e.code == CODE_AUTH_REQUIRED:
+            raise
+        raise RPCError(f"couldn't list GOG builds for {app}: {e}", -32002)
+    raw = data.get("builds") or {}
+    items = raw.get("items", []) if isinstance(raw, dict) else raw or []
+    latest = str(data.get("buildId") or "")
+    branches = [b for b in (data.get("available_branches") or []) if b]
+    known = {str(i.get("build_id")) for i in items if i.get("build_id")}
+    listed = {bid for bid in known if bid}
+    installed = installed_games().get(app) or {}
+    current = str(installed.get("build") or "")
+    if not current and installed.get("path"):
+        # A 0.1.0 install predates build tracking: read the marker gogdl left.
+        current = marker_build(installed["path"], app)
+    channels = [{"id": b, "name": b, "requires": "none",
+                 "current": installed.get("channel") == b}
+                for b in branches]
+    builds = []
+    for i in items:
+        bid = str(i.get("build_id"))
+        if not bid:
+            continue
+        entry = {"id": bid, "name": str(i.get("version_name") or f"build {bid}"),
+                 "publishedAt": str(i.get("date_published") or "")[:10],
+                 "source": "store", "current": bid == current}
+        if i.get("branch"):
+            entry["channel"] = str(i["branch"])
+        builds.append(entry)
+    # History the store no longer lists: unlisted ids can never be served
+    # (gogdl falls back to the default build for an id it doesn't serve), so
+    # mark them unavailable without probing.
+    for l in ((params or {}).get("ledger") or [])[-5:]:
+        if not isinstance(l, dict):
+            continue
+        lb = str(l.get("build") or "")
+        if not lb or lb in known:
+            continue
+        known.add(lb)  # one row per build, even if history repeats it
+        entry = {"id": lb, "name": str(l.get("versionName") or f"build {lb}"),
+                 "publishedAt": str(l.get("date") or "")[:10],
+                 "source": "archive", "available": False,
+                 "current": lb == current}
+        if l.get("channel"):
+            entry["channel"] = str(l["channel"])
+        builds.append(entry)
+    # No manual box: gogdl matches --build only against the public items, so
+    # a typed private-branch id could never install. (VersionList has no note
+    # field to say how many builds stay hidden.)
+    pinned = (params or {}).get("pinned") or {}
+    update_available = False
+    if current:
+        if pinned.get("kind") == "build" and pinned.get("id"):
+            update_available = current != str(pinned["id"])
+        else:
+            channel = installed.get("channel") or ""
+            if pinned.get("kind") == "channel" and pinned.get("id"):
+                channel = str(pinned["id"])
+            head = channel_head(items, channel) if channel else latest
+            # A build the store doesn't list (removed, or newer than the
+            # store's) never claims an update.
+            update_available = bool(head) and current != head and current in listed
+    return {"channels": channels, "builds": builds, "manual": None,
+            "links": [], "updateAvailable": update_available,
+            "pinned": (params or {}).get("pinned")}
+
 # --- jobs ---------------------------------------------------------------
 
 def start_job(params, kind):
@@ -370,11 +570,29 @@ def start_job(params, kind):
     path = params.get("installDir") or ""
     if not os.path.isabs(path):
         raise RPCError("installDir is missing or relative; Platypus always sends one")
+    build, branch = resolve_target(params.get("target"))
+    platform = platform_of(app)
+    if kind == "update" and build and app in installed_games():
+        # Fail fast when the store doesn't serve the build: gogdl would
+        # silently converge to the default instead.
+        require_served_build(app, platform, build, branch or None, timeout=60)
     if kind == "update" and app in installed_games():
         cmd = ["update", app, "--path", path]
     else:
         cmd = ["download", app, "--path", path]
-    cmd += ["--platform", platform_of(app), "--skip-dlcs", "--max-workers", "4"]
+    if build:
+        cmd += ["--build", build]
+    if branch:
+        cmd += ["--branch", branch]
+    cmd += ["--platform", platform, "--skip-dlcs", "--max-workers", "4"]
+    if kind == "install":
+        # A fresh install (resume included) with no marker on disk must not
+        # diff against a cached manifest: gogdl compares manifest vs manifest
+        # and would report a same-build cache as up to date in an empty folder.
+        clear_cached_manifest(app, find_game_dir(app, path, platform), platform)
+    elif platform != "linux" and kind == "update":
+        prime_legacy_manifest(app, find_game_dir(app, path, platform))
+    argv = ["gogdl", "--auth-config-path", auth_file(), *cmd]
     # Platypus resends a job with the same jobId after a crash: run it once. A job
     # just paused or canceled is still stopping: wait, then resume from what
     # gogdl left in the game folder.
@@ -382,90 +600,558 @@ def start_job(params, kind):
         return {}
     job_started(job_id, app, kind, path)
     try:
-        proc = subprocess.Popen(["gogdl", "--auth-config-path", auth_file(), *cmd],
-                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True, bufsize=1)
+        proc = spawn_gogdl(argv)
     except FileNotFoundError:
         with jobs_lock:
             jobs.pop(job_id, None)
-        raise RPCError("gogdl is not installed; get the binary from "
-                       "github.com/Heroic-Games-Launcher/heroic-gogdl/releases")
+        raise RPCError("gogdl is not installed (needs version 1.1 or newer); get the "
+                       "binary from github.com/Heroic-Games-Launcher/heroic-gogdl/releases")
     with jobs_lock:
         job = jobs.setdefault(job_id, {"canceled": False, "id": app})
         job["proc"] = proc
+        job["argv"] = argv
         canceled = job["canceled"]
         job["title"] = params.get("title") or ""
+        # What this run converges to, and when it last moved: the stall
+        # watchdog fails the job when gogdl hangs (see follow_job).
+        job["build"], job["channel"], job["platform"] = build, branch, platform
+        reset_run_state(job, time.monotonic())
     threading.Thread(target=follow_job, args=(job_id, kind, proc), daemon=True).start()
     if canceled:  # job.cancel arrived while the process was starting
         stop_proc(proc, grace=5)
     return {}
 
 
+def require_served_build(app, platform, build, branch=None, timeout=600):
+    """The info for a requested build, or -32002: gogdl silently keeps the
+    default build for an id it doesn't serve."""
+    data = gog_info(app, platform, build, branch, timeout=timeout)
+    if str(data.get("buildId") or "") != build:
+        raise RPCError(f"GOG doesn't offer build {build} to this account; pick a "
+                       f"listed build or install the latest.", -32002)
+    return data
+
+
+def prime_legacy_manifest(app, game_dir):
+    """0.1.0 kept gogdl's manifest in the shared config dir. On update, when
+    the isolated cache has nothing for the game, copy the legacy manifest
+    over if it matches the installed build; else warn that the update will
+    download everything. Never moves: Heroic's copy stays theirs."""
+    base = gogdl_config_base()
+    subs = ("manifests", os.path.join("heroic_gogdl", "manifests"))
+    if any(os.path.isfile(os.path.join(base, s, app)) for s in subs):
+        return  # the isolated cache already has it
+    for s in subs:
+        try:
+            os.makedirs(os.path.join(base, s), exist_ok=True)
+        except OSError:
+            pass
+    xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    legacy = os.path.join(xdg, "heroic_gogdl", "manifests", app)
+    try:
+        with open(legacy) as f:
+            legacy_build = str(json.load(f).get("buildId") or "")
+    except (OSError, ValueError):
+        legacy_build = ""
+    if legacy_build and legacy_build == marker_build(game_dir, app):
+        for s in subs:
+            try:
+                shutil.copyfile(legacy, os.path.join(base, s, app))
+            except OSError:
+                pass
+    else:
+        log("warn", f"no cached manifest matches the installed {app}; "
+                    f"the update will download everything")
+
+
+def clear_cached_manifest(app, game_dir, platform="windows"):
+    """Drops our isolated manifest cache for a game with no marker on disk, so
+    a fresh install always fetches. Never called for updates: those must diff
+    against the installed manifest."""
+    if has_marker(game_dir, app, platform):
+        return
+    for sub in ("manifests", os.path.join("heroic_gogdl", "manifests")):
+        try:
+            os.remove(os.path.join(gogdl_config_base(), sub, app))
+        except OSError:
+            pass
+
+
+def clear_download_cache(job_id):
+    """Deletes gogdl's chunk cache for a stalled job: its chunks are reused
+    without verification, so the retry refetches them with fresh links. The
+    cache lives in the game folder, which may not be resolvable yet (no
+    marker): then delete it in every folder this job created, tracked in
+    jobs-meta — never a glob over the install folder."""
+    with jobs_lock:
+        job = jobs.get(job_id, {})
+        app, path = job.get("id"), job.get("path")
+    if not app or not path:
+        return
+    platform = job.get("platform") or "windows"
+    game_dir = find_game_dir(app, path, platform)
+    dirs = [game_dir] if has_marker(game_dir, app, platform) else []
+    with meta_lock:
+        meta = load_meta()
+        m = meta.get(job_id)
+        if m is not None:
+            claim_new_dirs(meta, m)
+            base = m.get("installDir") or path
+            for name in m.get("dirs", []):
+                if isinstance(name, str) and name not in ("", ".", "..") and "/" not in name:
+                    dirs.append(os.path.join(base, name))
+            try:
+                write_json_atomic(meta_file(), meta)
+            except OSError:
+                pass
+    for d in dirs:
+        shutil.rmtree(os.path.join(d, ".gogdl-download-cache"), ignore_errors=True)
+
+
+def reset_run_state(job, now=None):
+    """(Re)arms a run's stall timers. Called with the lock held at spawn and
+    before a stall retry, with a fresh timestamp."""
+    now = now if now is not None else time.monotonic()
+    job.pop("stalled", None)
+    job["last_line_at"] = job["last_bytes_at"] = job["last_live_at"] = now
+    job["top_bytes"], job["dl_mib"] = 0, 0
+    job["seen_progress"] = False
+    job.pop("speed", None)
+
+
+def spawn_gogdl(argv):
+    """Starts gogdl in its own process session and records the group id, so
+    stop_proc can kill the whole download tree: forked workers outlive a lone
+    SIGINT to the parent and would hold our stdout pipe open forever."""
+    proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, bufsize=1,
+                            start_new_session=True, env=gogdl_env())
+    try:
+        proc.pgid = os.getpgid(proc.pid)
+    except OSError:
+        proc.pgid = None
+    return proc
+
+
+def respawn_job(job_id):
+    """Starts the same gogdl command again after a stall (fresh links and a
+    fresh session). None when the job went away or was canceled meanwhile."""
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if job is None or job.get("canceled"):
+            return None
+        argv = job.get("argv")
+    if not argv:
+        return None
+    try:
+        proc = spawn_gogdl(argv)
+    except (FileNotFoundError, OSError):
+        return None
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if job is None or job.get("canceled"):
+            stop_proc(proc, grace=5)
+            return None
+        job["proc"] = proc
+    return proc
+
+
 def follow_job(job_id, kind, proc):
+    """Reports gogdl's progress, then its outcome. Two guards turn silent
+    corruption into loud errors: a stall detector fails a run gogdl hangs on
+    (no liveness for a while, or no output at all), then retries it once with
+    a fresh connection; and a size check fails a run gogdl reports as done
+    but left far short on disk (an unserved build, a filtered language, a
+    gogdl bug)."""
     state = {"jobId": job_id, "phase": "downloading", "percent": 0}
-    for line in proc.stdout:
-        line = line.rstrip()
-        if not line:
+    bytes_stall, quiet_stall = stall_limits()
+    for attempt in (1, 2):
+        outcome = watch_attempt(job_id, proc, state, bytes_stall, quiet_stall)
+        if outcome == "canceled":
+            with jobs_lock:
+                jobs.pop(job_id, None)
+            job_stopped(job_id)
+            return
+        if outcome == "stalled" and attempt == 1:
+            with jobs_lock:
+                job = jobs.get(job_id, {})
+                if job.get("canceled"):
+                    jobs.pop(job_id, None)
+                    job_stopped(job_id)
+                    return
+                msg = job.get("stalled") or "gogdl stalled"
+            log("warn", f"{msg} Retrying once with a fresh connection.")
+            stop_proc(proc)
+            clear_download_cache(job_id)
+            with jobs_lock:
+                reset_run_state(jobs.get(job_id, {}))
+            proc = respawn_job(job_id)
+            if proc is None:
+                with jobs_lock:
+                    gone = jobs.get(job_id, {}).get("canceled")
+                job_stopped(job_id)
+                if gone:
+                    return
+                notify("job.failed", {"jobId": job_id,
+                                      "error": "gogdl stalled and couldn't be restarted; "
+                                               "retry the job"})
+                return
             continue
-        m = PROGRESS_RE.search(line)
-        if m:
-            state["percent"] = float(m.group(1))
-            state["bytes"] = int(float(m.group(2)) * MIB)
-            state["total"] = int(float(m.group(3)) * MIB)
-            if m.group(4):
-                state["speed"] = float(m.group(4)) * MIB
-            notify("job.progress", dict(state))
-    rc = proc.wait()
+        break
+    try:  # the reader may have left on an abnormal pipe break
+        rc = proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        stop_proc(proc, grace=5)
+        try:
+            rc = proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            rc = -1  # wedged kernel-side; the failure below says so
     with jobs_lock:
         job = jobs.pop(job_id, {})
     if job.get("canceled"):
         job_stopped(job_id)
         return
+    if job.get("stalled"):
+        job_stopped(job_id)
+        notify("job.failed", {"jobId": job_id, "error": job["stalled"]})
+        return
     if rc != 0:
         job_stopped(job_id)
         notify("job.failed", {"jobId": job_id, "error": f"gogdl exited with {rc}"})
         return
-    record_install(job, kind)
+    failed, installed = finish_install(job, kind)
+    if failed:
+        job_stopped(job_id)
+        notify("job.failed", {"jobId": job_id, "error": failed})
+        return
+    record_install(job, kind, installed)
     job_finished(job_id)
-    notify("job.done", {"jobId": job_id})
+    done = {"jobId": job_id}
+    if installed.get("build"):
+        done["installed"] = installed
+    notify("job.done", done)
 
 
-def record_install(job, kind):
+def watch_attempt(job_id, proc, state, bytes_stall, quiet_stall):
+    """Reads one gogdl run to its end: "eof", "stalled" or "canceled". A stall
+    kills the run's process group; the caller decides whether to retry."""
+    stop = threading.Event()
+
+    def watchdog():
+        while not stop.wait(10):
+            with jobs_lock:
+                job = jobs.get(job_id)
+            if job is None:
+                return
+            stalled = stall_message(job, bytes_stall, quiet_stall)
+            if stalled is not None:
+                with jobs_lock:
+                    jobs.get(job_id, {})["stalled"] = stalled
+                stop_proc(proc)
+                return
+
+    def stall_message(job, bytes_stall, quiet_stall):
+        last_line = job.get("last_line_at")
+        if last_line is None:
+            return None  # already reaped
+        now = time.monotonic()
+        if job.get("seen_progress") and now - job.get("last_live_at", now) > bytes_stall:
+            dl = job.get("dl_mib", 0)
+            return (f"gogdl stalled: no progress for {int(bytes_stall)}s "
+                    f"(still {job.get('percent', 0):.1f}%, "
+                    f"{job.get('top_mib', 0):.0f}/{job.get('total_mib', 0):.0f} MiB, "
+                    f"downloaded {dl:.1f} MiB). "
+                    f"The connection or GOG's CDN may be stuck; retry, or "
+                    f"update to the latest build.")
+        if now - last_line > quiet_stall:
+            return (f"gogdl went quiet for {int(quiet_stall)}s with no output. "
+                    f"The download may be stuck; retry the job.")
+        return None
+
+    threading.Thread(target=watchdog, daemon=True).start()
+    # Read the raw fd, not the TextIOWrapper: the wrapper readaheads into an
+    # internal buffer that select() can't see, so select-then-readline would
+    # stall with whole lines already buffered but the fd dry.
+    try:
+        fd = proc.stdout.fileno()
+    except (OSError, ValueError):
+        stop.set()
+        return "eof"
+    buf = b""
+
+    def next_line(timeout):
+        """One line within timeout, "" on end of stream (or a closed pipe),
+        None on timeout. Keeps a byte buffer across calls."""
+        nonlocal buf
+        while b"\n" not in buf:
+            try:
+                ready, _, _ = select.select([fd], [], [], timeout)
+            except (OSError, ValueError):
+                return ""
+            if not ready:
+                return None
+            try:
+                chunk = os.read(fd, 65536)
+            except OSError:
+                return ""
+            if chunk == b"":
+                line, buf = buf, b""
+                return line.decode("utf-8", "replace") if line else ""
+            buf += chunk
+            timeout = 0
+        line, buf = buf.split(b"\n", 1)
+        return line.decode("utf-8", "replace")
+
+    def handle_line(line):
+        """Folds one gogdl output line into the job's progress timers and the
+        reported state. Besides written bytes, growing downloaded MiB and any
+        non-zero throughput or disk activity count as liveness (slow chunks
+        and xdelta patches move no written bytes for a while)."""
+        line = line.rstrip()
+        if not line:
+            return
+        live = False
+        parsed = parse_progress(line)
+        now = time.monotonic()
+        if parsed is None:
+            m = SPEED_RE.search(line)  # 1.3.0 reports throughput on its own lines
+            if m:
+                if float(m.group(1)) > 0:
+                    live = True
+                with jobs_lock:
+                    jobs.get(job_id, {})["speed"] = float(m.group(1)) * MIB
+            m = DL_RE.search(line)
+            if m:
+                dl = float(m.group(1))
+                with jobs_lock:
+                    job = jobs.get(job_id, {})
+                    if dl > job.get("dl_mib", 0):
+                        job["dl_mib"] = dl
+                        live = True
+            m = DISK_RE.search(line)
+            if m and (float(m.group(1)) > 0 or float(m.group(2)) > 0):
+                live = True
+        with jobs_lock:
+            job = jobs.get(job_id, {})
+            job["last_line_at"] = now
+            if parsed:
+                pct, done, total, speed = parsed
+                job["seen_progress"] = True
+                job["percent"] = pct
+                if done > job.get("top_bytes", 0):
+                    job["top_bytes"], job["last_bytes_at"] = done, now
+                    live = True
+                job["top_mib"] = done / MIB
+                job["total_mib"] = total / MIB
+            if live:
+                job["last_live_at"] = now
+        if parsed:
+            pct, done, total, speed = parsed
+            state["percent"] = pct
+            state["bytes"] = done
+            state["total"] = total
+            if speed is None:
+                with jobs_lock:
+                    speed = jobs.get(job_id, {}).get("speed")
+            if speed is not None:
+                state["speed"] = speed
+            notify("job.progress", dict(state))
+
+    while True:
+        line = next_line(5)
+        if line is None:
+            pass  # timeout: re-check the process below
+        elif line == "":
+            break  # every writer closed: EOF (or the pipe went away)
+        else:
+            handle_line(line)
+        if proc.poll() is not None:
+            # gogdl is gone, but forked workers may still hold the pipe open:
+            # take the lines already here, then stop instead of hanging on EOF.
+            while True:
+                line = next_line(0)
+                if not line:  # "" (EOF) or None (nothing waiting)
+                    break
+                handle_line(line)
+            break
+    stop.set()
+    with jobs_lock:
+        job = jobs.get(job_id, {})
+        if job.get("canceled"):
+            return "canceled"
+        if job.get("stalled"):
+            return "stalled"
+    return "eof"
+
+
+def finish_install(job, kind):
+    """What a successful run put on disk: ("", installed) normally, or
+    (error, {}) when gogdl reported done but the game isn't what was asked
+    for. installed feeds job.done and the install ledger
+    (docs/plugins/protocol.md, "Versions")."""
+    app, path = job.get("id"), job.get("path")
+    build, channel = job.get("build") or "", job.get("channel") or ""
+    platform = job.get("platform") or platform_of(app)
+    game_dir = find_game_dir(app, path, platform) if app and path else ""
+    if not has_marker(game_dir, app, platform):
+        marker_name = "a Linux installer marker" if platform == "linux" else f"goggame-{app}.info"
+        return (f"gogdl reported success but left no game in "
+                f"{game_dir or path or 'the install folder'} "
+                f"(no {marker_name}); the install did not land, "
+                f"retry the job.", {})
+    if platform == "linux":
+        # The Linux installer manager has no builds and no buildId: verify
+        # the size only, and report no version (those games already omit
+        # "versions" from their library features).
+        try:
+            data = gog_info(app, platform, timeout=60)
+        except RPCError as e:
+            log("warn", f"couldn't confirm the installed size for {app}: {e}")
+            data = None
+        if data:
+            _, expected = best_sizes(data)
+            actual_bytes = dir_size(game_dir)
+            if expected > 0 and actual_bytes < expected // 2:
+                return (f"installed only {fmt_bytes(actual_bytes)} of the expected "
+                        f"{fmt_bytes(expected)}; the game looks incomplete, "
+                        f"retry the job.", {})
+        return "", {}
+    marker = marker_build(game_dir, app)
+    data = None
+    try:  # short timeout: this gates the job's outcome, not the download
+        data = gog_info(app, platform, build or None, channel or None,
+                        timeout=60)
+    except RPCError as e:
+        log("warn", f"couldn't confirm the installed build for {app}: {e}")
+    served = str((data or {}).get("buildId") or "")
+    if build:
+        # gogdl silently keeps the default build for an id it doesn't serve.
+        if served and served != build:
+            return (f"gogdl installed build {served}, not the requested build "
+                    f"{build}; that build is no longer served. Pick a listed "
+                    f"build or update to the latest.", {})
+        if not served and marker and marker != build:
+            return (f"gogdl installed build {marker}, not the requested build "
+                    f"{build}; that build is no longer served. Pick a listed "
+                    f"build or update to the latest.", {})
+        if not served and not marker:
+            return (f"installed the requested build {build} but couldn't confirm "
+                    f"it (the store didn't answer); retry the job.", {})
+        actual = build
+    else:
+        actual = served or marker
+        if not actual:
+            return (f"installed {app} but couldn't determine the build (the "
+                    f"store didn't answer); retry the job.", {})
+    if data:
+        _, expected = best_sizes(data)
+        actual_bytes = dir_size(game_dir)
+        if expected > 0 and actual_bytes < expected // 2:
+            return (f"installed only {fmt_bytes(actual_bytes)} of the expected "
+                    f"{fmt_bytes(expected)} for build {actual}. "
+                    f"gogdl reported success but the game looks incomplete "
+                    f"(a filtered language, or files GOG no longer serves); "
+                    f"retry, or update to the latest build.", {})
+    installed = {"build": actual, "channel": channel,
+                 "versionName": str((data or {}).get("versionName") or "")}
+    if not installed["channel"]:
+        del installed["channel"]
+    if not installed["versionName"]:
+        del installed["versionName"]
+    return "", installed
+
+
+def has_marker(game_dir, app, platform="windows"):
+    """Whether gogdl left the game's marker file in the resolved folder."""
+    if not game_dir:
+        return False
+    markers = linux_markers() if platform == "linux" else [f"goggame-{app}.info"]
+    return any(os.path.isfile(os.path.join(game_dir, m)) for m in markers)
+
+
+def marker_build(game_dir, app):
+    """The build id gogdl wrote into the game's marker file, if any."""
+    try:
+        with open(os.path.join(game_dir or "", f"goggame-{app}.info"),
+                  encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return ""
+    for key in ("buildId", "build_id", "build"):
+        if data.get(key):
+            return str(data[key])
+    return ""
+
+
+def dir_size(path):
+    """Apparent bytes under path (st_size: sparse test files count fully)."""
+    total = 0
+    try:
+        for root, _dirs, files in os.walk(path):
+            for f in files:
+                try:
+                    total += os.path.getsize(os.path.join(root, f))
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return total
+
+
+def fmt_bytes(n):
+    return f"{n / (1024 ** 3):.2f} GiB" if n >= 1024 ** 3 else f"{n / 1024 ** 2:.0f} MiB"
+
+
+def record_install(job, kind, installed):
     """Remember the install so launches and updates can find it. gogdl imports
     don't exist here, so the plugin keeps its own index of what it installed."""
     app, path = job.get("id"), job.get("path")
     if not app or not path:
         return
-    game_dir = find_game_dir(app, path)
+    platform = job.get("platform") or platform_of(app)
+    game_dir = find_game_dir(app, path, platform)
     exe = find_executable(game_dir)
-    platform = platform_of(app)
     with state_lock:
         state = installed_games()
         state[app] = {
             "path": game_dir,
             "platform": platform,
-            "version": "",
+            "version": installed.get("versionName", ""),
+            "build": installed.get("build", ""),
+            "channel": installed.get("channel", ""),
             "executable": exe,
             "title": job.get("title") or known_titles().get(app, ""),
         }
         save_installed(state)
 
 
-def find_game_dir(app, path):
+def find_game_dir(app, path, platform="windows"):
     """gogdl unpacks into <path>/<folder_name> (the store's folder name, not
-    the numeric id). Find the dir holding the game's goggame-<id>.info marker;
+    the numeric id). Find the dir holding the game's marker (goggame-<id>.info
+    on Windows, .gogdl-linux-manifest or gameinfo for a Linux installer);
     fall back to the id-named dir, then the path itself."""
+    markers = linux_markers() if platform == "linux" else [f"goggame-{app}.info"]
     direct = os.path.join(path, app)
     if os.path.isdir(direct):
         return direct
     try:
         for name in sorted(os.listdir(path)):
             sub = os.path.join(path, name)
-            if os.path.isfile(os.path.join(sub, f"goggame-{app}.info")):
+            if not os.path.isdir(sub):
+                continue
+            if any(os.path.isfile(os.path.join(sub, m)) for m in markers):
                 return sub
     except OSError:
         pass
+    if platform == "linux" and any(os.path.isfile(os.path.join(path, m)) for m in markers):
+        return path  # a Linux installer may unpack straight into installDir
     return path
+
+
+def linux_markers():
+    """The files gogdl's Linux installer manager leaves in the game folder
+    instead of a goggame-<id>.info marker."""
+    return (".gogdl-linux-manifest", "gameinfo")
 
 
 def find_executable(game_dir):
@@ -548,14 +1234,54 @@ def claim_job(job_id, entry, timeout=90):
 
 
 def stop_proc(proc, grace=15):
+    """Stops a job's gogdl: SIGINT to its process group, SIGKILL after the
+    grace period, and one last SIGKILL sweep once the parent is reaped.
+    gogdl forks download workers that outlive a lone SIGINT to the parent,
+    and its ProcessingManager server ignores SIGINT entirely; left running,
+    they keep the network and our stdout pipe busy (the reader then never
+    sees EOF, so the job hangs instead of failing). The group id is captured
+    at spawn; without killpg (or a group) it falls back to the parent."""
     if proc is None:
         return
+    pgid = getattr(proc, "pgid", None)
+    grouped = pgid is not None and hasattr(os, "killpg")
+
+    def sweep(sig):
+        try:
+            if grouped:
+                os.killpg(pgid, sig)
+            elif sig == signal.SIGINT:
+                proc.send_signal(sig)
+            else:
+                proc.kill()
+        except OSError:
+            pass  # group already gone; the wait below reaps what's left
+
+    sweep(signal.SIGINT)
     try:
-        proc.send_signal(signal.SIGINT)
         proc.wait(timeout=grace)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        pass
+    except (ProcessLookupError, OSError):
+        return
+    # The parent may be gone while a SIGINT-ignoring child survives: sweep
+    # the group once more. ProcessLookupError means nothing is left.
+    try:
+        if grouped:
+            os.killpg(pgid, signal.SIGKILL)
     except ProcessLookupError:
+        pass
+    except OSError:
+        pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+    except (ProcessLookupError, OSError):
         pass
 
 
@@ -738,8 +1464,11 @@ def launch_spec(params):
 # --- dispatch -----------------------------------------------------------
 
 def initialize(params):
-    return {"name": "GOG (gogdl)", "version": "0.1.0", "api": API,
-            "capabilities": ["library", "install", "launch", "auth", "discard"], "missing": []}
+    return {"name": "GOG (gogdl)", "version": PLUGIN_VERSION, "api": API,
+            "capabilities": ["library", "install", "launch", "auth", "discard", "versions"],
+            "features": {"versions": {"builds": True, "channels": True,
+                                     "manual": False, "password": False}},
+            "missing": []}
 
 
 def game_details(params):
@@ -819,6 +1548,7 @@ METHODS = {
     "job.cancel": job_cancel,
     "job.discard": job_discard,
     "game.launchSpec": launch_spec,
+    "versions.list": versions_list,
 }
 
 
