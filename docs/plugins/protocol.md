@@ -125,7 +125,7 @@ other errors can contain.
 | `auth.complete` | `{ fields: { <id>: value } }` | `{ loggedIn, user? }` |
 | `auth.logout` | | `{ loggedIn }` |
 | `library.list` | | `{ games: [LibraryGame] }` |
-| `game.details` | `{ id, terms? }` | `GameDetails` (with `terms` from 1.11, media from 1.12) |
+| `game.details` | `{ id, terms? }` | `GameDetails` (with `terms` from 1.11, media from 1.12, news from 1.19) |
 | `game.saveContext` | `{ id }` | `{ roots?, storeUserId?, prefix?, windows?, proton?, winUser? }` |
 | `game.installSize` | `{ id, target?, options? }` | `{ downloadBytes, diskBytes }` |
 | `game.install` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
@@ -221,7 +221,8 @@ entry's art and title only.
   "languages": ["English", "French"], "controller": "full",
   "requirements": { "minimum": "<p>…</p>", "recommended": "<p>…</p>" },
   "ageRating": "12+", "tags": ["Comedy", "Puzzle"],
-  "videos": [{ "url": "https://…/trailer.mp4", "thumbnail": "https://…", "title": "Trailer", "mime": "video/mp4" }]
+  "videos": [{ "url": "https://…/trailer.mp4", "thumbnail": "https://…", "title": "Trailer", "mime": "video/mp4" }],
+  "news": [{ "title": "Patch 1.2", "url": "https://…", "date": 1700000000 }]
 }
 ```
 
@@ -229,6 +230,7 @@ The media and richer facts (`descriptionHtml`, `website`, `storeUrl`,
 `languages`, `controller`, `requirements`, `ageRating`, `tags`, `videos`) are
 protocol 1.12 (see [Media](#media-112)): Platypus reads them only from a
 plugin that negotiated 1.12 or later. An older plugin's answer carries none.
+The game's news links (`news`) are protocol 1.19 (see [News](#news-119)).
 
 For an id the store doesn't know, `game.details` fails with an error; a game the
 store knows but has no metadata for gets `{}`. (Steam's store answers
@@ -715,10 +717,11 @@ that doesn't know it.
   `save-context` capability (`game.saveContext`), and
   `LibraryGame.clientLaunch`; 1.18: the split ratings and protection state of
   `compat.lookup` (`protectionOnline`, see [Compat facts](#compat-facts-117))
-  and `game.clientStatus` (see [Client launch status](#client-launch-status-118)); see [Compat facts](#compat-facts-117),
-  [Runner](#runner-117), and [Save context](#save-context-117)). 1.19: the
+  and `game.clientStatus` (see [Client launch status](#client-launch-status-118)); 1.19: the game's
+  news links on `game.details` (`news`, see [News](#news-119)); see [Compat facts](#compat-facts-117),
+  [Runner](#runner-117), and [Save context](#save-context-117)). 1.20: the
   wine-client launch delegate and the `client.setup` job (a store client in a
-  Platypus-managed prefix; see [Wine clients](#wine-clients-119)).
+  Platypus-managed prefix; see [Wine clients](#wine-clients-120)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
   1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18 or 1.19 method.
@@ -1546,6 +1549,31 @@ For backward compatibility, the local-art route also accepts relative
 slash-separated paths from older snapshots. The path must be local and resolve
 under a declared `permissions.read` folder; traversal and absolute paths are
 rejected.
+
+## News (1.19)
+
+Protocol 1.19 adds one optional field to the answer of `game.details`: the
+game's own news, as links the game page opens. A plugin sends it only when it
+has some, and Platypus reads it only from a plugin that negotiated 1.19 or
+later.
+
+```
+game.details { id } -> { ..., news? }
+news = [{ title, url, date? }]
+```
+
+- **news.** Up to 5 entries, newest first. `url` must be `https`; Platypus drops
+  anything else. `title` is plain text, at most 200 bytes, and is the link's
+  label. `date` is the store's publish time in Unix seconds and may be absent.
+- **Failure is absence.** The store's news source may be unreachable or slow:
+  then the plugin sends no `news` (or its last cached answer), and the game
+  page simply shows no links. A news failure never fails `game.details` and
+  never surfaces as an error.
+- **No account.** News is public store data: the plugin uses no login, token or
+  account id for it. Caching and refresh are the plugin's business; the core
+  keeps the answer with the rest of the game details.
+- **Gating.** Platypus reads the field only from a plugin that negotiated 1.19
+  or later; an older plugin's game page shows no news.
 
 ## Out of scope
 

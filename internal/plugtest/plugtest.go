@@ -449,6 +449,15 @@ func (s Suite) Conformance(t *testing.T) {
 					checkKeys(t, "game.details video", v, VideoKeys)
 				}
 			}
+			if rawNews, ok := details["news"]; ok {
+				var news []json.RawMessage
+				if err := json.Unmarshal(rawNews, &news); err != nil {
+					t.Errorf("game.details news isn't a list: %s", rawNews)
+				}
+				for _, n := range news {
+					checkKeys(t, "game.details news item", n, NewsKeys)
+				}
+			}
 		}
 		if has("terms") {
 			sess.checkTerms(t, game.StoreAppID, rawDetails)
@@ -875,13 +884,15 @@ var (
 		"coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy", "status", "userNotes"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
 		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms",
-		"descriptionHtml", "website", "storeUrl", "languages", "controller", "requirements", "ageRating", "tags", "videos"}
+		"descriptionHtml", "website", "storeUrl", "languages", "controller", "requirements", "ageRating", "tags", "videos", "news"}
 	// The drm block of game.details (protocol 1.10, "Compat").
 	DRMKeys = []string{"drmFree", "onlineRequired", "launcher", "denuvoLikely", "notes"}
 	// requirements and a video of game.details (protocol 1.12, "Media").
 	RequirementsKeys = []string{"minimum", "recommended"}
 	VideoKeys        = []string{"url", "thumbnail", "title", "mime"}
-	LaunchKeys       = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
+	// One of the game's news links (protocol 1.19, "News").
+	NewsKeys   = []string{"title", "url", "date"}
+	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
 		"delegate", "client", "command", "prefix", "find", "startTimeout"}
 
 	// The versions capability (docs/plugins/protocol.md, "Versions").
