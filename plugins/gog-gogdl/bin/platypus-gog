@@ -27,6 +27,7 @@ import glob
 import json
 import os
 import re
+import select
 import shutil
 import signal
 import subprocess
@@ -37,9 +38,25 @@ import urllib.error
 import urllib.request
 
 API = 1
+PLUGIN_VERSION = "0.2.0"
 CODE_AUTH_REQUIRED = -32001
-# GOG's login page for Platypus's client id (gogdl's own OAuth client). The page
-# redirects to embed.gog.com/on_login_success?... with the code in the query.
+# GOG build ids are long digits (e.g. 57200821661238017).
+BUILD_ID_RE = re.compile(r"[0-9]{4,32}")
+
+
+def stall_limits():
+    """How long a download may go without progress before the plugin fails it
+    instead of hanging: no growth in downloaded bytes (bytes stall), or no
+    output line at all (quiet stall). Tests shrink both through the environment."""
+    def secs(name, default):
+        try:
+            return max(1.0, float(os.environ.get(name, default)))
+        except ValueError:
+            return default
+    return secs("PLATYPUS_GOG_STALL_BYTES_S", 600), secs("PLATYPUS_GOG_STALL_QUIET_S", 900)
+
+ # GOG's login page for Platypus's client id (gogdl's own OAuth client). The page
+ # redirects to embed.gog.com/on_login_success?... with the code in the query.
 LOGIN_URL = ("https://auth.gog.com/auth?client_id=46899977096215655&response_type=code"
              "&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient")
 
@@ -51,8 +68,25 @@ state_lock = threading.RLock()
 jobs = {}  # jobId -> {"proc": Popen, "canceled": bool}
 
 MIB = 1024 * 1024
-# gogdl download progress: "Progress: 42.13% (123.45/292.88 MiB) @ 5.61 MiB/s"
+# gogdl download progress. 1.3.0 prints `[PROGRESS] INFO: = Progress: 22.36
+# 16802208/75133843, Running for: …` (byte counts); older ones printed
+# `Progress: 42.13% (123.45/292.88 MiB) @ 5.61 MiB/s`.
 PROGRESS_RE = re.compile(r"Progress:\s*([\d.]+)%\s*\(([\d.]+)/([\d.]+)\s*MiB\)(?:\s*@\s*([\d.]+)\s*MiB/s)?")
+PROGRESS2_RE = re.compile(r"=\s*Progress:\s*([\d.]+)\s+(\d+)/(\d+)")
+SPEED_RE = re.compile(r"\+\s*Download\s*-\s*([\d.]+)\s*MiB/s")
+
+def parse_progress(line):
+    """(percent, done_bytes, total_bytes, speed_bps|None) from a gogdl progress
+    line, or None for any other output."""
+    m = PROGRESS_RE.search(line)
+    if m:
+        speed = float(m.group(4)) * MIB if m.group(4) else None
+        return (float(m.group(1)), int(float(m.group(2)) * MIB),
+                int(float(m.group(3)) * MIB), speed)
+    m = PROGRESS2_RE.search(line)
+    if m:
+        return float(m.group(1)), int(m.group(2)), int(m.group(3)), None
+    return None
 
 
 class RPCError(Exception):
@@ -313,27 +347,48 @@ def add_installed(entry, ig):
     entry["native"] = ig.get("platform", "windows") == "linux"
 
 
-def install_size(params):
-    app, platform = params["id"], platform_of(params["id"])
-    code, out, err = gogdl("info", app, "--platform", platform, timeout=600)
+def gog_info(app, platform, build=None, branch=None):
+    """gogdl info as a dict. build/branch narrow it to one build's metadata."""
+    cmd = ["info", app, "--platform", platform]
+    if build:
+        cmd += ["--build", build]
+    if branch:
+        cmd += ["--branch", branch]
+    code, out, err = gogdl(*cmd, timeout=600)
     if code != 0:
         # Logged out = gogdl says so, or no stored credentials. A bare "auth"
         # substring also matches unrelated words ("authoritative").
         if "not logged in" in err.lower() or credentials() is None:
             raise RPCError("log in to GOG first", CODE_AUTH_REQUIRED)
         raise RPCError(f"gogdl info failed: {tail(err)}")
+    return parse_gogdl_json(out, err)
+
+
+def parse_gogdl_json(out, err):
+    """The info JSON, tolerating log lines some gogdl versions print on stdout."""
+    text = out[out.index("{"):] if "{" in out else out
     try:
-        data = json.loads(out)
+        return json.loads(text)
     except ValueError:
         raise RPCError(f"gogdl info printed no JSON: {tail(err)}")
-    # Real gogdl (v1.3+) nests the sizes per language under "size"; the *
-    # entry can be all zeros while the actual language carries the numbers,
-    # so take the biggest entry. Older builds printed the fields at top level.
-    sizes = data.get("size") or {"*": data}
+
+
+def best_sizes(data):
+    """The biggest per-language (download, disk) pair. Real gogdl (v1.3+)
+    nests the sizes per language under "size"; the * entry can be all zeros
+    while the actual language carries the numbers. Older builds printed the
+    fields at top level."""
+    sizes = (data or {}).get("size") or {"*": data}
     entries = list(sizes.values()) or [data]
     best = max(entries, key=lambda e: int((e or {}).get("disk_size") or 0))
-    return {"downloadBytes": int(best.get("download_size") or 0),
-            "diskBytes": int(best.get("disk_size") or 0)}
+    return int(best.get("download_size") or 0), int(best.get("disk_size") or 0)
+
+
+def install_size(params):
+    app = params["id"]
+    build, branch = resolve_target(params.get("target"))
+    download, disk = best_sizes(gog_info(app, platform_of(app), build or None, branch or None))
+    return {"downloadBytes": download, "diskBytes": disk}
 
 
 def platform_of(app):
@@ -354,6 +409,133 @@ def platform_of(app):
     return "windows"
 
 
+# --- versions (1.3) ---------------------------------------------------------
+#
+# Builds come from `gogdl info` (its builds[] lists what this user can fetch).
+# The content-system builds endpoint only names the total: when it reports more
+# builds than gogdl lists, or private branches, the rest sit on branches this
+# user can't see, and versions.list offers a build-id box instead of pretending
+# the list is complete. No password branches are known (available_branches is
+# [null]), so there is no versions.unlock: the first -32601 tells Platypus.
+
+def resolve_target(target):
+    """(build, branch) for gogdl from a Versions target. ("", "") by default;
+    manual.input (or manual.build) is a build id the store doesn't list."""
+    if not target:
+        return "", ""
+    build = str(target.get("build") or "")
+    branch = str(target.get("channel") or "")
+    manual = target.get("manual") or {}
+    if not build:
+        build = str(manual.get("input") or manual.get("build") or "").strip()
+    if build and not BUILD_ID_RE.fullmatch(build):
+        raise RPCError(f"GOG build ids are digits (got {build!r}); pick a build "
+                       f"from the list or type its numeric id", -32000)
+    return build, branch
+
+
+def store_builds(app, platform):
+    """(endpoint data, hidden): the builds endpoint's answer, and how many more
+    builds it counts than it names (private branches). ({}, 0) when the
+    endpoint can't be read; the gogdl list still stands on its own."""
+    hook = os.environ.get("PLATYPUS_GOG_BUILDS_FILE")
+    if hook:
+        try:
+            with open(hook) as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return {}, 0
+    else:
+        try:
+            creds = credentials() or {}
+        except Exception:
+            creds = {}
+        token = creds.get("access_token", "") if isinstance(creds, dict) else ""
+        try:
+            data = api_get(f"https://content-system.gog.com/products/{app}/os/"
+                           f"{platform}/builds?generation=2", token)
+        except Exception:
+            return {}, 0
+        if not isinstance(data, dict) or not data.get("items"):
+            try:  # old games may only have generation-1 builds
+                data = api_get(f"https://content-system.gog.com/products/{app}/os/"
+                               f"{platform}/builds?generation=1", token)
+            except Exception:
+                return {}, 0
+    if not isinstance(data, dict):
+        return {}, 0
+    items = data.get("items") or []
+    total = data.get("total_count") or len(items)
+    hidden = max(int(total) - len(items), 0)
+    if data.get("has_private_branches") and hidden == 0:
+        hidden = 1  # named count matches, but branches stay hidden
+    return data, hidden
+
+
+def versions_list(params):
+    app = (params or {}).get("id") or ""
+    if not app:
+        raise RPCError("invalid params: id is required", -32602)
+    platform = platform_of(app)
+    data = gog_info(app, platform)  # unknown id or logged out: an RPC error
+    raw = data.get("builds") or {}
+    items = raw.get("items", []) if isinstance(raw, dict) else raw or []
+    latest = str(data.get("buildId") or "")
+    branches = [b for b in (data.get("available_branches") or []) if b]
+    known = {str(i.get("build_id")) for i in items if i.get("build_id")}
+    installed = installed_games().get(app) or {}
+    current = str(installed.get("build") or "")
+    channels = [{"id": b, "name": b, "requires": "none",
+                 "current": installed.get("channel") == b}
+                for b in branches]
+    builds = []
+    for i in items:
+        bid = str(i.get("build_id"))
+        if not bid:
+            continue
+        entry = {"id": bid, "name": str(i.get("version_name") or f"build {bid}"),
+                 "publishedAt": str(i.get("date_published") or "")[:10],
+                 "source": "store", "current": bid == current}
+        if i.get("branch"):
+            entry["channel"] = str(i["branch"])
+        builds.append(entry)
+    for l in (params or {}).get("ledger") or []:
+        if not isinstance(l, dict) or str(l.get("build") or "") in known:
+            continue
+        lb = str(l["build"])
+        known.add(lb)  # one row per build, even if history repeats it
+        try:  # still fetchable now, or gone from the store?
+            seen = gog_info(app, platform, lb)
+            name = str(seen.get("versionName") or l.get("versionName") or f"build {lb}")
+            available, published = True, str(l.get("date") or "")[:10]
+        except RPCError:
+            name = str(l.get("versionName") or f"build {lb}")
+            available, published = False, str(l.get("date") or "")[:10]
+        entry = {"id": lb, "name": name, "publishedAt": published,
+                 "source": "archive", "available": available,
+                 "current": lb == current}
+        if l.get("channel"):
+            entry["channel"] = str(l["channel"])
+        builds.append(entry)
+    manual = None
+    _, hidden = store_builds(app, platform)
+    if hidden > 0:
+        s = "s" if hidden > 1 else ""
+        manual = {"label": "GOG build id",
+                  "hint": f"GOG hides {hidden} more build{s} on private branches. "
+                          f"Type a numeric build id to install it; a branch-locked "
+                          f"build may still fail."}
+    pinned = (params or {}).get("pinned") or {}
+    update_available = False
+    if current:
+        if pinned.get("kind") == "build" and pinned.get("id"):
+            update_available = current != str(pinned["id"])
+        elif latest:
+            update_available = current != latest
+    return {"channels": channels, "builds": builds, "manual": manual,
+            "links": [], "updateAvailable": update_available,
+            "pinned": (params or {}).get("pinned")}
+
 # --- jobs ---------------------------------------------------------------
 
 def start_job(params, kind):
@@ -370,10 +552,15 @@ def start_job(params, kind):
     path = params.get("installDir") or ""
     if not os.path.isabs(path):
         raise RPCError("installDir is missing or relative; Platypus always sends one")
+    build, branch = resolve_target(params.get("target"))
     if kind == "update" and app in installed_games():
         cmd = ["update", app, "--path", path]
     else:
         cmd = ["download", app, "--path", path]
+    if build:
+        cmd += ["--build", build]
+    if branch:
+        cmd += ["--branch", branch]
     cmd += ["--platform", platform_of(app), "--skip-dlcs", "--max-workers", "4"]
     # Platypus resends a job with the same jobId after a crash: run it once. A job
     # just paused or canceled is still stopping: wait, then resume from what
@@ -384,7 +571,8 @@ def start_job(params, kind):
     try:
         proc = subprocess.Popen(["gogdl", "--auth-config-path", auth_file(), *cmd],
                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True, bufsize=1)
+                                stderr=subprocess.STDOUT, text=True, bufsize=1,
+                                start_new_session=True)
     except FileNotFoundError:
         with jobs_lock:
             jobs.pop(job_id, None)
@@ -395,6 +583,12 @@ def start_job(params, kind):
         job["proc"] = proc
         canceled = job["canceled"]
         job["title"] = params.get("title") or ""
+        # What this run converges to, and when it last moved: the stall
+        # watchdog fails the job when gogdl hangs (see follow_job).
+        job["build"], job["channel"] = build, branch
+        now = time.monotonic()
+        job["last_line_at"], job["last_bytes_at"] = now, now
+        job["top_bytes"], job["seen_progress"] = 0, False
     threading.Thread(target=follow_job, args=(job_id, kind, proc), daemon=True).start()
     if canceled:  # job.cancel arrived while the process was starting
         stop_proc(proc, grace=5)
@@ -402,35 +596,216 @@ def start_job(params, kind):
 
 
 def follow_job(job_id, kind, proc):
+    """Reports gogdl's progress, then its outcome. Two guards turn silent
+    corruption into loud errors: a watchdog fails a run gogdl hangs on (no
+    new bytes for a while, or no output at all), and a size check fails a run
+    gogdl reports as done but left far short on disk (an old build whose
+    files GOG pruned, a filtered language, a gogdl bug)."""
     state = {"jobId": job_id, "phase": "downloading", "percent": 0}
-    for line in proc.stdout:
+    bytes_stall, quiet_stall = stall_limits()
+    stop = threading.Event()
+
+    def watchdog():
+        while not stop.wait(10):
+            with jobs_lock:
+                job = jobs.get(job_id)
+            if job is None:
+                return
+            stalled = stall_message(job, bytes_stall, quiet_stall)
+            if stalled is not None:
+                with jobs_lock:
+                    jobs.get(job_id, {})["stalled"] = stalled
+                stop_proc(proc)
+                return
+
+    def stall_message(job, bytes_stall, quiet_stall):
+        last_line = job.get("last_line_at")
+        if last_line is None:
+            return None  # already reaped
+        now = time.monotonic()
+        if job.get("seen_progress") and now - job.get("last_bytes_at", now) > bytes_stall:
+            return (f"gogdl stalled: no progress for {int(bytes_stall)}s "
+                    f"(still {job.get('percent', 0):.1f}%, "
+                    f"{job.get('top_mib', 0):.0f}/{job.get('total_mib', 0):.0f} MiB). "
+                    f"The connection or GOG's CDN may be stuck; retry, or "
+                    f"update to the latest build.")
+        if now - last_line > quiet_stall:
+            return (f"gogdl went quiet for {int(quiet_stall)}s with no output. "
+                    f"The download may be stuck; retry the job.")
+        return None
+
+    threading.Thread(target=watchdog, daemon=True).start()
+    out = proc.stdout
+
+    def handle_line(line):
+        """Folds one gogdl output line into the job's progress timers and the
+        reported state."""
         line = line.rstrip()
         if not line:
-            continue
-        m = PROGRESS_RE.search(line)
-        if m:
-            state["percent"] = float(m.group(1))
-            state["bytes"] = int(float(m.group(2)) * MIB)
-            state["total"] = int(float(m.group(3)) * MIB)
-            if m.group(4):
-                state["speed"] = float(m.group(4)) * MIB
+            return
+        parsed = parse_progress(line)
+        now = time.monotonic()
+        if parsed is None:
+            # 1.3.0 reports throughput on its own lines, between progress ones.
+            m = SPEED_RE.search(line)
+            if m:
+                with jobs_lock:
+                    jobs.get(job_id, {})["speed"] = float(m.group(1)) * MIB
+        with jobs_lock:
+            job = jobs.get(job_id, {})
+            job["last_line_at"] = now
+            if parsed:
+                pct, done, total, speed = parsed
+                job["seen_progress"] = True
+                job["percent"] = pct
+                if done > job.get("top_bytes", 0):
+                    job["top_bytes"], job["last_bytes_at"] = done, now
+                job["top_mib"] = done / MIB
+                job["total_mib"] = total / MIB
+        if parsed:
+            pct, done, total, speed = parsed
+            state["percent"] = pct
+            state["bytes"] = done
+            state["total"] = total
+            if speed is None:
+                with jobs_lock:
+                    speed = jobs.get(job_id, {}).get("speed")
+            if speed is not None:
+                state["speed"] = speed
             notify("job.progress", dict(state))
+
+    def drain_lines():
+        """Takes the lines already waiting without blocking: at most that."""
+        while True:
+            try:
+                ready, _, _ = select.select([out], [], [], 0)
+            except (OSError, ValueError):
+                return
+            if not ready:
+                return
+            try:
+                line = out.readline()
+            except ValueError:
+                return
+            if line == "":
+                return
+            handle_line(line)
+
+    while True:
+        try:
+            ready, _, _ = select.select([out], [], [], 5)
+        except (OSError, ValueError):
+            break  # the pipe went away under us
+        if ready:
+            try:
+                line = out.readline()
+            except ValueError:
+                break
+            if line == "":
+                break  # every writer closed: EOF
+            handle_line(line)
+        if proc.poll() is not None:
+            # gogdl is gone, but forked workers may still hold the pipe open:
+            # take the lines already here, then stop instead of hanging on EOF.
+            drain_lines()
+            break
+    stop.set()
     rc = proc.wait()
     with jobs_lock:
         job = jobs.pop(job_id, {})
     if job.get("canceled"):
         job_stopped(job_id)
         return
+    if job.get("stalled"):
+        job_stopped(job_id)
+        notify("job.failed", {"jobId": job_id, "error": job["stalled"]})
+        return
     if rc != 0:
         job_stopped(job_id)
         notify("job.failed", {"jobId": job_id, "error": f"gogdl exited with {rc}"})
         return
-    record_install(job, kind)
+    failed, installed = finish_install(job, kind)
+    if failed:
+        job_stopped(job_id)
+        notify("job.failed", {"jobId": job_id, "error": failed})
+        return
+    record_install(job, kind, installed)
     job_finished(job_id)
-    notify("job.done", {"jobId": job_id})
+    done = {"jobId": job_id}
+    if installed.get("build"):
+        done["installed"] = installed
+    notify("job.done", done)
 
 
-def record_install(job, kind):
+def finish_install(job, kind):
+    """What a successful run put on disk: ("", installed) normally, or
+    (error, {}) when gogdl reported done but the game is far short of the
+    size the store advertises for this build. installed feeds job.done and
+    the install ledger (docs/plugins/protocol.md, "Versions")."""
+    app, path = job.get("id"), job.get("path")
+    build, channel = job.get("build") or "", job.get("channel") or ""
+    game_dir = find_game_dir(app, path) if app and path else ""
+    data = None
+    try:
+        data = gog_info(app, platform_of(app), build or None, channel or None)
+    except RPCError as e:
+        log("warn", f"couldn't confirm the installed build for {app}: {e}")
+    if data:
+        _, expected = best_sizes(data)
+        actual = dir_size(game_dir)
+        if expected > 0 and actual < expected // 2:
+            return (f"installed only {fmt_bytes(actual)} of the expected "
+                    f"{fmt_bytes(expected)} for build {build or data.get('buildId')}. "
+                    f"gogdl reported success but the game looks incomplete "
+                    f"(an old build GOG no longer serves, or a filtered "
+                    f"language); retry, or update to the latest build.", {})
+    installed = {"build": build, "channel": channel,
+                 "versionName": str((data or {}).get("versionName") or "")}
+    if not installed["build"]:
+        installed["build"] = str((data or {}).get("buildId") or "")
+    if not installed["build"]:
+        installed["build"] = marker_build(game_dir, app)
+    if not installed["channel"]:
+        del installed["channel"]
+    if not installed["versionName"]:
+        del installed["versionName"]
+    return "", installed
+
+
+def marker_build(game_dir, app):
+    """The build id gogdl wrote into the game's marker file, if any."""
+    try:
+        with open(os.path.join(game_dir or "", f"goggame-{app}.info"),
+                  encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return ""
+    for key in ("buildId", "build_id", "build"):
+        if data.get(key):
+            return str(data[key])
+    return ""
+
+
+def dir_size(path):
+    """Apparent bytes under path (st_size: sparse test files count fully)."""
+    total = 0
+    try:
+        for root, _dirs, files in os.walk(path):
+            for f in files:
+                try:
+                    total += os.path.getsize(os.path.join(root, f))
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return total
+
+
+def fmt_bytes(n):
+    return f"{n / (1024 ** 3):.2f} GiB" if n >= 1024 ** 3 else f"{n / 1024 ** 2:.0f} MiB"
+
+
+def record_install(job, kind, installed):
     """Remember the install so launches and updates can find it. gogdl imports
     don't exist here, so the plugin keeps its own index of what it installed."""
     app, path = job.get("id"), job.get("path")
@@ -444,7 +819,9 @@ def record_install(job, kind):
         state[app] = {
             "path": game_dir,
             "platform": platform,
-            "version": "",
+            "version": installed.get("versionName", ""),
+            "build": installed.get("build", ""),
+            "channel": installed.get("channel", ""),
             "executable": exe,
             "title": job.get("title") or known_titles().get(app, ""),
         }
@@ -548,14 +925,25 @@ def claim_job(job_id, entry, timeout=90):
 
 
 def stop_proc(proc, grace=15):
+    """Stops a job's gogdl: SIGINT to its process group, SIGKILL after the
+    grace period. gogdl forks download workers that outlive a lone SIGINT to
+    the parent; left running, they keep the network and our stdout pipe busy
+    (the reader then never sees EOF, so the job hangs instead of failing)."""
     if proc is None:
         return
     try:
-        proc.send_signal(signal.SIGINT)
+        try:  # the group exists while any of the job's processes does
+            os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+        except OSError:
+            proc.send_signal(signal.SIGINT)
         proc.wait(timeout=grace)
     except subprocess.TimeoutExpired:
-        proc.kill()
-    except ProcessLookupError:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except OSError:
+            proc.kill()
+        proc.wait()
+    except (ProcessLookupError, OSError):
         pass
 
 
@@ -738,8 +1126,11 @@ def launch_spec(params):
 # --- dispatch -----------------------------------------------------------
 
 def initialize(params):
-    return {"name": "GOG (gogdl)", "version": "0.1.0", "api": API,
-            "capabilities": ["library", "install", "launch", "auth", "discard"], "missing": []}
+    return {"name": "GOG (gogdl)", "version": PLUGIN_VERSION, "api": API,
+            "capabilities": ["library", "install", "launch", "auth", "discard", "versions"],
+            "features": {"versions": {"builds": True, "channels": True,
+                                     "manual": True, "password": False}},
+            "missing": []}
 
 
 def game_details(params):
@@ -819,6 +1210,7 @@ METHODS = {
     "job.cancel": job_cancel,
     "job.discard": job_discard,
     "game.launchSpec": launch_spec,
+    "versions.list": versions_list,
 }
 
 

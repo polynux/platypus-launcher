@@ -129,7 +129,7 @@ def slow(d):
     time.sleep(0.3)
     return orig(d)
 hg.find_executable = slow
-ts = [threading.Thread(target=hg.record_install, args=({"id": a, "path": "/tmp/x", "title": a}, "install")) for a in ("1", "2")]
+ts = [threading.Thread(target=hg.record_install, args=({"id": a, "path": "/tmp/x", "title": a}, "install", {"build": a})) for a in ("1", "2")]
 [t.start() for t in ts]; [t.join() for t in ts]
 print(sorted(hg.installed_games()))
 `)
