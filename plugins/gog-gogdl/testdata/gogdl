@@ -36,7 +36,7 @@ def err(msg, code=1):
     sys.exit(code)
 
 
-def info_for(build):
+def info_for(build, platform="windows"):
     builds = [
         {"build_id": LATEST_BUILD, "version_name": "1.0", "date_published": "2024-01-08T12:35:53+0000",
          "branch": None, "generation": 2},
@@ -51,13 +51,18 @@ def info_for(build):
         # the default build instead of failing, so callers must compare the
         # answered buildId with the requested one.
         build = LATEST_BUILD
-    total = int(os.environ.get("FAKE_GOGDL_TOTAL_COUNT", str(len(builds))))
+    if platform == "linux":
+        # The Linux installer manager has no builds and answers no buildId.
+        return {"size": {"*": {"download_size": 0, "disk_size": 0},
+                         "en-US": {"download_size": 8 * 1024 * 1024, "disk_size": DISK_BYTES}},
+                "languages": ["en-US"], "folder_name": "SuperGame", "dependencies": [],
+                "dlcs": [], "builds": {"total_count": 0, "count": 0, "items": []}}
     return {"size": {"*": {"download_size": 0, "disk_size": 0},
                      "en-US": {"download_size": 8 * 1024 * 1024, "disk_size": DISK_BYTES}},
             "buildId": build, "versionName": names[build],
             "languages": ["en-US"], "folder_name": "SuperGame", "dependencies": [],
             "available_branches": ["beta", None], "dlcs": [],
-            "builds": {"total_count": total, "count": len(builds), "items": builds}}
+            "builds": {"total_count": len(builds), "count": len(builds), "items": builds}}
 
 
 def main():
@@ -96,10 +101,12 @@ def main():
         print(json.dumps(creds))
     elif cmd == "info":
         build = rest[rest.index("--build") + 1] if "--build" in rest else LATEST_BUILD
-        print(json.dumps(info_for(build)))
+        platform = rest[rest.index("--platform") + 1] if "--platform" in rest else "windows"
+        print(json.dumps(info_for(build, platform)))
     elif cmd in ("download", "update"):
         app = rest[0]
         path = rest[rest.index("--path") + 1]
+        platform = rest[rest.index("--platform") + 1] if "--platform" in rest else "windows"
         build = rest[rest.index("--build") + 1] if "--build" in rest else LATEST_BUILD
         if build not in (LATEST_BUILD, OLD_BUILD, BETA_BUILD):
             build = LATEST_BUILD  # unmatched --build keeps the default
@@ -178,8 +185,16 @@ def main():
         else:
             with open(payload, "wb") as f:
                 f.truncate(DISK_BYTES)
-        with open(os.path.join(game_dir, f"goggame-{app}.info"), "w") as f:
-            json.dump({"buildId": build, "version": {LATEST_BUILD: "1.0"}.get(build, "0.9")}, f)
+        if platform == "linux":
+            # The Linux installer manager leaves gameinfo plus its manifest,
+            # never a goggame-<id>.info marker.
+            with open(os.path.join(game_dir, "gameinfo"), "w") as f:
+                f.write("SuperGame")
+            with open(os.path.join(game_dir, ".gogdl-linux-manifest"), "w") as f:
+                f.write("{}")
+        else:
+            with open(os.path.join(game_dir, f"goggame-{app}.info"), "w") as f:
+                json.dump({"buildId": build, "version": {LATEST_BUILD: "1.0"}.get(build, "0.9")}, f)
         script = os.path.join(game_dir, "start.sh")
         with open(script, "w") as f:
             f.write("#!/bin/sh\necho \"gog game $*\"\n")
