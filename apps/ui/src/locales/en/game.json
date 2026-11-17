@@ -273,6 +273,8 @@
     "needsUpdate": "Update available",
     "notInstalled": "Not downloaded",
     "updated": "Updated {{date}}",
+    "pathNote": "Files are written to this game's Workshop folder; games that read Steam's workshop folder (like client launches) use them.",
+    "listFailed": "Couldn't read your Workshop items.",
     "sync": "Sync",
     "syncing": "Syncing…",
     "jobFailed": "The Workshop sync didn't finish."

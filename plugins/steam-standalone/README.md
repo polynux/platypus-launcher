@@ -87,8 +87,10 @@ content handles, `PublishedFile.GetDetails` for titles and previews);
 downloading reuses the Go downloader's content path, reading each item's
 manifest from the game's workshop depot (`depots.workshopdepot`, else the app
 id) — DepotDownloader's `-pubfile` flow. Items with only a legacy `file_url`
-are plain HTTP files. Only the current content is available: Steam keeps no
-past versions of Workshop items.
+are downloaded over https from Steam's content hosts (steamusercontent.com,
+steampowered.com, their Akamai/CloudFront edges); a redirect or any other host
+is refused. Only the current content is available: Steam keeps no past
+versions of Workshop items.
 
 Content placement follows the store: a game whose folder sits in a Steam
 library (`steamapps/common/...`) gets `<library>/steamapps/workshop/content/
@@ -96,8 +98,10 @@ library (`steamapps/common/...`) gets `<library>/steamapps/workshop/content/
 itself has no `steamapps` tree, so its content goes to
 `<install folder>/workshop/<item>` and leaves with the game. A game that finds
 its mods through the Steamworks API may still need the Steam client at
-runtime; the client-required launch mode covers that. Subscribing and
-unsubscribing are account writes and aren't offered yet.
+runtime; the client-required launch mode covers that. There are no per-game
+placement rules yet: a Platypus-installed game always gets `workshop/<item>`
+(issue #214 tracks the rules). Subscribing and unsubscribing are account
+writes and aren't offered yet.
 
 ## Steam Families
 

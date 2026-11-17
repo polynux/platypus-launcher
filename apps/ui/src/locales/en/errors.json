@@ -55,6 +55,7 @@
   },
   "game": {
     "launchBusy": "{{title}} is being {{what}}; launch it once that finishes.",
+    "launchBusyWorkshop": "{{title}} is syncing Workshop items; launch it once that finishes.",
     "noClientLaunch": "{{title}} can't be started through a store client.",
     "noCommand": "{{title}} returned no command.",
     "noLaunchTarget": "Game {{title}} has no launch target.",

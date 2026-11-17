@@ -88,6 +88,9 @@ func Preallocate(m *Manifest, dir string) (*InstallWriter, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return nil, err
 		}
+		if err := ensureRegularTarget(dir, path); err != nil {
+			return nil, err
+		}
 		fh, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
 		if err != nil {
 			return nil, err
@@ -163,6 +166,24 @@ func (w *InstallWriter) Close() error {
 		}
 	}
 	return first
+}
+
+// ensureRegularTarget makes path safe to open for writing: a parent that
+// escapes dir through a symlink is refused, and an existing non-regular
+// target (a symlink a stale folder left behind, a directory) is removed
+// first. Without it an uploader's symlink would redirect the open (and the
+// truncation that comes with it) outside the install folder, and the later
+// Write guard would run too late.
+func ensureRegularTarget(dir, path string) error {
+	if err := checkNoSymlinkEscape(dir, path); err != nil {
+		return err
+	}
+	if fi, err := os.Lstat(path); err == nil && !fi.Mode().IsRegular() {
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("replacing %q: %w", path, err)
+		}
+	}
+	return nil
 }
 
 // checkNoSymlinkEscape resolves existing parent components and refuses any

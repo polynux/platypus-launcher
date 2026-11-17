@@ -1,45 +1,74 @@
 package main
 
-// A Workshop item's update deletes the files its new manifest dropped; a
-// stale file left beside the new content would keep loading in the game.
+// A stale item folder is replaced, never written through: an uploader's
+// symlink must not let a Workshop download touch a file outside the content
+// root (B1).
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"platypus/internal/depot"
 )
 
-func TestPruneWorkshopDirKeepsTheNewManifest(t *testing.T) {
-	dir := t.TempDir()
-	for _, name := range []string{"keep.txt", "dropped.txt", "sub/keep.bin", "sub/gone.bin", "old/gone.bin"} {
-		path := filepath.Join(dir, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	man := &depot.Manifest{Files: []depot.File{{Name: "keep.txt"}, {Name: "sub/keep.bin"}}}
-	if err := pruneWorkshopDir(dir, man); err != nil {
+func TestReplaceWorkshopDirDoesNotFollowASymlink(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"keep.txt", "sub/keep.bin"} {
-		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(name))); err != nil {
-			t.Errorf("%s was pruned but the manifest still lists it: %v", name, err)
+	victim := filepath.Join(outside, "victim.txt")
+	if err := os.WriteFile(victim, []byte("keep me"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "9200")
+	if err := os.Symlink(outside, dir); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	partial := dir + ".partial"
+	if err := os.MkdirAll(partial, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(partial, "addon.gma"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceWorkshopDir(dir, partial); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(victim); err != nil || string(data) != "keep me" {
+		t.Fatalf("the symlink target was touched: %q, %v", data, err)
+	}
+	if fi, err := os.Lstat(dir); err != nil || !fi.IsDir() {
+		t.Fatalf("item folder wasn't replaced with a real directory: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(dir, "addon.gma")); err != nil || string(data) != "new" {
+		t.Fatalf("new content = %q, %v", data, err)
+	}
+	if _, err := os.Lstat(partial); !os.IsNotExist(err) {
+		t.Fatalf("staging folder stayed: %v", err)
+	}
+}
+
+func TestWorkshopItemDirsRemovesPlantedSymlinks(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"9200", "9200.partial"} {
+		if err := os.Symlink(outside, filepath.Join(root, name)); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
 		}
 	}
-	for _, name := range []string{"dropped.txt", "sub/gone.bin"} {
-		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(name))); !os.IsNotExist(err) {
-			t.Errorf("%s stayed on disk", name)
+	dir, partial, err := workshopItemDirs(root, "9200")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{dir, partial} {
+		if fi, err := os.Lstat(path); !os.IsNotExist(err) {
+			t.Fatalf("%s is still a symlink: %v %v", path, fi, err)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, "old")); !os.IsNotExist(err) {
-		t.Errorf("the directory a dropped file was alone in stayed")
-	}
-	if fi, err := os.Stat(filepath.Join(dir, "sub")); err != nil || !fi.IsDir() {
-		t.Errorf("a directory the manifest still uses was pruned: %v", err)
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("the symlink target was removed: %v", err)
 	}
 }

@@ -73,6 +73,18 @@ describe('Workshop section (protocol 1.22)', () => {
     expect(onSync).toHaveBeenCalledTimes(1);
   });
 
+  it('shows a failed listing with Retry instead of hiding the section', async () => {
+    api.getGameWorkshop.mockRejectedValueOnce(new Error('Steam CM connection dropped: reset'));
+    page(plugin(['library', 'install', 'launch', 'workshop']));
+    expect(await screen.findByText(/Steam CM connection dropped/)).toBeInTheDocument();
+    const retry = screen.getByRole('alert').querySelector('button');
+    if (!retry) throw new Error('the error row has no Retry button');
+    const before = api.getGameWorkshop.mock.calls.length;
+    fireEvent.click(retry);
+    await waitFor(() => expect(api.getGameWorkshop.mock.calls.length).toBe(before + 1));
+    expect(await screen.findByText('Echo Extra Level')).toBeInTheDocument();
+  });
+
   it('renders nothing without the workshop capability', async () => {
     api.getGameWorkshop.mockResolvedValue([]);
     page(plugin(['library', 'install', 'launch']));

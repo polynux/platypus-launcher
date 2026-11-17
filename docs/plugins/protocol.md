@@ -1614,6 +1614,30 @@ news = [{ title, url, date? }]
 - **Gating.** Platypus reads the field only from a plugin that negotiated 1.19
   or later; an older plugin's game page shows no news.
 
+## Download limit (1.21)
+
+Protocol 1.21 adds one optional param to `game.install` and `game.update`: the
+user's global download speed cap, an integer in bytes per second. A verify that
+repairs also downloads, so `game.verify` with `repair: true` carries it too.
+
+```
+game.install { id, installDir, jobId, ..., downloadLimit? }
+game.update  { id, installDir, jobId, ..., downloadLimit? }
+game.verify  { id, installDir, jobId, repair: true, downloadLimit? }
+```
+
+- **When it is sent.** Only to a plugin that declares 1.21 or later and negotiates
+  it, and only when the user set a cap (Settings → Downloads). Unlimited sends
+  nothing: the param's absence means "no cap", not "zero bytes".
+- **What to do with it.** Hand it to the process that downloads the files, as a
+  rate cap for the whole job (all depots, chunks or files together). A plugin
+  whose downloader has no rate control must not fake one: ignore the param and
+  keep downloading at its own pace.
+- **Not a promise about a running job.** Platypus reads the setting when it
+  starts the job; changing it mid-download affects the next install or update.
+- **Not on the wire anywhere else.** `game.installSize` and the rest carry no
+  `downloadLimit`; a plain verify (no repair) has nothing to cap.
+
 ## Workshop (1.22)
 
 The `workshop` capability lists a game's subscribed Workshop items and brings
@@ -1640,7 +1664,8 @@ workshop.sync { id, installDir, jobId } -> {}
 - **workshop.sync** is a job like `game.update`: it downloads or updates every
   subscribed item's content for that game. `installDir` is the game's own
   folder (`library.list`'s `installPath`), and the plugin decides where inside
-  it (or beside it) the store's runtime expects Workshop content. Platypus
+  it (or beside it) the store's runtime expects Workshop content; no per-game
+  placement rules exist yet (Steam's follow-up is #214). Platypus
   sends `jobId`, reports progress through `job.progress` and the outcome
   through `job.done`/`job.failed`; `job.cancel` stops it. A repeated `jobId`
   starts no second copy. A game that isn't installed fails with a readable
@@ -1648,30 +1673,6 @@ workshop.sync { id, installDir, jobId } -> {}
   writes nothing.
 - **Gating.** A plugin that negotiated 1.21 or older never receives these
   methods, and the game page shows no Workshop section.
-
-## Download limit (1.21)
-
-Protocol 1.21 adds one optional param to `game.install` and `game.update`: the
-user's global download speed cap, an integer in bytes per second. A verify that
-repairs also downloads, so `game.verify` with `repair: true` carries it too.
-
-```
-game.install { id, installDir, jobId, ..., downloadLimit? }
-game.update  { id, installDir, jobId, ..., downloadLimit? }
-game.verify  { id, installDir, jobId, repair: true, downloadLimit? }
-```
-
-- **When it is sent.** Only to a plugin that declares 1.21 or later and negotiates
-  it, and only when the user set a cap (Settings → Downloads). Unlimited sends
-  nothing: the param's absence means "no cap", not "zero bytes".
-- **What to do with it.** Hand it to the process that downloads the files, as a
-  rate cap for the whole job (all depots, chunks or files together). A plugin
-  whose downloader has no rate control must not fake one: ignore the param and
-  keep downloading at its own pace.
-- **Not a promise about a running job.** Platypus reads the setting when it
-  starts the job; changing it mid-download affects the next install or update.
-- **Not on the wire anywhere else.** `game.installSize` and the rest carry no
-  `downloadLimit`; a plain verify (no repair) has nothing to cap.
 
 ## Out of scope
 

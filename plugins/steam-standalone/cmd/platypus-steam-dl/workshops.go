@@ -10,7 +10,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -110,16 +109,27 @@ func runWorkshop(ctx context.Context, req request) error {
 	}
 	onProg, _, _ := progress(total)
 	var base uint64
+	var staging []string
+	// Canceled or failed: no half-written item is left in the content root.
+	defer func() {
+		for _, dir := range staging {
+			_ = os.RemoveAll(dir)
+		}
+	}()
 	out := []map[string]any{}
 	for _, p := range plans {
-		dir := filepath.Join(req.InstallDir, p.item.ID)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-		if err := pruneWorkshopDir(dir, p.man); err != nil {
+		dir, partial, err := workshopItemDirs(req.InstallDir, p.item.ID)
+		if err != nil {
 			return fmt.Errorf("workshop item %s: %w", p.item.ID, err)
 		}
-		w, err := depot.Preallocate(p.man, dir)
+		if err := os.RemoveAll(partial); err != nil {
+			return fmt.Errorf("workshop item %s: %w", p.item.ID, err)
+		}
+		if err := os.MkdirAll(partial, 0o755); err != nil {
+			return fmt.Errorf("workshop item %s: %w", p.item.ID, err)
+		}
+		staging = append(staging, partial)
+		w, err := depot.Preallocate(p.man, partial)
 		if err != nil {
 			return fmt.Errorf("workshop item %s: %w", p.item.ID, err)
 		}
@@ -135,12 +145,17 @@ func runWorkshop(ctx context.Context, req request) error {
 			return fmt.Errorf("workshop item %s: %w", p.item.ID, cErr)
 		}
 		base += p.man.TotalSize()
-		bad, err := depot.Verify(p.man, dir)
+		bad, err := depot.Verify(p.man, partial)
 		if err != nil {
 			return fmt.Errorf("workshop item %s: %w", p.item.ID, err)
 		}
 		if len(bad) > 0 {
 			return fmt.Errorf("workshop item %s: verify failed: %v", p.item.ID, bad)
+		}
+		// Swap only once the new content is complete and verified: a failed
+		// or canceled sync leaves the previous item in place.
+		if err := replaceWorkshopDir(dir, partial); err != nil {
+			return fmt.Errorf("workshop item %s: %w", p.item.ID, err)
 		}
 		out = append(out, map[string]any{"id": p.item.ID, "hcontent": p.item.HContent, "bytes": p.man.TotalSize()})
 	}
@@ -148,42 +163,30 @@ func runWorkshop(ctx context.Context, req request) error {
 	return nil
 }
 
-// pruneWorkshopDir deletes what the item's new manifest no longer lists: a
-// Workshop update can remove files, and a stale one left beside the new
-// content would keep loading. Directories the manifest still uses stay.
-func pruneWorkshopDir(dir string, man *depot.Manifest) error {
-	want := map[string]bool{}
-	for _, f := range man.Files {
-		want[filepath.FromSlash(f.Name)] = true
+// workshopItemDirs returns the item's folder and its staging sibling. Both
+// must be real entries: a symlink planted in an earlier item folder must not
+// redirect the download (or the removal below) outside the content root.
+func workshopItemDirs(root, id string) (dir, partial string, err error) {
+	dir = filepath.Join(root, id)
+	partial = dir + ".partial"
+	if fi, err := os.Lstat(dir); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		if err := os.Remove(dir); err != nil {
+			return "", "", err
+		}
 	}
-	if _, err := os.Stat(dir); err != nil {
-		return nil
+	if fi, err := os.Lstat(partial); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		if err := os.Remove(partial); err != nil {
+			return "", "", err
+		}
 	}
-	var dirs []string
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || path == dir {
-			return nil
-		}
-		rel, relErr := filepath.Rel(dir, path)
-		if relErr != nil {
-			return nil
-		}
-		if d.IsDir() {
-			dirs = append(dirs, path)
-			return nil
-		}
-		if !want[rel] {
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
+	return dir, partial, nil
+}
+
+// replaceWorkshopDir swaps the freshly downloaded item in for the old one.
+// os.RemoveAll removes a symlink itself, never what it points at.
+func replaceWorkshopDir(dir, partial string) error {
+	if err := os.RemoveAll(dir); err != nil {
 		return err
 	}
-	for i := len(dirs) - 1; i >= 0; i-- {
-		_ = os.Remove(dirs[i]) // only empty ones go
-	}
-	return nil
+	return os.Rename(partial, dir)
 }

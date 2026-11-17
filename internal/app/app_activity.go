@@ -28,8 +28,8 @@ const (
 )
 
 type activityFile struct {
-	Version int                  `json:"version"`
-	NextID  int64                `json:"next_id"`
+	Version int                   `json:"version"`
+	NextID  int64                 `json:"next_id"`
 	Events  []types.ActivityEvent `json:"events"`
 }
 
@@ -630,7 +630,7 @@ func (a *App) noteExplicitAdd(game types.Game) {
 func (a *App) recordJobActivity(j types.Job) {
 	kind := j.Kind
 	switch kind {
-	case "install", "update", "uninstall", "verify", "move":
+	case "install", "update", "uninstall", "verify", "move", "workshop":
 	default:
 		return
 	}

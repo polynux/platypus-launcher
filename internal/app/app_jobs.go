@@ -21,6 +21,21 @@ type jobBackend struct{ a *App }
 
 func (b jobBackend) Size(ctx context.Context, j types.Job) (plugins.InstallSize, error) {
 	var s plugins.InstallSize
+	if j.Kind == jobs.KindWorkshop {
+		// A Workshop sync's download is the subscribed items' current sizes:
+		// the store's own listing is the estimate, checked before it starts.
+		var items []plugins.WorkshopItem
+		if err := b.a.plugins.Call(ctx, j.Source, "workshop.list", map[string]any{"id": j.StoreGameID}, &items); err != nil {
+			return s, err
+		}
+		for _, it := range items {
+			if it.SizeBytes > 0 {
+				s.DiskBytes += it.SizeBytes
+			}
+		}
+		s.DownloadBytes = s.DiskBytes
+		return s, nil
+	}
 	options, err := b.a.optionsForJob(ctx, j)
 	if err != nil {
 		return s, err
@@ -175,11 +190,14 @@ func (a *App) heldByJob(game types.Game) error {
 			return apperr.New("game.launchBusy", fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title), map[string]string{"title": game.Title, "what": "set up"})
 		}
 	}
-	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindBackup, jobs.KindRestore, jobs.KindRemove)
+	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindBackup, jobs.KindRestore, jobs.KindRemove, jobs.KindWorkshop)
 	if !ok {
 		return nil
 	}
 	what := "checked"
+	if j.Kind == jobs.KindWorkshop {
+		return apperr.New("game.launchBusyWorkshop", fmt.Sprintf("%s is syncing Workshop items; launch it once that finishes", game.Title), map[string]string{"title": game.Title})
+	}
 	switch j.Kind {
 	case jobs.KindMove:
 		what = "moved"
@@ -206,8 +224,13 @@ func (a *App) jobFinished(j types.Job) {
 	a.recordJobActivity(j)
 	// A verify only reports: it changes no bytes and lists nothing new, so
 	// the library and disk caches stay (issue #145 records it, nothing more).
-	// A Workshop sync writes only mod content, not the game or its listing.
-	if j.Kind == jobs.KindVerify || j.Kind == jobs.KindWorkshop {
+	if j.Kind == jobs.KindVerify {
+		return
+	}
+	// A Workshop sync writes mod content beside the game, not the game or its
+	// library listing: only its size on disk changed.
+	if j.Kind == jobs.KindWorkshop {
+		a.invalidateDiskGame(j.GameID)
 		return
 	}
 	a.invalidateLibrary(j.Source)

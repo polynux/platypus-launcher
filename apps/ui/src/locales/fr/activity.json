@@ -56,6 +56,7 @@
   "jobVerbUninstalled": "désinstallé",
   "jobVerbVerified": "vérifié",
   "jobVerbMoved": "déplacé",
+  "jobVerbSynced": "Synchronisé",
   "jobDone": "{{title}} {{action}}",
   "jobFailed": "{{kind}} de {{title}} a échoué",
   "sideloaded": "{{title}} ajouté manuellement",

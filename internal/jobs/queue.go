@@ -350,7 +350,7 @@ func startTimeoutFor(kind string) time.Duration {
 
 // prepare checks free space and creates the install folder.
 func (q *Queue) prepare(ctx context.Context, job types.Job) error {
-	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindBackup || job.Kind == KindRestore || job.Kind == KindRemove || job.Kind == KindRunnerInstall || job.Kind == KindClientSetup || job.Kind == KindWorkshop {
+	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindBackup || job.Kind == KindRestore || job.Kind == KindRemove || job.Kind == KindRunnerInstall || job.Kind == KindClientSetup {
 		return nil // no download, so nothing to size; a move checks its space when it is queued
 	}
 	sizeCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -824,7 +824,7 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 		if u.Installed != nil && job.Kind != KindUninstall && installed != nil {
 			installed(job, *u.Installed)
 		}
-		if (job.Kind == KindInstall || job.Kind == KindUpdate || job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindRemove) && finished != nil {
+		if (job.Kind == KindInstall || job.Kind == KindUpdate || job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindRemove || job.Kind == KindWorkshop) && finished != nil {
 			finished(job)
 		}
 		q.finish(job.ID, StateDone, "")

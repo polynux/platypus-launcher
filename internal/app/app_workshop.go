@@ -17,8 +17,10 @@ import (
 
 const (
 	workshopTimeout = 45 * time.Second
-	// maxWorkshopItems bounds one listing, like the other store lists.
+	// maxWorkshopItems bounds one listing, like the other store lists;
+	// maxWorkshopTitle keeps a store's title to a readable length.
 	maxWorkshopItems = 500
+	maxWorkshopTitle = 200
 )
 
 // GetGameWorkshop returns the game's subscribed Workshop items. A nil, nil
@@ -46,11 +48,18 @@ func (a *App) GetGameWorkshop(game types.Game) ([]types.WorkshopItem, error) {
 func normalizeWorkshop(items []plugins.WorkshopItem) []types.WorkshopItem {
 	out := make([]types.WorkshopItem, 0, len(items))
 	for _, it := range items {
-		if it.ID == "" || len(out) == maxWorkshopItems {
+		if it.ID == "" {
 			continue
 		}
+		if len(out) == maxWorkshopItems {
+			break
+		}
+		title := it.Title
+		if r := []rune(title); len(r) > maxWorkshopTitle {
+			title = string(r[:maxWorkshopTitle])
+		}
 		out = append(out, types.WorkshopItem{
-			ID: it.ID, Title: it.Title, PreviewURL: httpURL(it.PreviewURL),
+			ID: it.ID, Title: title, PreviewURL: httpURL(it.PreviewURL),
 			SizeBytes: it.SizeBytes, UpdatedAt: it.UpdatedAt,
 			Installed: it.Installed, NeedsUpdate: it.NeedsUpdate,
 		})

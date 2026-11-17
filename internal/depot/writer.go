@@ -86,6 +86,9 @@ func writeOne(dir string, f File, data map[string][]byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	if err := ensureRegularTarget(dir, path); err != nil {
+		return err
+	}
 	fh, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return err

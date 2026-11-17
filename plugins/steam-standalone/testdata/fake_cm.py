@@ -699,10 +699,17 @@ def serve_subscribed(conn, hdr, body, st, steamid, sessionid):
     file_hcontent = 4, file_size = 5, rtime32_last_updated = 6,
     is_depot_content = 7) and total_results = 3."""
     jobid = hdr.get(10, [0])[0]
-    want = pb_parse(body).get(1, [0])[0]
-    record(f"workshop subscribed app={want}")
+    req = pb_parse(body)
+    want = req.get(1, [0])[0]
+    start = req.get(2, [0])[0]
+    record(f"workshop subscribed app={want} start={start}")
     items = [it for it in st.get("workshop_items") or []
              if int(it.get("appid") or want) == want]
+    total = len(items)
+    page = int(st.get("workshop_page") or 0)
+    items = items[start:]
+    if page > 0:
+        items = items[:page]
     out = pb_int(1, 1)
     for it in items:
         entry = pb_fixed64(1, int(it.get("published_file_id") or 0))
@@ -714,7 +721,7 @@ def serve_subscribed(conn, hdr, body, st, steamid, sessionid):
         entry += pb_fixed32(6, int(it.get("updated") or 0))
         entry += pb_int(7, 1 if it.get("depot_content") else 0)
         out += pb_msg(2, entry)
-    out += pb_int(3, len(items))
+    out += pb_int(3, total)
     resp_hdr = pb_fixed64(11, jobid)
     conn.send_frame(2, pack(EMSG_UCM_ENUMERATE_SUBSCRIBED_RESPONSE, resp_hdr, out))
 

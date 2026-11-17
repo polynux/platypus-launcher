@@ -727,19 +727,23 @@ export function InstallationPanel({
  *  Progress and cancel ride the same queue as an update. */
 export function WorkshopSection({
   items,
+  error,
   job,
   onSync,
+  onRetry,
   onJobAction,
 }: {
   items: WorkshopItem[];
+  error?: string | null;
   job?: Job;
   onSync?: () => void;
+  onRetry?: () => void;
   onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
 }) {
   const { t } = useTranslation('game');
   const syncJob = job?.kind === 'workshop' ? job : undefined;
   const active = syncJob && (syncJob.state === 'queued' || syncJob.state === 'running');
-  if (items.length === 0) return null;
+  if (items.length === 0 && !error) return null;
   return (
     <Panel className="bg-surface-strong">
       <div className="mb-2 flex items-baseline justify-between gap-3">
@@ -748,7 +752,12 @@ export function WorkshopSection({
           {t('game:workshop.count', { count: items.length })}
         </span>
       </div>
-      <div className="space-y-2">
+      {/* Where the files go (S1): one line, no per-game table. */}
+      <p className="mb-3 text-hint leading-snug text-text-muted">{t('game:workshop.pathNote')}</p>
+      {error ? (
+        <ErrorNotice message={error} fallback={t('game:workshop.listFailed')} onRetry={onRetry} />
+      ) : null}
+      {!error && <div className="space-y-2">
         {items.map((it) => {
           const state = !it.installed
             ? t('game:workshop.notInstalled')
@@ -779,12 +788,12 @@ export function WorkshopSection({
             </div>
           );
         })}
-      </div>
-      <div className="mt-3 flex items-center gap-2">
-        <Button size="sm" variant="neutral" disabled={!!active || !onSync} onClick={onSync}>
+      </div>}
+      {!error && <div className="mt-3 flex items-center gap-2">
+        <Button size="sm" variant="neutral" disabled={!!active || !onSync || !!error} onClick={onSync}>
           {active ? t('game:workshop.syncing') : t('game:workshop.sync')}
         </Button>
-      </div>
+      </div>}
       {active && <div className="mt-3"><JobProgress job={syncJob} onCancel={(id) => onJobAction('cancel', id)} /></div>}
       {syncJob?.state === 'failed' && !active && (
         <ErrorNotice className="mt-2" message={syncJob.error ?? ''} fallback={t('game:workshop.jobFailed')} onRetry={() => onJobAction('retry', syncJob.id)} />

@@ -3054,6 +3054,14 @@ def playtime_list(_params):
 
 WORKSHOP_FILE_TYPE_COLLECTION = 3
 WORKSHOP_PAGE = 100
+# A game page may ask again on every render: one listing per app is reused for
+# a minute (a sync drops it so the next read sees what was written).
+try:
+    WORKSHOP_CACHE_TTL = float(os.environ.get("PLATYPUS_WORKSHOP_CACHE_TTL") or 60)
+except ValueError:
+    WORKSHOP_CACHE_TTL = 60.0
+workshop_cache = {}
+workshop_cache_lock = threading.Lock()
 
 
 def cm_workshop_session():
@@ -3077,6 +3085,14 @@ def workshop_state():
 
 def workshop_save_state(state):
     save_state("workshop.json", state)
+
+
+def workshop_roots():
+    return load_state("workshop-roots.json", {})
+
+
+def workshop_save_roots(roots):
+    save_state("workshop-roots.json", roots)
 
 
 def workshop_number(params):
@@ -3150,13 +3166,18 @@ def workshop_root(app, install_dir):
 
 def workshop_items(app):
     """The subscription list joined with its details, for both list and sync.
-    One CM session covers both calls; a CMError is mapped to the protocol's
-    login/transient codes."""
+    One CM session covers the listing, the items' details and a collection's
+    children; a CMError is mapped to the protocol's login/transient codes."""
     try:
         session = cm_workshop_session()
         try:
             subs = workshop_subscriptions(app, session)
             details = workshop_details(app, [s["id"] for s in subs], session) if subs else {}
+            child_ids = []
+            for d in details.values():
+                if int(d.get("file_type") or 0) == WORKSHOP_FILE_TYPE_COLLECTION:
+                    child_ids.extend(d.get("children") or [])
+            child_details = workshop_details(app, child_ids, session) if child_ids else {}
         finally:
             session.logoff()
     except steam_cm.CMError as e:
@@ -3164,37 +3185,71 @@ def workshop_items(app):
     if not subs:
         return []
     state = workshop_state().get(app) or {}
+    install_dir = (load_state("installed.json", {}).get(app) or {}).get("path") or ""
+    root = workshop_root(app, install_dir) if install_dir else ""
     out = []
     for s in subs:
         d = details.get(s["id"]) or {}
         hcontent = int(d.get("hcontent") or s.get("hcontent") or 0)
+        children = d.get("children") or [] if int(d.get("file_type") or 0) == WORKSHOP_FILE_TYPE_COLLECTION else []
         installed_h = state.get(s["id"])
-        installed = installed_h is not None
+        if children:
+            # A collection is its children's content: installed when every
+            # child is on disk, outdated when a child is missing or moved on.
+            kids = {cid: child_details.get(cid) for cid in children}
+            installed = all(
+                state.get(cid) is not None and os.path.isdir(os.path.join(root, cid))
+                for cid in children
+            ) if root else False
+            stale = any(
+                d2 is None or state.get(cid) != int(d2.get("hcontent") or 0)
+                for cid, d2 in kids.items()
+            )
+            needs_update = bool(installed and stale)
+            sized = sum(int((d2 or {}).get("size") or 0) for d2 in kids.values())
+            size = sized or int(d.get("size") or s.get("size") or 0)
+        else:
+            installed = bool(root) and installed_h is not None and os.path.isdir(os.path.join(root, s["id"]))
+            needs_update = bool(installed and installed_h != hcontent)
+            size = int(d.get("size") or s.get("size") or 0)
         out.append({
             "id": s["id"],
             "title": d.get("title") or f"Workshop item {s['id']}",
             "preview": d.get("preview_url") or "",
-            "size": int(d.get("size") or s.get("size") or 0),
+            "size": size,
             "updated": int(d.get("updated") or s.get("updated") or 0),
             "hcontent": hcontent,
             "file_url": d.get("file_url") or "",
             "filename": d.get("filename") or "",
             "file_type": int(d.get("file_type") or 0),
-            "children": d.get("children") or [],
+            "children": children,
+            "child_details": child_details,
             "installed": installed,
-            "needs_update": bool(installed and installed_h != hcontent),
+            "needs_update": needs_update,
         })
     return out
 
 
+def workshop_cache_drop(app):
+    with workshop_cache_lock:
+        workshop_cache.pop(app, None)
+
+
 def workshop_list(params):
     app = workshop_number(params)
+    with workshop_cache_lock:
+        hit = workshop_cache.get(app)
+    if hit and time.time() - hit[0] < WORKSHOP_CACHE_TTL:
+        return hit[1]
     items = workshop_items(app)
-    return [{
+    out = [{
         "id": it["id"], "title": it["title"], "previewUrl": it["preview"],
         "sizeBytes": it["size"], "updatedAt": it["updated"],
         "installed": it["installed"], "needsUpdate": it["needs_update"],
     } for it in items]
+    with workshop_cache_lock:
+        workshop_cache[app] = (time.time(), out)
+    return out
 
 
 def start_workshop(params):
@@ -3205,8 +3260,12 @@ def start_workshop(params):
     install_dir = params.get("installDir") or ""
     if not os.path.isabs(install_dir):
         raise RPCError("invalid params: installDir must be an absolute path", -32602)
-    if app not in load_state("installed.json", {}):
+    installed = load_state("installed.json", {}).get(app)
+    if installed is None:
         raise RPCError(tr("not_installed", app=app))
+    recorded = installed.get("path") or ""
+    if recorded and os.path.normpath(install_dir) != os.path.normpath(recorded):
+        raise RPCError("installDir is not this game's install folder", -32602)
     if not claim_job(job_id, {"canceled": False, "id": app, "dir": install_dir, "proc": None}):
         return {}
     threading.Thread(target=follow_workshop, args=(job_id, app, install_dir), daemon=True).start()
@@ -3215,38 +3274,64 @@ def start_workshop(params):
 
 def apply_workshop_plans(app, items):
     """Resolve the direct items and their collection children into one list of
-    downloadable plans. A collection counts as its children's content."""
+    downloadable plans. A collection counts as its children's content; a child
+    Steam no longer details fails the sync instead of being skipped."""
     plans = []
     collections = []
-    missing_children = []
+    missing = 0
     for it in items:
+        if not str(it["id"]).isdigit():
+            raise RPCError("a Workshop item id isn't numeric", -32000)
         if it["file_type"] == WORKSHOP_FILE_TYPE_COLLECTION and it["children"]:
             collections.append(it)
-            missing_children.extend(it["children"])
+            known = {p["id"] for p in plans}
+            for cid in it["children"]:
+                if not str(cid).isdigit():
+                    raise RPCError("a Workshop item id isn't numeric", -32000)
+                if cid in known:
+                    continue
+                d = (it.get("child_details") or {}).get(cid)
+                if d is None:
+                    missing += 1
+                    continue
+                plans.append({
+                    "id": cid,
+                    "title": d.get("title") or f"Workshop item {cid}",
+                    "hcontent": int(d.get("hcontent") or 0),
+                    "file_url": d.get("file_url") or "",
+                    "filename": d.get("filename") or "",
+                    "size": int(d.get("size") or 0),
+                })
         else:
             plans.append(it)
-    if missing_children:
-        known = {p["id"] for p in plans}
-        details = workshop_details(app, [i for i in missing_children if i not in known])
-        for cid in missing_children:
-            d = details.get(cid)
-            if d is None:
-                continue
-            plans.append({
-                "id": cid,
-                "title": d.get("title") or f"Workshop item {cid}",
-                "hcontent": int(d.get("hcontent") or 0),
-                "file_url": d.get("file_url") or "",
-                "filename": d.get("filename") or "",
-                "size": int(d.get("size") or 0),
-            })
+    if missing:
+        raise RPCError(f"{missing} item{'s' if missing != 1 else ''} in your subscribed collections {'are' if missing != 1 else 'is'} no longer available from Steam")
     return plans, collections
+
+
+def workshop_prune(root, keep):
+    """Removes item folders no longer subscribed (folders only, names stay
+    ids): the sync owns this root and nothing else lives in it."""
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return
+    for name in names:
+        if name in keep or not name.isdigit():
+            continue
+        path = os.path.join(root, name)
+        if os.path.isdir(path) and not os.path.islink(path):
+            shutil.rmtree(path, ignore_errors=True)
 
 
 def follow_workshop(job_id, app, install_dir):
     root = workshop_root(app, install_dir)
     try:
         items = workshop_items(app)
+        if workshop_job_canceled(job_id):
+            with jobs_lock:
+                jobs.pop(job_id, None)
+            return
         plans, collections = apply_workshop_plans(app, items)
         depot_items = [p for p in plans if p["hcontent"]]
         http_items = [p for p in plans if not p["hcontent"] and p["file_url"]]
@@ -3262,6 +3347,10 @@ def follow_workshop(job_id, app, install_dir):
             result = dl_run("workshop", req, job_id, root, label="Steam Workshop", phase="downloading")
             for done in (result or {}).get("items") or []:
                 saved[str(done.get("id"))] = int(done.get("hcontent") or 0)
+        if workshop_job_canceled(job_id):
+            with jobs_lock:
+                jobs.pop(job_id, None)
+            return
         if http_items:
             total = sum(p["size"] for p in http_items)
             written = 0
@@ -3295,28 +3384,94 @@ def follow_workshop(job_id, app, install_dir):
     for c in collections:
         if all(cid in entry for cid in c["children"]):
             entry[c["id"]] = int(c.get("hcontent") or 0)
+    keep = {p["id"] for p in plans} | {c["id"] for c in collections}
+    # Unsubscribed items leave the record and the disk with them.
+    state[app] = {k: v for k, v in entry.items() if k in keep}
     workshop_save_state(state)
+    roots = workshop_roots()
+    roots[app] = root
+    workshop_save_roots(roots)
+    workshop_prune(root, keep)
+    workshop_cache_drop(app)
     notify("job.done", {"jobId": job_id})
+
+
+# Legacy Workshop items carry a file_url instead of a depot manifest. Steam
+# serves those from its own content hosts (cloud-N.steamusercontent.com and
+# media.steampowered.com historically; Akamai and CloudFront edges in front
+# of them), always https today. Anything else is refused before a byte is
+# fetched: the URL comes from another user's item.
+WORKSHOP_HTTP_HOSTS = (
+    "steamusercontent.com", "steamcontent.com", "steampowered.com",
+    "steamstatic.com", "steamserver.net", "akamaihd.net", "cloudfront.net",
+    "valve.net",
+)
+# A hard ceiling even when the store reported no size.
+WORKSHOP_HTTP_MAX = 4 << 30
+
+
+def workshop_http_allowed(url):
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme != "https" or not parts.hostname:
+        return False
+    host = parts.hostname.lower().rstrip(".")
+    return any(host == h or host.endswith("." + h) for h in WORKSHOP_HTTP_HOSTS)
+
+
+class WorkshopRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect only within Steam's content hosts; a file:// or a
+    third-party redirect fails the download instead of fetching it."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not workshop_http_allowed(urllib.parse.urljoin(req.full_url, newurl)):
+            raise RPCError("workshop item download redirected off Steam's hosts")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def workshop_job_canceled(job_id):
+    with jobs_lock:
+        return bool((jobs.get(job_id) or {}).get("canceled"))
 
 
 def workshop_http_item(root, plan, job_id, written, total):
     """A legacy item whose content is one plain file (file_url), not a depot
-    manifest. The file name comes from the store and never becomes a path."""
+    manifest. The file name comes from the store and never becomes a path;
+    bytes are capped at the size the store reported (and a hard ceiling), and
+    a failed or canceled transfer leaves no .part behind."""
+    if not workshop_http_allowed(plan["file_url"]):
+        raise RPCError(f"workshop item {plan['id']} is served from a host Platypus doesn't download from")
     name = os.path.basename(plan["filename"] or f"{plan['id']}.bin")
     if not name or name in (".", ".."):
         raise RPCError(f"workshop item {plan['id']} has no usable file name")
+    limit = int(plan.get("size") or 0)
+    if limit <= 0 or limit > WORKSHOP_HTTP_MAX:
+        limit = WORKSHOP_HTTP_MAX
     dest_dir = os.path.join(root, plan["id"])
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, name)
     tmp = dest + ".part"
-    with urllib.request.urlopen(plan["file_url"], timeout=60) as r, open(tmp, "wb") as f:
-        while True:
-            chunk = r.read(1 << 20)
-            if not chunk:
-                break
-            f.write(chunk)
-            written += len(chunk)
-            notify("job.progress", {"jobId": job_id, "phase": "downloading", "bytes": written, "total": total})
+    opener = urllib.request.build_opener(WorkshopRedirects)
+    got = 0
+    try:
+        with opener.open(plan["file_url"], timeout=60) as r, open(tmp, "wb") as f:
+            while True:
+                if workshop_job_canceled(job_id):
+                    raise RPCError("canceled")
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                got += len(chunk)
+                if got > limit:
+                    raise RPCError(f"workshop item {plan['id']} is larger than the store reported ({limit} bytes)")
+                f.write(chunk)
+                written += len(chunk)
+                notify("job.progress", {"jobId": job_id, "phase": "downloading", "bytes": written, "total": total})
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
     os.replace(tmp, dest)
     return written
 
@@ -4253,6 +4408,18 @@ def follow_uninstall(job_id, app, ev=None):
         if ig and ig.get("path") and os.path.isdir(ig["path"]):
             shutil.rmtree(ig["path"], ignore_errors=True)
         save_state("installed.json", installed)
+        # Workshop content and its state leave with the game. A root outside
+        # the game folder is removed only when this plugin wrote it (it is
+        # recorded per app), never a Steam client one.
+        workshop_cache_drop(app)
+        state = workshop_state()
+        state.pop(app, None)
+        workshop_save_state(state)
+        roots = workshop_roots()
+        root = roots.pop(app, "")
+        workshop_save_roots(roots)
+        if root and os.path.basename(root.rstrip(os.sep)) in ("workshop", app) and os.path.isdir(root):
+            shutil.rmtree(root, ignore_errors=True)
     notify("job.done", {"jobId": job_id})
 
 

@@ -187,24 +187,28 @@ function useDetails(game: Game) {
 
 /** A game's subscribed Workshop items (protocol 1.22), or [] when the plugin
  *  doesn't offer them for this game. A Workshop job for the game ending
- *  reloads the list so its installed flags follow what the sync wrote. */
-function useGameWorkshop(game: Game, enabled: boolean, job?: Job): WorkshopItem[] {
+ *  reloads the list so its installed flags follow what the sync wrote; a
+ *  failed read keeps its error for the section's Retry. */
+function useGameWorkshop(game: Game, enabled: boolean, job?: Job): { items: WorkshopItem[]; error: string | null; reload: () => void } {
   const [items, setItems] = useState<WorkshopItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0);
   const key = job?.kind === 'workshop' ? `${job.id}:${job.state}` : '';
   useEffect(() => {
     setItems([]);
+    setError(null);
     if (!enabled) return;
     let live = true;
     Effect.runPromise(LauncherApi.getGameWorkshop(game)).then(
       (list) => live && setItems(list),
-      () => live && setItems([]),
+      (e) => live && setError(e instanceof Error ? e.message : String(e)),
     );
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.id, enabled, key]);
-  return items;
+  }, [game.id, enabled, key, nonce]);
+  return { items, error, reload: () => setNonce((n) => n + 1) };
 }
 
 /** One region's frame in a game layout (issue #103): the hero holds the top
@@ -621,7 +625,9 @@ export function GamePage(p: GamePageProps) {
       onCopyChanged: p.onCopyChanged,
       progress,
       ach,
-      workshop,
+      workshop: workshop.items,
+      workshopError: workshop.error,
+      onRetryWorkshop: workshop.reload,
       onSyncWorkshop: p.onSyncWorkshop,
       events,
     },
@@ -802,6 +808,8 @@ interface GameData {
   progress: ReturnType<typeof useAchievementProgress>;
   ach: GameDetails['achievements'];
   workshop: WorkshopItem[];
+  workshopError: string | null;
+  onRetryWorkshop: () => void;
   onSyncWorkshop?: () => void;
   events: ActivityEvent[];
 }
@@ -895,8 +903,15 @@ function gameBlocks(d: GameData, _layout?: GameLayoutData): Record<string, React
     installation: isPluginGame(game) && game.is_installed && d.plugin ? (
       <div className="space-y-5">
         <InstallationPanel game={game} plugin={d.plugin} job={d.job} onJobAction={d.onJobAction} sourceLogos={d.sourceLogos} />
-        {offers(d.plugin, 'workshop', { game }) && d.workshop.length > 0 ? (
-          <WorkshopSection items={d.workshop} job={d.job} onSync={d.onSyncWorkshop} onJobAction={d.onJobAction} />
+        {offers(d.plugin, 'workshop', { game }) && (d.workshop.length > 0 || d.workshopError) ? (
+          <WorkshopSection
+            items={d.workshop}
+            error={d.workshopError}
+            job={d.job}
+            onSync={d.onSyncWorkshop}
+            onRetry={d.onRetryWorkshop}
+            onJobAction={d.onJobAction}
+          />
         ) : null}
       </div>
     ) : null,
