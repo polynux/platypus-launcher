@@ -62,10 +62,21 @@ Authorization: Bearer <access_token>
 
 `time_sum` is minutes (Heroic divides by 60 for hours). There is no
 library-wide call: Heroic reads one game at a time, and the plugin does the same
-for every owned game (8 requests at a time) after one account listing. The
-`clients/<id>/users/<user id>/sessions` form also exists (comet uses it for the
-running game) but is undocumented and was not tested; the `games/…` form is the
-one Heroic ships.
+for every owned game after one account listing. Asking for the whole library on
+every launcher start is hundreds of calls, so the plugin keeps each game's time
+in `playtime.json` under its data folder: an installed game is asked again
+after 10 minutes, the rest after 6 hours, and the refresh stops after 25 s with
+whatever finished (a slow or 429-answering game keeps its cached time instead of
+showing 0). The `clients/<id>/users/<user id>/sessions` form also exists (comet
+uses it for the running game) but is undocumented and was not tested; the
+`games/…` form is the one Heroic ships.
+
+Language matching for depots mirrors gogdl's table: a depot's language counts
+when it is `"*"`, the installed language's code, its English name, or one of its
+legacy codes (`en`/`English` for `en-US`, `br` for `pt-BR`, `cn`/`zh` for
+`zh-Hans`, and so on) — case-insensitive, with no prefix matching. The same
+table maps a bare UI locale to the `X-Gog-Lc` code (`fr` → `fr-FR`, unknown →
+`en-US`).
 
 Important limit: GOG only learns playtime from **posted sessions**. Heroic posts
 them on game exit (`POST .../sessions` with `{ session_date, time }`, time in
@@ -91,14 +102,19 @@ hashes the same file lists itself.
 - The file list is `GET https://cdn.gog.com/content-system/v2/meta/<ab/cd/hash>`,
   zlib-compressed JSON (`Content-System V2 responses are zlib encoded, window
   size 15`): `{ depot: { items: [ { type: "DepotFile", path, chunks: [ {md5, size, …} ], flags? } ] } }`.
-  `flags: ["support"]` files are installed outside the game folder; they are
-  skipped.
+  `flags: ["support"]` files live in the game's `gog-support` folder, not in
+  the game folder, so verify skips them; files with no chunks are skipped like
+  gogdl does.
 - Repair needs the stored manifest (`ManifestUnavailable: No manifest stored
   locally, unable to verify`); `download` (a fresh install) does not.
 - Linux installers use `<game dir>/.gogdl-linux-manifest` instead:
   `{ files: [ { file_name: "data/noarch/…", crc32, size, is_symlink } ] }`, and
-  gogdl's Linux repair opens `$GOGDL_CONFIG_PATH/exclude/<product id>`
-  unconditionally — the plugin creates it empty before a repair.
+  gogdl's Linux repair opens
+  `$GOGDL_CONFIG_PATH/heroic_gogdl/exclude/<product id>` unconditionally — the
+  plugin creates it empty before a repair. gogdl's Linux manager rebuilds only
+  the install it is told about, so a repair passes the recorded `--lang` and
+  `--with-dlcs --dlcs`; the plugin stores them in its install record because a
+  Linux install has no gogdl manifest to read them from.
 - Generation-1 manifests (`version: 1`) point at
   `content-system/v1/manifests/...` and use a different layout; the plugin
   refuses to check those and asks for an update first.
@@ -129,15 +145,19 @@ Sources: heroic-gogdl `gogdl/args.py`, `gogdl/dl/managers/v2.py`
 
 No account was available, so these are unverified on the wire:
 
-1. `X-Gog-Lc` accepts Platypus's locale string as given (a bare `de` versus
-   `de-DE`); if GOG rejects it, achievements fall back to a fixed `en-US`.
+1. `X-Gog-Lc` accepts the mapped code (a bare `de` becomes `de-DE`); if GOG
+   rejects the mapping, achievements fall back to a fixed `en-US`.
 2. The achievements list's paging (`limit` 1000): games with more than one page
    are assumed not to exist.
 3. `games/<id>/users/<user>/sessions` returns `time_sum` in minutes for a real
-   account, and how many requests a large library tolerates (one per game).
+   account, and how many requests a large library tolerates (one per game, at
+   most 25 s of them per call).
 4. Whether `clients/<id>/users/<user>/sessions` is equivalent (comet's form).
 5. A repair on a corrupted Windows install re-downloads only the broken chunks
-   and the post-check comes back clean; and the same for a Linux installer.
-6. Depot language codes really are prefix-compatible with the installed
-   language (`en` vs `en-US`) — the plugin accepts `*`, an exact match, or a
-   dash-boundary prefix match either way.
+   and the post-check comes back clean; and the same for a Linux installer,
+   including that the language and add-ons stay installed.
+6. Depot language codes really are the ones gogdl's table names (`en`, `br`,
+   `cn`, English names) for real multi-language games.
+7. `game.options` on a movie/extra (no installers) answers empty groups rather
+   than an error, and a language GOG dropped from a game is refused when asked
+   for.

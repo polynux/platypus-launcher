@@ -46,7 +46,7 @@ def crc32_file(path):
     return crc & 0xFFFFFFFF
 
 
-def write_manifests(app, build, platform, game_dir):
+def write_manifests(app, build, platform, game_dir, lang="en-US", dlc_ids=()):
     """The file lists the real tool stores: .gogdl-linux-manifest for the Linux
     installer manager, the content-system manifest for Windows installs (what
     `gogdl repair` verifies against)."""
@@ -72,8 +72,8 @@ def write_manifests(app, build, platform, game_dir):
     meta = {
         "version": 2,
         "baseProductId": app,
-        "HGLInstallLanguage": "en-US",
-        "HGLdlcs": [],
+        "HGLInstallLanguage": lang,
+        "HGLdlcs": [{"id": d, "title": d} for d in dlc_ids],
         "installDirectory": "SuperGame",
         "buildId": build,
         "depots": [{"languages": ["*", "en-US"], "manifest": DEPOT_HASH,
@@ -103,17 +103,25 @@ def info_for(build, platform="windows"):
         # the default build instead of failing, so callers must compare the
         # answered buildId with the requested one.
         build = LATEST_BUILD
+    # Two installable languages and two owned add-ons (what gogdl info lists:
+    # one entry per owned DLC, with its per-language sizes).
+    dlcs = [
+        {"id": "111", "title": "Season Pass",
+         "size": {"en-US": {"download_size": 1 * 1024 * 1024, "disk_size": 1 * 1024 * 1024}}},
+        {"id": "222", "title": "Deluxe",
+         "size": {"en-US": {"download_size": 2 * 1024 * 1024, "disk_size": 2 * 1024 * 1024}}},
+    ]
     if platform == "linux":
         # The Linux installer manager has no builds and answers no buildId.
         return {"size": {"*": {"download_size": 0, "disk_size": 0},
                          "en-US": {"download_size": 8 * 1024 * 1024, "disk_size": DISK_BYTES}},
-                "languages": ["en-US"], "folder_name": "SuperGame", "dependencies": [],
-                "dlcs": [], "builds": {"total_count": 0, "count": 0, "items": []}}
+                "languages": ["en-US", "de-DE"], "folder_name": "SuperGame", "dependencies": [],
+                "dlcs": dlcs, "builds": {"total_count": 0, "count": 0, "items": []}}
     return {"size": {"*": {"download_size": 0, "disk_size": 0},
                      "en-US": {"download_size": 8 * 1024 * 1024, "disk_size": DISK_BYTES}},
             "buildId": build, "versionName": names[build],
-            "languages": ["en-US"], "folder_name": "SuperGame", "dependencies": [],
-            "available_branches": ["beta", None], "dlcs": [],
+            "languages": ["en-US", "de-DE"], "folder_name": "SuperGame", "dependencies": [],
+            "available_branches": ["beta", None], "dlcs": dlcs,
             "builds": {"total_count": len(builds), "count": len(builds), "items": builds}}
 
 
@@ -255,11 +263,22 @@ def main():
         else:
             with open(os.path.join(game_dir, f"goggame-{app}.info"), "w") as f:
                 json.dump({"buildId": build, "version": {LATEST_BUILD: "1.0"}.get(build, "0.9")}, f)
+        # The chosen language and add-ons land like the real tool's files, so
+        # a repair (which passes them back) restores them too.
+        lang = rest[rest.index("--lang") + 1] if "--lang" in rest else "en-US"
+        dlc_ids = []
+        if "--dlcs" in rest:
+            dlc_ids = [d for d in (rest[rest.index("--dlcs") + 1] or "").split(",") if d]
+        with open(os.path.join(game_dir, "language.txt"), "w") as f:
+            f.write(lang)
+        for dlc in dlc_ids:
+            with open(os.path.join(game_dir, f"dlc-{dlc}.bin"), "wb") as f:
+                f.truncate(1024 * 1024)
         script = os.path.join(game_dir, "start.sh")
         with open(script, "w") as f:
             f.write("#!/bin/sh\necho \"gog game $*\"\n")
         os.chmod(script, 0o755)
-        write_manifests(app, build, platform, game_dir)
+        write_manifests(app, build, platform, game_dir, lang, dlc_ids)
         st.setdefault("paths", {})[st.get("install_id", "1234")] = game_dir
         save(st)
         print("[cli] INFO: Download complete", file=sys.stderr)

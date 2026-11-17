@@ -51,7 +51,7 @@ func (b backend) Cancel(ctx context.Context, j types.Job) error {
 	return b.m.Call(ctx, j.Source, "job.cancel", map[string]any{"jobId": j.ID}, nil)
 }
 
-func setup(t *testing.T) (*plugins.Manager, *jobs.Queue, *stores.Plugin, string) {
+func setup(t *testing.T, extra ...map[string]string) (*plugins.Manager, *jobs.Queue, *stores.Plugin, string) {
 	t.Helper()
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 not installed")
@@ -71,6 +71,11 @@ func setup(t *testing.T) (*plugins.Manager, *jobs.Queue, *stores.Plugin, string)
 	userdata := filepath.Join(root, "userdata.json")
 	os.WriteFile(userdata, []byte(`{"username": "GogUser", "totalPages": 1, "products": [{"id": 1234, "title": "Super Game", "isGame": true, "image": "//img.gog/box"}], "_test": {"id": 1234, "title": "Super Game", "description": {"lead": "A super game."}, "genres": [{"name": "Action"}], "release_date": "2019-09-20T00:00:00Z", "downloads": {"installers": [{"os": "linux", "language": "en-US"}]}, "screenshots": [{"formatter_template_url": "//images.gog.com/x_{formatter}.png", "formatted_images": [{"formatter_name": "ggvgl", "image_url": "https://images.gog.com/x_ggvgl.jpg"}]}]}}`), 0o644)
 	t.Setenv("PLATYPUS_GOG_API_FILE", userdata)
+	for _, env := range extra {
+		for k, v := range env {
+			t.Setenv(k, v)
+		}
+	}
 
 	sets, _ := settings.Open(filepath.Join(root, "settings.json"))
 	var q *jobs.Queue
@@ -174,6 +179,12 @@ func forceLinuxPlatform(t *testing.T) {
 // installFixture installs the setup's only game and returns its library entry.
 func installFixture(t *testing.T, q *jobs.Queue, store *stores.Plugin, folder string) types.Game {
 	t.Helper()
+	return installWith(t, q, store, folder, nil)
+}
+
+// installWith installs the setup's only game with the given install options.
+func installWith(t *testing.T, q *jobs.Queue, store *stores.Plugin, folder string, options types.InstallOptions) types.Game {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	lib, err := store.Library(ctx)
@@ -181,8 +192,12 @@ func installFixture(t *testing.T, q *jobs.Queue, store *stores.Plugin, folder st
 		t.Fatalf("library: %+v, %v", lib, err)
 	}
 	game := lib[0]
-	if j := installTargeted(t, q, game, folder, nil); j.State != jobs.StateDone {
-		t.Fatalf("install: %+v", j)
+	j, err := q.AddWithOptions(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, folder, nil, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done := waitState(t, q, j.ID, jobs.StateDone, jobs.StateFailed); done.State != jobs.StateDone {
+		t.Fatalf("install: %+v", done)
 	}
 	lib, err = store.Library(ctx)
 	if err != nil {
@@ -200,6 +215,20 @@ func installFixture(t *testing.T, q *jobs.Queue, store *stores.Plugin, folder st
 	return types.Game{}
 }
 
+// runVerify queues a check (or repair) and waits for its report.
+func runVerify(t *testing.T, q *jobs.Queue, game types.Game, dir string, repair bool) types.Job {
+	t.Helper()
+	j, err := q.AddVerify(id, game.ID, game.StoreAppID, game.Title, dir, repair)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := waitState(t, q, j.ID, jobs.StateDone, jobs.StateFailed)
+	if done.State != jobs.StateDone || done.Verify == nil {
+		t.Fatalf("verify (repair %v): %+v", repair, done)
+	}
+	return done
+}
+
 func TestGogVerifyLinuxInstall(t *testing.T) {
 	m, q, store, folder := setup(t)
 	forceLinuxPlatform(t)
@@ -209,15 +238,7 @@ func TestGogVerifyLinuxInstall(t *testing.T) {
 
 	check := func(repair bool) types.Job {
 		t.Helper()
-		j, err := q.AddVerify(id, game.ID, game.StoreAppID, game.Title, dir, repair)
-		if err != nil {
-			t.Fatal(err)
-		}
-		done := waitState(t, q, j.ID, jobs.StateDone, jobs.StateFailed)
-		if done.State != jobs.StateDone || done.Verify == nil {
-			t.Fatalf("verify (repair %v): %+v", repair, done)
-		}
-		return done
+		return runVerify(t, q, game, dir, repair)
 	}
 
 	done := check(false)
@@ -251,6 +272,100 @@ func TestGogVerifyLinuxInstall(t *testing.T) {
 	if v := check(false).Verify; v.Damaged != 0 || v.Missing != 0 {
 		t.Fatalf("check after repair: %+v", v)
 	}
+}
+
+func TestGogVerifyWindowsRepair(t *testing.T) {
+	// The Windows install's stored manifest points at a depot list on the
+	// fake CDN, which verify hashes file by file.
+	m, q, store, folder := setup(t, map[string]string{"PLATYPUS_GOG_API_BASE": fakeDepot(t)})
+	login(t, m)
+	game := installFixture(t, q, store, folder)
+	dir := game.InstallDir
+
+	if v := runVerify(t, q, game, dir, false).Verify; v.Damaged != 0 || v.Missing != 0 || v.Checked != 1 {
+		t.Fatalf("clean check: %+v", v)
+	}
+	// One byte of the game's only depot file changes.
+	f, err := os.OpenFile(filepath.Join(dir, "data.bin"), os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteAt([]byte{1}, 0); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	f.Close()
+	if v := runVerify(t, q, game, dir, false).Verify; v.Damaged != 1 || v.Missing != 0 {
+		t.Fatalf("damaged check: %+v", v)
+	}
+	if v := runVerify(t, q, game, dir, true).Verify; v.Repaired != 1 || v.Damaged != 0 || v.Missing != 0 {
+		t.Fatalf("repair: %+v", v)
+	}
+	if v := runVerify(t, q, game, dir, false).Verify; v.Damaged != 0 || v.Missing != 0 {
+		t.Fatalf("check after repair: %+v", v)
+	}
+	readCalls(t).check(t, "repair 1234 --path "+dir+" --platform windows")
+}
+
+func TestGogLinuxRepairKeepsLanguageAndDLC(t *testing.T) {
+	m, q, store, folder := setup(t)
+	forceLinuxPlatform(t)
+	login(t, m)
+	options := types.InstallOptions{"language": "de-DE", "dlc": []any{"111"}}
+	game := installWith(t, q, store, folder, options)
+	dir := game.InstallDir
+
+	if b, err := os.ReadFile(filepath.Join(dir, "language.txt")); err != nil || string(b) != "de-DE" {
+		t.Fatalf("installed language: %q, %v", b, err)
+	}
+	// A Linux install has no gogdl manifest; the record keeps the choice.
+	raw, err := os.ReadFile(filepath.Join(m.DataDirOf(id), "installed.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec map[string]map[string]any
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec["1234"]["language"] != "de-DE" || len(rec["1234"]["dlc"].([]any)) != 1 {
+		t.Fatalf("install record: %+v", rec["1234"])
+	}
+	var opts struct {
+		Groups []struct {
+			ID      string `json:"id"`
+			Default string `json:"default"`
+			Values  []struct {
+				ID        string `json:"id"`
+				Installed bool   `json:"installed"`
+			} `json:"values"`
+		} `json:"groups"`
+	}
+	if err := call(t, m, "game.options", map[string]any{"id": "1234"}, &opts); err != nil {
+		t.Fatal(err)
+	}
+	if len(opts.Groups) != 2 || opts.Groups[0].Default != "de-DE" {
+		t.Fatalf("game.options: %+v", opts.Groups)
+	}
+	dlc := opts.Groups[1]
+	if dlc.ID != "dlc" || len(dlc.Values) == 0 || dlc.Values[0].ID != "111" || !dlc.Values[0].Installed {
+		t.Fatalf("dlc group: %+v", dlc)
+	}
+
+	// The DLC file goes missing: the repair must rebuild it with the same
+	// language and add-ons, or it would drop what the install chose.
+	if err := os.Remove(filepath.Join(dir, "dlc-111.bin")); err != nil {
+		t.Fatal(err)
+	}
+	if v := runVerify(t, q, game, dir, false).Verify; v.Missing != 1 || v.Damaged != 0 {
+		t.Fatalf("missing check: %+v", v)
+	}
+	if v := runVerify(t, q, game, dir, true).Verify; v.Repaired != 1 || v.Missing != 0 {
+		t.Fatalf("repair: %+v", v)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "dlc-111.bin")); err != nil {
+		t.Fatalf("repair didn't restore the DLC file: %v", err)
+	}
+	readCalls(t).check(t, "repair 1234 --path "+dir+" --platform linux --lang de-DE --with-dlcs --dlcs 111")
 }
 
 func TestGogVerifyRefusedWithoutManifest(t *testing.T) {

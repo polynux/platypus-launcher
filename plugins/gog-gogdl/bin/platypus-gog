@@ -48,10 +48,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
-from concurrent.futures import ThreadPoolExecutor
 
 API = 1
-PLUGIN_VERSION = "0.3.0"
+PLUGIN_VERSION = "0.4.0"
 CODE_AUTH_REQUIRED = -32001
 # GOG build ids are long digits (e.g. 57200821661238017).
 BUILD_ID_RE = re.compile(r"[0-9]{4,32}")
@@ -59,6 +58,101 @@ BUILD_ID_RE = re.compile(r"[0-9]{4,32}")
 LOCALE = "en-US"
 CAPABILITIES = ["library", "install", "launch", "auth", "discard", "versions",
                 "verify", "install-options", "achievements", "playtime"]
+# How long playtime.list may spend refreshing GOG's per-game times, and how
+# old a cached time may be before that game is asked again (installed games
+# are the ones still being played).
+PLAYTIME_BUDGET_S = 25
+PLAYTIME_STALE_S = 6 * 3600
+PLAYTIME_INSTALLED_STALE_S = 600
+# gogdl's language table (gogdl/languages.py): code, English name, and the
+# legacy codes GOG's depots still use. gogdl treats a depot's language as the
+# installed one when it is any of these; the plugin does the same.
+GOG_LANGUAGES = [
+    ("af-ZA", "Afrikaans", ()),
+    ("ar", "Arabic", ()),
+    ("az-AZ", "Azeri", ()),
+    ("be-BY", "Belarusian", ("be",)),
+    ("bn-BD", "Bengali", ("bn_BD",)),
+    ("bg-BG", "Bulgarian", ("bg", "bl")),
+    ("bs-BA", "Bosnian", ()),
+    ("ca-ES", "Catalan", ("ca",)),
+    ("cs-CZ", "Czech", ("cz",)),
+    ("cy-GB", "Welsh", ()),
+    ("da-DK", "Danish", ("da",)),
+    ("de-DE", "German", ("de",)),
+    ("dv-MV", "Divehi", ()),
+    ("el-GR", "Greek", ("gk", "el-GK")),
+    ("en-GB", "British English", ("en_GB",)),
+    ("en-US", "English", ("en",)),
+    ("es-ES", "Spanish", ("es",)),
+    ("es-MX", "Latin American Spanish", ("es_mx",)),
+    ("et-EE", "Estonian", ("et",)),
+    ("eu-ES", "Basque", ()),
+    ("fa-IR", "Persian", ("fa",)),
+    ("fi-FI", "Finnish", ("fi",)),
+    ("fo-FO", "Faroese", ()),
+    ("fr-FR", "French", ("fr",)),
+    ("gl-ES", "Galician", ()),
+    ("gu-IN", "Gujarati", ("gu",)),
+    ("he-IL", "Hebrew", ("he",)),
+    ("hi-IN", "Hindi", ("hi",)),
+    ("hr-HR", "Croatian", ()),
+    ("hu-HU", "Hungarian", ("hu",)),
+    ("hy-AM", "Armenian", ()),
+    ("id-ID", "Indonesian", ()),
+    ("is-IS", "Icelandic", ("is",)),
+    ("it-IT", "Italian", ("it",)),
+    ("ja-JP", "Japanese", ("jp",)),
+    ("jv-ID", "Javanese", ("jv",)),
+    ("ka-GE", "Georgian", ()),
+    ("kk-KZ", "Kazakh", ()),
+    ("kn-IN", "Kannada", ()),
+    ("ko-KR", "Korean", ("ko",)),
+    ("kok-IN", "Konkani", ()),
+    ("ky-KG", "Kyrgyz", ()),
+    ("la", "Latin", ()),
+    ("lt-LT", "Lithuanian", ()),
+    ("lv-LV", "Latvian", ()),
+    ("ml-IN", "Malayalam", ("ml",)),
+    ("mi-NZ", "Maori", ()),
+    ("mk-MK", "Macedonian", ()),
+    ("mn-MN", "Mongolian", ()),
+    ("mr-IN", "Marathi", ("mr",)),
+    ("ms-MY", "Malay", ()),
+    ("mt-MT", "Maltese", ()),
+    ("nb-NO", "Norwegian", ("no",)),
+    ("nl-NL", "Dutch", ("nl",)),
+    ("ns-ZA", "Northern Sotho", ()),
+    ("pa-IN", "Punjabi", ()),
+    ("pl-PL", "Polish", ("pl",)),
+    ("ps-AR", "Pashto", ()),
+    ("pt-BR", "Portuguese (Brazilian)", ("br",)),
+    ("pt-PT", "Portuguese", ("pt",)),
+    ("ro-RO", "Romanian", ("ro",)),
+    ("ru-RU", "Russian", ("ru",)),
+    ("sa-IN", "Sanskrit", ()),
+    ("sk-SK", "Slovak", ("sk",)),
+    ("sl-SI", "Slovenian", ()),
+    ("sq-AL", "Albanian", ()),
+    ("sr-SP", "Serbian", ("sb",)),
+    ("sv-SE", "Swedish", ("sv",)),
+    ("sw-KE", "Kiswahili", ()),
+    ("ta-IN", "Tamil", ("ta_IN",)),
+    ("te-IN", "Telugu", ("te",)),
+    ("th-TH", "Thai", ("th",)),
+    ("tl-PH", "Tagalog", ()),
+    ("tn-ZA", "Setswana", ()),
+    ("tr-TR", "Turkish", ("tr",)),
+    ("tt-RU", "Tatar", ()),
+    ("uk-UA", "Ukrainian", ("uk",)),
+    ("ur-PK", "Urdu", ("ur_PK",)),
+    ("uz-UZ", "Uzbek", ()),
+    ("vi-VN", "Vietnamese", ("vi",)),
+    ("xh-ZA", "isiXhosa", ()),
+    ("zh-Hans", "Chinese (Simplified)", ("zh_Hans", "zh", "cn")),
+    ("zh-Hant", "Chinese (Traditional)", ("zh_Hant",)),
+    ("zu-ZA", "isiZulu", ()),
+]
 
 
 def stall_limits():
@@ -495,6 +589,15 @@ def expected_sizes(data, lang="", dlcs=()):
     return download, disk
 
 
+def dlc_disk_bytes(sizes, lang):
+    """What a DLC adds to the install: its chosen language's depots plus the
+    "*" ones, like the base game's."""
+    if not isinstance(sizes, dict):
+        return 0
+    lang = lang or ("en-US" if "en-US" in sizes else "")
+    return best_sizes({"size": sizes}, lang)[1]
+
+
 def option_choices(options):
     """(language, DLC ids) from a job's install-option choices. Platypus sends
     the complete set, so an absent group means the game offers none."""
@@ -503,6 +606,27 @@ def option_choices(options):
     raw = o.get("dlc")
     dlcs = [str(d) for d in raw if str(d)] if isinstance(raw, list) else []
     return lang, dlcs
+
+
+def check_options(app, platform, options):
+    """Refuse a choice gogdl can't install: a language GOG doesn't offer, or an
+    add-on the account doesn't own (one already on disk may stay, per the
+    protocol). No choice means no lookup."""
+    lang, dlcs = option_choices(options)
+    if not lang and not dlcs:
+        return
+    data = gog_info(app, platform, timeout=20)
+    if lang:
+        langs = [str(l) for l in (data.get("languages") or []) if l]
+        # An install already in that language may keep it, like an add-on.
+        if langs and lang not in langs and lang != installed_language(app):
+            raise RPCError(f"GOG doesn't offer {lang} for {app}", -32602)
+    owned = {str(d.get("id")) for d in (data.get("dlcs") or [])
+             if isinstance(d, dict) and d.get("id") is not None}
+    installed = installed_dlcs(app)
+    for d in dlcs:
+        if d not in owned and d not in installed:
+            raise RPCError(f"you don't own GOG add-on {d} for {app}", -32602)
 
 
 def install_size(params):
@@ -535,6 +659,18 @@ def platform_of(app):
     return "windows"
 
 
+def product_installable(app):
+    """Whether GOG sells installers for a product at all (movies, extras and
+    books don't). Unknown or unreachable counts as installable, so its caller
+    keeps its real error."""
+    try:
+        data = api_get(f"https://api.gog.com/products/{app}?expand=downloads", "")
+    except Exception:
+        return True
+    installers = (data.get("downloads") or {}).get("installers") or []
+    return bool(installers)
+
+
 # --- install options (protocol 1.5) -----------------------------------------
 #
 # gogdl installs one language (--lang, en-US by default) and, with --with-dlcs
@@ -556,7 +692,12 @@ def stored_manifest(app):
 
 
 def installed_language(app):
-    return str(stored_manifest(app).get("HGLInstallLanguage") or "")
+    """The language the game is installed in: gogdl's manifest for Windows
+    installs, the install record for Linux ones (which have no manifest)."""
+    lang = str(stored_manifest(app).get("HGLInstallLanguage") or "")
+    if not lang:
+        lang = str((installed_games().get(app) or {}).get("language") or "")
+    return lang
 
 
 def installed_dlcs(app):
@@ -564,6 +705,8 @@ def installed_dlcs(app):
     for d in stored_manifest(app).get("HGLdlcs") or []:
         if isinstance(d, dict) and d.get("id") is not None:
             ids.add(str(d["id"]))
+    for d in (installed_games().get(app) or {}).get("dlc") or []:
+        ids.add(str(d))
     return ids
 
 
@@ -573,11 +716,14 @@ def game_options(params):
     app = str((params or {}).get("id") or "")
     if not app:
         raise RPCError("invalid params: id is required", -32602)
+    platform = platform_of(app)
     try:
-        data = gog_info(app, platform_of(app), timeout=120)
+        data = gog_info(app, platform, timeout=20)
     except RPCError as e:
         if e.code == CODE_AUTH_REQUIRED:
             raise
+        if not product_installable(app):
+            return {"groups": []}  # a movie or extra: nothing to choose
         raise RPCError(f"couldn't list install options for {app}: {e}", -32002)
     lang = installed_language(app)
     groups = []
@@ -595,7 +741,7 @@ def game_options(params):
             v = {"id": str(d["id"]), "label": str(d.get("title") or d["id"]), "owned": True}
             sizes = d.get("size")
             if isinstance(sizes, dict):
-                disk = best_sizes({"size": sizes}, lang)[1]
+                disk = dlc_disk_bytes(sizes, lang)
                 if disk:
                     v["sizeBytes"] = disk
             if str(d["id"]) in have:
@@ -731,6 +877,7 @@ def start_job(params, kind):
         raise RPCError("installDir is missing or relative; Platypus always sends one")
     build, branch = resolve_target(params.get("target"))
     platform = platform_of(app)
+    check_options(app, platform, params.get("options"))
     if kind == "update" and build and app in installed_games():
         # Fail fast when the store doesn't serve the build: gogdl would
         # silently converge to the default instead.
@@ -1294,7 +1441,17 @@ def record_install(job, kind, installed):
     exe = find_executable(game_dir)
     with state_lock:
         state = installed_games()
-        state[app] = {
+        prev = state.get(app) or {}
+        options = job.get("options") or {}
+        lang, dlcs = option_choices(options)
+        # gogdl's manifest carries these for Windows installs; a Linux
+        # installer has no manifest, so the record is the only place (repair
+        # and game.options read it from here).
+        if not lang:
+            lang = str(prev.get("language") or "")
+        if "dlc" not in options:
+            dlcs = list(prev.get("dlc") or [])
+        record = {
             "path": game_dir,
             "platform": platform,
             "version": installed.get("versionName", ""),
@@ -1303,6 +1460,11 @@ def record_install(job, kind, installed):
             "executable": exe,
             "title": job.get("title") or known_titles().get(app, ""),
         }
+        if lang:
+            record["language"] = lang
+        if dlcs:
+            record["dlc"] = dlcs
+        state[app] = record
         save_installed(state)
 
 
@@ -1656,50 +1818,95 @@ def galaxy_path(name):
     return name if "/" in name else name[:2] + "/" + name[2:4] + "/" + name
 
 
+def language_entry(lang):
+    """gogdl's table entry (code, name, legacy codes) for a code, name or
+    legacy code, or None."""
+    want = str(lang or "").strip().lower()
+    if not want:
+        return None
+    for code, name, legacy in GOG_LANGUAGES:
+        if want in (code.lower(), name.lower()) or want in [l.lower() for l in legacy]:
+            return code, name, legacy
+    return None
+
+
+def gog_locale(locale):
+    """A GOG language code for the X-Gog-Lc header: the code itself when the
+    locale names one, the language's code for a bare locale ("fr" -> fr-FR),
+    and en-US when neither matches."""
+    entry = language_entry(locale)
+    if entry:
+        return entry[0]
+    want = str(locale or "").strip().lower().replace("_", "-")
+    if want:
+        for code, _name, _legacy in GOG_LANGUAGES:
+            if code.lower().split("-")[0] == want:
+                return code
+    return "en-US"
+
+
 def lang_matches(depot_langs, installed):
-    """Whether a depot belongs to an install of `installed`: "*" or that
-    language. Depot languages may be shortened ("en" for "en-US"), which gogdl
-    treats as equal (its table maps deprecated codes)."""
-    want = (installed or "").lower()
+    """Whether a depot belongs to an install of `installed`: "*", its code, its
+    English name, or one of its legacy codes — exactly what gogdl compares
+    (Languages.Language.__eq__)."""
+    entry = language_entry(installed)
+    accepted = {str(installed).lower()} if installed else set()
+    if entry:
+        accepted |= {entry[0].lower(), entry[1].lower()}
+        accepted |= {l.lower() for l in entry[2]}
     for l in depot_langs or []:
         l = str(l).lower()
-        if l == "*" or (want and (l == want or l.startswith(want + "-")
-                                  or want.startswith(l + "-"))):
+        if l == "*" or l in accepted:
             return True
     return False
 
 
 def case_insensitive_path(path):
-    """The path as it is on disk when only its case differs, else path."""
+    """The path with each existing component matched case-insensitively, like
+    gogdl's get_case_insensitive_name: a game folder written as "Data" is found
+    for "data/x". Components that match nothing are left as they are."""
     if os.path.exists(path):
         return path
     folder, name = os.path.split(path)
+    if not name:
+        return path
+    base = case_insensitive_path(folder) if folder and folder != path else folder
     try:
-        for entry in os.listdir(folder or "."):
+        for entry in os.listdir(base or "."):
             if entry.lower() == name.lower():
-                return os.path.join(folder, entry)
+                return os.path.join(base, entry)
     except OSError:
         pass
-    return path
+    return os.path.join(base, name)
 
 
-def crc32_matches(path, want):
+def crc32_matches(job_id, path, want, on_read=None):
+    """True/False for the file's crc32, or None when the job was canceled.
+    on_read gets the bytes read so far, so a big file shows progress."""
     crc = 0
+    read = 0
     try:
         with open(path, "rb") as f:
             while True:
+                if canceled(job_id):
+                    return None
                 block = f.read(1 << 20)
                 if not block:
                     break
+                read += len(block)
+                if on_read:
+                    on_read(read)
                 crc = zlib.crc32(block, crc)
     except OSError:
         return False
     return crc & 0xFFFFFFFF == want & 0xFFFFFFFF
 
 
-def hashes_match(path, chunks):
-    """Whether every chunk of the file matches the store's md5, streamed one
-    chunk at a time (a check never loads a file into memory)."""
+def hashes_match(job_id, path, chunks, on_read=None):
+    """True/False for the file's md5 chunks, streamed one chunk at a time (a
+    check never loads a file into memory), or None when the job was canceled.
+    on_read gets the bytes read so far, so a big file shows progress."""
+    read = 0
     try:
         with open(path, "rb") as f:
             for c in chunks:
@@ -1709,9 +1916,14 @@ def hashes_match(path, chunks):
                 left = int(c.get("size") or 0)
                 h = hashlib.md5()
                 while left > 0:
+                    if canceled(job_id):
+                        return None
                     block = f.read(min(left, 1 << 20))
                     if not block:
                         return False
+                    read += len(block)
+                    if on_read:
+                        on_read(read)
                     h.update(block)
                     left -= len(block)
                 if want and h.hexdigest() != want:
@@ -1721,10 +1933,11 @@ def hashes_match(path, chunks):
     return True
 
 
-def depot_files(meta):
+def depot_files(job_id, meta):
     """(path, chunks) for the game files a stored manifest lists: the install's
     language and DLC depots only; support files are left out (gogdl installs
-    those outside the game folder)."""
+    those in the game's gog-support folder), and so are files without chunks
+    (gogdl skips them). None when the job was canceled."""
     base = str(meta.get("baseProductId") or "")
     dlcs = {str(d["id"]) for d in meta.get("HGLdlcs") or []
             if isinstance(d, dict) and d.get("id") is not None}
@@ -1741,6 +1954,8 @@ def depot_files(meta):
             continue
         if depot.get("osBitness") and bits not in [str(b) for b in depot["osBitness"]]:
             continue
+        if canceled(job_id):
+            return None
         data = api_get_zjson("https://cdn.gog.com/content-system/v2/meta/"
                              + galaxy_path(str(depot["manifest"])))
         for item in ((data or {}).get("depot") or {}).get("items") or []:
@@ -1749,8 +1964,9 @@ def depot_files(meta):
             if "support" in (item.get("flags") or []):
                 continue
             path = str(item.get("path") or "").replace("\\", "/").lstrip("/")
-            if path:
-                files.append((path, item.get("chunks") or []))
+            chunks = [c for c in item.get("chunks") or [] if isinstance(c, dict)]
+            if path and chunks:  # gogdl skips chunkless files too
+                files.append((path, chunks))
     return files
 
 
@@ -1791,11 +2007,18 @@ def verify_files(job_id, app, game_dir, platform):
                 return None
             checked += 1
             path = str(f["file_name"]).replace("data/noarch", game_dir)
+            size = int(f.get("size") or 0)
             if not os.path.isfile(path):
                 missing += 1
-            elif not crc32_matches(path, int(f.get("crc32") or 0)):
-                damaged += 1
-            done += int(f.get("size") or 0)
+            else:
+                ok = crc32_matches(job_id, path, int(f.get("crc32") or 0),
+                                   lambda n, base=done: check_progress(
+                                       job_id, base + n, total, last))
+                if ok is None:
+                    return None
+                if not ok:
+                    damaged += 1
+            done += size
             check_progress(job_id, done, total, last)
         return checked, damaged, missing
     meta = stored_manifest(app)
@@ -1804,24 +2027,32 @@ def verify_files(job_id, app, game_dir, platform):
                        "installs from GOG's older content system); update the "
                        "game once, then verify again")
     try:
-        files = depot_files(meta)
+        files = depot_files(job_id, meta)
     except Exception as e:
         raise RPCError(f"couldn't read GOG's file list for {app}: {e}")
+    if files is None:
+        return None
     if not files:
         raise RPCError("this install has no stored game file list to check; "
                        "update the game once, then verify again")
-    total = sum(sum(int(c.get("size") or 0) for c in chunks if isinstance(c, dict))
-                for _path, chunks in files)
+    total = sum(sum(int(c.get("size") or 0) for c in chunks) for _path, chunks in files)
     for rel, chunks in files:
         if canceled(job_id):
             return None
         checked += 1
         path = case_insensitive_path(os.path.join(game_dir, rel))
+        size = sum(int(c.get("size") or 0) for c in chunks)
         if not os.path.isfile(path):
             missing += 1
-        elif not hashes_match(path, chunks):
-            damaged += 1
-        done += sum(int(c.get("size") or 0) for c in chunks if isinstance(c, dict))
+        else:
+            ok = hashes_match(job_id, path, chunks,
+                              lambda n, base=done: check_progress(
+                                  job_id, base + n, total, last))
+            if ok is None:
+                return None
+            if not ok:
+                damaged += 1
+        done += size
         check_progress(job_id, done, total, last)
     return checked, damaged, missing
 
@@ -1878,23 +2109,26 @@ def start_verify(params):
     return {}
 
 
-def report_repair_line(job_id, state, line):
-    parsed = parse_progress(line)
-    if not parsed:
-        return
-    pct, done, total, speed = parsed
-    state.update({"percent": pct, "bytes": done, "total": total})
-    if speed is not None:
-        state["speed"] = speed
-    notify("job.progress", dict(state))
-
-
 def run_repair(job_id, app, install_dir, platform):
     """The repair half of a verify: gogdl re-hashes the files and re-downloads
-    the broken ones. None on success, else the message for job.failed."""
+    the broken ones. None on success (or when the job was canceled), else the
+    message for job.failed."""
     ensure_exclude_file(app)
     argv = ["gogdl", "--auth-config-path", auth_file(), "repair", app,
-            "--path", install_dir, "--platform", platform, "--max-workers", "4"]
+            "--path", install_dir, "--platform", platform]
+    if platform == "linux":
+        # gogdl's Linux manager rebuilds exactly the chosen install: without
+        # these it repairs only the base game and drops the language/add-ons
+        # its manifest lists. For Windows installs the stored manifest already
+        # holds them.
+        lang, dlcs = option_choices(installed_games().get(app) or {})
+        if lang:
+            argv += ["--lang", lang]
+        if dlcs:
+            argv += ["--with-dlcs", "--dlcs", ",".join(dlcs)]
+        else:
+            argv += ["--skip-dlcs"]
+    argv += ["--max-workers", "4"]
     try:
         proc = spawn_gogdl(argv)
     except FileNotFoundError:
@@ -1905,13 +2139,16 @@ def run_repair(job_id, app, install_dir, platform):
             stop_proc(proc, grace=5)
             return None
         job["proc"] = proc
+        reset_run_state(job, time.monotonic())
     state = {"jobId": job_id, "phase": "repairing", "percent": 0}
-    try:
-        next_line = line_reader(proc.stdout.fileno())
-    except (OSError, ValueError, AttributeError):
-        next_line = None
-    if next_line is not None:
-        pump(proc, next_line, lambda line: report_repair_line(job_id, state, line))
+    bytes_stall, quiet_stall = stall_limits()
+    outcome = watch_attempt(job_id, proc, state, bytes_stall, quiet_stall)
+    if outcome == "canceled":
+        return None
+    with jobs_lock:
+        stalled = jobs.get(job_id, {}).get("stalled")
+    if outcome == "stalled":
+        return stalled or "gogdl stalled while repairing; retry the job"
     try:
         rc = proc.wait(timeout=30)
     except subprocess.TimeoutExpired:
@@ -1950,9 +2187,10 @@ def follow_verify(job_id, app, install_dir, platform, repair):
             repaired = max(0, damaged + missing - left)
             damaged, missing = after[1], after[2]
     except Exception as e:
+        was_canceled = canceled(job_id)
         with jobs_lock:
             jobs.pop(job_id, None)
-        if canceled(job_id):
+        if was_canceled:
             return
         error = str(e) if isinstance(e, RPCError) else f"{type(e).__name__}: {e}"
         notify("job.failed", {"jobId": job_id, "error": error})
@@ -1998,17 +2236,23 @@ def game_relocated(params):
 # library-wide playtime call (Heroic reads the same endpoint, per game).
 
 def iso_unix(text):
-    """Unix seconds from GOG's ISO-8601 date, or None."""
+    """Unix seconds from GOG's ISO-8601 date, or None. GOG also sends the
+    "+0000" offset, which fromisoformat rejects before Python 3.11."""
     if not isinstance(text, str) or not text:
         return None
     try:
         return int(datetime.datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp())
     except ValueError:
+        pass
+    try:
+        return int(datetime.datetime.strptime(text, "%Y-%m-%dT%H:%M:%S%z").timestamp())
+    except ValueError:
         return None
 
 
 def gameplay(path, token):
-    return api_get("https://gameplay.gog.com" + path, token, {"X-Gog-Lc": LOCALE})
+    return api_get("https://gameplay.gog.com" + path, token,
+                   {"X-Gog-Lc": gog_locale(LOCALE)})
 
 
 def achievements_list(params):
@@ -2059,6 +2303,26 @@ def achievements_list(params):
     return {"total": len(out), "unlocked": unlocked, "list": out}
 
 
+def playtime_cache():
+    """Per-game playtime GOG gave us, with when we asked: refetching every
+    owned game on every launcher start is hundreds of calls."""
+    path = os.path.join(os.environ.get("PLATYPUS_PLUGIN_DATA") or ".", "playtime.json")
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_playtime_cache(cache):
+    path = os.path.join(os.environ.get("PLATYPUS_PLUGIN_DATA") or ".", "playtime.json")
+    try:
+        write_json_atomic(path, cache)
+    except OSError:
+        pass
+
+
 def playtime_list(_params=None):
     creds = credentials()
     if not creds:
@@ -2071,21 +2335,64 @@ def playtime_list(_params=None):
         games = account_products(token)
     except Exception as e:
         raise RPCError(f"GOG API is unreachable: {e}", -32002)
+    cache = playtime_cache()
+    installed = installed_games()
     apps = [str(g.get("id")) for g in games if isinstance(g, dict) and g.get("id")]
 
     def minutes(app):
+        """The game's GOG time in minutes, or None when it can't be refreshed
+        (429 included: keep the cached value rather than claim zero)."""
         try:
-            return max(0, int(gameplay(f"/games/{app}/users/{user}/sessions",
-                                       token).get("time_sum") or 0))
+            data = gameplay(f"/games/{app}/users/{user}/sessions", token)
+            return max(0, int(data.get("time_sum") or 0))
         except Exception:
-            return 0  # one game's sessions failing hides only its time
+            return None
 
+    now = time.time()
+    pending = []
+    for app in apps:
+        entry = cache.get(app) or {}
+        age = now - float(entry.get("fetched") or 0)
+        # Installed games are the ones still being played, so they go stale
+        # sooner than the rest of the library.
+        if entry and age < (PLAYTIME_INSTALLED_STALE_S if app in installed else PLAYTIME_STALE_S):
+            continue
+        pending.append(app)
+    if pending:
+        # Daemon workers so a slow GOG answer can't hold the plugin open at
+        # exit; whatever finishes within the budget is what we keep.
+        deadline = time.monotonic() + PLAYTIME_BUDGET_S
+        queue_lock = threading.Lock()
+        todo = list(pending)
+        results = {}
+
+        def worker():
+            while True:
+                with queue_lock:
+                    if not todo or time.monotonic() >= deadline:
+                        return
+                    app = todo.pop(0)
+                mins = minutes(app)
+                if mins is not None:  # None keeps the cached time
+                    with queue_lock:
+                        results[app] = mins
+
+        workers = [threading.Thread(target=worker, daemon=True) for _ in range(8)]
+        for w in workers:
+            w.start()
+        for w in workers:
+            w.join(max(0.0, deadline - time.monotonic()))
+        if todo and time.monotonic() >= deadline:
+            log("warn", "GOG's playtime service is slow; using the times "
+                        "already recorded")
+        for app, mins in results.items():
+            cache[app] = {"minutes": mins, "fetched": now}
+        save_playtime_cache(cache)
     out = []
-    if apps:
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            for app, mins in zip(apps, pool.map(minutes, apps)):
-                if mins:
-                    out.append({"id": app, "minutes": mins})
+    for app in apps:
+        mins = int((cache.get(app) or {}).get("minutes") or 0)
+        if mins:
+            out.append({"id": app, "minutes": mins})
     return {"games": out}
 
 
