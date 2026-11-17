@@ -118,3 +118,40 @@ but does not by itself warm the driver caches.
 - Gated behind the plugin's `settings` toggle (default off); multi-GB
   swarm buckets (CS2 6.6 GB, A Hat in Time 8.3 GB) must not ride every
   install silently. Skip-if-current via stored bucket manifest gids.
+
+## Step 0 probe (issue #211): per-GPU buckets are driver binaries, not .foz
+
+Probed live 2026-11-17 from this worktree (one CM logon, read-only service
+calls + CDN manifest/chunk fetches; scratch deleted afterwards): machine
+GPU vendor NVIDIA, proprietary driver 620.70.06. Client config carries two
+positional per-GPU pairs plus the three `SteamSwarm / G7:` shared buckets.
+
+For one owned game (Counter-Strike 2), the first per-GPU pair answers a
+real bucket (102683032, manifest 4665201175428774799, 788 566 bytes); the
+second answers `NoMatch` (42). The bucket manifest (depot == appid, like
+the swarm path) lists NO `.foz` file — its payload is the NVIDIA
+driver-binary cache layout verbatim:
+
+- `nvidiav1/GLCache/<driver-hash>/<gpu-hash>/steam_shader_cache.bin`
+  (754 718 bytes, magic `CDVN`)
+- `nvidiav1/GLCache/<driver-hash>/<gpu-hash>/steam_shader_cache.toc`
+  (33 848 bytes, magic `CDVN`)
+- plus the `nvidiav1/...` directory entries.
+
+Downloaded both files (< 1 MB total) into a `/tmp` scratch dir, confirmed
+the `CDVN` magic (NVIDIA driver-cache container) in both headers, then
+deleted the scratch dir.
+
+Consequences for #211:
+
+- Per-GPU buckets need NO replay: extract them under
+  `shadercache/<appid>/` and they already sit in the
+  `__GL_SHADER_DISK_CACHE_PATH` (`…/nvidiav1`) layout the driver reads.
+  Only the shared `SteamSwarm / G7:VulkanPipelinesV6` bucket holds
+  `fozpipelinesv6/steam_pipeline_cache.foz` and needs `fossilize_replay`.
+- Per-bucket folders/state therefore track two shapes: driver-native trees
+  (`nvidiav1/…`) usable as-is, and `.foz` files pending replay.
+- `MESA_DISK_CACHE_SINGLE_FILE=1` + `MESA_DISK_CACHE_READ_ONLY_FOZ_DBS`
+  could not be verified here (no Mesa GPU on this machine): a Mesa machine
+  still needs to check whether its per-GPU buckets arrive as `.foz` or as
+  native `mesa_shader_cache…` trees before relying on those knobs.

@@ -109,6 +109,12 @@ func BuildCommandFor(game types.Game, runner types.ProtonVersion, target Target,
 		env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = filepath.Join(home, ".local/share/Steam")
 	}
 
+	// Shader pre-caching (issue #211): a downloaded shader tree redirects
+	// the drivers at launch. Plugin launch specs cannot set STEAM_COMPAT_*,
+	// so the core sets the whole family here; explicit spec or user values
+	// win, and games without a downloaded tree are untouched.
+	applyShaderCacheEnv(game, target, env)
+
 	// Anti-cheat runtime bindings
 	if game.Settings.EACRuntime {
 		eacPath := filepath.Join(home, ".local/share/Steam/steamapps/common/Proton EasyAntiCheat Runtime")
@@ -182,4 +188,49 @@ func BuildCommandFor(game types.Game, runner types.ProtonVersion, target Target,
 	}
 
 	return cmdArgs, env, nil
+}
+
+// steamShaderPlugin is the store plugin whose shadercache layout the core
+// knows: shadercache/<appid>/ next to the game install, mirroring the
+// client's steamapps/shadercache (issues #205, #211).
+const steamShaderPlugin = "steam-standalone"
+
+// shaderCacheDir is the downloaded shader tree for a game, or "" when the
+// game has none: only steam-standalone games (the only ones Platypus
+// downloads buckets for), with a store id, a non-client launch (client
+// launches run under the real Steam client, which points its own caches)
+// and a shadercache/<appid>/ dir already on disk.
+func shaderCacheDir(game types.Game) string {
+	if game.Source != steamShaderPlugin || game.StoreAppID == "" ||
+		game.ClientLaunch || game.InstallDir == "" {
+		return ""
+	}
+	dir := filepath.Join(filepath.Dir(game.InstallDir), "shadercache", game.StoreAppID)
+	st, err := os.Stat(dir)
+	if err != nil || !st.IsDir() {
+		return ""
+	}
+	return dir
+}
+
+// applyShaderCacheEnv points the GPU drivers at the game's downloaded
+// shader tree: Mesa and NVIDIA disk caches for every launch, plus the
+// compat shader path for Proton/umu (never native). Keys already present
+// (from the launch spec or, later, the user's env) are left alone.
+func applyShaderCacheEnv(game types.Game, target Target, env map[string]string) {
+	dir := shaderCacheDir(game)
+	if dir == "" {
+		return
+	}
+	setDefault := func(k, v string) {
+		if _, ok := env[k]; !ok {
+			env[k] = v
+		}
+	}
+	setDefault("MESA_SHADER_CACHE_DIR", dir)
+	setDefault("__GL_SHADER_DISK_CACHE_PATH", filepath.Join(dir, "nvidiav1"))
+	setDefault("__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "1")
+	if !target.Native {
+		setDefault("STEAM_COMPAT_SHADER_PATH", dir)
+	}
 }
