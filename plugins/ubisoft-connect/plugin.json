@@ -3,20 +3,19 @@
   "name": "Ubisoft Connect",
   "version": "0.1.0",
   "author": "Platypus",
-  "description": "Ubisoft games through the official Ubisoft Connect client in a Platypus-managed prefix (phase A skeleton: client setup plus client-driven install/launch/uninstall; the library reader is pending issue #192).",
+  "description": "Ubisoft games through the official Ubisoft Connect client in a Platypus-managed prefix (phase A skeleton: client setup plus client-driven launch; the library reader is pending issue #192).",
   "manifestVersion": 1,
-  "protocol": { "versions": ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20"], "transport": "jsonrpc-stdio" },
+  "protocol": { "versions": ["1.20"], "transport": "jsonrpc-stdio" },
   "store": "ubisoft",
   "exec": "bin/platypus-ubisoft",
-  "capabilities": ["library", "install", "launch"],
+  "capabilities": ["library", "launch"],
   "requires": [
-    { "bin": "wine", "hint": "install Wine from your distribution (see winehq.org) to run Ubisoft Connect" },
     { "bin": "python3", "hint": "install python3 from your distribution" }
   ],
   "install_dir": "ubisoft",
   "permissions": {
     "network": ["ubistatic3-a.akamaihd.net"],
     "read": [],
-    "write": []
+    "write": ["~/.local/share/platypus"]
   }
 }

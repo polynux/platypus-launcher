@@ -2,56 +2,71 @@
 """Platypus store plugin for Ubisoft Connect (phase A skeleton, issues #193/#194).
 
 The official Ubisoft Connect client, in one Platypus-managed Wine prefix,
-owns installs and launches; this plugin only orchestrates it and reads its
-on-disk state (docs/research/ubisoft-options.md §1-§5). No Ubisoft account is
-handled here: the user signs into the real client, Platypus never sees the
-password and never sends an app id.
+owns installs and launches; this plugin only answers the installer spec and
+the wine-client launch spec, and reads the client's on-disk state
+(docs/research/ubisoft-options.md §1-§5). No Ubisoft account is handled here:
+the user signs into the real client, Platypus never sees the password and
+never sends an app id. The plugin starts no process of its own: only the
+core runs Wine (installer and client), from the specs this plugin answers.
 
 Speaks Platypus's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
 over stdin/stdout, one object per line.
 
 What is real here and what is a stand-in (live checks L-U1/L-U2, issue #195):
 
-- `client.setup` returns the pinned Connect installer spec (URL + SHA-256 +
-  size below, silent `/S`). The Lutris recipe also applies winetricks
-  `d3dcompiler_43` + `corefonts` and disables the overlay; that stays core
-  runner work, not plugin work.
-- `game.install` / `game.update` run the client with `uplay://install/<id>`
-  (update re-runs install through the client), `game.uninstall` with
-  `uplay://uninstall/<id>`. Progress is honestly indeterminate (a phase, no
-  byte counts); completion is detected by watching the client's per-game
-  install records in the prefix. Both the record location and the direct-exe
-  invocation (instead of `wine start <url>`) are guesses until L-U1 pins
-  down `uplay://` reachability and the record format.
-- `game.launchSpec` answers the `wine-client` delegate: `upc.exe` with
+- `client.setup` downloads the pinned Connect installer to
+  PLATYPUS_PLUGIN_DATA (kept across restarts, hash-verified), copies it into
+  the client prefix for the run (the spec's exe must validate inside the
+  prefix), and answers `{exe, args: ["/S"], size, confirm}`. The copy stays in
+  the prefix: the protocol gives the plugin no post-setup callback. The
+  Lutris recipe also applies winetricks `d3dcompiler_43` + `corefonts` and
+  disables the overlay; nothing applies those yet (see README).
+- `game.launchSpec` answers the `wine-client` delegate: the client exe with
   `uplay://launch/<id>/0`, and `find` carries the game's exe name from its
-  install record, never anything matching the client command.
+  install record, never anything matching the client command. When the client
+  exe is missing the spec is still answered (Windows paths): the core's
+  validation reports `client.notSetUp` and the game page offers the setup.
+- `game.clientStatus` maps what the prefix shows onto the accepted states:
+  no client exe → `idle`, game installed → `launching`, else `updating`
+  (waiting for sign-in). A first-run client self-update or sign-in can take a
+  while, hence the generous `startTimeout`; a dedicated waiting-for-signin
+  state is a protocol proposal (see README).
 - `library.list` is empty: the local-cache reader (issue #192) is blocked on
   the licence decision (issue #197).
 
-Test hooks (never set in production): PLATYPUS_UBISOFT_INSTALLER_FILE points
-at a file to use as the downloaded installer (no network in tests),
-PLATYPUS_UBISOFT_WATCH_TIMEOUT bounds the install-record watch in seconds,
-FAKE_WINE_* is read by testdata/wine, the fake `wine` on PATH in tests.
+The per-game install records stand in for the real client records until L-U1
+pins down their location and format (candidates: Wine system.reg
+ HKLM\\SOFTWARE\\(WOW6432Node\\)\\Ubisoft\\Launcher\\Installs\\<id>\\InstallDir per
+Playnite, uplay_install.manifest/.state per Optima). The plugin only reads
+them; whatever the client (real or test double) wrote is the state.
+
+Installs and uninstalls through the client are NOT here: the plugin must not
+run Wine itself. They wait on the core-run client-commands issue (see
+README), which lets `game.install`/`game.uninstall` answer a wine-client
+spec the core runs as part of the plugin's job.
+
+Test hooks (never set in production): PLATYPUS_UBISOFT_INSTALLER_URL,
+PLATYPUS_UBISOFT_INSTALLER_SHA256 and PLATYPUS_UBISOFT_INSTALLER_SIZE
+override the pin below, so tests drive the real fetch path through a
+loopback server with no network.
 """
 
 import hashlib
 import json
 import os
 import shutil
-import signal
-import subprocess
 import sys
+import tempfile
 import threading
-import time
+import urllib.parse
 import urllib.request
 
 API = 1
 PLUGIN_VERSION = "0.1.0"
-CAPABILITIES = ["library", "install", "launch"]
+CAPABILITIES = ["library", "launch"]
 
 # Pinned Connect installer (Lutris `ubisoft-connect-latest` recipe):
-# https://lutris.net/games/install/5228/view
+# https://lutris.net/lutris/games/install/5228/view
 # Pinned 2026-11-17: download once, sha256sum it, delete it. To bump: fetch
 # the new installer from the same URL, replace SHA-256 and SIZE below, and
 # note the date. Never check the binary itself into the repo.
@@ -61,37 +76,34 @@ INSTALLER_SHA256 = "50431349564846c751281be4b855e00cc6a6d9ffcb2f8ec88c6745a61ad0
 INSTALLER_SIZE = 259083384  # bytes on 2026-11-17 (~247 MB)
 INSTALLER_NAME = "UbisoftConnectInstaller.exe"
 INSTALLER_ARGS = ["/S"]  # silent install, per the Lutris recipe
-CONFIRM = ("This downloads the Ubisoft Connect installer (~247 MB) from "
-           "ubistatic3-a.akamaihd.net and runs it silently (/S) in Platypus's "
-           "managed prefix. Sign into Ubisoft Connect when it opens.")
 
-# The client executable inside its prefix (unifideck launches
-# `upc.exe uplay://launch/<id>/0`; the exact install folder is confirmed
-# against a real prefix in L-U1).
-CLIENT_REL = os.path.join("drive_c", "Program Files (x86)", "Ubisoft",
-                          "Ubisoft Game Launcher", "upc.exe")
-CLIENT_WINDOWS = ("C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher\\upc.exe")
+# The client executable: UbisoftConnect.exe is the modern name (preferred),
+# upc.exe the older one both the research and unifideck attest. The exact
+# install folder is confirmed against a real prefix in L-U1 (#195).
+CLIENT_DIR_WINDOWS = ("C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher")
+CLIENT_NAMES = ("UbisoftConnect.exe", "upc.exe")
 # find must never match the client command itself, only the game process.
-CLIENT_NAMES = ("upc.exe", "ubisoftconnect.exe")
-START_TIMEOUT = 300  # the client may log in or update before the game starts
+CLIENT_NAMES_LOWER = frozenset(n.lower() for n in CLIENT_NAMES)
+# First-run self-update plus sign-in can take a while (within the protocol's
+# 30-minute clamp on startTimeout).
+START_TIMEOUT = 900
 
-# Where the client's per-game install records live in the prefix. INTERIM
-# (L-U1): the fake client in tests writes these; the real location and format
-# come from the live prefix (candidates: Wine system.reg
-# HKLM\SOFTWARE\(WOW6432Node\)\Ubisoft\Launcher\Installs\<id>\InstallDir per
-# Playnite, uplay_install.manifest/.state per Optima). One JSON file per
-# product id: {"exe": "<game exe name>"}.
+# Wine and Proton prefix layouts, probed in this order.
+LAYOUTS = ("drive_c", os.path.join("pfx", "drive_c"))
+
+# Where the client's per-game install records live in the prefix. INTERIM,
+# read-only (see module docstring): one JSON file per product id,
+# {"exe": "<game exe name>"}, owned by the client. Replaced by the L-U1
+# findings, never written by this plugin.
 RECORDS_REL = os.path.join("drive_c", "platypus-ubisoft", "records")
 
-# Test-only env: a file to use as the installer instead of downloading.
-HOOK_INSTALLER = "PLATYPUS_UBISOFT_INSTALLER_FILE"
-# Test-only env: bound on the install-record watch, seconds (default 1800).
-HOOK_TIMEOUT = "PLATYPUS_UBISOFT_WATCH_TIMEOUT"
-WATCH_TIMEOUT = 1800
+# Test-only pin overrides (see module docstring).
+HOOK_URL = "PLATYPUS_UBISOFT_INSTALLER_URL"
+HOOK_SHA256 = "PLATYPUS_UBISOFT_INSTALLER_SHA256"
+HOOK_SIZE = "PLATYPUS_UBISOFT_INSTALLER_SIZE"
 
 out_lock = threading.Lock()
-jobs_lock = threading.Lock()
-jobs = {}  # jobId -> {"proc": Popen|None, "canceled": bool}
+_warned_empty = False
 
 
 class RPCError(Exception):
@@ -137,23 +149,32 @@ def remembered_prefix():
         return ""
 
 
-def client_exe(prefix):
-    return os.path.join(prefix, CLIENT_REL)
+def layouts(prefix):
+    """The Wine and Proton drive layouts under the prefix, in probe order."""
+    return [os.path.join(prefix, lay) for lay in LAYOUTS]
 
 
-def records_dir(prefix):
-    return os.path.join(prefix, RECORDS_REL)
+def find_client_exe(prefix):
+    """The client's absolute Linux path, preferred name then fallback, Wine
+    layout then Proton layout, or None (see CLIENT_NAMES)."""
+    for drive in layouts(prefix):
+        for name in CLIENT_NAMES:
+            exe = os.path.join(drive, "Program Files (x86)", "Ubisoft",
+                               "Ubisoft Game Launcher", name)
+            if os.path.isfile(exe):
+                return exe
+    return None
 
 
 def record_path(prefix, app):
     safe = "".join(c for c in app if c.isalnum() or c in ("-", "_", "."))
     if not safe or safe != app:
         raise RPCError(f"{app!r} is not a Ubisoft product id")
-    return os.path.join(records_dir(prefix), safe + ".json")
+    return os.path.join(prefix, RECORDS_REL, safe + ".json")
 
 
 def read_record(prefix, app):
-    """The client's install record for the game, or None (see RECORDS_REL)."""
+    """The client's install record for the game, or None (read-only)."""
     try:
         with open(record_path(prefix, app)) as f:
             rec = json.load(f)
@@ -163,13 +184,13 @@ def read_record(prefix, app):
 
 
 def game_exe_name(prefix, app):
-    """The exe name launchSpec tracks, or None when the game isn't installed."""
+    """The exe name launchSpec tracks, or None when the game isn't installed
+    (or the record names the client itself, which find must never match)."""
     rec = read_record(prefix, app)
     if not rec:
         return None
-    exe = rec.get("exe") or ""
-    base = os.path.basename(str(exe).replace("\\", "/"))
-    if not base or base.lower() in CLIENT_NAMES:
+    base = os.path.basename(str(rec.get("exe") or "").replace("\\", "/"))
+    if not base or base.lower() in CLIENT_NAMES_LOWER:
         return None
     return base
 
@@ -185,27 +206,54 @@ def sha256_file(path):
     return h.hexdigest()
 
 
-def fetch_installer(dest):
-    """The pinned installer at dest, downloading and verifying it as needed."""
-    if os.path.isfile(dest) and sha256_file(dest) == INSTALLER_SHA256:
-        return
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
-    tmp = dest + ".part"
+def installer_pin():
+    url = os.environ.get(HOOK_URL) or INSTALLER_URL
+    sha = os.environ.get(HOOK_SHA256) or INSTALLER_SHA256
     try:
-        with urllib.request.urlopen(INSTALLER_URL, timeout=600) as r, \
-                open(tmp, "wb") as f:
-            shutil.copyfileobj(f, r, 1 << 20)
+        size = int(os.environ.get(HOOK_SIZE) or INSTALLER_SIZE)
+    except ValueError:
+        size = INSTALLER_SIZE
+    return url, sha, size
+
+
+def bump_message():
+    return ("the Ubisoft Connect installer failed its pin check "
+            "(the pin may need a bump: see this plugin's docstring)")
+
+
+def fetch_installer():
+    """The pinned installer under PLATYPUS_PLUGIN_DATA, downloading and
+    verifying it as needed. A complete verified file is kept across
+    restarts; each download goes to a unique temp file."""
+    url, sha, size = installer_pin()
+    os.makedirs(data_dir(), exist_ok=True)
+    cached = os.path.join(data_dir(), INSTALLER_NAME)
+    if (os.path.isfile(cached) and os.path.getsize(cached) == size
+            and sha256_file(cached) == sha):
+        return cached
+    fd, tmp = tempfile.mkstemp(dir=data_dir(), prefix=INSTALLER_NAME + ".")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            with urllib.request.urlopen(url, timeout=600) as r:
+                shutil.copyfileobj(r, f)
+        if os.path.getsize(tmp) != size:
+            raise RPCError(bump_message())
+        if sha256_file(tmp) != sha:
+            raise RPCError(bump_message())
+        os.replace(tmp, cached)
+    except RPCError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
     except Exception as e:
         try:
             os.remove(tmp)
         except OSError:
             pass
         raise RPCError(f"couldn't download the Ubisoft Connect installer: {e}")
-    if sha256_file(tmp) != INSTALLER_SHA256:
-        os.remove(tmp)
-        raise RPCError("the Ubisoft Connect installer failed its SHA-256 check "
-                       "(the pin may need a bump: see this plugin's docstring)")
-    os.replace(tmp, dest)
+    return cached
 
 
 def initialize(_params):
@@ -215,9 +263,12 @@ def initialize(_params):
 
 def library_list(_params):
     # Empty on purpose: the local-cache reader (issue #192) is blocked on the
-    # licence decision (issue #197). Log the reason where the user can find it.
-    log("warning", "the Ubisoft library is empty: the local-cache reader "
-        "(issue #192) is blocked on the licence decision (issue #197)")
+    # licence decision (issue #197). Warn once per process, not per call.
+    global _warned_empty
+    if not _warned_empty:
+        _warned_empty = True
+        log("warning", "the Ubisoft library is empty: the local-cache reader "
+            "(issue #192) is blocked on the licence decision (issue #197)")
     return {"games": []}
 
 
@@ -227,45 +278,46 @@ def game_details(params):
                    "local-cache reader lands (issues #192, #197)")
 
 
-def install_size(_params):
-    # Client-driven installs stream through Ubisoft Connect: sizes stay
-    # unknown until the client runs, so there is nothing honest to report.
-    return {"downloadBytes": 0, "diskBytes": 0}
-
-
 def client_setup(params):
     """The Connect installer spec the core runs (protocol 1.20). jobId is
     empty when the core only inspects the spec: answer the same either way."""
     prefix = (params.get("prefix") or "")
     if not os.path.isabs(prefix):
         raise RPCError("invalid params: prefix is required", code=-32602)
-    dest = os.path.join(prefix, "drive_c", "platypus-ubisoft", INSTALLER_NAME)
-    hook = os.environ.get(HOOK_INSTALLER)
-    if hook:
-        try:
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            shutil.copyfile(hook, dest)
-        except OSError as e:
-            raise RPCError(f"test installer isn't readable: {e}")
-    else:
-        fetch_installer(dest)
+    cached = fetch_installer()
+    # The spec's exe must validate inside the prefix: copy the cached
+    # download there. Prefer whichever drive layout already exists.
+    drive = next((d for d in layouts(prefix) if os.path.isdir(d)),
+                 os.path.join(prefix, LAYOUTS[0]))
+    dest_dir = os.path.join(drive, "platypus-ubisoft")
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, INSTALLER_NAME)
+    shutil.copyfile(cached, dest)
     remember_prefix(prefix)
+    url, _sha, size = installer_pin()
+    host = urllib.parse.urlparse(url).netloc or url
+    confirm = (f"This downloads the Ubisoft Connect installer "
+               f"(~{size // (1 << 20)} MB) from {host} and runs it silently "
+               "(/S) in Platypus's managed prefix. "
+               "Sign into Ubisoft Connect when it opens.")
     return {"exe": dest, "args": list(INSTALLER_ARGS),
-            "size": os.path.getsize(dest), "confirm": CONFIRM}
+            "size": os.path.getsize(dest), "confirm": confirm}
 
 
 def launch_spec(params):
+    """The wine-client delegate for the game (protocol 1.20). Answered from
+    Windows paths without preflighting the client: a missing client exe is
+    the core's client.notSetUp, not a plugin error."""
     app = params["id"]
     prefix = (params.get("prefix") or "") or remembered_prefix()
     if not prefix:
-        raise RPCError("the Ubisoft Connect prefix is unknown (run the client setup first)")
-    if not os.path.isfile(client_exe(prefix)):
-        raise RPCError("Ubisoft Connect isn't set up yet (run the client setup first)")
+        raise RPCError("invalid params: prefix is required", code=-32602)
     exe = game_exe_name(prefix, app)
     if exe is None:
         raise RPCError(f"{app} is not installed in Ubisoft Connect")
     return {"delegate": "wine-client", "client": "Ubisoft Connect",
-            "exe": CLIENT_WINDOWS, "args": [f"uplay://launch/{app}/0"],
+            "exe": CLIENT_DIR_WINDOWS + "\\" + CLIENT_NAMES[0],
+            "args": [f"uplay://launch/{app}/0"],
             "prefix": "client", "find": {"cmdline": [exe]},
             "startTimeout": START_TIMEOUT}
 
@@ -275,7 +327,7 @@ def client_status(params):
     Interim mapping until L-U1 shows the real client behaviour."""
     app = params["id"]
     prefix = remembered_prefix()
-    if not prefix or not os.path.isfile(client_exe(prefix)):
+    if not prefix or find_client_exe(prefix) is None:
         return {"state": "idle", "label": "Ubisoft Connect isn't set up yet"}
     if read_record(prefix, app) is None:
         return {"state": "updating",
@@ -284,142 +336,10 @@ def client_status(params):
             "label": f"Starting {app} in Ubisoft Connect"}
 
 
-def watch_timeout():
-    try:
-        return max(1, int(os.environ.get(HOOK_TIMEOUT) or WATCH_TIMEOUT))
-    except ValueError:
-        return WATCH_TIMEOUT
-
-
-def stop_proc(proc, grace=5):
-    try:
-        proc.terminate()
-    except (OSError, ProcessLookupError):
-        return
-    try:
-        proc.wait(timeout=grace)
-    except subprocess.TimeoutExpired:
-        try:
-            proc.kill()
-        except (OSError, ProcessLookupError):
-            pass
-
-
-def claim_job(job_id, job):
-    with jobs_lock:
-        if job_id in jobs:
-            return False
-        jobs[job_id] = job
-        return True
-
-
-def start_job(params, kind):
-    app, job_id = params["id"], params["jobId"]
-    if kind == "uninstall":
-        prefix = remembered_prefix()
-        if prefix and read_record(prefix, app) is None:
-            raise RPCError(f"{app} is not installed")
-    else:
-        path = params.get("installDir") or ""
-        if not os.path.isabs(path):
-            raise RPCError("installDir is missing or relative; Platypus always sends one")
-        # update re-runs install through the client (research §5): same URL.
-    url = f"uplay://{'uninstall' if kind == 'uninstall' else 'install'}/{app}"
-    # Platypus resends a job with the same jobId after a crash: run it once.
-    if not claim_job(job_id, {"proc": None, "canceled": False}):
-        return {}
-    prefix = remembered_prefix()
-    if not prefix:
-        with jobs_lock:
-            jobs.pop(job_id, None)
-        raise RPCError("the Ubisoft Connect prefix is unknown (run the client setup first)")
-    if not os.path.isfile(client_exe(prefix)):
-        with jobs_lock:
-            jobs.pop(job_id, None)
-        raise RPCError("Ubisoft Connect isn't set up yet (run the client setup first)")
-    wine = shutil.which("wine")
-    if wine is None:
-        with jobs_lock:
-            jobs.pop(job_id, None)
-        raise RPCError("wine is not installed (see winehq.org)")
-    # Direct client-exe invocation with the uplay URL, the unifideck launch
-    # shape; `wine start <url>` is the L-U1 alternative when reachability is
-    # verified against a real prefix.
-    argv = [wine, client_exe(prefix), url]
-    try:
-        proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL,
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
-                                env={**os.environ, "WINEPREFIX": prefix})
-    except FileNotFoundError:
-        with jobs_lock:
-            jobs.pop(job_id, None)
-        raise RPCError(f"{wine} could not be started")
-    with jobs_lock:
-        jobs[job_id]["proc"] = proc
-    want_present = kind != "uninstall"
-    threading.Thread(target=follow_job, args=(job_id, app, prefix, proc, want_present),
-                     daemon=True).start()
-    return {}
-
-
-def follow_job(job_id, app, prefix, proc, want_present):
-    """Watches the client's install records until the job converges.
-    Indeterminate by design (research §1.3): a phase, no byte counts. A
-    canceled job sends nothing; Platypus already marked it."""
-    notify("job.progress", {"jobId": job_id, "phase": "waiting-client"})
-    deadline = time.monotonic() + watch_timeout()
-
-    def settled():
-        present = read_record(prefix, app) is not None
-        return present == want_present
-
-    while True:
-        time.sleep(0.5)
-        with jobs_lock:
-            canceled = jobs.get(job_id, {}).get("canceled", True)
-        if canceled:
-            return
-        if settled():
-            notify("job.done", {"jobId": job_id})
-            return
-        if proc.poll() is not None:
-            if settled():
-                notify("job.done", {"jobId": job_id})
-            else:
-                notify("job.failed", {"jobId": job_id,
-                                      "error": "Ubisoft Connect exited without "
-                                               f"{'installing' if want_present else 'removing'} {app}"})
-            return
-        if time.monotonic() > deadline:
-            stop_proc(proc)
-            notify("job.failed", {"jobId": job_id,
-                                  "error": f"timed out waiting for Ubisoft Connect ({app})"})
-            return
-
-
-def job_cancel(params):
-    job_id = params.get("jobId")
-    with jobs_lock:
-        job = jobs.get(job_id)
-        if job is None:
-            return {}
-        job["canceled"] = True
-        proc = job.get("proc")
-    if proc is not None and proc.poll() is None:
-        stop_proc(proc)
-    return {}
-
-
 METHODS = {
     "initialize": initialize,
     "library.list": library_list,
     "game.details": game_details,
-    "game.installSize": install_size,
-    "game.install": lambda p: start_job(p, "install"),
-    "game.update": lambda p: start_job(p, "update"),
-    "game.uninstall": lambda p: start_job(p, "uninstall"),
-    "job.cancel": job_cancel,
     "client.setup": client_setup,
     "game.launchSpec": launch_spec,
     "game.clientStatus": client_status,
@@ -456,7 +376,6 @@ def main():
             continue
         if "id" not in msg:
             continue  # notifications need no answer
-        # Reads stay responsive while a client job runs.
         threading.Thread(target=handle, args=(msg,), daemon=True).start()
 
 

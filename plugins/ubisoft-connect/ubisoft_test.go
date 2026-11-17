@@ -1,49 +1,63 @@
-// Tests the Ubisoft Connect plugin (issues #193/#194) through Platypus's real
-// plugin path (manager, JSON-RPC) against testdata/wine, a fake `wine` that
-// applies uplay:// URLs to the plugin's interim install records. No network,
-// no Wine, no Ubisoft account.
+// Tests the Ubisoft Connect plugin (issues #193/#194: setup + launch only)
+// through Platypus's real plugin path (manager, JSON-RPC). The installer
+// fetch drives the real download code against a loopback server with a
+// patched pin (testenv allows loopback); client state is planted in a temp
+// prefix. No network, no Wine, no Ubisoft account.
 package ubisoft_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
-	"time"
 
-	"platypus/internal/jobs"
 	"platypus/internal/jsonrpc"
 	"platypus/internal/plugtest"
-	"platypus/internal/types"
 )
 
 const id = "ubisoft-connect"
 
-// suite wires the plugin with its test doubles: the fake wine on PATH, the
-// fake installer instead of a download, and a short record-watch bound.
-func suite(t *testing.T, extra map[string]string) plugtest.Suite {
+// pinServer serves bytes as the installer download and counts its hits.
+func pinServer(t *testing.T, data []byte) (*httptest.Server, *int64) {
 	t.Helper()
-	hook, err := filepath.Abs(filepath.Join("testdata", "fake-installer.bin"))
-	if err != nil {
-		t.Fatal(err)
+	var hits int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&hits, 1)
+		w.Write(data)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &hits
+}
+
+func pinEnv(srv *httptest.Server, data []byte) map[string]string {
+	sum := sha256.Sum256(data)
+	return map[string]string{
+		"PLATYPUS_UBISOFT_INSTALLER_URL":    srv.URL + "/UbisoftConnectInstaller.exe",
+		"PLATYPUS_UBISOFT_INSTALLER_SHA256": hex.EncodeToString(sum[:]),
+		"PLATYPUS_UBISOFT_INSTALLER_SIZE":   fmt.Sprint(len(data)),
 	}
-	env := map[string]string{
-		"PLATYPUS_UBISOFT_INSTALLER_FILE": hook,
-		"PLATYPUS_UBISOFT_WATCH_TIMEOUT": "20",
-		"FAKE_WINE_DELAY":                 "0.2",
+}
+
+func suite(extra map[string]string) plugtest.Suite {
+	return plugtest.Suite{ID: id, CopyDir: ".", Env: extra}
+}
+
+// fakeInstaller is the loopback "Connect installer": 64 KiB of pattern bytes.
+func fakeInstaller() []byte {
+	data := make([]byte, 64<<10)
+	for i := range data {
+		data[i] = byte(i * 31)
 	}
-	for k, v := range extra {
-		env[k] = v
-	}
-	return plugtest.Suite{
-		ID:      id,
-		CopyDir: ".",
-		FakeCLI: map[string]string{"wine": filepath.Join("testdata", "wine")},
-		Env:     env,
-	}
+	return data
 }
 
 func call(t *testing.T, s *plugtest.Session, method string, params, result any) {
@@ -66,59 +80,37 @@ func wantCode(t *testing.T, s *plugtest.Session, method string, params any, code
 	}
 }
 
-// waitMethod polls the session's notifications for a job event.
-func waitMethod(t *testing.T, s *plugtest.Session, jobID, method string, within time.Duration) {
+// plantRecord writes a client-owned install record (the interim stand-in the
+// plugin reads; see the plugin docstring).
+func plantRecord(t *testing.T, prefix, app, exe string) {
 	t.Helper()
-	deadline := time.Now().Add(within)
-	for time.Now().Before(deadline) {
-		for _, e := range s.Events(jobID) {
-			if e.Method == method {
-				if e.Method == "job.failed" {
-					t.Fatalf("job %s failed: %s", jobID, e.Update.Error)
-				}
-				return
-			}
-			if e.Method == "job.failed" {
-				t.Fatalf("job %s failed: %s", jobID, e.Update.Error)
-			}
-		}
-		time.Sleep(50 * time.Millisecond)
+	dir := filepath.Join(prefix, "drive_c", "platypus-ubisoft", "records")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	t.Fatalf("job %s saw no %s within %s", jobID, method, within)
+	if err := os.WriteFile(filepath.Join(dir, app+".json"),
+		[]byte(`{"exe": "`+exe+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
-func countMethod(s *plugtest.Session, jobID, method string) int {
-	n := 0
-	for _, e := range s.Events(jobID) {
-		if e.Method == method {
-			n++
-		}
-	}
-	return n
-}
-
-// clientSetup inspects the installer spec for a fresh prefix and plants the
-// fake client executable the plugin's fail-fast checks look for.
-func clientSetup(t *testing.T, s *plugtest.Session) string {
+// plantClient writes a client executable into a drive layout.
+func plantClient(t *testing.T, prefix, layout, name string) {
 	t.Helper()
-	prefix := filepath.Join(t.TempDir(), "client")
-	var raw json.RawMessage
-	call(t, s, "client.setup", map[string]any{"jobId": "", "prefix": prefix}, &raw)
-	exe := filepath.Join(prefix, "drive_c", "Program Files (x86)", "Ubisoft",
-		"Ubisoft Game Launcher", "upc.exe")
+	exe := filepath.Join(prefix, layout, "Program Files (x86)", "Ubisoft",
+		"Ubisoft Game Launcher", name)
 	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(exe, []byte("fake upc.exe"), 0o755); err != nil {
+	if err := os.WriteFile(exe, []byte("fake "+name), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return prefix
 }
 
 func TestUbisoftHandshake(t *testing.T) {
-	s := suite(t, nil).Handshake(t)
-	// The manifest declares up to 1.20 (wine-client + client.setup); with the
-	// core offering 1.21 that negotiates exactly 1.20.
+	s := suite(nil).Handshake(t)
+	// The manifest speaks exactly 1.20 (wine-client + client.setup); the
+	// core offering 1.21 negotiates exactly that.
 	data, err := os.ReadFile("plugin.json")
 	if err != nil {
 		t.Fatal(err)
@@ -131,21 +123,29 @@ func TestUbisoftHandshake(t *testing.T) {
 	if err := json.Unmarshal(data, &man); err != nil {
 		t.Fatal(err)
 	}
-	if got := man.Protocol.Versions; !slices.Contains(got, "1.20") || got[len(got)-1] != "1.20" {
-		t.Fatalf("manifest protocol versions = %v, want up to 1.20", got)
+	if !slices.Equal(man.Protocol.Versions, []string{"1.20"}) {
+		t.Fatalf("manifest protocol versions = %v, want [1.20]", man.Protocol.Versions)
 	}
 	var init struct {
 		Capabilities []string `json:"capabilities"`
 	}
 	call(t, s, "initialize", map[string]any{"api": 1}, &init)
-	if !slices.Equal(init.Capabilities, []string{"library", "install", "launch"}) {
-		t.Fatalf("capabilities = %v, want [library install launch]", init.Capabilities)
+	if !slices.Equal(init.Capabilities, []string{"library", "launch"}) {
+		t.Fatalf("capabilities = %v, want [library launch]", init.Capabilities)
 	}
+	// Install is gone (the core-run client-commands issue): the gate refuses
+	// its methods before the plugin.
+	wantCode(t, s, "game.install", map[string]any{}, jsonrpc.CodeMethodNotFound)
+	wantCode(t, s, "game.installSize", map[string]any{}, jsonrpc.CodeMethodNotFound)
+	wantCode(t, s, "job.cancel", map[string]any{}, jsonrpc.CodeMethodNotFound)
 }
 
-func TestUbisoftClientSetup(t *testing.T) {
-	sess := suite(t, nil).Start(t)
+func TestUbisoftClientSetupFetch(t *testing.T) {
+	data := fakeInstaller()
+	srv, hits := pinServer(t, data)
+	sess := suite(pinEnv(srv, data)).Start(t)
 	prefix := filepath.Join(t.TempDir(), "client")
+
 	var raw json.RawMessage
 	call(t, sess, "client.setup",
 		map[string]any{"jobId": "setup-1", "prefix": prefix}, &raw)
@@ -167,33 +167,68 @@ func TestUbisoftClientSetup(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("client.setup isn't an installer spec: %s", raw)
 	}
-	hook, _ := os.ReadFile(filepath.Join("testdata", "fake-installer.bin"))
-	if !filepath.IsAbs(decoded.Exe) || !strings.HasPrefix(decoded.Exe, prefix) {
-		t.Errorf("exe = %q, want an absolute path inside the prefix", decoded.Exe)
+	wantExe := filepath.Join(prefix, "drive_c", "platypus-ubisoft", "UbisoftConnectInstaller.exe")
+	if decoded.Exe != wantExe {
+		t.Errorf("exe = %q, want the prefix copy %q", decoded.Exe, wantExe)
 	}
-	if st, err := os.Stat(decoded.Exe); err != nil || st.Size() != int64(len(hook)) {
-		t.Errorf("installer at %q is %v, want the %d-byte test hook", decoded.Exe, st, len(hook))
+	if got, err := os.ReadFile(decoded.Exe); err != nil || string(got) != string(data) {
+		t.Errorf("prefix copy isn't the downloaded bytes: %v", err)
 	}
 	if !slices.Equal(decoded.Args, []string{"/S"}) {
 		t.Errorf("args = %v, want the silent-install [/S]", decoded.Args)
 	}
-	if decoded.Size != int64(len(hook)) {
-		t.Errorf("size = %d, want %d", decoded.Size, len(hook))
+	if decoded.Size != int64(len(data)) {
+		t.Errorf("size = %d, want %d", decoded.Size, len(data))
 	}
-	if !strings.Contains(decoded.Confirm, "247 MB") {
+	if !strings.Contains(decoded.Confirm, "downloads") || !strings.Contains(decoded.Confirm, "127.0.0.1") {
 		t.Errorf("confirm = %q, want the download approval text", decoded.Confirm)
 	}
-	// The empty-jobId inspection answers the same spec.
+	// The empty-jobId inspection answers the same spec, reusing the cached
+	// download instead of fetching again.
 	var again json.RawMessage
 	call(t, sess, "client.setup", map[string]any{"jobId": "", "prefix": prefix}, &again)
 	if string(again) != string(raw) {
 		t.Errorf("inspection spec = %s, want %s", again, raw)
 	}
+	if n := atomic.LoadInt64(hits); n != 1 {
+		t.Errorf("server saw %d downloads, want 1 (cache reuse)", n)
+	}
+	// The Proton-only layout takes the copy under pfx/drive_c.
+	proton := filepath.Join(t.TempDir(), "proton")
+	os.MkdirAll(filepath.Join(proton, "pfx", "drive_c"), 0o755)
+	call(t, sess, "client.setup", map[string]any{"jobId": "setup-pfx", "prefix": proton}, &raw)
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(proton, "pfx", "drive_c", "platypus-ubisoft",
+		"UbisoftConnectInstaller.exe"); decoded.Exe != want {
+		t.Errorf("exe = %q, want the Proton-layout copy %q", decoded.Exe, want)
+	}
 	wantCode(t, sess, "client.setup", map[string]any{"jobId": "x"}, jsonrpc.CodeInvalidParams)
 }
 
+func TestUbisoftClientSetupPinMismatch(t *testing.T) {
+	data := fakeInstaller()
+	srv, _ := pinServer(t, data)
+
+	t.Run("sha", func(t *testing.T) {
+		env := pinEnv(srv, data)
+		env["PLATYPUS_UBISOFT_INSTALLER_SHA256"] = strings.Repeat("0", 64)
+		sess := suite(env).Start(t)
+		wantCode(t, sess, "client.setup",
+			map[string]any{"jobId": "s", "prefix": t.TempDir()}, -32000)
+	})
+	t.Run("size", func(t *testing.T) {
+		env := pinEnv(srv, data)
+		env["PLATYPUS_UBISOFT_INSTALLER_SIZE"] = fmt.Sprint(len(data) + 1)
+		sess := suite(env).Start(t)
+		wantCode(t, sess, "client.setup",
+			map[string]any{"jobId": "s", "prefix": t.TempDir()}, -32000)
+	})
+}
+
 func TestUbisoftLibraryEmpty(t *testing.T) {
-	sess := suite(t, nil).Start(t)
+	sess := suite(nil).Start(t)
 	var lib struct {
 		Games []any `json:"games"`
 	}
@@ -201,39 +236,15 @@ func TestUbisoftLibraryEmpty(t *testing.T) {
 	if len(lib.Games) != 0 {
 		t.Fatalf("library.list = %+v, want no games until #192", lib.Games)
 	}
-	// Unknown ids error; install sizes stay unknown (indeterminate installs).
 	wantCode(t, sess, "game.details", map[string]any{"id": "635"}, -32000)
-	var size struct {
-		Download int64 `json:"downloadBytes"`
-		Disk     int64 `json:"diskBytes"`
-	}
-	call(t, sess, "game.installSize", map[string]any{"id": "635"}, &size)
-	if size != (struct {
-		Download int64 `json:"downloadBytes"`
-		Disk     int64 `json:"diskBytes"`
-	}{}) {
-		t.Fatalf("installSize = %+v, want zeros", size)
-	}
 }
 
-func TestUbisoftInstallLaunchUninstall(t *testing.T) {
-	calls := filepath.Join(t.TempDir(), "wine.calls")
-	sess := suite(t, map[string]string{"FAKE_WINE_CALLS": calls}).Start(t)
-	prefix := clientSetup(t, sess)
-	game := types.Game{ID: sess.Store.WireID("635"), StoreAppID: "635", Title: "Fake Game 635"}
-
-	sess.RunJob(jobs.KindInstall, game)
-	record := filepath.Join(prefix, "drive_c", "platypus-ubisoft", "records", "635.json")
-	data, err := os.ReadFile(record)
-	if err != nil {
-		t.Fatalf("no install record after the install job: %v", err)
-	}
-	var rec struct {
-		Exe string `json:"exe"`
-	}
-	if err := json.Unmarshal(data, &rec); err != nil || rec.Exe == "" {
-		t.Fatalf("install record = %s, want the game exe name", data)
-	}
+func TestUbisoftLaunchSpec(t *testing.T) {
+	sess := suite(nil).Start(t)
+	prefix := filepath.Join(t.TempDir(), "client")
+	// No client executable planted: the spec is still answered (Windows
+	// paths), so the core reports client.notSetUp and offers the setup.
+	plantRecord(t, prefix, "635", "Game.exe")
 
 	var raw json.RawMessage
 	call(t, sess, "game.launchSpec",
@@ -248,9 +259,9 @@ func TestUbisoftInstallLaunchUninstall(t *testing.T) {
 		}
 	}
 	var launch struct {
-		Delegate     string   `json:"delegate"`
-		Client       string   `json:"client"`
-		Exe          string   `json:"exe"`
+		Delegate     string `json:"delegate"`
+		Client       string `json:"client"`
+		Exe          string `json:"exe"`
 		Args         []string `json:"args"`
 		Prefix       string   `json:"prefix"`
 		Find         struct {
@@ -264,8 +275,8 @@ func TestUbisoftInstallLaunchUninstall(t *testing.T) {
 	if launch.Delegate != "wine-client" || launch.Client == "" {
 		t.Errorf("launch = %+v, want the wine-client delegate", launch)
 	}
-	if launch.Exe != `C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\upc.exe` {
-		t.Errorf("exe = %q, want the client path", launch.Exe)
+	if want := `C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\UbisoftConnect.exe`; launch.Exe != want {
+		t.Errorf("exe = %q, want the preferred client path %q", launch.Exe, want)
 	}
 	if !slices.Equal(launch.Args, []string{"uplay://launch/635/0"}) {
 		t.Errorf("args = %v, want the launch URL", launch.Args)
@@ -273,131 +284,61 @@ func TestUbisoftInstallLaunchUninstall(t *testing.T) {
 	if launch.Prefix != "client" {
 		t.Errorf("prefix = %q, want client", launch.Prefix)
 	}
-	if !slices.Equal(launch.Find.Cmdline, []string{rec.Exe}) {
+	if !slices.Equal(launch.Find.Cmdline, []string{"Game.exe"}) {
 		t.Errorf("find = %v, want the game's exe from its record", launch.Find.Cmdline)
 	}
-	if launch.StartTimeout < 60 {
-		t.Errorf("startTimeout = %d, want a generous client window", launch.StartTimeout)
+	if launch.StartTimeout != 900 {
+		t.Errorf("startTimeout = %d, want the 900 s client window", launch.StartTimeout)
 	}
+	// No record, no spec: the game isn't installed.
+	wantCode(t, sess, "game.launchSpec",
+		map[string]any{"id": "636", "prefix": prefix}, -32000)
+	// A record naming the client itself is refused (find must track the game).
+	plantRecord(t, prefix, "637", "upc.exe")
+	wantCode(t, sess, "game.launchSpec",
+		map[string]any{"id": "637", "prefix": prefix}, -32000)
+}
 
+func TestUbisoftClientStatus(t *testing.T) {
+	data := fakeInstaller()
+	srv, _ := pinServer(t, data)
+	sess := suite(pinEnv(srv, data)).Start(t)
+
+	// No setup ran in this session: the client isn't set up.
 	var status struct {
 		State string `json:"state"`
 		Label string `json:"label"`
 	}
 	call(t, sess, "game.clientStatus",
-		map[string]any{"id": "635", "since": time.Now().Unix()}, &status)
-	if status.State != "launching" || status.Label == "" {
-		t.Errorf("clientStatus = %+v, want the launching state with a label", status)
+		map[string]any{"id": "635", "since": 0}, &status)
+	if status.State != "idle" || status.Label == "" {
+		t.Errorf("clientStatus = %+v, want the idle not-set-up state", status)
 	}
 
-	// The fake wine saw direct client-exe invocations with the uplay URLs.
-	body, _ := os.ReadFile(calls)
-	var sawInstall, sawUninstall bool
-	for _, line := range strings.Split(strings.TrimSpace(string(body)), "\n") {
-		if line == "" {
-			continue
-		}
-		var argv []string
-		if err := json.Unmarshal([]byte(line), &argv); err != nil || len(argv) != 3 {
-			t.Fatalf("wine call = %q, want [wine client-exe url]", line)
-		}
-		if !strings.HasSuffix(argv[1], "upc.exe") {
-			t.Errorf("wine ran %q, want the client executable", argv[1])
-		}
-		sawInstall = sawInstall || argv[2] == "uplay://install/635"
-		sawUninstall = sawUninstall || argv[2] == "uplay://uninstall/635"
-	}
-	if !sawInstall {
-		t.Error("wine never got uplay://install/635")
-	}
-
-	sess.RunJob(jobs.KindUninstall, game)
-	if _, err := os.Stat(record); !os.IsNotExist(err) {
-		t.Fatal("install record still present after the uninstall job")
-	}
-	if !sawUninstall {
-		// Re-read: the uninstall ran after the first assertion pass.
-		body, _ = os.ReadFile(calls)
-		if !strings.Contains(string(body), "uplay://uninstall/635") {
-			t.Error("wine never got uplay://uninstall/635")
-		}
-	}
-	wantCode(t, sess, "game.launchSpec",
-		map[string]any{"id": "635", "prefix": prefix}, -32000)
+	prefix := filepath.Join(t.TempDir(), "client")
+	call(t, sess, "client.setup", map[string]any{"jobId": "", "prefix": prefix}, nil)
+	// Client present but the game unknown: waiting (sign in if it asks).
+	plantClient(t, prefix, "drive_c", "UbisoftConnect.exe")
 	call(t, sess, "game.clientStatus",
-		map[string]any{"id": "635", "since": time.Now().Unix()}, &status)
-	if status.State == "launching" {
-		t.Errorf("clientStatus = %+v after uninstall, want the waiting state", status)
+		map[string]any{"id": "635", "since": 0}, &status)
+	if status.State != "updating" || status.Label == "" {
+		t.Errorf("clientStatus = %+v, want the waiting state", status)
 	}
-}
+	plantRecord(t, prefix, "635", "Game.exe")
+	call(t, sess, "game.clientStatus",
+		map[string]any{"id": "635", "since": 0}, &status)
+	if status.State != "launching" || status.Label == "" {
+		t.Errorf("clientStatus = %+v, want the launching state", status)
+	}
 
-func TestUbisoftCancelInstall(t *testing.T) {
-	sess := suite(t, map[string]string{"FAKE_WINE_DELAY": "30"}).Start(t)
-	prefix := clientSetup(t, sess)
-	installDir := filepath.Join(t.TempDir(), "games")
-	if err := sess.Call("game.install",
-		map[string]any{"id": "635", "installDir": installDir, "jobId": "cancel-1"}, nil); err != nil {
-		t.Fatalf("game.install: %v", err)
-	}
-	waitMethod(t, sess, "cancel-1", "job.progress", 30*time.Second)
-	if err := sess.Call("job.cancel", map[string]any{"jobId": "cancel-1"}, nil); err != nil {
-		t.Fatalf("job.cancel: %v", err)
-	}
-	time.Sleep(1500 * time.Millisecond)
-	for _, e := range sess.Events("cancel-1") {
-		if e.Method == "job.done" {
-			t.Fatal("plugin reported job.done for a canceled install")
-		}
-	}
-	record := filepath.Join(prefix, "drive_c", "platypus-ubisoft", "records", "635.json")
-	if _, err := os.Stat(record); !os.IsNotExist(err) {
-		t.Fatal("canceled install left the install record")
-	}
-}
-
-func TestUbisoftUninstallCancel(t *testing.T) {
-	sess := suite(t, map[string]string{"FAKE_WINE_DELAY": "30"}).Start(t)
-	prefix := clientSetup(t, sess)
-	record := filepath.Join(prefix, "drive_c", "platypus-ubisoft", "records", "635.json")
-	if err := os.MkdirAll(filepath.Dir(record), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(record, []byte(`{"exe": "Game.exe"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := sess.Call("game.uninstall",
-		map[string]any{"id": "635", "jobId": "u-cancel"}, nil); err != nil {
-		t.Fatalf("game.uninstall: %v", err)
-	}
-	waitMethod(t, sess, "u-cancel", "job.progress", 30*time.Second)
-	if err := sess.Call("job.cancel", map[string]any{"jobId": "u-cancel"}, nil); err != nil {
-		t.Fatalf("job.cancel: %v", err)
-	}
-	time.Sleep(1500 * time.Millisecond)
-	for _, e := range sess.Events("u-cancel") {
-		if e.Method == "job.done" {
-			t.Fatal("plugin reported job.done for a canceled uninstall")
-		}
-	}
-	if _, err := os.Stat(record); err != nil {
-		t.Fatal("canceled uninstall deleted the install record")
-	}
-}
-
-func TestUbisoftRepeatedJobID(t *testing.T) {
-	sess := suite(t, nil).Start(t)
-	clientSetup(t, sess)
-	installDir := filepath.Join(t.TempDir(), "games")
-	dup := map[string]any{"id": "635", "installDir": installDir, "jobId": "dup-1"}
-	if err := sess.Call("game.install", dup, nil); err != nil {
-		t.Fatalf("game.install: %v", err)
-	}
-	if err := sess.Call("game.install", dup, nil); err != nil {
-		t.Fatalf("game.install with a repeated jobId: %v", err)
-	}
-	waitMethod(t, sess, "dup-1", "job.done", 30*time.Second)
-	time.Sleep(500 * time.Millisecond)
-	if n := countMethod(sess, "dup-1", "job.done"); n != 1 {
-		t.Fatalf("repeated jobId reported job.done %d times, want 1", n)
+	// Proton layout plus the older exe name: still found (S2, S3).
+	legacy := filepath.Join(t.TempDir(), "legacy")
+	call(t, sess, "client.setup", map[string]any{"jobId": "l", "prefix": legacy}, nil)
+	plantClient(t, legacy, filepath.Join("pfx", "drive_c"), "upc.exe")
+	plantRecord(t, legacy, "635", "Game.exe")
+	call(t, sess, "game.clientStatus",
+		map[string]any{"id": "635", "since": 0}, &status)
+	if status.State != "launching" {
+		t.Errorf("clientStatus = %+v, want launching via the Proton/upc.exe fallback", status)
 	}
 }

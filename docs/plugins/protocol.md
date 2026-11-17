@@ -580,12 +580,13 @@ missing fails with `client.notSetUp`, and the game page offers the setup
 instead.
 
 `client.setup { jobId, prefix } -> { exe, args?, env?, redact?, size?, confirm? }`
-answers the installer spec the core runs (an optional method of `launch`,
-protocol 1.20). Fetch the installer before answering and keep it under
-`PLATYPUS_PLUGIN_DATA` across restarts; the `exe` validates like a direct
-launch spec (absolute or `C:\` path, inside the prefix or an allowed folder,
-present) and `size` is the installer's download bytes for the free-space
-check. When `confirm` is set, its text asks the user to approve the download
+ answers the installer spec the core runs (an optional method of `launch`,
+ protocol 1.20). Fetch the installer before answering and keep it under
+ `PLATYPUS_PLUGIN_DATA` across restarts (copy it into the client prefix for
+ the run: the `exe` must validate inside the prefix). The `exe` validates
+ like a direct launch spec (absolute or `C:\` path, inside the prefix or an
+ allowed folder, present) and `size` is the installer's download bytes for
+ the free-space check. When `confirm` is set, its text asks the user to
 ("This downloads ~800 MB from ..."): the core runs the installer only after
 the user confirms. `jobId` is empty when the core only inspects the spec
 (the confirmation check); the plugin answers the same spec either way.
