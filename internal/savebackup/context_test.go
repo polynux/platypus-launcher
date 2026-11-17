@@ -115,3 +115,36 @@ func TestStoreUserIDUnresolvedWhenPluginCannotResolveIt(t *testing.T) {
 		t.Fatalf("unresolved = %d, want 1", un)
 	}
 }
+
+// A native game on a Windows host has no prefix: the <win…> placeholders come
+// from the platform's own save folders (paths.SaveDirsFor on Windows), while a
+// prefix still wins when the game runs under Wine (issue #82).
+func TestWindowsHostPlaceholdersWithoutPrefix(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	game := types.Game{ID: "g", Title: "T", Native: true}
+	ctx := NewContextFor(game, home, Prefix{})
+	roaming := filepath.Join(home, "AppData", "Roaming")
+	ctx.Roots["appData"] = roaming
+	ctx.Roots["documents"] = filepath.Join(home, "Documents")
+	expanded, un := expandPattern("<winAppData>/T/x.sav", ctx, game)
+	if un != 0 || len(expanded) != 1 || expanded[0] != filepath.Join(roaming, "T", "x.sav") {
+		t.Fatalf("winAppData = %v, un=%d", expanded, un)
+	}
+	expanded, un = expandPattern("<winDocuments>/T/x.sav", ctx, game)
+	if un != 0 || len(expanded) != 1 || expanded[0] != filepath.Join(home, "Documents", "T", "x.sav") {
+		t.Fatalf("winDocuments = %v, un=%d", expanded, un)
+	}
+	// No native folder: unresolved, as on a Linux host.
+	if _, un = expandPattern("<winLocalAppData>/T/x.sav", ctx, game); un != 1 {
+		t.Fatalf("missing winLocalAppData unresolved = %d, want 1", un)
+	}
+	// A prefix still owns the placeholders in its own drive_c.
+	prefix := filepath.Join(home, "pfx")
+	ctx.Roots["prefix"] = prefix
+	ctx.WinUser = "steamuser"
+	expanded, un = expandPattern("<winAppData>/T/x.sav", ctx, game)
+	if un != 0 || len(expanded) != 1 || expanded[0] != filepath.Join(prefix, "drive_c", "users", "steamuser", "AppData", "Roaming", "T", "x.sav") {
+		t.Fatalf("prefix winAppData = %v, un=%d", expanded, un)
+	}
+}

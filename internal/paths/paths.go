@@ -2,21 +2,31 @@
 //
 // Precedence, per folder:
 //
-//	data:    $PLATYPUS_DATA_DIR, else $XDG_DATA_HOME/platypus, else ~/.local/share/platypus
-//	config:  $PLATYPUS_CONFIG_DIR, else $XDG_CONFIG_HOME/platypus, else ~/.config/platypus
-//	cache:   $PLATYPUS_CACHE_DIR, else $XDG_CACHE_HOME/platypus, else ~/.cache/platypus
+//	data:    $PLATYPUS_DATA_DIR, else <data base>/platypus
+//	config:  $PLATYPUS_CONFIG_DIR, else <config base>/platypus
+//	cache:   $PLATYPUS_CACHE_DIR, else <cache base>/platypus
 //	plugins: $PLATYPUS_PLUGINS, else <data>/plugins
+//
+// The bases are the platform's own (issue #82). On Linux they are the XDG
+// folders: $XDG_DATA_HOME, $XDG_CONFIG_HOME, $XDG_CACHE_HOME, with
+// ~/.local/share, ~/.config and ~/.cache as the defaults. On Windows config
+// is %APPDATA% and data/cache are under %LOCALAPPDATA%; the choice is in
+// defaults_windows.go.
 //
 // An XDG variable counts only when set to an absolute path; relative or
 // empty means unset, per the XDG spec. PLATYPUS_* variables count only when
 // absolute too, so a relative value can never escape the data folder.
 //
-// With no variables set every path is byte-for-byte what it is today. When
-// $XDG_DATA_HOME points elsewhere but only the legacy folder exists, Resolve
-// keeps the legacy folder and logs one info line; user data is never moved
-// automatically. settings.json stays in the data dir in this pass; the
+// With no variables set every Linux path is byte-for-byte what it is today.
+// When $XDG_DATA_HOME points elsewhere but only the legacy folder exists,
+// Resolve keeps the legacy folder and logs one info line; user data is never
+// moved automatically. settings.json stays in the data dir in this pass; the
 // config resolver exists for later. Only truly re-fetchable data (game-info
 // cache) belongs in the cache dir.
+//
+// Steam install roots are not resolved here: the Steam plugins report them
+// (game.saveContext; internal/steam for the plugins themselves) and nothing
+// in the core asks for them (issue #82).
 package paths
 
 import (
@@ -27,7 +37,7 @@ import (
 	"platypus/internal/datadir"
 )
 
-// AppName is the folder name under the XDG bases.
+// AppName is the folder name under the platform bases.
 const AppName = "platypus"
 
 // absEnv returns the value of key when it is set to an absolute path, else "".
@@ -39,22 +49,13 @@ func absEnv(key string) string {
 	return ""
 }
 
-// xdgBase returns $XDG_*/platypus when the variable holds an absolute path,
-// else home/fallback/platypus.
-func xdgBase(envKey, home, fallback string) string {
-	if v := absEnv(envKey); v != "" {
-		return filepath.Join(v, AppName)
-	}
-	return filepath.Join(home, fallback, AppName)
-}
-
 // DataDirFor is Platypus's data folder for the user whose home is home,
 // before the legacy-exists fallback (see Resolve).
 func DataDirFor(home string) string {
 	if v := absEnv("PLATYPUS_DATA_DIR"); v != "" {
 		return v
 	}
-	return xdgBase("XDG_DATA_HOME", home, filepath.Join(".local", "share"))
+	return defaultDataDir(home)
 }
 
 // ConfigDirFor resolves the config folder (settings.json stays in the data
@@ -63,7 +64,7 @@ func ConfigDirFor(home string) string {
 	if v := absEnv("PLATYPUS_CONFIG_DIR"); v != "" {
 		return v
 	}
-	return xdgBase("XDG_CONFIG_HOME", home, ".config")
+	return defaultConfigDir(home)
 }
 
 // CacheDirFor resolves the cache folder (only truly re-fetchable data).
@@ -71,7 +72,7 @@ func CacheDirFor(home string) string {
 	if v := absEnv("PLATYPUS_CACHE_DIR"); v != "" {
 		return v
 	}
-	return xdgBase("XDG_CACHE_HOME", home, ".cache")
+	return defaultCacheDir(home)
 }
 
 // PluginsDirFor resolves the plugins folder: $PLATYPUS_PLUGINS, else
@@ -106,13 +107,9 @@ func Resolve() Config {
 // ResolveFor is Resolve for an explicit home (tests pass temp dirs).
 func ResolveFor(home string) Config {
 	data := DataDirFor(home)
-	// Legacy fallback: XDG set elsewhere, only the old folder exists.
-	if absEnv("PLATYPUS_DATA_DIR") == "" && absEnv("XDG_DATA_HOME") != "" {
-		legacy := filepath.Join(home, ".local", "share", AppName)
-		if data != legacy && !existsDir(data) && existsDir(legacy) {
-			log.Printf("paths: using legacy data folder %s (XDG_DATA_HOME points at %s)", legacy, data)
-			data = legacy
-		}
+	if legacy, ok := legacyDataDir(data, home); ok {
+		log.Printf("paths: using legacy data folder %s (XDG_DATA_HOME points at %s)", legacy, data)
+		data = legacy
 	}
 	if ov, ok := datadir.Override(); ok {
 		data = ov
@@ -124,23 +121,6 @@ func ResolveFor(home string) Config {
 		CacheDir:   CacheDirFor(home),
 		PluginsDir: PluginsDirFor(data),
 	}
-}
-
-// SteamRoots lists where a Steam install may live for the user whose home
-// is home. $XDG_DATA_HOME/Steam is an additional candidate, not a
-// replacement: the legacy ~/.local/share/Steam is always tried too.
-func SteamRoots(home string) []string {
-	roots := []string{filepath.Join(home, ".local", "share", "Steam")}
-	if xdg := absEnv("XDG_DATA_HOME"); xdg != "" {
-		if cand := filepath.Join(xdg, "Steam"); cand != roots[0] {
-			roots = append(roots, cand)
-		}
-	}
-	roots = append(roots,
-		filepath.Join(home, ".steam", "steam"),
-		filepath.Join(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
-	)
-	return roots
 }
 
 func existsDir(path string) bool {
