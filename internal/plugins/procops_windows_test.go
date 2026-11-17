@@ -42,7 +42,7 @@ func testProcessAlive(pid int) bool {
 		return false
 	}
 	defer procTestClose.Call(h)
-	var code uintptr
+	var code uint32
 	if ok, _, _ := procTestQuery.Call(h, uintptr(unsafe.Pointer(&code))); ok == 0 {
 		return false
 	}

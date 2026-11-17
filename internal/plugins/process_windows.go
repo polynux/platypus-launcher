@@ -2,6 +2,15 @@
 
 package plugins
 
+// Windows plugin supervision (issue #85): each plugin runs in its own process
+// group plus a KILL_ON_JOB_CLOSE job object, so helpers it spawns (legendary,
+// …) die with it — and so does the plugin itself if Platypus dies without a
+// clean shutdown. That is the opposite of game jobs (internal/session keeps
+// its jobs kill-on-close-free so games survive a core crash): plugins are
+// part of the launcher and must never outlive it. The graceful stop stays the
+// protocol shutdown (stop() closes stdin first); the job close below is the
+// force path.
+
 import (
 	"os/exec"
 	"sync"
@@ -10,13 +19,11 @@ import (
 )
 
 var (
-	kernel32 = syscall.NewLazyDLL("kernel32.dll")
-
+	kernel32              = syscall.NewLazyDLL("kernel32.dll")
+	procOpenProc          = kernel32.NewProc("OpenProcess")
 	procCreateJobObjectW  = kernel32.NewProc("CreateJobObjectW")
 	procSetInformationJob = kernel32.NewProc("SetInformationJobObject")
 	procAssignToJob       = kernel32.NewProc("AssignProcessToJobObject")
-	procOpenProcess       = kernel32.NewProc("OpenProcess")
-	procTerminateProcess  = kernel32.NewProc("TerminateProcess")
 	procCloseHandle       = kernel32.NewProc("CloseHandle")
 )
 
@@ -26,8 +33,8 @@ const (
 
 	createNewProcessGroup = 0x200
 
-	processTerminate = 0x0001
-	processSetQuota  = 0x0100
+	processSetQuota   = 0x0100
+	processKillAccess = 0x0001 | processSetQuota
 )
 
 // jobLimits mirrors JOBOBJECT_EXTENDED_LIMIT_INFORMATION with only the
@@ -41,6 +48,7 @@ type jobLimits struct {
 	maximumWorkingSetSize   uintptr
 	activeProcessCount      uint32
 	affinity                uintptr
+	priorityClass           uint32
 	schedulingClass         uint32
 	ioInfo                  [6]uint64
 	processMemoryLimit      uintptr
@@ -56,22 +64,22 @@ var pluginJobs = struct {
 	m map[int]syscall.Handle
 }{m: map[int]syscall.Handle{}}
 
-// configurePluginProcess starts the plugin in its own process group and
-// keeps unrelated launcher handles out of it. Go still inherits the stdio
-// handles start() set up explicitly (the protocol pipes, the log file), so
-// the protocol stream is unaffected.
+// configurePluginProcess starts the plugin in its own process group. Go's
+// exec already restricts inheritance to the stdio handles start() sets up
+// (PROC_THREAD_ATTRIBUTE_HANDLE_LIST), so unrelated launcher handles stay
+// out without NoInheritHandles (which would drop the protocol pipes too).
 func configurePluginProcess(cmd *exec.Cmd) {
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
-	cmd.SysProcAttr.CreationFlags = createNewProcessGroup
-	cmd.SysProcAttr.NoInheritHandles = true
+	cmd.SysProcAttr.CreationFlags |= createNewProcessGroup
 }
 
-// afterPluginStart puts a freshly started plugin in its own job object, so
-// helpers it spawns (legendary, …) die with it, and so does the plugin if
-// Platypus dies without a clean shutdown. Best effort: any failure leaves
-// the plugin running without a job.
+// afterPluginStart puts a freshly started plugin in its own job object. A
+// helper the plugin spawns between CreateProcess and this assignment escapes
+// the job; that helper is reaped when the plugin's own teardown runs, and a
+// plugin that never reaches assignment is killed directly below. Best
+// effort: any failure leaves the plugin running without a job.
 func afterPluginStart(cmd *exec.Cmd) {
 	if cmd.Process == nil {
 		return
@@ -89,8 +97,7 @@ func afterPluginStart(cmd *exec.Cmd) {
 		return
 	}
 	pid := cmd.Process.Pid
-	procHandle, _, _ := procOpenProcess.Call(
-		uintptr(processTerminate|processSetQuota), 0, uintptr(pid))
+	procHandle, _, _ := procOpenProc.Call(uintptr(processKillAccess), 0, uintptr(pid))
 	if procHandle == 0 {
 		procCloseHandle.Call(job)
 		return
@@ -106,10 +113,11 @@ func afterPluginStart(cmd *exec.Cmd) {
 	pluginJobs.Unlock()
 }
 
-// killPluginProcess ends the plugin and anything it spawned: closing its job
-// object terminates every member, and the leader is terminated directly in
-// case it never joined a job. The waiter's recordCrash already ran; the job
-// handle is closed exactly once here.
+// killPluginProcess ends the plugin and anything it spawned. Closing its job
+// object terminates every member (KILL_ON_JOB_CLOSE), so no pid-based
+// terminate follows — pids can be reused once Wait has reaped the leader.
+// Without a job the leader is killed through Go's own handle, which reports
+// ErrProcessDone instead of touching a stranger's pid when already reaped.
 func killPluginProcess(cmd *exec.Cmd) {
 	if cmd.Process == nil {
 		return
@@ -123,11 +131,7 @@ func killPluginProcess(cmd *exec.Cmd) {
 	pluginJobs.Unlock()
 	if found {
 		procCloseHandle.Call(uintptr(job))
-	}
-	h, _, _ := procOpenProcess.Call(uintptr(processTerminate), 0, uintptr(pid))
-	if h == 0 {
 		return
 	}
-	procTerminateProcess.Call(h, 1)
-	procCloseHandle.Call(h)
+	_ = cmd.Process.Kill()
 }

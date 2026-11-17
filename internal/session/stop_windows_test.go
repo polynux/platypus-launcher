@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,23 +17,41 @@ import (
 
 // The Windows tree tests drive the test binary itself as the game: a helper
 // mode (parent) spawns a second copy (child) and both block until killed,
-// which proves a stop reaches the whole job-object tree. A third mode
-// (mark) prints one line and exits, proving stdio pipes survive
-// NoInheritHandles.
+// which proves a stop reaches the whole job-object tree. An orphan mode is a
+// stub launcher that exits while its child survives, proving the session end
+// doesn't kill the real game. A mark mode prints one line and exits, proving
+// the game inherits the stdio pipes the tracker set up.
 func TestMain(m *testing.M) {
 	switch os.Getenv("PLATYPUS_SESSION_HELPER") {
 	case "child":
+		swallowCtrlBreak()
 		writeHelperPid()
-		select {} // killed by the job close or TerminateProcess
+		select {} // killed by the job terminate or TerminateProcess
 	case "parent":
+		swallowCtrlBreak()
 		writeHelperPid()
 		runHelperChild()
-		select {} // killed by the job close or TerminateProcess
+		select {} // killed by the job terminate or TerminateProcess
+	case "orphan":
+		// A stub launcher: spawns a child that outlives it, then exits.
+		// The child must survive the session end (game jobs have no
+		// KILL_ON_JOB_CLOSE), so the test reaps it explicitly.
+		writeHelperPid()
+		runHelperChild()
+		os.Exit(0)
 	case "mark":
 		fmt.Println("platypus-windows-stdio-mark")
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
+}
+
+// swallowCtrlBreak ignores console CTRL_BREAK in the helper modes, so the
+// escalation test below is valid on a console CI too: without this, a
+// delivered CTRL_BREAK could end the helpers during the "graceful" phase and
+// the stop would never need to escalate.
+func swallowCtrlBreak() {
+	signal.Notify(make(chan os.Signal, 1), os.Interrupt)
 }
 
 func writeHelperPid() {
@@ -50,8 +69,6 @@ func runHelperChild() {
 	child.Env = append(os.Environ(),
 		"PLATYPUS_SESSION_HELPER=child",
 		"PLATYPUS_SESSION_PIDFILE="+os.Getenv("PLATYPUS_SESSION_CHILD_PIDFILE"))
-	// Stdout stays connected: the child must not hold the protocol stream
-	// open, but here it only proves spawn works under a job member.
 	if err := child.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, "helper child:", err)
 		os.Exit(1)
@@ -174,8 +191,8 @@ func TestWindowsStopGracefulEscalatesToJobKill(t *testing.T) {
 	}
 }
 
-// The game's stdout reaches its session log: NoInheritHandles didn't close
-// the stdio pipes the tracker set up.
+// The game's stdout reaches its session log: the game inherits the stdio
+// pipes the tracker set up.
 func TestWindowsGameStdioReachesLog(t *testing.T) {
 	logDir := t.TempDir()
 	rec := newRecorder()
@@ -195,4 +212,35 @@ func TestWindowsGameStdioReachesLog(t *testing.T) {
 	if !strings.Contains(string(raw), "platypus-windows-stdio-mark") {
 		t.Fatalf("session log lacks the game's stdout: %q", raw)
 	}
+}
+
+// A stub launcher that exits must not take its surviving child with it: game
+// jobs have no KILL_ON_JOB_CLOSE, so ending the session only drops the job
+// handle. The test reaps the orphaned helper explicitly.
+func TestWindowsStubExitLeavesChildRunning(t *testing.T) {
+	dir := t.TempDir()
+	rec := newRecorder()
+	tr := NewTracker(rec.emit)
+	tr.SetLogDir(dir)
+	cmd := exec.Command(os.Args[0])
+	cmd.Env = append(os.Environ(),
+		"PLATYPUS_SESSION_HELPER=orphan",
+		"PLATYPUS_SESSION_PIDFILE="+filepath.Join(dir, "stub.pid"),
+		"PLATYPUS_SESSION_CHILD_PIDFILE="+filepath.Join(dir, "real.pid"))
+	if _, err := tr.StartDirect("gstub", cmd, "helper stub", nil); err != nil {
+		t.Fatal(err)
+	}
+	stub := readHelperPid(t, filepath.Join(dir, "stub.pid"))
+	real := readHelperPid(t, filepath.Join(dir, "real.pid"))
+	rec.waitState(t, "running", 10*time.Second)
+	rec.waitState(t, "stopped", 10*time.Second)
+	if !windowsAlive(real) {
+		t.Fatal("the surviving child died with the stub launcher's session")
+	}
+	if !gameJobsEmpty() {
+		t.Fatal("the game's job handle leaked")
+	}
+	terminatePid(real)
+	waitWindowsDead(t, stub, 10*time.Second)
+	waitWindowsDead(t, real, 10*time.Second)
 }

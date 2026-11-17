@@ -15,9 +15,9 @@ import (
 )
 
 // The Windows plugin tests drive the test binary itself as the plugin: one
-// mode prints a marker on stdout (proving the protocol pipes survive
-// NoInheritHandles) and a parent/child pair blocks until killed (proving the
-// job object cleans up the whole tree).
+// mode prints a marker on stdout (proving the child inherits the protocol
+// pipes the manager sets up) and a parent/child pair blocks until killed
+// (proving the job object cleans up the whole tree).
 func TestMain(m *testing.M) {
 	switch os.Getenv("PLATYPUS_PLUGIN_HELPER") {
 	case "pipechild":
