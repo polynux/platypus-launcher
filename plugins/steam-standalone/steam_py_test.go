@@ -295,10 +295,11 @@ func TestSteamFindExecutableSearchesSubfolders(t *testing.T) {
 // I18N-4: with locale fr, the store details request carries l=french and the
 // launch-mode note is French; English is the default and the fallback.
 func TestSteamLocaleDetailsAndModeNote(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
 	got := pyRun(t, `
 hs.set_locale("fr")
 urls = []
-def fake_api(url, token=None):
+def fake_api(url, token=None, **kw):
     urls.append(url)
     return {"367520": {"success": True, "data": {
         "short_description": "x", "genres": [], "developers": [],
@@ -593,5 +594,36 @@ print(hs.family_cache, hs.family_last_good, hs.family_borrowed,
 `)
 	if got != "{'loggedIn': True}\nNone {} {} set() set()" {
 		t.Fatalf("login kept family state = %q", got)
+	}
+}
+
+// News (protocol 1.19): the keyless read is cached and drops entries without
+// a titled https link; a failing read serves the cache, and with no cache
+// sends no news at all (never an error).
+func TestSteamNewsCachedFailureIsAbsence(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+calls = []
+def fake(url, token=None, timeout=None):
+    calls.append((url, timeout))
+    if len(calls) == 1:
+        return {"appnews": {"newsitems": [
+            {"title": "Patch", "url": "https://example.com/n1", "date": 1700000000},
+            {"title": "Bad", "url": "http://insecure"},
+        ]}}
+    raise OSError("offline")
+hs.api_get = fake
+print(hs.news_for_app("4321"))
+hs.NEWS_TTL = 0
+print(hs.news_for_app("4321"))
+print(hs.news_for_app("9999"))
+print(calls[0][0].split("?")[0], calls[0][1])
+`)
+	want := "[{'title': 'Patch', 'url': 'https://example.com/n1', 'date': 1700000000}]\n" +
+		"[{'title': 'Patch', 'url': 'https://example.com/n1', 'date': 1700000000}]\n" +
+		"[]\n" +
+		"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/ 5"
+	if got != want {
+		t.Fatalf("news = %q, want %q", got, want)
 	}
 }

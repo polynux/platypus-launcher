@@ -97,6 +97,10 @@ const details = {
   description_html: '<p>A long description.</p>',
   website: 'https://example.com/echo-tiny',
   store_url: 'https://example.com/store/echo-tiny',
+  news: [
+    { title: 'Patch 1.2', url: 'https://example.com/news/1', date: 1700000000 },
+    { title: 'Launch week', url: 'https://example.com/news/2' },
+  ],
 };
 
 const settings = {
@@ -162,6 +166,10 @@ describe('game page tabs variant', () => {
     expect(screen.getByText('Pictures')).toBeInTheDocument();
     expect(screen.getByText('Played')).toBeInTheDocument();
     expect(screen.getByText('Details')).toBeInTheDocument();
+    // News links (protocol 1.19): the store's announcements open outside.
+    const news = screen.getByTestId('game-news');
+    expect(within(news).getByRole('link', { name: /Patch 1\.2/ })).toHaveAttribute('href', 'https://example.com/news/1');
+    expect(within(news).getByRole('link', { name: /Launch week/ })).toHaveAttribute('href', 'https://example.com/news/2');
     // The achievements summary opens the Achievements tab.
     await user.click(screen.getByRole('button', { name: /See all 2 achievements/ }));
     expect(within(tablist).getByRole('tab', { name: /Achievements/ })).toHaveAttribute('aria-selected', 'true');

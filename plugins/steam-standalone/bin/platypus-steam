@@ -585,7 +585,7 @@ def state_user():
 
 # --- Steam Web API --------------------------------------------------------
 
-def api_get(url, token=None):
+def api_get(url, token=None, timeout=60):
     # Test hook: tests point this at a file with the responses, so nothing
     # reaches the network. Not set in normal runs. The file may carry
     # "_routes": {substring: response} so different endpoints can answer
@@ -604,7 +604,7 @@ def api_get(url, token=None):
         sep = "&" if "?" in url else "?"
         url = f"{url}{sep}access_token={token}"
     req = urllib.request.Request(url)
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
 
@@ -1313,6 +1313,20 @@ def resolve_art_assets(app_ids, deadline=None):
     return out
 
 
+def launch_hints(app, installed):
+    """Protocol 1.15 library hints, from what the plugin already knows: a
+    client-mode install needs Steam (and so a connection), any other install
+    runs the game directly, and only an install record names its launch mode.
+    Platypus owns this store's cloud saves, so the store never syncs them."""
+    mode = (installed.get(app) or {}).get("mode") or ""
+    hints = {"cloudSync": False}
+    if mode == "client":
+        hints["offline"] = "network"
+    elif app in installed:
+        hints["offline"] = "ok"
+    return hints
+
+
 def library_list(_params):
     data = owned_games()
     token = access_token()
@@ -1342,6 +1356,13 @@ def library_list(_params):
             entry["note"] = mode_note(ig.get("mode") or "none")
             if ig.get("mode") == "client":
                 entry["clientLaunch"] = True
+        entry.update(launch_hints(app, installed))
+        try:
+            last = int(g.get("rtime_last_played") or 0)
+        except (TypeError, ValueError):
+            last = 0
+        if last > 0:
+            entry["lastPlayed"] = last
         # Art needs no Store lookup: always set it, so games past the Store
         # budget (or with no Store entry at all) still show covers.
         entry.update(art_urls(app))
@@ -1372,6 +1393,7 @@ def library_list(_params):
             }
             if ig.get("mode") == "client":
                 missing["clientLaunch"] = True
+            missing.update(launch_hints(app, installed))
             missing.update(art_urls(app))
             out.append(missing)
     # Newer apps only have hashed asset paths: resolve the real cover/hero/
@@ -1918,6 +1940,7 @@ def merge_family_games(out, fam, installed, deadline, steamid=""):
             entry["note"] = mode_note(ig.get("mode") or "none")
             if ig.get("mode") == "client":
                 entry["clientLaunch"] = True
+        entry.update(launch_hints(appid, installed))
         entry.update(art_urls(appid))
         app_type = (store.get("type") or "").lower()
         if app_type and app_type not in ("game", "demo", "beta", "application"):
@@ -3346,6 +3369,17 @@ def _requirement_side(v):
     return lo, hi
 
 
+def _platforms(raw):
+    """The store's platform flags as the protocol's names (protocol 1.10,
+    "Compat"). PICS app info carries the same OS list as common/oslist; the
+    store's app details already answer it, so game.details stays public."""
+    if not isinstance(raw, dict):
+        return []
+    return [name for key, name in
+            (("windows", "windows"), ("mac", "macos"), ("linux", "linux"))
+            if raw.get(key)]
+
+
 def _movie_url(movie):
     """Prefer mp4 480/max or webm; HLS-only entries are skipped."""
     for key in ("mp4", "webm"):
@@ -3385,6 +3419,49 @@ def game_terms(app):
             continue
         terms.append({k: t[k] for k in ("id", "title", "url", "version") if t.get(k)})
     return terms
+
+
+NEWS_TTL = 6 * 3600  # seconds; a game's announcements change slowly
+NEWS_TIMEOUT = 5  # seconds; the game page never waits on news
+NEWS_COUNT = 5
+
+
+def news_for_app(app):
+    """The app's Steam announcements (protocol 1.19, "News"), from the
+    keyless ISteamNews Web API: no login, no token, nothing about the
+    account. Cached in news.json; an unreachable or slow API serves what was
+    cached (or nothing) and never fails the game details."""
+    cache = load_state("news.json", {})
+    entry = cache.get(app) or {}
+    cached = [i for i in (entry.get("items") or []) if isinstance(i, dict)][:NEWS_COUNT]
+    now = time.time()
+    if now - entry.get("at", 0) < NEWS_TTL:
+        return cached
+    try:
+        data = api_get("https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
+                       f"?appid={app}&count={NEWS_COUNT}&maxlength=0",
+                       timeout=NEWS_TIMEOUT)
+    except Exception:
+        return cached
+    items = []
+    for n in ((data.get("appnews") or {}).get("newsitems") or [])[:NEWS_COUNT]:
+        if not isinstance(n, dict):
+            continue
+        title = (n.get("title") or "").strip()
+        url = n.get("url") or ""
+        if not title or not url.startswith("https://"):
+            continue
+        try:
+            date = int(n.get("date") or 0)
+        except (TypeError, ValueError):
+            date = 0
+        item = {"title": title[:200], "url": url}
+        if date > 0:
+            item["date"] = date
+        items.append(item)
+    cache[app] = {"at": now, "items": items}
+    save_state("news.json", cache)
+    return items
 
 
 def game_details(params):
@@ -3466,6 +3543,18 @@ def game_details(params):
             ("title", (m.get("name") or "")[:200]), ("mime", mime)) if v})
     if videos:
         out["videos"] = videos
+    # Compat facts (protocol 1.10, "Compat"): this store knows the game's own
+    # AppID and its platform flags. DRM stays absent: Steam doesn't state it,
+    # and Platypus never shows a guessed badge.
+    out["steamAppId"] = app
+    platforms = _platforms(d.get("platforms"))
+    if platforms:
+        out["platforms"] = platforms
+    # News (protocol 1.19): the game's own announcements, keyless and
+    # cached; a failed read simply sends none.
+    news = news_for_app(app)
+    if news:
+        out["news"] = news
     if params.get("terms"):
         terms = game_terms(app)
         if terms:
@@ -3969,8 +4058,9 @@ def chat_unread_counts(_params):
 def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
-    protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.23.0", "api": API,
+    protocol = "1.19" if "1.19" in offered else (
+        "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14"))
+    return {"name": "Steam (standalone)", "version": "0.24.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],
