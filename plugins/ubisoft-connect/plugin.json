@@ -1,0 +1,21 @@
+{
+  "id": "ubisoft-connect",
+  "name": "Ubisoft Connect",
+  "version": "0.1.0",
+  "author": "Platypus",
+  "description": "Ubisoft games through the official Ubisoft Connect client in a Platypus-managed prefix (phase A skeleton: client setup plus client-driven launch; the library reader is pending issue #192).",
+  "manifestVersion": 1,
+  "protocol": { "versions": ["1.20"], "transport": "jsonrpc-stdio" },
+  "store": "ubisoft",
+  "exec": "bin/platypus-ubisoft",
+  "capabilities": ["library", "launch"],
+  "requires": [
+    { "bin": "python3", "hint": "install python3 from your distribution" }
+  ],
+  "install_dir": "ubisoft",
+  "permissions": {
+    "network": ["ubistatic3-a.akamaihd.net"],
+    "read": [],
+    "write": ["~/.local/share/platypus"]
+  }
+}
