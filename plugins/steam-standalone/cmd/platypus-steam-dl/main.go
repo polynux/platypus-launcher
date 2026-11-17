@@ -132,6 +132,10 @@ type request struct {
 	Target          *versionTarget    `json:"target"`
 	InstallDir      string            `json:"install_dir"`
 	JobID           string            `json:"job_id"`
+	// DownloadLimit is the global speed cap in bytes per second (protocol
+	// 1.21, issue #207); 0 means unlimited. One limiter spans every depot
+	// of the run, so the cap is for the whole job.
+	DownloadLimit int64 `json:"download_limit"`
 	// Repair, on a verify run, re-downloads the bad files after the check
 	// (protocol 1.4): without it the run only reads.
 	Repair bool `json:"repair"`

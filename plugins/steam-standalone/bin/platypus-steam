@@ -2172,6 +2172,11 @@ def dl_request(params, extra=None):
             req["branch_passwords"] = {channel: stored[channel]}
         elif stored and not channel:
             req["branch_passwords"] = dict(stored)
+    # The user's download speed cap (protocol 1.21, issue #207), bytes per
+    # second; the downloader turns it into its token bucket. Absent or 0 is
+    # unlimited, so nothing is sent.
+    if params.get("downloadLimit"):
+        req["download_limit"] = int(params["downloadLimit"])
     if extra:
         req.update(extra)
     return req
@@ -2821,6 +2826,10 @@ def start_job(params, kind):
     os.makedirs(game_dir, exist_ok=True)
     dl_kind = "update" if kind == "update" else "install"
     version = {k: params[k] for k in ("branch", "branchPassword", "branch_password", "target") if params.get(k)}
+    # The global download speed cap (protocol 1.21, issue #207): the core
+    # sends it to plugins that speak 1.21. Absent means unlimited.
+    if params.get("downloadLimit"):
+        version["downloadLimit"] = int(params["downloadLimit"])
     if kind == "update" and "target" not in version and "branch" not in version:
         # An unpinned game stays on the channel it was installed from
         # (like the Steam client), never silently back to public. The
@@ -4058,9 +4067,9 @@ def chat_unread_counts(_params):
 def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
-    protocol = "1.19" if "1.19" in offered else (
-        "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14"))
-    return {"name": "Steam (standalone)", "version": "0.24.0", "api": API,
+    protocol = "1.21" if "1.21" in offered else ("1.19" if "1.19" in offered else (
+        "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")))
+    return {"name": "Steam (standalone)", "version": "0.25.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context", "terms", "versions", "family",
                              "verify", "achievements", "playtime", "cloud-saves", "social", "chat"],

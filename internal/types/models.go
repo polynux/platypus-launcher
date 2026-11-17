@@ -405,6 +405,15 @@ type LauncherSettings struct {
 	// CancelCleanupDays is how long a canceled download's partial data is
 	// kept before Platypus deletes it; 0 deletes it right away.
 	CancelCleanupDays int `json:"cancel_cleanup_days"`
+	// DownloadLimit is the global download speed cap in bytes per second
+	// (issue #207); 0 means unlimited.
+	DownloadLimit int64 `json:"download_limit"`
+	// UpdateWindow is the daily window when queued updates may start (issue
+	// #207). The times are local HH:MM; an end before the start crosses
+	// midnight. Manual installs always start right away.
+	UpdateWindowEnabled bool   `json:"update_window_enabled"`
+	UpdateWindowStart   string `json:"update_window_start"`
+	UpdateWindowEnd     string `json:"update_window_end"`
 	// RatingsOnline is the "Fetch ratings online" switch (see compat.go).
 	RatingsOnline bool `json:"ratings_online"`
 	// ProtectionOnline is the "Fetch protection data online" switch (issue

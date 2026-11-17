@@ -1,4 +1,4 @@
-# Store plugin protocol (1.19, draft)
+# Store plugin protocol (1.21, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -128,8 +128,8 @@ other errors can contain.
 | `game.details` | `{ id, terms? }` | `GameDetails` (with `terms` from 1.11, media from 1.12, news from 1.19) |
 | `game.saveContext` | `{ id }` | `{ roots?, storeUserId?, prefix?, windows?, proton?, winUser? }` |
 | `game.installSize` | `{ id, target?, options? }` | `{ downloadBytes, diskBytes }` |
-| `game.install` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
-| `game.update` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
+| `game.install` | `{ id, installDir, jobId, title?, target?, options?, downloadLimit? }` | `{}` once started (`downloadLimit` 1.21, [Download limit](#download-limit-121)) |
+| `game.update` | `{ id, installDir, jobId, title?, target?, options?, downloadLimit? }` | `{}` once started (`downloadLimit` 1.21, [Download limit](#download-limit-121)) |
 | `game.uninstall` | `{ id, jobId }` | `{}` once started |
 | `game.verify` | `{ id, installDir, jobId, repair }` | `{}` once started (1.4, [Verify and move](#verify-and-move-14)) |
 | `game.move` | `{ id, from, to, jobId }` | `{}` once started (1.4, [Verify and move](#verify-and-move-14)) |
@@ -428,7 +428,11 @@ Report progress with notifications:
 | `job.failed` | `{ jobId, error }` |
 | `log` | `{ level, message }` (goes to the plugin's log file) |
 
-Platypus runs one job at a time and saves the queue. If Platypus or the plugin dies
+Platypus runs one job at a time and saves the queue. An update waits while the
+user's update window is closed (Settings → Downloads): Platypus holds queued
+`game.update` jobs until the window opens, and a later install still starts at
+once. The plugin is not told about the schedule; it only sees the job when it
+starts. If Platypus or the plugin dies
 mid-install, Platypus calls `game.install` again with the same `jobId`, so installs
 must be resumable or at least idempotent: a `jobId` that is already running starts
 no second copy and ends with one `job.done`. A paused job is the same thing: Platypus
@@ -635,7 +639,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.21"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -680,11 +684,12 @@ that doesn't know it.
   `LibraryGame.clientLaunch`; 1.18: the split ratings and protection state of
   `compat.lookup` (`protectionOnline`, see [Compat facts](#compat-facts-117))
   and `game.clientStatus` (see [Client launch status](#client-launch-status-118)); 1.19: the game's
-  news links on `game.details` (`news`, see [News](#news-119)); see [Compat facts](#compat-facts-117),
+  news links on `game.details` (`news`, see [News](#news-119)); 1.21: the optional `downloadLimit` param of
+  `game.install` and `game.update` (see [Download limit](#download-limit-121)); see [Compat facts](#compat-facts-117),
   [Runner](#runner-117), and [Save context](#save-context-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18 or 1.19 method.
+  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19 or 1.21 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -1534,6 +1539,28 @@ news = [{ title, url, date? }]
   keeps the answer with the rest of the game details.
 - **Gating.** Platypus reads the field only from a plugin that negotiated 1.19
   or later; an older plugin's game page shows no news.
+
+## Download limit (1.21)
+
+Protocol 1.21 adds one optional param to `game.install` and `game.update`: the
+user's global download speed cap, an integer in bytes per second.
+
+```
+game.install { id, installDir, jobId, ..., downloadLimit? }
+game.update  { id, installDir, jobId, ..., downloadLimit? }
+```
+
+- **When it is sent.** Only to a plugin that declares 1.21 or later and negotiates
+  it, and only when the user set a cap (Settings → Downloads). Unlimited sends
+  nothing: the param's absence means "no cap", not "zero bytes".
+- **What to do with it.** Hand it to the process that downloads the files, as a
+  rate cap for the whole job (all depots, chunks or files together). A plugin
+  whose downloader has no rate control must not fake one: ignore the param and
+  keep downloading at its own pace.
+- **Not a promise about a running job.** Platypus reads the setting when it
+  starts the job; changing it mid-download affects the next install or update.
+- **Not on the wire anywhere else.** `game.installSize`, `game.verify` and the
+  rest carry no `downloadLimit`.
 
 ## Out of scope
 

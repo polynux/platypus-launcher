@@ -53,6 +53,36 @@ print([(s, r["branch"], r.get("branch_password")) for s, r in reqs])
 	}
 }
 
+// The global download speed cap (protocol 1.21, issue #207) reaches
+// platypus-steam-dl's stdin request as download_limit; unlimited sends none.
+func TestSteamDownloadLimitInRequest(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+hs.refresh_token = lambda: "tok"
+hs.game_dir_name = lambda app: "g"
+import os
+d = os.path.join(os.environ["PLATYPUS_PLUGIN_DATA"], "games")
+reqs = []
+def fake_run(sub, req, job_id=None, game_dir=None):
+    reqs.append((sub, dict(req)))
+    return {"os_used": "linux"}
+hs.dl_run = fake_run
+hs.record_install = lambda *a: None
+hs.notify = lambda *a: None
+class T:
+    def __init__(self, target, args=(), daemon=False): self.target, self.args = target, args
+    def start(self): self.target(*self.args)
+hs.threading.Thread = T
+hs.start_job({"id": "4321", "jobId": "j1", "installDir": d, "downloadLimit": 1048576}, "install")
+hs.start_job({"id": "4321", "jobId": "j2", "installDir": d}, "update")
+print([(s, r.get("download_limit")) for s, r in reqs])
+`)
+	want := "[('install', 1048576), ('update', None)]"
+	if got != want {
+		t.Fatalf("requests = %s, want %s", got, want)
+	}
+}
+
 // The password never reaches the plugin's logs or job table.
 func TestSteamBranchPasswordNotRetained(t *testing.T) {
 	got := pyRun(t, `

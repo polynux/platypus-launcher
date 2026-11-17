@@ -561,6 +561,10 @@ export namespace types {
     games_folder: string;
     default_games_folder: string;
     cancel_cleanup_days: number;
+    download_limit: number;
+    update_window_enabled: boolean;
+    update_window_start: string;
+    update_window_end: string;
     ratings_online: boolean;
     protection_online: boolean;
     client_notices: boolean;

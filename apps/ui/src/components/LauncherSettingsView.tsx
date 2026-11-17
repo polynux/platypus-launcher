@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
 import type { LauncherSettings, StorePlugin, ThemeInfo } from '../types';
-import { NumberField } from '@/components/ds/number-field';
 import { Input } from '@/components/ds/input';
 import { Switch } from '@/components/ds/switch';
 import { Button } from '@/components/ds/button';
@@ -13,6 +12,7 @@ import { PSEUDO_LOCALE, applyLanguage, loadSessionInfo, pseudoAvailable } from '
 import { CloudSavesDefaults } from './CloudSavesSetting';
 import { GameFoldersSettings } from './GameFoldersSettings';
 import { BackupsSetting } from './BackupsSetting';
+import { DownloadsSetting } from './DownloadsSetting';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
 import { DEFAULT_THEME_ID, currentThemeVariables, loadTheme, onThemeApplied, useColorScheme, useThemeSchemes, useVariant, saveColorSchemeChoice, type ColorScheme } from '../lib/theme';
@@ -64,32 +64,6 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   // (scroll -> tabs, no re-mount) lands on what the user was on. Tab clicks
   // update the persisted section, so this agrees with the state above.
   const activeSection = Math.max(0, sectionNames.indexOf(persistedSettingsSection));
-  const [saved, setSaved] = useState<LauncherSettings | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [cleanupDays, setCleanupDays] = useState<number | ''>('');
-  const [cleanupError, setCleanupError] = useState<string | null>(null);
-
-  useEffect(() => {
-    Effect.runPromise(LauncherApi.getLauncherSettings())
-      .then((s) => { setSaved(s); setCleanupDays(s.cancel_cleanup_days); })
-      .catch((e) => setError(coreErrMsg(e)));
-  }, []);
-
-  const saveCleanupDays = (days: number) => {
-    setBusy(true);
-    setCleanupError(null);
-    Effect.runPromise(LauncherApi.setCancelCleanupDays(days))
-      .then((s) => {
-        setSaved(s);
-        setCleanupDays(s.cancel_cleanup_days);
-        onNotify(t('cleanup.saved'));
-      })
-      .catch((e) => setCleanupError(coreErrMsg(e)))
-      .finally(() => setBusy(false));
-  };
-
-  const cleanupDirty = saved != null && typeof cleanupDays === 'number' && cleanupDays !== saved.cancel_cleanup_days;
 
   const sections = [
     <LanguageSetting onNotify={onNotify} />,
@@ -97,30 +71,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
     <AppearanceSetting onNotify={onNotify} />,
     <GameFoldersSettings onNotify={onNotify} />,
     <PrefixesFolderSetting onNotify={onNotify} />,
-    atlas ? (
-      <section>
-        <AtlasSRow label={t('cleanup.heading')} desc={t('cleanup.description')}>
-          <Select value={String(cleanupDays)} onValueChange={(v) => saveCleanupDays(Number(v))} disabled={!saved || busy}>
-            <SelectTrigger aria-label={t('cleanup.daysLabel')} className="h-8 w-[210px] font-sans text-[13px]"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="0">{t('cleanup.deleteRightAway')}</SelectItem><SelectItem value="7">{t('cleanup.keepWeek')}</SelectItem><SelectItem value="365">{t('cleanup.keepYear')}</SelectItem></SelectContent>
-          </Select>
-        </AtlasSRow>
-        <div className="mt-2.5 flex min-h-4 items-center gap-4">{cleanupError ? <ErrorNotice message={cleanupError} fallback={t('cleanupError')} /> : <span />}</div>
-      </section>
-    ) : (
-    <section className={SECTION}>
-      <h2 className="text-[14px] font-bold">{t('cleanup.heading')}</h2>
-      <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">{t('cleanup.description')}</p>
-      <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (cleanupDirty && typeof cleanupDays === 'number') saveCleanupDays(cleanupDays); }}>
-        <label className="flex items-center gap-2"><span className="text-[12.5px] text-text-body">{t('cleanup.keepFor')}</span>
-          <NumberField min={0} max={365} step={1} hideSteppers value={cleanupDays === '' ? undefined : cleanupDays} onChange={(v) => { setCleanupDays(v ?? ''); setCleanupError(null); }} disabled={!saved} aria-label={t('cleanup.daysLabel')} className="w-24" />
-          <span className="text-[12.5px] text-text-body">{t('cleanup.days')}</span>
-        </label>
-        <Button type="submit" variant="primary" disabled={!cleanupDirty || busy}>{t('common:save')}</Button>
-      </form>
-      <div className="mt-2.5 flex min-h-4 items-center gap-4">{cleanupError ? <ErrorNotice message={cleanupError} fallback={t('cleanupError')} /> : <span />}</div>
-    </section>
-    ),
+    <DownloadsSetting onNotify={onNotify} />,
     <RatingsSetting onNotify={onNotify} />,
     <ArtworkSetting onNotify={onNotify} />,
     <GameInfoSetting onNotify={onNotify} />,
@@ -139,7 +90,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   // layout and derives its category navigation from it.
   if (atlas) {
     const settingsBlocks: Record<string, React.ReactNode> = Object.fromEntries(sectionNames.map((name, i) => [name.toLowerCase(), sections[i]]));
-    return <AtlasSettingsPage blocks={settingsBlocks} loadError={error} />;
+    return <AtlasSettingsPage blocks={settingsBlocks} loadError={null} />;
   }
 
   return (
@@ -149,7 +100,6 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
         title={t('settings:title')}
         subtitle={<p className="mt-0.5 max-w-[75ch] text-[12.5px] text-text-body">{t('subtitle')}</p>}
       />
-      {error && <ErrorNotice className="mt-2" message={error} fallback={t('loadError')} />}
 
       {navigation === 'tabs' ? (
         <div className="grid grid-cols-[10rem_minmax(0,1fr)] gap-5">

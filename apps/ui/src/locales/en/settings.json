@@ -8,7 +8,7 @@
   "appearance": "Appearance",
   "folders": "Game folders",
   "prefixes": "Wine prefix",
-  "cleanup": "Canceled downloads",
+  "cleanup": "Downloads",
   "ratings": "Game information",
   "artwork": "Artwork",
   "gameInfo": "Game details",
@@ -135,9 +135,25 @@
    "invalid": "its file can't be used"
   }
  },
+ "downloads": {
+  "heading": "Downloads",
+  "description": "Speed and timing for store downloads.",
+  "limitLabel": "Speed limit",
+  "limitDescription": "Cap the speed of every download, in KiB/s. 0 is unlimited. Applies to stores whose downloader supports a cap (Steam); the others download as fast as they can.",
+  "kib": "KiB/s",
+  "limitSaved": "Download speed limit saved",
+  "windowLabel": "Only start updates between",
+  "windowDescription": "Queued updates wait for this window; installs always start right away. A window that ends before it starts crosses midnight.",
+  "windowToggle": "Only start updates in the window",
+  "start": "Window start",
+  "end": "Window end",
+  "to": "to",
+  "scheduleSaved": "Update schedule saved",
+  "scheduleOff": "Updates can start at any time",
+  "saveError": "Platypus couldn't save the download settings."
+ },
  "loadError": "Platypus couldn't load the settings.",
  "prefixError": "Platypus couldn't change the Wine prefix folder.",
- "cleanupError": "Platypus couldn't clean up those folders.",
  "backups": {
   "heading": "Save backups",
   "description": "Platypus backs up save files before anything destructive (removing a game, deleting a prefix, uninstalling). Backups are one zip per run, kept here or in a folder of your choice — a synced folder works too.",

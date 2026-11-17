@@ -25,6 +25,8 @@ type SchedulerConfig struct {
 	MaxPerHost   int
 	RetryLimit   int
 	GrowEvery    time.Duration
+	// Limiter caps the run's throughput (issue #207); nil is unlimited.
+	Limiter *Limiter
 }
 
 func (c SchedulerConfig) withDefaults() SchedulerConfig {
@@ -227,6 +229,11 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 	worker := func() {
 		defer wg.Done()
 		for task := range tasks {
+			// Hold the run's rate before asking the CDN, so a capped
+			// download fetches slower instead of buffering ahead.
+			if err := s.cfg.Limiter.WaitN(ctx, int(task.chunk.CompressedLength)); err != nil {
+				return // the context ended; the collector's done case unwinds
+			}
 			data, host, err := s.fetchOne(ctx, m, depotID, task.chunk, states, key)
 			if err != nil {
 				results <- result{id: string(task.chunk.ID), task: task, err: err}

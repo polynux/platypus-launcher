@@ -20,6 +20,7 @@ import (
 	"platypus/internal/jsonrpc"
 	"platypus/internal/platform"
 	"platypus/internal/plugins"
+	"platypus/internal/settings"
 	"platypus/internal/types"
 )
 
@@ -129,6 +130,11 @@ type Queue struct {
 	cleanupAfter time.Duration
 	discarding   map[string]bool
 	cleanupWake  chan struct{}
+	// updateWindow holds queued updates until it opens (issue #207);
+	// windowTimer is the single wake-up scheduled for the next opening.
+	updateWindow settings.UpdateWindow
+	windowTimer  *time.Timer
+	windowAt     time.Time
 	jobs         []*types.Job
 	lastSave     time.Time
 	lastEmit     time.Time
@@ -219,6 +225,20 @@ func (q *Queue) signal() {
 	}
 }
 
+// wakeAt asks for another pass when the update window opens, keeping one
+// timer: an earlier deadline replaces it, a later one never postpones it.
+// Callers hold q.mu.
+func (q *Queue) wakeAt(t time.Time) {
+	if q.windowTimer != nil && !q.windowAt.After(t) {
+		return
+	}
+	if q.windowTimer != nil {
+		q.windowTimer.Stop()
+	}
+	q.windowAt = t
+	q.windowTimer = time.AfterFunc(time.Until(t), q.signal)
+}
+
 // cleanupLoop deletes the data of canceled jobs past the threshold: once at
 // startup, hourly, and whenever a cancel or a threshold change asks for it.
 // It runs apart from the job loop because a plugin can take a while to wind a
@@ -241,16 +261,29 @@ func (q *Queue) cleanupLoop(ctx context.Context) {
 func (q *Queue) next(ctx context.Context) {
 	q.mu.Lock()
 	var job *types.Job
+	var opens time.Time
 	for _, j := range q.jobs {
 		if j.State == StateRunning {
 			q.mu.Unlock()
 			return
 		}
-		if job == nil && j.State == StateQueued {
-			job = j
+		if j.State != StateQueued || job != nil {
+			continue
 		}
+		// An update outside its window waits; a later install still runs
+		// (issue #207: installs never wait for the schedule).
+		if at, waiting := q.waitsForWindow(j); waiting {
+			if opens.IsZero() || at.Before(opens) {
+				opens = at
+			}
+			continue
+		}
+		job = j
 	}
 	if job == nil {
+		if !opens.IsZero() {
+			q.wakeAt(opens)
+		}
 		q.mu.Unlock()
 		return
 	}
