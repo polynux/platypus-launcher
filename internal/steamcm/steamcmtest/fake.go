@@ -32,6 +32,9 @@ type Push struct {
 	// (FriendMessagesClient.IncomingMessage#1, ...) arrive as
 	// EMsgServiceMethodResponse with a target and no jobid_target.
 	Target string
+	// RoutingAppID sets the header's routing_appid (field 3): the game a
+	// ClientInviteToGame (7005) invites to. 0 leaves it unset.
+	RoutingAppID uint32
 	// After counts service calls: 0 = right after the logon response,
 	// 1 = after the first service request is received (the push goes
 	// out before that call's reply, so it lands between the client's
@@ -398,7 +401,13 @@ func (f *Fake) packDue(cfg Config, count int, steamID uint64) [][]byte {
 			continue
 		}
 		f.record(fmt.Sprintf("push %d", p.EMsg))
-		out = append(out, steamcm.PackEMsg(p.EMsg, steamcm.Header(steamID, 4711, 0, p.Target), p.Body))
+		hdr := steamcm.Header(steamID, 4711, 0, p.Target)
+		if p.RoutingAppID != 0 {
+			e := &depot.Enc{}
+			e.Fixed32(3, p.RoutingAppID)
+			hdr = append(hdr, e.Bytes()...)
+		}
+		out = append(out, steamcm.PackEMsg(p.EMsg, hdr, p.Body))
 	}
 	return out
 }

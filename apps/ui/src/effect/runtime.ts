@@ -147,6 +147,11 @@ export const LauncherApi = {
 
   launchGame: (game: Game) => call<string>('LaunchGame', () => App.LaunchGame(backend(game))),
 
+  // A game invite's Join: the same launch with the raw join fragment, which
+  // the core parses against the allowlist before anything runs (1.24).
+  launchWithArgs: (game: Game, kind: string, connect: string, lobbyId: string) =>
+    call<string>('LaunchWithArgs', () => App.LaunchWithArgs(backend(game), kind, connect, lobbyId)),
+
   // Installs or repairs a store client's own prefix (protocol 1.20): queues
   // the client.setup job. Without confirmed, a client that asks for download
   // confirmation fails with client.confirmDownload instead of queueing.

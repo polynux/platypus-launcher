@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -553,6 +554,11 @@ func (a *App) pluginNotify(id, method string, params json.RawMessage) {
 		return
 	}
 	if a.social != nil && strings.HasPrefix(method, "social.") {
+		// Game invites need protocol 1.24 and a friend of the plugin's
+		// own; an older plugin's invite never reaches the view.
+		if method == social.NoteInvite && !a.inviteSpoken(id, params) {
+			return
+		}
 		a.social.Notify(id, method, params)
 		return
 	}
@@ -1108,11 +1114,22 @@ type prepared struct {
 	redact []string             // argument prefixes hidden in previews and logs
 	runner plugins.RunnerInfo   // the runner the plugin picked, when the game uses one
 	stop   func(force bool)
+	// extra counts trailing join arguments (LaunchWithArgs): shown leaves
+	// them out, so join fragments never reach session logs.
+	extra int
 }
 
 // prepareLaunch asks the game's store how to launch it and builds the command.
 // preview must not cost the store anything (no launch tokens).
 func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
+	return a.prepareLaunchArgs(game, preview, nil)
+}
+
+// prepareLaunchArgs builds the command with extra arguments appended to the
+// launch spec: a join fragment. Direct launches run them as argv;
+// store-client launches pass them after the app id, which the client
+// forwards to the game like its own run URL does.
+func (a *App) prepareLaunchArgs(game types.Game, preview bool, extra []string) (*prepared, error) {
 	a.applySavedSettings(&game)
 	var launch *stores.Launch
 	if s, ok := a.stores.Get(sourceOf(game)); ok {
@@ -1137,28 +1154,38 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 
 	switch {
 	case launch != nil && launch.Client != nil && launch.Client.Wine != nil:
-		return a.prepareWineClient(game, launch.Client, preview)
+		return a.prepareWineClient(game, launch.Client, preview, extra)
 	case launch != nil && launch.Client != nil:
 		// The store client starts the game, so the command runs as it is: a
 		// runner wrapper would wrap the client, not the game.
-		return &prepared{args: launch.Client.Command, env: map[string]string{}, client: launch.Client}, nil
+		return &prepared{args: append(slices.Clone(launch.Client.Command), extra...), env: map[string]string{}, client: launch.Client, extra: len(extra)}, nil
 	case launch != nil && launch.Direct != nil:
 		d := launch.Direct
 		dir := d.Dir
 		if game.Settings.WorkingDir != "" {
 			dir = game.Settings.WorkingDir
 		}
-		return a.wrapLaunch(game, append([]string{d.Exe}, d.Args...), d.Env, dir, d.NeedsWine, preview, d.Redact)
+		p, err := a.wrapLaunch(game, append(append([]string{d.Exe}, d.Args...), extra...), d.Env, dir, d.NeedsWine, preview, d.Redact)
+		if err != nil {
+			return nil, err
+		}
+		p.extra = len(extra)
+		return p, nil
 	}
 
 	if a.isCustomLaunch(game) {
-		return a.prepareSideload(game, preview)
+		return a.prepareSideload(game, preview, extra)
 	}
 	dir := game.Settings.WorkingDir
 	if dir == "" && game.Executable != "" {
 		dir = filepath.Dir(game.Executable)
 	}
-	return a.wrapLaunch(game, []string{game.Executable}, nil, dir, !game.Native, preview, nil)
+	p, err := a.wrapLaunch(game, append([]string{game.Executable}, extra...), nil, dir, !game.Native, preview, nil)
+	if err != nil {
+		return nil, err
+	}
+	p.extra = len(extra)
+	return p, nil
 }
 
 // prepareWineClient runs the store client itself under the runner in its own
@@ -1169,7 +1196,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 // the default runner and none of the game's settings: wrappers, env and
 // runtime bindings are per-game choices, and the client belongs to no game.
 // A launch without a runner plugin fails: a wine command needs Wine.
-func (a *App) prepareWineClient(game types.Game, cl *stores.ClientLaunch, preview bool) (*prepared, error) {
+func (a *App) prepareWineClient(game types.Game, cl *stores.ClientLaunch, preview bool, extra []string) (*prepared, error) {
 	clientDir := stores.ClientPrefixDir(game.Source, a.effectivePrefixesFolder())
 	present, err := a.runnerPlugin()
 	if err != nil {
@@ -1194,20 +1221,23 @@ func (a *App) prepareWineClient(game types.Game, cl *stores.ClientLaunch, previe
 	clientGame.ID = stores.ClientGameID(game.Source)
 	clientGame.Settings = types.GameSettings{WinePrefix: clientDir}
 	clientGame.SettingsExtra = nil
-	p, err := a.wrapLaunch(clientGame, append([]string{w.Exe}, w.Args...), w.Env, filepath.Dir(w.Exe), true, preview, w.Redact)
+	// The client's own arguments (with -applaunch) take the join fragment
+	// the same way a native client launch does.
+	p, err := a.wrapLaunch(clientGame, append(append([]string{w.Exe}, w.Args...), extra...), w.Env, filepath.Dir(w.Exe), true, preview, w.Redact)
 	if err != nil {
 		return nil, err
 	}
 	p.client = cl
+	p.extra = len(extra)
 	return p, nil
 }
 
-func (a *App) prepareSideload(game types.Game, preview bool) (*prepared, error) {
+func (a *App) prepareSideload(game types.Game, preview bool, extra []string) (*prepared, error) {
 	// The library sets Native, but previews from the settings draft (or any
 	// hand-built game) may carry a stale flag with a fresh run_mode: resolve
 	// again so the preview is honest.
 	game.Native = a.customNative(game.Executable, game.Settings.RunMode)
-	return a.prepareCustomLaunch(game, preview)
+	return a.prepareCustomLaunch(game, preview, extra)
 }
 
 // isCustomLaunch says whether the game launches as a sideloaded executable
@@ -1228,13 +1258,18 @@ func (a *App) isCustomLaunch(game types.Game) bool {
 // (issue #81: the POSIX shell on Unix, cmd.exe or PowerShell on Windows); any
 // other native binary without it fails with a clear error instead of a raw
 // exec failure (the UI offers to set the bit first).
-func (a *App) prepareCustomLaunch(game types.Game, preview bool) (*prepared, error) {
+func (a *App) prepareCustomLaunch(game types.Game, preview bool, extra []string) (*prepared, error) {
 	if !game.Native {
 		dir := game.Settings.WorkingDir
 		if dir == "" && game.Executable != "" {
 			dir = filepath.Dir(game.Executable)
 		}
-		return a.wrapLaunch(game, []string{game.Executable}, nil, dir, true, preview, nil)
+		p, err := a.wrapLaunch(game, append([]string{game.Executable}, extra...), nil, dir, true, preview, nil)
+		if err != nil {
+			return nil, err
+		}
+		p.extra = len(extra)
+		return p, nil
 	}
 	st, err := os.Stat(game.Executable)
 	if err != nil {
@@ -1262,10 +1297,17 @@ func (a *App) prepareCustomLaunch(game types.Game, preview bool) (*prepared, err
 	if dir == "" && game.Executable != "" {
 		dir = filepath.Dir(game.Executable)
 	}
-	return a.wrapLaunch(game, append([]string{command}, args...), nil, dir, false, preview, nil)
+	p, err := a.wrapLaunch(game, append(append([]string{command}, args...), extra...), nil, dir, false, preview, nil)
+	if err != nil {
+		return nil, err
+	}
+	p.extra = len(extra)
+	return p, nil
 }
 
-// shown is the command line with env, redacted for previews and logs.
+// shown is the command line with env, redacted for previews and logs. Join
+// arguments are left out: they are another user's data (server addresses,
+// lobby ids) and never reach a log.
 func (p *prepared) shown() string {
 	keys := make([]string, 0, len(p.env))
 	for k := range p.env {
@@ -1276,7 +1318,11 @@ func (p *prepared) shown() string {
 	for _, k := range keys {
 		parts = append(parts, k+"="+p.env[k])
 	}
-	return strings.Join(append(parts, stores.RedactArgs(p.args, p.redact)...), " ")
+	args := p.args
+	if p.extra > 0 && p.extra <= len(args) {
+		args = args[:len(args)-p.extra]
+	}
+	return strings.Join(append(parts, stores.RedactArgs(args, p.redact)...), " ")
 }
 
 // stopHook asks the game's wineserver to terminate when the game is stopped;
@@ -1308,9 +1354,32 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 	return a.launchGame(game, false)
 }
 
+// LaunchWithArgs starts a game with a game invite's join fragment appended
+// to its launch spec: kind "connect" (a +connect/+invite command line) or
+// kind "lobby" (a Steam lobby id). The fragment is parsed and checked
+// against the strict join allowlist here, before anything runs: the remote
+// friend controls launch argv, so nothing pre-split ever reaches an exec.
+// Direct launches run the args as argv; store-client launches pass them
+// after the app id, which is what the client's own run URL does.
+func (a *App) LaunchWithArgs(game types.Game, kind, connect, lobbyID string) (string, error) {
+	args, ok := social.ParseJoinArgs(kind, connect, lobbyID)
+	if !ok {
+		return "", apperr.New("game.badJoinArg",
+			fmt.Sprintf("the invite for %s doesn't name a usable join", game.Title),
+			map[string]string{"title": game.Title})
+	}
+	return a.launchGameArgs(game, false, args)
+}
+
 // launchGame starts a game. anyway is the user's "launch anyway" for this one
 // launch: it skips the cloud step and nothing after it.
 func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
+	return a.launchGameArgs(game, anyway, nil)
+}
+
+// launchGameArgs starts a game with extra arguments appended to its launch
+// spec (nil for a plain launch).
+func (a *App) launchGameArgs(game types.Game, anyway bool, extra []string) (string, error) {
 	if _, ok := a.plugins.Plugin(game.Source); ok {
 		a.stats.noteSource(game.ID, game.Source)
 	}
@@ -1322,7 +1391,7 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 	if err := a.heldByJob(game); err != nil {
 		return "", err
 	}
-	p, err := a.prepareLaunch(game, false)
+	p, err := a.prepareLaunchArgs(game, false, extra)
 	if err != nil {
 		return "", err
 	}

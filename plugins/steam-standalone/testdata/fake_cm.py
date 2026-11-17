@@ -852,7 +852,8 @@ def send_family_push(conn, st, steamid, sessionid, push_body):
 #   friends_incr: [...]                         the incremental list instead
 #   persona_states: {"<id>": {"name", "state", "app", "title", "ava", "seen"}}
 #            state is the EPersonaState number, app the played appid, ava
-#            40 hex chars of avatar_hash, seen a unix last-seen time
+#            40 hex chars of avatar_hash, seen a unix last-seen time;
+#            "connect" and "lobby" script the join data (1.24)
 #   push_body_after: {"<n>": ["friends", "friends_incr", "personas", "incoming"]}
 #            pushes that ride out before the nth service call's reply
 #            (they also work at "0", right after logon)
@@ -892,6 +893,13 @@ def persona_body(personas):
             f += pb_int(47, p["seen"])
         if p.get("title"):
             f += pb_str(55, p["title"])
+        # Join data (protocol 1.24): rich presence "connect" (field 71 KV)
+        # and the lobby SteamID (field 73). The log records ids and counts
+        # only, never the fragment.
+        if p.get("connect"):
+            f += pb_msg(71, pb_str(1, "connect") + pb_str(2, p["connect"]))
+        if p.get("lobby"):
+            f += pb_fixed64(73, int(p["lobby"]))
         out += pb_msg(2, f)
     return out
 

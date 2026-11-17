@@ -39,11 +39,13 @@ import type { types as gen } from './gen/models';
 import { reconcileViews, upsertView } from './lib/social';
 import { ensureTerms } from './lib/termsRequest';
 import { friendNameOf, useChat } from './lib/useChat';
+import { useInviteToasts } from './lib/useInvites';
+import { friendInvite, joinDecision } from './lib/invites';
 import { isLiveState } from './lib/sessions';
 import { usePauseWhileGameRuns } from './lib/pauseWhileHidden';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { attentionIssues, heroImages, mergeAttentionSignals, mergeCloudEvent, needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
-import type { ActivityEvent, Collection, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, Tweak, View } from './types';
+import type { ActivityEvent, Collection, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialFriend, SocialStatus, SocialView, SourceWarning, StorePlugin, Tweak, View } from './types';
 import { useTranslation } from 'react-i18next';
 import { applyLanguage, loadSessionInfo } from './lib/i18n';
 import { loadTheme } from './lib/theme';
@@ -56,7 +58,7 @@ import { Modal } from './components/Modal';
 import { useVariant } from './lib/theme';
 import { useGameTone } from './lib/gameTone';
 import type { GameSettingsTab } from './lib/gameSettingsTabs';
-import { notify as toastNotify, type LegacyKind as NoticeKind } from './lib/notify';
+import { notify as toastNotify, type LegacyKind as NoticeKind, type NotifyOptions } from './lib/notify';
 import { acceptTermsActionFor, loginActionFor, setStoreLoginOpener } from './lib/storeLogin';
 import { X } from 'lucide-react';
 import { RouterProvider, useRouter } from '@tanstack/react-router';
@@ -295,21 +297,21 @@ export function AppContent() {
   // Every in-app notice goes through Sonner (issue #64): stacked top-right
   // toasts, newest on top. onNotify props stay (least churn) as a thin
   // wrapper: ok → success, err → error, busy → info.
-  const notify = useCallback((msg: string, kind: NoticeKind = 'ok') => {
+  const notify = useCallback((msg: string, kind: NoticeKind = 'ok', options: NotifyOptions = {}) => {
     // An error toast says a plain sentence; the raw text rides as the
     // toast description, and the toast stays long enough to read it.
     // Known engine strings become sentences (audit F4), with the raw behind.
     const fallback = t('errors:fallback');
     if (kind === 'err') {
       const parts = errorToastParts(msg, t, fallback);
-      toastNotify.error(parts.title, parts.description ? { description: parts.description } : undefined);
+      toastNotify.error(parts.title, { description: parts.description ?? options.description, action: options.action });
       return;
     }
     if (kind === 'busy') {
-      toastNotify.info(msg);
+      toastNotify.info(msg, options);
       return;
     }
-    toastNotify.success(msg);
+    toastNotify.success(msg, options);
     // t is a dep: toasts follow a live language switch.
   }, [t]);
 
@@ -522,6 +524,38 @@ export function AppContent() {
       .then((res) => notify(res || t('game:launching', { title: game.title }), 'busy'))
       .catch((err) => notify(coreErrMsg(err), 'err'))
       .finally(() => setLaunchingId(null));
+  };
+
+  // A game invite's Join: the same launch with the join fragment appended.
+  // The core parses the raw fragment against the allowlist before anything
+  // runs; the UI mirror (lib/invites) only decides the disabled Join.
+  const launchWithArgs = (game: Game, kind: string, connect: string, lobbyId: string) => {
+    if (launchingId || sessions[game.id]) return;
+    setLaunchingId(game.id);
+    Effect.runPromise(LauncherApi.launchWithArgs(game, kind, connect, lobbyId))
+      .then((res) => notify(res || t('game:launching', { title: game.title }), 'busy'))
+      .catch((err) => notify(coreErrMsg(err), 'err'))
+      .finally(() => setLaunchingId(null));
+  };
+
+  // Join a friend's game from its row: launch with the join args, or open
+  // the game page when it isn't installed. Disabled rows explain why.
+  const joinFriend = (plugin: string, friend: SocialFriend) => {
+    const frag = friendInvite(friend);
+    if (!frag) return;
+    const decision = joinDecision(frag, friend.game?.id, games);
+    if (decision.kind === 'launch') launchWithArgs(decision.game, frag.kind, frag.connect ?? '', frag.lobbyId ?? '');
+    else if (decision.kind === 'page') openGame(decision.gameId);
+  };
+  // Null when Join does something (launch the game, or open its page when
+  // it isn't installed); otherwise the disabled reason the row shows.
+  const joinFriendReason = (plugin: string, friend: SocialFriend): string | null => {
+    const frag = friendInvite(friend);
+    if (!frag) return null;
+    const title = friend.game?.title ?? '';
+    const decision = joinDecision(frag, friend.game?.id, games);
+    if (decision.kind === 'disabled') return t(`chat:invite.${decision.reason}`, { title });
+    return null;
   };
 
   const stop = (gameId: string, force: boolean) => {
@@ -909,6 +943,8 @@ export function AppContent() {
       ),
     [],
   );
+  // Game invites (protocol 1.24): each new one toasts with a Join action.
+  useInviteToasts(social, games, launchWithArgs, openGame, notify);
   // The Settings entry (the shell's and the palette's): the theme's presentation
   // decides whether Settings replaces the view or opens over it.
   const openSettings = useCallback(() => {
@@ -1467,6 +1503,8 @@ export function AppContent() {
               onReconnect={(plugin) =>
                 Effect.runPromise(LauncherApi.restartSocial(plugin)).then(refreshSocial).catch((err) => notify(coreErrMsg(err), 'err'))}
               onOpenGame={(id) => { closeFriends(); openGame(id); }}
+              onJoin={joinFriend}
+              joinReason={joinFriendReason}
               unreadOf={chat.unreadOf}
               onOpenChat={(plugin, friend) => chat.open(plugin, friend.id)}
               chat={chatPanel}

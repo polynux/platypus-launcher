@@ -55,6 +55,7 @@
     "unsupported": "{{name}} doesn't offer family."
   },
   "game": {
+    "badJoinArg": "Couldn't use the invite's join arguments for {{title}}.",
     "clientRunBusy": "{{title}} is {{action}} in {{client}}; launch it once that finishes.",
     "launchBusy": "{{title}} is being {{what}}; launch it once that finishes.",
     "launchBusyWorkshop": "{{title}} is syncing Workshop items; launch it once that finishes.",

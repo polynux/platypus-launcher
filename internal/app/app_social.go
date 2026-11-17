@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"platypus/internal/apperr"
@@ -29,6 +31,38 @@ func (b socialBackend) Offers(ctx context.Context, pluginID string) bool {
 func (b socialBackend) Call(ctx context.Context, pluginID, method string, params, result any) error {
 	return b.a.plugins.Call(ctx, pluginID, method, params, result)
 }
+
+// inviteSpoken says whether a plugin may send game invites: it runs at
+// protocol 1.24 or later, and the invite names a friend on its own list.
+// Anything older or stranger is dropped where it arrives (the 1.22 cap).
+func (a *App) inviteSpoken(id string, params json.RawMessage) bool {
+	if a.plugins == nil || a.social == nil {
+		return false
+	}
+	if !a.invitesAllowed(id) {
+		return false
+	}
+	var p struct {
+		From struct {
+			ID string `json:"id"`
+		} `json:"from"`
+	}
+	if json.Unmarshal(params, &p) != nil || p.From.ID == "" {
+		return false
+	}
+	return slices.ContainsFunc(a.social.View(id).Friends, func(f social.Friend) bool { return f.ID == p.From.ID })
+}
+
+// invitesAllowed reports whether the plugin settled on protocol 1.24 or
+// later: the social backend's answer for the manager's own gate.
+func (a *App) invitesAllowed(id string) bool {
+	if a.plugins == nil {
+		return false
+	}
+	return a.plugins.Runtime(id).Speaks(plugins.InviteVersion)
+}
+
+func (b socialBackend) Invites(pluginID string) bool { return b.a.invitesAllowed(pluginID) }
 
 // startSocial creates the friends orchestrator. Subscriptions start with
 // syncSocial, once the plugins are known.

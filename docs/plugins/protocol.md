@@ -1,4 +1,4 @@
-# Store plugin protocol (1.23, draft)
+# Store plugin protocol (1.24, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -762,11 +762,13 @@ that doesn't know it.
   (`workshop.list`, `workshop.sync`, see [Workshop](#workshop-122)); 1.23: the `clientRun` answer of
   `game.install`, `game.update` and `game.uninstall` (the core runs a client command in the pinned
   prefix as part of the plugin's job) and the `signin` clientStatus state (the client waits for the user,
-  see [Client-run commands](#client-run-commands-123)); see [Compat facts](#compat-facts-117),
+  see [Client-run commands](#client-run-commands-123)); 1.24: game invites (the `social.invite`
+  notification, the join fields of `Friend.game`, and the `invites` of `social.state`;
+  see [Game invites](#game-invites-124)); see [Compat facts](#compat-facts-117),
   [Runner](#runner-117), and [Save context](#save-context-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20, 1.21, 1.22 or 1.23 method.
+  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20, 1.21, 1.22, 1.23 or 1.24 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -1076,14 +1078,16 @@ requests and rich presence are not part of it.
 ```
 social.start {} -> {}                              turn the friends on: connect, then push as below
 social.stop {} -> {}                               disconnect (idempotent)
-social.state {} -> { connection, self, friends }   the current snapshot, as the pushes would have it
+social.state {} -> { connection, self, friends, invites? }   the current snapshot, as the pushes would have it (1.24 adds `invites`)
 social.setStatus { state } -> {}                   the user's own status (optional)
 social.setPlaying { id | null } -> {}              the game the user plays, null for none (optional)
 
 social.connection { state, message? }              plugin -> Platypus notification
 social.self { name, avatarUrl?, state }            the user's own profile and status
 social.friends { full, friends: [Friend] }         the whole list (full: true) or changed friends (full: false)
-Friend = { id, name, avatarUrl?, state, game?: { id?, title }, lastSeen? }
+social.invite Invite                               plugin -> Platypus notification: a game invite (1.24, see [Game invites](#game-invites-124))
+Friend = { id, name, avatarUrl?, state, game?: { id?, title, storeId?, joinable?, connect?, lobbyId? }, lastSeen? }
+Invite = { from: { id, name }, game: { id?, title, storeId }, kind: "connect" | "lobby", connect?, lobbyId?, at }
 ```
 
 - **States.** A friend's `state` is `online`, `offline`, `away`, `busy`, `snooze`, `looking` or `invisible`. A
@@ -1093,6 +1097,10 @@ Friend = { id, name, avatarUrl?, state, game?: { id?, title }, lastSeen? }
   `id`) and adds new ones. It never removes a friend: a plugin that drops one sends the full list.
 - **Games.** `game.id` is Platypus's key (`p.<plugin id>.<game id>`) when the game is in the user's library, and left out
   otherwise, when only `title` says what the friend plays. Platypus links the game when the key is in the library.
+- **Joinable friends (1.24).** `game.storeId` is the store's raw game id even when the game is not in the library
+  (what `game.id` leaves out); `game.joinable` says the friend can be joined right now, with the `connect` join
+  fragment and/or the `lobbyId` to launch with (see [Game invites](#game-invites-124)). A plugin that negotiated
+  older than 1.24 leaves these keys out.
 - **Playing.** When a game of this plugin starts, Platypus sends `social.setPlaying { id }` with the store's game id (the
   part after `p.<plugin id>.`); when it stops, `{ id: null }`. Only plugins that offer the capability get it, and only
   for their own games, and only while the user keeps "Show what I'm playing to friends" on for the store (on by
@@ -1729,6 +1737,47 @@ confirm a dialog). While `signin` is reported the start deadline is paused
 from launch so a forgotten window doesn't track forever. The UI shows
 "Waiting for you in <client>" on the Play button, with the plugin's `label`
 when given.
+
+## Game invites (1.24)
+
+Protocol 1.24 carries a friend's game invitation to the launcher: who invites
+the user to what, and how to join them. Sending an invitation is not part of
+it; neither is Remote Play Together (a stream invitation, not a join).
+
+```
+social.invite { from: { id, name }, game: { id?, title, storeId },
+                kind: "connect" | "lobby", connect?, lobbyId?, at }
+```
+
+- **What it is.** `kind: "connect"` joins with the `connect` command-line
+  fragment; `kind: "lobby"` joins the `lobbyId` Steam lobby through the game's
+  store client. `at` is Unix seconds.
+- **Join shapes.** Only these exact token shapes ever reach an exec; anything
+  else is refused with a readable error before anything runs:
+  `+connect <host>[:<port>][/password]` (hostname/IPv4 or bracketed IPv6,
+  port 1-65535, optional `+password <pw>` instead of the `/pw` suffix),
+  `+invite <uint64>` (optionally `+invite <uint64> -launchsource2`), and
+  `+connect_lobby <uint64>` (a Steam lobby id, 1-20 digits). `+exec`,
+  `-insecure`, extra tokens, paths and every other form never launch.
+- **One per friend.** The plugin keeps one pending invite per friend (newest
+  wins) and treats the same friend, game and fragment inside 120 s as a
+  repeat: stores push the same invitation over several channels at once.
+  `social.state` carries the pending invites so a UI restart does not lose
+  them; Platypus does the same one-per-friend merge on its side.
+- **Expiry.** A pending invite lives 15 minutes: the helper, the core and the
+  UI agree on the window, and the core is the authority that drops it. When
+  the inviter stops playing that app, the join is gone with it.
+- **Caps.** An over-long `connect` (over 256 characters), `storeId` or
+  `lobbyId` (over 64 each) drops the invite at the boundary, never clipped.
+  An invite with no friend, no game, a kind its field doesn't match, or
+  neither `connect` nor `lobbyId` is dropped the same way.
+- **Gating.** Platypus takes `social.invite` only from a plugin that
+  negotiated 1.24 or later, and only about a friend on that plugin's own
+  list; anything older or stranger is dropped where it arrives.
+- **Privacy.** Invites and join fragments are other users' data: they stay in
+  memory and out of the launcher's logs (join arguments never reach a session
+  log line). The plugin persists no invite text, only what the friends list
+  already keeps.
 
 ## Out of scope
 

@@ -192,7 +192,15 @@ func (s VersionSet) MarshalJSON() ([]byte, error) {
 // 1.21 adds the optional downloadLimit param of game.install and game.update
 // (issue #207); 1.22 adds the workshop capability (workshop.list,
 // workshop.sync); 1.23 adds the clientRun answer of game.install, game.update
-var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12}, {1, 13}, {1, 14}, {1, 15}, {1, 16}, {1, 17}, {1, 18}, {1, 19}, {1, 20}, {1, 21}, {1, 22}, {1, 23}}
+// and game.uninstall (the core runs a client command in the pinned prefix as
+// part of the plugin's job); 1.24 adds game invites (the social.invite
+// notification, the join fields of Friend.game, and the invites of
+// social.state).
+var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12}, {1, 13}, {1, 14}, {1, 15}, {1, 16}, {1, 17}, {1, 18}, {1, 19}, {1, 20}, {1, 21}, {1, 22}, {1, 23}, {1, 24}}
+
+// InviteVersion is the first protocol revision with game invites: a plugin
+// below it sends no social.invite and no join fields.
+var InviteVersion = Version{1, 24}
 
 var ClientStatusVersion = Version{1, 18}
 

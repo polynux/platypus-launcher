@@ -819,14 +819,15 @@ func TestSteamLibraryInstallLaunchUninstall(t *testing.T) {
 	}
 }
 
-// The plugin declares protocol 1.22 (issue #204 on top of #207): the core may
-// send the global download cap, and the plugin hands it to the downloader
-// (covered by TestSteamDownloadLimitInRequest), plus the Workshop methods.
+// The plugin speaks protocol 1.24 (issue #206 on top of #204 and #207): the
+// core may send the global download cap, and the plugin hands it to the
+// downloader (covered by TestSteamDownloadLimitInRequest), plus the Workshop
+// methods and social.invite (which the core gates on 1.24).
 func TestSteamSpeaksDownloadLimitProtocol(t *testing.T) {
 	e := setup(t)
 	e.login()
-	if got := e.m.Runtime(id).Protocol; got != "1.22" {
-		t.Fatalf("negotiated protocol = %q, want 1.22", got)
+	if got := e.m.Runtime(id).Protocol; got != "1.24" {
+		t.Fatalf("negotiated protocol = %q, want 1.24", got)
 	}
 }
 

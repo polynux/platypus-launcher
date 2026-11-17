@@ -55,6 +55,7 @@
     "unsupported": "« {{name}} » n'offre pas la famille."
   },
   "game": {
+    "badJoinArg": "Impossible d'utiliser les arguments de jonction de l'invitation pour « {{title}} ».",
     "clientRunBusy": "« {{title}} » est occupé ({{actionFr}} dans {{client}}) ; lancez-le une fois terminé.",
     "launchBusy": "« {{title}} » est occupé ({{what}}) ; lancez-le une fois terminé.",
     "launchBusyWorkshop": "« {{title}} » synchronise les éléments d’atelier ; lancez-le une fois terminé.",
