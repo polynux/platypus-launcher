@@ -157,6 +157,16 @@ export const LauncherApi = {
   // confirmation fails with client.confirmDownload instead of queueing.
   setupClient: (source: string, confirmed: boolean) => call<Job>('SetupClient', () => App.SetupClient(source, confirmed)),
 
+  // Whether a wine-client store's own client is set up (protocol 1.20/1.25):
+  // the plugin card shows Set up vs Open from this, with the setup job's
+  // progress riding along.
+  clientState: (source: string) =>
+    call<gen.ClientState>('ClientState', () => App.ClientState(source)),
+
+  // Opens a wine-client store by itself (protocol 1.25), tracked like a
+  // client session so a later game launch reuses the running client.
+  openClient: (source: string) => call<string>('OpenClient', () => App.OpenClient(source)),
+
   // Graceful stop (SIGTERM, then SIGKILL after a few seconds); progress arrives
   // as session events ("stopping", then "stopped").
   stopGame: (gameId: string) => call<void>('StopGame', () => App.StopGame(gameId)),

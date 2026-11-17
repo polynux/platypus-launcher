@@ -43,6 +43,12 @@
     "enable": "Enable",
     "uninstall": "Uninstall"
   },
+  "client": {
+    "open": "Open {{client}}",
+    "opening": "Opening {{client}}…",
+    "hint": "Sign in to {{client}} here; Platypus reads your games once you have.",
+    "busyNote": "{{client}} is busy; try again in a moment."
+  },
   "auth": {
     "checking": "checking login…",
     "loggedIn": "Logged in",

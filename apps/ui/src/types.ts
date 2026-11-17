@@ -183,6 +183,8 @@ export type JobKind = 'install' | 'update' | 'uninstall' | 'verify' | 'move' | '
 export type GameJobKind = 'install' | 'update' | 'uninstall';
 export type JobState = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'canceled';
 export type Job = gen.Job;
+/** Whether a wine-client store's own client is set up and what holds it. */
+export type ClientState = gen.ClientState;
 export type VerifyReport = gen.VerifyReport;
 export type MoveCheck = gen.MoveCheck;
 export type SaveBackup = gen.SaveBackup;

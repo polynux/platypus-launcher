@@ -104,10 +104,11 @@ CLIENT_NAMES_LOWER = frozenset(n.lower() for n in CLIENT_NAMES)
 # 30-minute clamp on startTimeout).
 START_TIMEOUT = 900
 
-# Protocol versions spoken: 1.20 (setup + launch) and 1.23 (plus install via
-# clientRun, and the signin clientStatus state). The install capability is
-# on only when 1.23 is negotiated.
-PROTOCOLS = ("1.20", "1.23")
+# Protocol versions spoken: 1.20 (setup + launch), 1.23 (plus install via
+# clientRun, and the signin clientStatus state) and 1.25 (plus client.openSpec,
+# so the card can open the client with no game). The install capability is
+# on only when 1.23 or later is negotiated.
+PROTOCOLS = ("1.20", "1.23", "1.25")
 
 # Seconds a client process may run without the game before clientStatus
 # reports signin (the user must act in the client). Overridden in tests.
@@ -298,9 +299,10 @@ def fetch_installer():
 
 
 def pick_protocol(offered):
-    """The highest protocol both sides speak (1.20 or 1.23)."""
-    if "1.23" in (offered or []) and "1.23" in PROTOCOLS:
-        return "1.23"
+    """The highest protocol both sides speak (1.20, 1.23 or 1.25)."""
+    for version in ("1.25", "1.23"):
+        if version in (offered or []) and version in PROTOCOLS:
+            return version
     return "1.20"
 
 
@@ -311,7 +313,7 @@ def initialize(params):
         offered = []
     _negotiated = pick_protocol([str(v) for v in offered])
     caps = ["library", "launch"]
-    if _negotiated == "1.23":
+    if _negotiated in ("1.23", "1.25"):
         caps = ["library", "install", "launch"]
     with _state_lock:
         _client_seen.clear()
@@ -322,7 +324,7 @@ def initialize(params):
 
 def negotiated_123():
     with _state_lock:
-        return _negotiated == "1.23"
+        return _negotiated in ("1.23", "1.25")
 
 
 def watch_timeout():
@@ -618,6 +620,16 @@ def launch_spec(params):
             "prefix": "client", "find": {"cmdline": [exe]},
             "startTimeout": START_TIMEOUT}
 
+def open_spec(params):
+    """The standalone client spec (protocol 1.25): the client exe with no
+    game args, so the card can open the client for sign-in. Answered from
+    Windows paths without preflighting the client: a missing client exe is
+    the core's client.notSetUp, not a plugin error."""
+    prefix = (params.get("prefix") or "") or remembered_prefix()
+    if not prefix:
+        raise RPCError("invalid params: prefix is required", code=-32602)
+    return {"exe": CLIENT_DIR_WINDOWS + "\\" + CLIENT_NAMES[0]}
+
 
 def client_status(params):
     """Client-side launch status (protocol 1.18, plus signin over 1.23).
@@ -668,6 +680,7 @@ METHODS = {
     "game.uninstall": game_uninstall,
     "job.cancel": job_cancel,
     "client.setup": client_setup,
+    "client.openSpec": open_spec,
     "game.launchSpec": launch_spec,
     "game.clientStatus": client_status,
 }

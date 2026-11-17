@@ -41,7 +41,9 @@
     "confirmDownload": "{{message}}",
     "gameRunning": "{{client}} is running a game; stop it before {{action}}.",
     "inUse": "{{client}} is running; stop the game before setting it up.",
-    "notSetUp": "{{client}} isn't set up yet; set it up first, then launch the game."
+    "notSetUp": "{{client}} isn't set up yet; set it up first, then launch the game.",
+    "running": "{{client}} is already running.",
+    "busy": "{{client}} is busy ({{action}}); try again once it finishes."
   },
   "cloud": {
     "none": "This game has no cloud saves Platypus can sync.",

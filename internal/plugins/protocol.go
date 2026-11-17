@@ -428,6 +428,19 @@ type ClientRunSpec struct {
 	Redact []string          `json:"redact,omitempty"`
 }
 
+// ClientOpenSpec is what client.openSpec answers (protocol 1.25): the store
+// client's own executable (and its arguments, working dir) for opening the
+// client by itself, with no game to launch. The core validates the exe like
+// a clientRun exe (an absolute or C:\ path, present now, inside the
+// client's prefix or an allowed folder) and runs it under the runner in the
+// pinned client prefix, tracked like a client session. The method is
+// optional: -32601 means the plugin has no standalone client to open.
+type ClientOpenSpec struct {
+	Exe  string   `json:"exe"`
+	Args []string `json:"args,omitempty"`
+	Cwd  string   `json:"cwd,omitempty"`
+}
+
 // InstallAnswer is what game.install, game.update and game.uninstall answer:
 // either {} once the plugin started its own work, or a clientRun command for
 // the core to run (protocol 1.23). ClientOwnsLocation says the client owns

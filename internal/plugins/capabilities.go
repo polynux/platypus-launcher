@@ -54,7 +54,7 @@ var registry = []Capability{
 		Surfaces: []string{"install-button", "update-button", "uninstall-button", "install-folder"}},
 	{Name: "launch", Since: rev10, Orchestrated: true,
 		Methods:         []string{"game.launchSpec"},
-		OptionalMethods: []string{"client.setup"}, // the client installer (protocol 1.20)
+		OptionalMethods: []string{"client.setup", "client.openSpec"}, // the client installer (protocol 1.20) and opener (1.25)
 		Surfaces:        []string{"play-button"}},
 	{Name: "auth", Since: rev10, Orchestrated: true,
 		Methods:  []string{"auth.status", "auth.begin", "auth.complete", "auth.logout"},

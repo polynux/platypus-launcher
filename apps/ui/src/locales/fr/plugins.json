@@ -43,6 +43,12 @@
     "enable": "Activer",
     "uninstall": "Désinstaller"
   },
+  "client": {
+    "open": "Ouvrir {{client}}",
+    "opening": "Ouverture de {{client}} en cours…",
+    "hint": "Connectez-vous à {{client}} ici ; Platypus lira vos jeux une fois fait.",
+    "busyNote": "« {{client}} » est occupé ; réessayez dans un instant."
+  },
   "auth": {
     "checking": "vérification de la connexion…",
     "loggedIn": "Connecté",

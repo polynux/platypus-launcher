@@ -21,6 +21,7 @@ export function ClientSetupAction({
   job,
   onNotify,
   buttonClassName,
+  showButton,
 }: {
   /** The client to name ("Ubisoft Connect"): the launch error's client. */
   client: string;
@@ -33,6 +34,8 @@ export function ClientSetupAction({
   onNotify?: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   /** Button sizing for the surrounding surface (strip vs hero). */
   buttonClassName?: string;
+  /** Show the Set up button even without a failure message (the plugin card). */
+  showButton?: boolean;
 }) {
   const { t } = useTranslation('game');
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -66,10 +69,10 @@ export function ClientSetupAction({
       </Button>
     );
   }
-  if (message == null) return null;
+  if (message == null && !showButton) return null;
   return (
     <div className="flex flex-col items-start gap-2">
-      <p role="status" className="max-w-md text-sm text-text-muted">{message}</p>
+      {message != null && <p role="status" className="max-w-md text-sm text-text-muted">{message}</p>}
       <Button
         variant="primary"
         size="none"
