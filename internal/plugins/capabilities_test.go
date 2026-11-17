@@ -128,7 +128,7 @@ func TestJobCancelIsServedToACloudOnlyPlugin(t *testing.T) {
 		t.Fatal("a plugin with cloud-saves and no install must still be sent job.cancel")
 	}
 	if !MethodOffered("job.cancel", "install", []string{"launch"}) {
-		t.Fatal("a plugin with launch and no install must still be sent job.cancel (client.setup, protocol 1.19)")
+		t.Fatal("a plugin with launch and no install must still be sent job.cancel (client.setup, protocol 1.20)")
 	}
 	if MethodOffered("job.cancel", "install", []string{"library"}) {
 		t.Fatal("job.cancel reached a plugin with neither install, cloud-saves nor launch")

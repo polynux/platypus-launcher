@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"time"
@@ -39,6 +40,14 @@ type StartOption func(*entry)
 // the prefix's wineserver to terminate.
 func WithStopHook(hook func(force bool)) StartOption {
 	return func(e *entry) { e.hook = hook }
+}
+
+// WithSessionLog attaches an output log to the launch (a wine-client
+// launch's client command, protocol 1.20). The tracker closes it when the
+// launch is no longer tracked, on every path out of WatchClient and
+// StartDirect.
+func WithSessionLog(w io.WriteCloser) StartOption {
+	return func(e *entry) { e.sessLog = w }
 }
 
 // ExitInfo says how a direct launch ended.

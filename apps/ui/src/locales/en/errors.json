@@ -37,6 +37,11 @@
     "none": "{{plugin}} has no chat.",
     "off": "Chat is not running."
   },
+  "client": {
+    "confirmDownload": "{{message}}",
+    "inUse": "{{client}} is running; stop the game before setting it up.",
+    "notSetUp": "{{client}} isn't set up yet; set it up first, then launch the game."
+  },
   "cloud": {
     "none": "This game has no cloud saves Platypus can sync.",
     "running": "{{title}} is running; choose its saves after it exits."

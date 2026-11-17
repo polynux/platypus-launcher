@@ -216,7 +216,7 @@ type RunnerInfo struct {
 // LaunchSpec answers game.launchSpec. Either Platypus runs Exe through its
 // runner pipeline, or (Delegate == "store-client") Platypus runs Command, which
 // asks the store's own client to start the game, and follows the game through
-// Find. A "wine-client" delegate (protocol 1.19) is a store client that runs
+// Find. A "wine-client" delegate (protocol 1.20) is a store client that runs
 // in a Platypus-managed Wine prefix: Platypus runs Exe with Args under the
 // runner in the client's prefix and follows the game through Find, like a
 // store-client launch once the client is going.
@@ -233,7 +233,7 @@ type LaunchSpec struct {
 	Delegate string   `json:"delegate,omitempty"`
 	Client   string   `json:"client,omitempty"` // client name for messages
 	Command  []string `json:"command,omitempty"`
-	// Prefix is the wine-client delegate's prefix key (protocol 1.19): only
+	// Prefix is the wine-client delegate's prefix key (protocol 1.20): only
 	// "client" is defined, the Platypus-managed prefix keyed per plugin.
 	Prefix       string    `json:"prefix,omitempty"`
 	Find         *FindSpec `json:"find,omitempty"`
@@ -244,6 +244,24 @@ type LaunchSpec struct {
 // (/proc/<pid>/cmdline) contains every string in Cmdline.
 type FindSpec struct {
 	Cmdline []string `json:"cmdline"`
+}
+
+// ClientSetupSpec is what client.setup answers (protocol 1.20): the installer
+// the core runs under the runner in the client's prefix. The plugin fetches
+// the installer before answering (it stays in PLATYPUS_PLUGIN_DATA across
+// restarts); the core validates the spec like a direct launch spec, asks the
+// user when Confirm is set, and runs the installer as a core-run job.
+type ClientSetupSpec struct {
+	Exe    string            `json:"exe"`
+	Args   []string          `json:"args,omitempty"`
+	Env    map[string]string `json:"env,omitempty"`
+	Redact []string          `json:"redact,omitempty"`
+	// Size is the installer's download bytes, for the free-space check.
+	Size int64 `json:"size,omitempty"`
+	// Confirm is the user-facing download prompt ("This downloads ~800 MB
+	// from ..."). When set, the core runs the installer only after the user
+	// confirms.
+	Confirm string `json:"confirm,omitempty"`
 }
 
 // GameDetails answers game.details: the game page's metadata. A plugin

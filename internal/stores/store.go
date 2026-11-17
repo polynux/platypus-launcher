@@ -48,7 +48,7 @@ type ClientLaunch struct {
 	// session default.
 	StartTimeout time.Duration
 	ClientStatus func(time.Time) (*types.ClientStatus, error)
-	// Wine is set for wine-client launches (protocol 1.19): the client
+	// Wine is set for wine-client launches (protocol 1.20): the client
 	// itself runs under the runner in its own Platypus-managed prefix. The
 	// App wraps Command there; Command stays the raw client command.
 	Wine *WineClientLaunch
@@ -64,6 +64,17 @@ type WineClientLaunch struct {
 	Redact []string
 }
 
+// ClientSetup is a validated client.setup answer (protocol 1.20): the
+// installer the core runs under the runner in the client's prefix.
+type ClientSetup struct {
+	Exe     string
+	Args    []string
+	Env     map[string]string
+	Redact  []string
+	Size    int64
+	Confirm string
+}
+
 // DirectLaunch is a validated plugin launch spec Platypus runs itself.
 type DirectLaunch struct {
 	Exe       string
@@ -75,7 +86,7 @@ type DirectLaunch struct {
 	Redact []string
 }
 
-// ClientPrefixKey is the only wine-client prefix key (protocol 1.19): the
+// ClientPrefixKey is the only wine-client prefix key (protocol 1.20): the
 // Platypus-managed prefix keyed per plugin.
 const ClientPrefixKey = "client"
 

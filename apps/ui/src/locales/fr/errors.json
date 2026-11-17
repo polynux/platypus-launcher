@@ -37,6 +37,11 @@
     "none": "« {{plugin}} » n'a pas de chat.",
     "off": "Le chat n'est pas démarré."
   },
+  "client": {
+    "confirmDownload": "{{message}}",
+    "inUse": "« {{client}} » est en cours d'exécution ; arrêtez le jeu avant de le configurer.",
+    "notSetUp": "« {{client}} » n'est pas encore configuré ; configurez-le d'abord, puis lancez le jeu."
+  },
   "cloud": {
     "none": "Ce jeu n'a pas de sauvegardes cloud que Platypus peut synchroniser.",
     "running": "« {{title}} » est en cours d'exécution ; choisissez ses sauvegardes après sa fermeture."

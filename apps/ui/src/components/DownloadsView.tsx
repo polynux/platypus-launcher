@@ -134,9 +134,9 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
               <Button variant="neutral" size="sm" onClick={() => onAction('resume', job.id)} aria-label={t('downloads:aria.resumeJob', { title: job.title })}>
                 <Play className="h-3 w-3" /> {t('downloads:job.resume')}
               </Button>
-              {/* A check, a move, a removal or a runner install works on the
-                  installed game or needs no cleanup: there is no download to discard. */}
-              {job.kind !== 'verify' && job.kind !== 'move' && job.kind !== 'remove' && job.kind !== 'runner-install' && (
+              {/* A check, a move, a removal, a runner install or a client setup works on the
+                  installed game (or the core-owned client prefix) or needs no cleanup: there is no download to discard. */}
+              {job.kind !== 'verify' && job.kind !== 'move' && job.kind !== 'remove' && job.kind !== 'runner-install' && job.kind !== 'client-setup' && (
                 <Button variant="neutral" size="sm" onClick={() => onAction('discard', job.id)} aria-label={t('downloads:aria.discardJob', { title: job.title })}>
                   <Trash2 className="h-3 w-3" /> {t('downloads:job.discard')}
                 </Button>

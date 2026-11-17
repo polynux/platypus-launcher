@@ -559,6 +559,12 @@ func (s Suite) Conformance(t *testing.T) {
 		}
 	}
 
+	// A plugin that speaks protocol 1.20 answers client.setup with the
+	// installer spec the core would run; anything older is never sent it.
+	if has("launch") && sess.m.Runtime(s.ID).Speaks(plugins.WineClientVersion) {
+		sess.checkClientSetup(t)
+	}
+
 	// update: a plugin answers game.update with its own update path, and the
 	// game stays installed. 5 library.list run in parallel while it works
 	// (the doc requires answering requests concurrently).
@@ -856,6 +862,39 @@ func (s *Session) checkHandshake(t *testing.T) {
 	}
 }
 
+// checkClientSetup drives client.setup (protocol 1.20): the plugin answers
+// the installer spec, which must validate like a direct spec against the
+// core-owned prefix the core passes in. The method is optional: -32601 means
+// the plugin has no client to set up, and the suite moves on.
+func (s *Session) checkClientSetup(t *testing.T) {
+	t.Helper()
+	prefix := t.TempDir()
+	var raw json.RawMessage
+	err := s.call("client.setup", map[string]any{"jobId": "plugtest-setup", "prefix": prefix}, &raw)
+	var rpcErr *jsonrpc.Error
+	if errors.As(err, &rpcErr) && rpcErr.Code == jsonrpc.CodeMethodNotFound {
+		return // optional method: no client to set up
+	}
+	if err != nil {
+		t.Fatalf("client.setup: %v", err)
+	}
+	checkKeys(t, "client.setup", raw, InstallerKeys)
+	var spec plugins.ClientSetupSpec
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		t.Fatalf("client.setup isn't an installer spec: %s", raw)
+	}
+	p, ok := s.m.Plugin(s.Store.ID())
+	if !ok {
+		t.Fatalf("plugin %s gone", s.Store.ID())
+	}
+	validated, err := stores.ValidateClientSetup(spec, p.Manifest, []string{s.Folder, prefix}, prefix)
+	if err != nil {
+		t.Fatalf("client.setup answered an uninstallable spec: %v", err)
+	}
+	if _, err := os.Stat(validated.Exe); err != nil {
+		t.Fatalf("the installer executable isn't there to run: %v", err)
+	}
+}
 func (s *Session) checkCompatFacts(t *testing.T) {
 	t.Helper()
 	s.wantCode("compat.lookup", map[string]any{}, jsonrpc.CodeInvalidParams)
@@ -894,6 +933,8 @@ var (
 	NewsKeys   = []string{"title", "url", "date"}
 	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
 		"delegate", "client", "command", "prefix", "find", "startTimeout"}
+	// The installer spec client.setup answers (protocol 1.20, "Wine clients").
+	InstallerKeys = []string{"exe", "args", "env", "redact", "size", "confirm"}
 
 	// The versions capability (docs/plugins/protocol.md, "Versions").
 	VersionListKeys    = []string{"channels", "builds", "manual", "links", "updateAvailable", "pinned"}

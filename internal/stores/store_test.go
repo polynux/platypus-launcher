@@ -80,7 +80,7 @@ func TestValidateSpec(t *testing.T) {
 		{Delegate: "store-client", Command: []string{"sh", "-c", "true"}, Find: &plugins.FindSpec{Cmdline: []string{"AppId=42"}}},
 	}
 	for i, spec := range ok {
-		if _, err := ValidateSpec(spec, man, folders); err != nil {
+		if _, err := ValidateSpec(spec, man, folders, ""); err != nil {
 			t.Errorf("ok[%d]: %v", i, err)
 		}
 	}
@@ -101,13 +101,13 @@ func TestValidateSpec(t *testing.T) {
 		"unknown delegate":    {Delegate: "magic"},
 	}
 	for name, spec := range bad {
-		if _, err := ValidateSpec(spec, man, folders); err == nil {
+		if _, err := ValidateSpec(spec, man, folders, ""); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
 
 	// A folder the user allowed later works too.
-	if _, err := ValidateSpec(plugins.LaunchSpec{Exe: outside, NeedsWine: true}, man, append(folders, root)); err != nil {
+	if _, err := ValidateSpec(plugins.LaunchSpec{Exe: outside, NeedsWine: true}, man, append(folders, root), ""); err != nil {
 		t.Errorf("allowed folder: %v", err)
 	}
 }

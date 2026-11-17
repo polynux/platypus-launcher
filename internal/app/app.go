@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"os/exec"
@@ -69,10 +70,15 @@ type App struct {
 	// settingsLocks orders the settings saves and starts of each plugin.
 	settingsLocks  settingsLocks
 	moves          coreMoves
-	removes        coreMoves   // core-run removals (issue #43), like moves
-	runnerInstalls coreMoves   // core-run runner installs (issue #142), like moves
-	custom         customStore // the user's titles and art (app_customize.go)
-	ledger         *ledger.Ledger
+	removes        coreMoves // core-run removals (issue #43), like moves
+	runnerInstalls coreMoves // core-run runner installs (issue #142), like moves
+	clientSetups   coreMoves // core-run client setups (protocol 1.20), like moves
+	// wineMu guards wineSessions: game ids running through a wine client, by
+	// source, so SetupClient refuses while the client runs (issue #191).
+	wineMu       sync.Mutex
+	wineSessions map[string]string
+	custom       customStore // the user's titles and art (app_customize.go)
+	ledger       *ledger.Ledger
 	// artwork is the online art lookup for sideloaded games (issue #36).
 	// Nil means the live Steam endpoints; tests inject an httptest client.
 	artwork *onlineart.Client
@@ -549,12 +555,9 @@ func (a *App) pluginStores() []stores.Store {
 func (a *App) pluginStore(p plugins.Plugin) *stores.Plugin {
 	id := p.Manifest.ID
 	return stores.NewPlugin(a.plugins, p, func() []string {
-		folders := a.plugins.Folders(id, a.settings.GamesFolder())
-		// A wine-client launch runs from the plugin's own prefix (protocol
-		// 1.19), so its executable validates against it like an install
-		// folder.
-		return append(folders, stores.ClientPrefixDir(id, a.effectivePrefixesFolder()))
-	}).WithRelocations(a.settings.Relocation)
+		return a.plugins.Folders(id, a.settings.GamesFolder())
+	}).WithClientPrefix(stores.ClientPrefixDir(id, a.effectivePrefixesFolder())).
+		WithRelocations(a.settings.Relocation)
 }
 
 // isRunning says whether the game has a session open.
@@ -1122,12 +1125,28 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 }
 
 // prepareWineClient runs the store client itself under the runner in its own
-// Platypus-managed prefix (protocol 1.19): the client starts the game, and
+// Platypus-managed prefix (protocol 1.20): the client starts the game, and
 // the session follows the game through find. The client's prefix is pinned
 // (the game's own WinePrefix would point at the game's prefix), so the
-// runner creates and uses the client's folder instead.
+// runner creates and uses the client's folder instead. The client runs with
+// the default runner and none of the game's settings: wrappers, env and
+// runtime bindings are per-game choices, and the client belongs to no game.
+// A launch without a runner plugin fails: a wine command needs Wine.
 func (a *App) prepareWineClient(game types.Game, cl *stores.ClientLaunch, preview bool) (*prepared, error) {
 	clientDir := stores.ClientPrefixDir(game.Source, a.effectivePrefixesFolder())
+	present, err := a.runnerPlugin()
+	if err != nil {
+		return nil, err
+	}
+	if !present {
+		return nil, apperr.New("game.noRunner",
+			fmt.Sprintf("%s needs the runner plugin to run its client", game.Title),
+			map[string]string{"title": game.Title})
+	}
+	// First-run prefix creation serializes on the client's id (see S4): two
+	// concurrent launches can't both initialize the folder.
+	unlock := a.lockGame(stores.ClientGameID(game.Source))
+	defer unlock()
 	if !preview {
 		if err := os.MkdirAll(clientDir, 0o755); err != nil {
 			return nil, err
@@ -1136,7 +1155,8 @@ func (a *App) prepareWineClient(game types.Game, cl *stores.ClientLaunch, previe
 	w := cl.Wine
 	clientGame := game
 	clientGame.ID = stores.ClientGameID(game.Source)
-	clientGame.Settings.WinePrefix = clientDir
+	clientGame.Settings = types.GameSettings{WinePrefix: clientDir}
+	clientGame.SettingsExtra = nil
 	p, err := a.wrapLaunch(clientGame, append([]string{w.Exe}, w.Args...), w.Env, filepath.Dir(w.Exe), true, preview, w.Redact)
 	if err != nil {
 		return nil, err
@@ -1269,6 +1289,15 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if p.client != nil && p.client.Wine != nil {
+		// The client starts the game: refuse while its setup holds it, even
+		// when the library didn't flag this game as client-launched (S4).
+		if _, ok := a.jobs.Holding(stores.ClientGameID(game.Source), jobs.KindClientSetup); ok {
+			return "", apperr.New("game.launchBusy",
+				fmt.Sprintf("%s is being set up; launch it once that finishes", game.Title),
+				map[string]string{"title": game.Title, "what": "set up"})
+		}
+	}
 	filtered := make([]string, 0, len(p.args))
 	for _, arg := range p.args {
 		if strings.TrimSpace(arg) != "" {
@@ -1288,7 +1317,20 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 	cmd.Dir = p.dir
 
 	if cl := p.client; cl != nil {
-		return a.startClient(game, cmd, cl, session.WithStopHook(p.stopHook()))
+		var extra []session.StartOption
+		if cl.Wine == nil {
+			// A native store client owns its processes; Platypus only
+			// follows the game. A wine client runs in a Platypus-managed
+			// prefix, but stopping the game must still never kill the
+			// client (or other games in the prefix): only the found game
+			// pid and its descendants are signaled (B2).
+			extra = append(extra, session.WithStopHook(p.stopHook()))
+		}
+		msg, err := a.startClient(game, cmd, cl, extra...)
+		if err == nil && cl.Wine != nil {
+			a.noteWineSession(game.ID, game.Source)
+		}
+		return msg, err
 	}
 	opts := []session.StartOption{session.WithStopHook(p.stopHook())}
 	push, note, blocked := a.cloudBeforeLaunch(game, anyway)
@@ -1319,9 +1361,22 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 // the request and exits; if not, it becomes the client and keeps running.
 // Either way, follow the game itself (Steam: its reaper process), not this PID.
 // The after-session backup hook runs when the client-tracked session ends,
-// like for direct launches.
+// like for direct launches. A wine-client launch's client command is logged
+// to the game's session log (protocol 1.20, S6), like a direct launch.
 func (a *App) startClient(game types.Game, cmd *exec.Cmd, cl *stores.ClientLaunch, extra ...session.StartOption) (string, error) {
+	var sessLog io.WriteCloser
+	if cl.Wine != nil {
+		extra = append(extra, session.WithOnExit(func(session.ExitInfo) { a.clearWineSession(game.ID) }))
+		if lw, err := a.sessions.OpenSessionLog(game.ID, redactedCommand(cmd, cl.Wine.Redact), cl.Wine.Redact); err == nil {
+			sessLog = lw
+			cmd.Stdout, cmd.Stderr = lw, lw
+			extra = append(extra, session.WithSessionLog(lw))
+		}
+	}
 	if err := cmd.Start(); err != nil {
+		if sessLog != nil {
+			_ = sessLog.Close()
+		}
 		return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
 	}
 	go func() { _ = cmd.Wait() }()
@@ -1333,9 +1388,18 @@ func (a *App) startClient(game types.Game, cmd *exec.Cmd, cl *stores.ClientLaunc
 		opts = append(opts, session.WithClientStatus(cl.ClientStatus), session.WithClientNotices(a.settings == nil || a.settings.ClientNotices()))
 	}
 	if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout, opts...) {
+		if sessLog != nil {
+			_ = sessLog.Close()
+		}
 		return "", apperr.New("game.running", fmt.Sprintf("%s is already running", game.Title), map[string]string{"title": game.Title})
 	}
 	return "Asked " + cl.Client + " to start " + game.Title, nil
+}
+
+// redactedCommand renders cmd for the session log with secret values hidden,
+// like the launch preview (stores.RedactArgs).
+func redactedCommand(cmd *exec.Cmd, redact []string) string {
+	return strings.Join(stores.RedactArgs(cmd.Args, redact), " ")
 }
 
 // StopGame asks a running game to quit: SIGTERM to its processes (and the

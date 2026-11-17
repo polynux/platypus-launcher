@@ -770,6 +770,10 @@ type Job struct {
 	// Options are the install-option choices the install or update sends
 	// (the `install-options` capability), kept with the job like Target.
 	Options InstallOptions `json:"options,omitempty"`
+	// Confirmed says the user accepted the client.setup download prompt (the
+	// `confirm` text of the installer's spec, protocol 1.20): only a
+	// confirmed setup job runs its installer.
+	Confirmed bool `json:"confirmed,omitempty"`
 }
 
 // VerifyReport is what a game's files check found. Checked counts the files

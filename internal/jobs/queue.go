@@ -48,7 +48,7 @@ const (
 	// through the queue.
 	KindRunnerInstall = "runner-install"
 	// KindClientSetup installs or repairs a store client in its own
-	// Platypus-managed prefix (protocol 1.19, issue #191): the plugin's
+	// Platypus-managed prefix (protocol 1.20, issue #191): the plugin's
 	// client.setup job. The job's GameID is the client's pseudo id (see
 	// stores.ClientGameID), so a client has at most one setup job like a
 	// game has at most one active job.
@@ -480,16 +480,17 @@ func (q *Queue) AddRunnerInstall(source, gameID, tag, title, installDir string) 
 }
 
 // AddClientSetup queues installing or repairing a store client in installDir,
-// its own Platypus-managed prefix (protocol 1.19, issue #191). gameID is the
-// client's pseudo id, so a client has at most one setup job; the plugin's
-// client.setup job reports progress and its outcome through the queue.
-func (q *Queue) AddClientSetup(source, gameID, title, installDir string) (types.Job, error) {
+// its own Platypus-managed prefix (protocol 1.20, issue #191). gameID is the
+// client's pseudo id, so a client has at most one setup job; confirmed says
+// the user accepted the installer's download prompt. The core runs the
+// installer's spec itself and reports the outcome through the queue.
+func (q *Queue) AddClientSetup(source, gameID, title, installDir string, confirmed bool) (types.Job, error) {
 	if !filepath.IsAbs(installDir) {
 		return types.Job{}, fmt.Errorf("client prefix %q is not an absolute path", installDir)
 	}
 	return q.enqueue(&types.Job{
 		Kind: KindClientSetup, Source: source, GameID: gameID, StoreGameID: "client",
-		Title: title, InstallDir: installDir,
+		Title: title, InstallDir: installDir, Confirmed: confirmed,
 	})
 }
 
@@ -1077,7 +1078,7 @@ func (q *Queue) Discard(ctx context.Context, id string) error {
 		q.mu.Unlock()
 		return fmt.Errorf("no job %s", id)
 	}
-	if j.Kind == KindVerify || j.Kind == KindMove || j.Kind == KindBackup || j.Kind == KindRestore || j.Kind == KindRemove || j.Kind == KindRunnerInstall {
+	if j.Kind == KindVerify || j.Kind == KindMove || j.Kind == KindBackup || j.Kind == KindRestore || j.Kind == KindRemove || j.Kind == KindRunnerInstall || j.Kind == KindClientSetup {
 		q.mu.Unlock()
 		return fmt.Errorf("%s: %w", j.Title, ErrNoData)
 	}

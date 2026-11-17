@@ -231,7 +231,7 @@ export function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: A
                         <RotateCcw className="h-3 w-3" /> {t('common:retry')}
                       </Button>
                     )}
-                    {j.state === 'canceled' && j.cleaned_at == null && j.kind !== 'verify' && j.kind !== 'move' && j.kind !== 'remove' && (
+                    {j.state === 'canceled' && j.cleaned_at == null && j.kind !== 'verify' && j.kind !== 'move' && j.kind !== 'remove' && j.kind !== 'client-setup' && (
                       <Button variant="neutral" size="sm" onClick={() => onAction('discard', j.id)} aria-label={t('downloads:aria.discardJob', { title: j.title })}>
                         <Trash2 className="h-3 w-3" /> {t('downloads:job.discard')}
                       </Button>

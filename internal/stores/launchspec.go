@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/plugins"
 	"platypus/internal/session"
 )
@@ -45,17 +46,20 @@ func envAllowed(key string) bool {
 
 // ValidateSpec checks a plugin's launch spec before Platypus runs anything:
 //   - direct: the executable and working dir must be inside one of folders
-//     (the plugin's install folder, the client's prefix, or folders the user
-//     allowed), after resolving symlinks, and no env key may be on the denylist;
+//     (the plugin's install folder or folders the user allowed), after
+//     resolving symlinks, and no env key may be on the denylist;
 //   - store-client: the command must be one of the tools the manifest
 //     requires, and the game must be identifiable by its command line;
-//   - wine-client (protocol 1.19): the client's executable must be an
-//     absolute path inside one of folders (its prefix, which the App adds to
-//     the folders), with the same env denylist, and the game must be
-//     identifiable by its command line.
-func ValidateSpec(spec plugins.LaunchSpec, man plugins.Manifest, folders []string) (*Launch, error) {
+//   - wine-client (protocol 1.20): the client's executable must be an
+//     absolute path (or a C:\ path, resolved against the client's prefix)
+//     inside one of folders (its prefix rides in the folders), with the same
+//     env denylist, and the game must be identifiable by its command line.
+//     A missing executable inside the prefix reads as "not set up yet"
+//     (client.notSetUp), not a broken spec. clientDir is the client's prefix,
+//     for resolving Windows paths; "" means no client prefix is known.
+func ValidateSpec(spec plugins.LaunchSpec, man plugins.Manifest, folders []string, clientDir string) (*Launch, error) {
 	if spec.Delegate != "" {
-		return validateDelegate(spec, man, folders)
+		return validateDelegate(spec, man, folders, clientDir)
 	}
 	if spec.Exe == "" {
 		return nil, fmt.Errorf("%s returned no executable", man.ID)
@@ -119,9 +123,9 @@ func ValidateSpec(spec plugins.LaunchSpec, man plugins.Manifest, folders []strin
 	}}, nil
 }
 
-func validateDelegate(spec plugins.LaunchSpec, man plugins.Manifest, folders []string) (*Launch, error) {
+func validateDelegate(spec plugins.LaunchSpec, man plugins.Manifest, folders []string, clientDir string) (*Launch, error) {
 	if spec.Delegate == "wine-client" {
-		return validateWineClient(spec, man, folders)
+		return validateWineClient(spec, man, folders, clientDir)
 	}
 	if spec.Delegate != "store-client" {
 		return nil, fmt.Errorf("%s: unknown delegate %q", man.ID, spec.Delegate)
@@ -152,23 +156,50 @@ func validateDelegate(spec plugins.LaunchSpec, man plugins.Manifest, folders []s
 	}}, nil
 }
 
-// validateWineClient checks a wine-client launch spec (protocol 1.19): the
+// resolveWineExe maps a wine-client executable to a Linux path. Absolute
+// paths pass through; Windows paths (C:\... or C:/...) resolve against the
+// client's prefix, whose Windows side lives at drive_c (plain Wine) or
+// pfx/drive_c (Proton), whichever exists. Only drive C is supported.
+func resolveWineExe(exe, clientDir string) (string, error) {
+	if len(exe) >= 4 && exe[1] == ':' && (exe[2] == '\\' || exe[2] == '/') &&
+		((exe[0] >= 'A' && exe[0] <= 'Z') || (exe[0] >= 'a' && exe[0] <= 'z')) {
+		if exe[0] != 'C' && exe[0] != 'c' {
+			return "", fmt.Errorf("wine path %q must be on drive C:", exe)
+		}
+		rest := filepath.FromSlash(strings.ReplaceAll(exe[3:], "\\", "/"))
+		if rest == "" || !filepath.IsLocal(rest) {
+			return "", fmt.Errorf("wine path %q escapes the prefix", exe)
+		}
+		for _, base := range []string{filepath.Join(clientDir, "drive_c"), filepath.Join(clientDir, "pfx", "drive_c")} {
+			if st, err := os.Stat(filepath.Join(base, rest)); err == nil && st.Mode().IsRegular() {
+				return filepath.Join(base, rest), nil
+			}
+		}
+		return filepath.Join(clientDir, "drive_c", rest), nil
+	}
+	if !filepath.IsAbs(exe) {
+		return "", fmt.Errorf("executable %q must be an absolute path or a C:\\ path", exe)
+	}
+	return exe, nil
+}
+
+// validateWineClient checks a wine-client launch spec (protocol 1.20): the
 // store client Platypus runs under the runner in its own prefix. The folders
 // the App passes already include the client's prefix, so the executable
 // containment is the same check direct launches get. A missing executable
 // inside the client's prefix means the client isn't set up yet, which reads
-// as a setup prompt rather than a broken spec.
-func validateWineClient(spec plugins.LaunchSpec, man plugins.Manifest, folders []string) (*Launch, error) {
+// as client.notSetUp rather than a broken spec.
+func validateWineClient(spec plugins.LaunchSpec, man plugins.Manifest, folders []string, clientDir string) (*Launch, error) {
 	if spec.Prefix != ClientPrefixKey {
 		return nil, fmt.Errorf("%s: unknown wine-client prefix %q (want %q)", man.ID, spec.Prefix, ClientPrefixKey)
 	}
 	if spec.Exe == "" {
 		return nil, fmt.Errorf("%s returned no client executable", man.ID)
 	}
-	if !filepath.IsAbs(spec.Exe) {
-		return nil, fmt.Errorf("%s: client executable %q must be an absolute path", man.ID, spec.Exe)
+	exe, err := resolveWineExe(spec.Exe, clientDir)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", man.ID, err)
 	}
-	exe := spec.Exe
 	resolved := false
 	if real, err := filepath.EvalSymlinks(exe); err == nil {
 		exe, resolved = real, true
@@ -183,27 +214,20 @@ func validateWineClient(spec plugins.LaunchSpec, man plugins.Manifest, folders [
 			return nil, fmt.Errorf("%s: %s is not a file", man.ID, spec.Exe)
 		}
 	} else {
-		if !insideLexical(spec.Exe, folders) {
+		if !insideLexical(exe, folders) {
 			return nil, fmt.Errorf("%s: client executable %s is outside its prefix (%s)", man.ID, spec.Exe, strings.Join(folders, ", "))
 		}
 		client := spec.Client
 		if client == "" {
 			client = man.Name
 		}
-		return nil, fmt.Errorf("%s isn't set up yet; set it up first, then launch the game", client)
+		return nil, apperr.New("client.notSetUp",
+			fmt.Sprintf("%s isn't set up yet; set it up first, then launch the game", client),
+			map[string]string{"client": client, "source": man.ID})
 	}
-	env := make(map[string]string, len(spec.Env))
-	for k, v := range spec.Env {
-		if !envAllowed(k) {
-			return nil, fmt.Errorf("%s: wine-client launch sets %s, which plugins may not set", man.ID, k)
-		}
-		env[k] = v
-	}
-	var redact []string
-	for _, r := range spec.Redact {
-		if r != "" {
-			redact = append(redact, r)
-		}
+	env, err := validateEnvMap(spec.Env, man, "wine-client launch")
+	if err != nil {
+		return nil, err
 	}
 	find, err := validateFind(spec, man)
 	if err != nil {
@@ -222,9 +246,76 @@ func validateWineClient(spec plugins.LaunchSpec, man plugins.Manifest, folders [
 			Exe:    exe,
 			Args:   slices.Clone(spec.Args),
 			Env:    env,
-			Redact: redact,
+			Redact: validateRedact(spec.Redact),
 		},
 	}}, nil
+}
+
+// ValidateClientSetup checks a client.setup answer (protocol 1.20): the
+// installer the core runs under the runner in the client's prefix. Unlike a
+// launch spec, the installer must exist now — the core runs it as soon as
+// the job starts.
+func ValidateClientSetup(spec plugins.ClientSetupSpec, man plugins.Manifest, folders []string, clientDir string) (*ClientSetup, error) {
+	if spec.Exe == "" {
+		return nil, fmt.Errorf("%s returned no installer executable", man.ID)
+	}
+	exe, err := resolveWineExe(spec.Exe, clientDir)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", man.ID, err)
+	}
+	real, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		return nil, fmt.Errorf("%s: installer %s: %w", man.ID, spec.Exe, err)
+	}
+	if !insideAny(real, folders) {
+		return nil, fmt.Errorf("%s: installer %s is outside its prefix (%s)", man.ID, spec.Exe, strings.Join(folders, ", "))
+	}
+	if st, err := os.Stat(real); err != nil {
+		return nil, err
+	} else if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: %s is not a file", man.ID, spec.Exe)
+	}
+	env, err := validateEnvMap(spec.Env, man, "client.setup")
+	if err != nil {
+		return nil, err
+	}
+	if spec.Size < 0 {
+		return nil, fmt.Errorf("%s: installer size %d must not be negative", man.ID, spec.Size)
+	}
+	return &ClientSetup{
+		Exe:     real,
+		Args:    slices.Clone(spec.Args),
+		Env:     env,
+		Redact:  validateRedact(spec.Redact),
+		Size:    spec.Size,
+		Confirm: spec.Confirm,
+	}, nil
+}
+
+// validateEnvMap checks plugin env against the denylist. Wine-client launches
+// and client setups share the direct launches' denylist: prefix and DLL
+// overrides are Platypus's.
+func validateEnvMap(env map[string]string, man plugins.Manifest, what string) (map[string]string, error) {
+	out := make(map[string]string, len(env))
+	for k, v := range env {
+		if !envAllowed(k) {
+			return nil, fmt.Errorf("%s: %s sets %s, which plugins may not set", man.ID, what, k)
+		}
+		out[k] = v
+	}
+	return out, nil
+}
+
+// validateRedact drops the empty redact prefixes; the rest hide argument
+// values in previews and logs.
+func validateRedact(redact []string) []string {
+	var out []string
+	for _, r := range redact {
+		if r != "" {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func validateFind(spec plugins.LaunchSpec, man plugins.Manifest) (func() int, error) {
